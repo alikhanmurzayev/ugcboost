@@ -19,6 +19,14 @@ All communication in this project is in **Russian**. Code, variable names, and c
 
 BMad framework (modules: Core, BMM, CIS, TEA). Use BMad skills and agents for planning, design, and implementation workflows.
 
+## BMad Setup
+
+BMad config files (`_bmad/*/config.yaml`) are per-user and gitignored. After cloning, run `/bmad-init` with:
+- communication_language: Russian
+- document_output_language: English
+- output_folder: _bmad-output
+- project_name: ugcboost
+
 ## Git Workflow
 
 - **Branch naming**: `<username>/<description>` (e.g. `alikhan/backend-auth`)
