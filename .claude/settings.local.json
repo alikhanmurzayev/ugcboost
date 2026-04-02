@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(sudo apt-get:*)",
+      "Bash(gh --version)",
+      "Bash(sudo cp:*)",
+      "Bash(sudo chmod:*)",
+      "Bash(sudo chown:*)",
+      "Bash(sudo usermod:*)",
+      "Bash(sudo -u aidana bash -c 'which node && node --version')",
+      "Bash(sudo node:*)",
+      "Bash(git config:*)",
+      "Bash(ssh-keygen:*)",
+      "Bash(chmod 600 /home/alikhan/.ssh/config)",
+      "Bash(gh ssh-key:*)",
+      "Bash(ssh -T git@github.com)"
+    ]
+  }
+}
