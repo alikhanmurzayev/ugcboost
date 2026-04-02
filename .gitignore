@@ -24,3 +24,6 @@ build/
 # OS
 .DS_Store
 Thumbs.db
+
+# BMad per-user config (each user runs /bmad-init after cloning)
+_bmad/*/config.yaml

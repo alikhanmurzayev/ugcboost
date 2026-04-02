@@ -7,10 +7,17 @@
    git clone git@github.com:alikhanmurzayev/ugcboost.git ~/projects/ugcboost
    ```
 
-2. Start Claude session:
+2. Initialize BMad (first time after cloning):
    ```bash
    claude-project ugcboost
    ```
+   Then run `/bmad-init` inside Claude session. Use these settings:
+   - **communication_language**: Russian
+   - **document_output_language**: English
+   - **output_folder**: `_bmad-output`
+   - **project_name**: ugcboost
+
+   BMad config is per-user (gitignored) — each team member runs this once.
 
 ## Workflow
 
