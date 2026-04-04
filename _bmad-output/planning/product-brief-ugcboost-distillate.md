@@ -1,259 +1,259 @@
 ---
-title: "Product Brief Distillate: UGCBoost"
+title: "Дистиллят продуктового брифа: UGCBoost"
 type: llm-distillate
 source: "product-brief-ugcboost.md"
 created: "2026-04-04"
-purpose: "Token-efficient context for downstream PRD creation — captures all detail from discovery sessions that exceeds the executive brief"
+purpose: "Контекст для создания PRD — детали из discovery-сессий, выходящие за рамки executive brief"
 ---
 
-# Product Brief Distillate: UGCBoost
+# Дистиллят продуктового брифа: UGCBoost
 
-## Market Validation
+## Валидация рынка
 
-- Landing page ugcboost.kz was published with zero marketing/promotion — only organic search indexing
-- Three companies contacted Aidana directly via WhatsApp (her phone number was on the landing):
-  - **One Corporate** — holding company with travel agency
-  - **Beauty by Sofia** — official distributor of multiple cosmetics brands
-  - **First Media Group** — major marketing holding representing Kotex, Ferrero, Milka
-- All three wanted to know how to place orders or connect with UGC creators — but the product didn't exist yet, so nothing came of it
-- This validates that brands are actively searching for UGC solutions in Kazakhstan and finding none
+- Лендинг ugcboost.kz был опубликован без какого-либо маркетинга — только органическая индексация в поиске
+- Три компании связались с Айданой напрямую через WhatsApp (номер был указан на лендинге):
+  - **One Corporate** — холдинг с тревел-агентством
+  - **Beauty by Sofia** — официальный дистрибьютор нескольких косметических брендов
+  - **First Media Group** — крупный маркетинговый холдинг, представляющий Kotex, Ferrero, Milka
+- Все три хотели узнать, как разместить заказы или найти UGC-креаторов — но продукта ещё не было, поэтому дальше разговоров не пошло
+- Это подтверждает: бренды активно ищут UGC-решения в Казахстане и не находят их
 
-## Competitive Landscape (Kazakhstan)
+## Конкурентный ландшафт (Казахстан)
 
-- **TusApp** — existing KZ platform, functions as a bulletin board, no quality moderation
-- **TTfluence** — existing KZ platform, same bulletin board model
-- **UGC app** (App Store: id6757330821) — another KZ entrant, same problems
-- **Common weakness across all:** no entry barrier for creators, no moderation, no operational value-add for brands — brands still have to manually vet, contract, and track creators just like in Instagram DMs
-- Multiple other similar apps exist in Google search results — all follow the same pattern
+- **TusApp** — существующая KZ-платформа, работает как доска объявлений, без модерации качества
+- **TTfluence** — существующая KZ-платформа, та же модель доски объявлений
+- **UGC app** (App Store: id6757330821) — ещё один KZ-участник, те же проблемы
+- **Общая слабость всех:** нет барьера входа для креаторов, нет модерации, нет операционной ценности для брендов — брендам всё равно приходится вручную проверять, заключать договоры и отслеживать креаторов, как и через Instagram DM
+- В поиске Google есть ещё несколько подобных приложений — все по одной модели
 
-## Competitive Landscape (International)
+## Конкурентный ландшафт (международный)
 
-- **Billo** — strong curation, reviews videos before delivery, ~$59/video, US/EU focus
-- **Insense** — full-service UGC + paid social, Spark Ads integration, subscription from ~$400/mo
-- **Trend.io** — hand-picks creators, reviews all content, ~$100+/video, premium positioning
-- **Collabstr** — marketplace with portfolio review, creators set own rates, 15-20% platform fee
-- **JoinBrands** — task-based model, light moderation, ~$35-100/video
-- **None operate in CIS/Central Asia** — zero localized competition from international players
-- Platforms with strongest quality curation (Billo, Trend) are the most successful — validates UGCBoost's moderation-first approach
+- **Billo** — сильное курирование, ревью видео перед доставкой, ~$59/видео, фокус US/EU
+- **Insense** — полный сервис UGC + paid social, интеграция Spark Ads, подписка от ~$400/мес
+- **Trend.io** — ручной отбор креаторов, ревью всего контента, ~$100+/видео, премиум-позиционирование
+- **Collabstr** — маркетплейс с ревью портфолио, креаторы сами ставят цены, комиссия платформы 15-20%
+- **JoinBrands** — модель на основе заданий, лёгкая модерация, ~$35-100/видео
+- **Ни один не работает в СНГ/ЦА** — нулевая локализованная конкуренция от международных игроков
+- Платформы с наиболее сильным курированием (Billo, Trend) — самые успешные, что подтверждает подход UGCBoost «модерация прежде всего»
 
-## UGC Market Context
+## Контекст UGC-рынка
 
-- UGC seeding = brands work on QUANTITY of content units, not individual influencer deals
-- Typical UGC creator gets 3,000–5,000 views per reel — brands compensate with volume (50–500 creators per campaign)
-- Two collaboration types: **barter** (brand sends product, creator posts) and **paid** (brand pays per reel, e.g. 20K–150K tenge)
-- Brands currently find creators via: Instagram search, Threads posts where brands announce they're looking for UGC creators (creators leave "+" in comments), Google Forms, DMs
-- The operational burden includes: vetting content quality, checking visual aesthetic and category fit, collecting physical addresses, sending products, managing contracts, tracking deliverables, chasing missing posts
+- UGC-посевы = бренды работают на КОЛИЧЕСТВО контент-единиц, а не на индивидуальные сделки с инфлюенсерами
+- Типичный UGC-креатор набирает 3 000–5 000 просмотров на рилс — бренды компенсируют объёмом (50–500 креаторов на кампанию)
+- Два типа сотрудничества: **бартер** (бренд отправляет продукт, креатор публикует) и **платное** (бренд платит за рилс, напр. 20K–150K тенге)
+- Бренды сейчас ищут креаторов через: поиск в Instagram, посты в Threads (бренды объявляют о поиске UGC-креаторов, те оставляют «+» в комментариях), Google-формы, DM
+- Операционная нагрузка включает: проверку качества контента, визуальной эстетики и соответствия категории, сбор физических адресов, отправку продукции, управление договорами, отслеживание выполнения, напоминания о публикациях
 
-## Creator Profile and Behavior
+## Профиль и поведение креаторов
 
-- Most UGC creators write "UGC creator" in their Instagram bio so brands can find them in search
-- This backfires: audiences see the label and recognize content as paid/sponsored, reducing its native feel
-- UGCBoost eliminates this need — creators are found through the platform, not public advertising
-- Platform **recommends** (not requires) creators remove the "UGC creator" label; incentive: brands prefer organic-looking profiles, so unlabeled creators get selected more often
-- This cannot be enforced — it's a recommendation with a clear business incentive, not a platform rule
-- Creators are typically individuals without ИП/ТОО (no tax registration), which creates legal problems for brand accounting
+- Большинство UGC-креаторов пишут «UGC-креатор» в био в Instagram, чтобы бренды могли их найти в поиске
+- Это работает против них: аудитория видит метку и распознаёт контент как проплаченную рекламу, снижая ощущение нативности
+- UGCBoost устраняет эту необходимость — креаторов находят через платформу, а не через публичную рекламу
+- Платформа **рекомендует** (не требует) убрать метку «UGC-креатор»; стимул: бренды предпочитают органично выглядящие профили, поэтому креаторы без метки получают больше заказов
+- Это нельзя принудительно обеспечить — это рекомендация с чётким бизнес-стимулом, а не правило платформы
+- Креаторы — как правило, физлица без ИП/ТОО (без налоговой регистрации), что создаёт юридические проблемы для бухгалтерии брендов
 
-## Creator Onboarding Flow (Detailed)
+## Флоу онбординга креаторов (детально)
 
-### Step 1: Application (Landing Page — Web)
-- Creator fills out form on ugcboost.kz landing page
-- Fields: name, surname, social media selection (Instagram, TikTok, Threads), links to accounts, content category/direction, city of residence, physical address (street, house — for product deliveries)
-- Consent checkboxes: personal data processing, third-party data transfer, cross-border data transfer, platform terms and conditions
-- On submission: confirmation screen ("Your application is under review") + prompt to open Telegram bot with explanation: "Please open our Telegram bot so we can notify you about results. We won't spam — only important updates."
+### Шаг 1: Подача заявки (лендинг — веб)
+- Креатор заполняет форму на лендинге ugcboost.kz
+- Поля: имя, фамилия, выбор соцсети (Instagram, TikTok, Threads), ссылки на аккаунты, категория/направление контента, город проживания, физический адрес (улица, дом — для доставки продукции). Адрес можно обновить в личном кабинете (креатор может переехать)
+- Чекбоксы согласия: обработка персональных данных, передача персональных данных третьим лицам, трансграничная передача данных, условия платформы
+- После отправки: экран подтверждения («Ваша заявка на рассмотрении») + приглашение открыть Telegram-бота с пояснением: «Пожалуйста, откройте нашего Telegram-бота, чтобы мы могли уведомить вас о результатах. Мы не будем спамить — только важные обновления.»
 
-### Step 2: Identity Verification
-- Confirm that the person is the actual owner of the social media accounts they linked
-- Prevents scam scenario: someone registers under a known blogger's name, takes barter products, never posts
-- Verification method: TBD (needs technical design — could be OAuth, screenshot proof, or other)
+### Шаг 2: Верификация личности
+- Подтверждение, что человек является реальным владельцем указанных аккаунтов в соцсетях
+- Предотвращение скам-сценария: кто-то регистрируется под именем известного блогера, забирает бартерную продукцию и ничего не публикует
+- Метод верификации: на проработке (нужен технический дизайн — OAuth, скриншот-доказательство или иное)
 
-### Step 3: Automated Moderation (LiveDune)
-- Pull metrics from LiveDune API: follower count, average views on recent reels, engagement rate (ER), posting frequency, total number of publications
-- Filter out obviously unqualified creators: too few posts (e.g., only 3 total), inactive accounts, very low engagement
-- Purpose: reduce manual workload for Aidana by eliminating clearly unqualified applicants before human review
+### Шаг 3: Автоматическая модерация (LiveDune)
+- Подтягивание метрик через LiveDune API: количество подписчиков, средние просмотры последних рилсов, ER, частота публикаций, общее количество публикаций
+- Отсев очевидно неподходящих креаторов: слишком мало постов (напр., всего 3), неактивные аккаунты, очень низкая вовлечённость
+- Цель: снизить ручную нагрузку на Айдану, отсекая явно неквалифицированных до ручного ревью
 
-### Step 4: Manual Moderation (Aidana)
-- Aidana personally reviews each remaining application
-- Checks: content quality, visual aesthetic, category fit (e.g., someone claiming "fashion" but posting casual home content = reject), consistency
-- Can approve, reject, or reject with feedback (e.g., "recommend changing your category from fashion to lifestyle — your content fits better there")
-- Approval/rejection reasons are stored in the database — this accumulates as training data for future AI-assisted moderation
-- For Fashion Week MVP: all 200 creators go through manual review (manageable volume)
-- Scaling plan: when volume exceeds capacity, Aidana has a person (currently handling UGC selection for Eurasian Fashion Week) who can be hired for moderation
+### Шаг 4: Ручная модерация (Айдана)
+- Айдана лично проверяет каждую оставшуюся заявку
+- Проверяет: качество контента, визуальную эстетику, соответствие категории (напр., заявляет «мода», но постит домашний контент = отклонение), последовательность
+- Может одобрить, отклонить или отклонить с фидбэком (напр., «рекомендуем сменить категорию с моды на лайфстайл — ваш контент больше подходит»)
+- Причины одобрения/отклонения сохраняются в базе данных — это накапливается как обучающая выборка для будущей AI-модерации
+- Для MVP Fashion Week: все 200 креаторов проходят ручное ревью (управляемый объём)
+- План масштабирования: когда объём превысит возможности, у Айданы есть человек (сейчас занимается отбором UGC-креаторов для Eurasian Fashion Week), которого можно нанять на модерацию
 
-### Step 5: Notification and Contract
-- Approved creator receives Telegram notification: "Congratulations, your application is approved! You've been granted access to [category]. Please review and sign the service agreement."
-- Contract signed via **TrustMe** (Kazakhstan e-signing service, legally binding, equivalent to wet signature, usable in court)
-- Contract is a one-time service agreement (not per-campaign) covering:
-  - Confidentiality: cannot share/screenshot brand details, campaign conditions, payment terms
-  - Obligation to fulfill campaign requirements per the technical brief (ТЗ) when accepting a campaign
-  - Liability: if creator takes barter product and doesn't deliver, they must reimburse product cost + platform costs + logistics costs
-  - Content licensing: creator agrees that UGCBoost may grant brands the right to repurpose their content for paid ads (at UGCBoost's discretion)
-- Contract duration: TBD (needs legal consultation — could be indefinite or fixed-term)
-- After signing: full access to Telegram Mini App and available campaigns
+### Шаг 5: Уведомление и договор
+- Одобренный креатор получает уведомление в Telegram: «Поздравляем, ваша заявка одобрена! Вам открыта категория [категория]. Пожалуйста, ознакомьтесь с договором и подпишите.»
+- Договор подписывается через **TrustMe** (казахстанский сервис электронной подписи, юридически обязывающий, эквивалент собственноручной подписи, может использоваться в суде)
+- Договор — разовое соглашение об оказании услуг (не на каждую кампанию), покрывающее:
+  - Конфиденциальность: нельзя делиться/скриншотить детали брендов, условия кампаний, условия оплаты
+  - Обязательство выполнять требования кампании по ТЗ при принятии заказа
+  - Ответственность: если креатор берёт бартерный продукт и не выполняет заказ, он обязан возместить стоимость продукции + расходы платформы + расходы на логистику
+  - Лицензирование контента: креатор соглашается, что UGCBoost может предоставить брендам право использовать его контент для платной рекламы (по решению UGCBoost)
+- Срок договора: на проработке (нужна юридическая консультация — бессрочный или с фиксированным сроком)
+- После подписания: полный доступ к Telegram Mini App и доступным кампаниям
 
-### Step 6: Platform Access
-- Creator enters the Telegram Mini App
-- Sees available campaigns filtered by/relevant to their approved category
-- Campaigns outside their category are visible but grayed out / blocked — cannot apply
-- Creator **cannot change their category** freely — changing category triggers re-moderation (all access suspended until new category is reviewed and approved). This prevents gaming: e.g., entering as "lifestyle" then switching to "fashion" to access premium campaigns
+### Шаг 6: Доступ к платформе
+- Креатор входит в Telegram Mini App
+- Видит доступные кампании, отфильтрованные по одобренной категории
+- Кампании вне категории видны, но отображаются серым/заблокированными — нельзя подать заявку
+- Креатор **не может свободно менять категорию** — смена категории запускает повторную модерацию (доступ приостанавливается до проверки и одобрения новой категории). Это предотвращает обход: напр., зайти как «лайфстайл», потом переключиться на «мода» для доступа к премиум-кампаниям
 
-## Campaign Flow (Detailed)
+## Флоу кампаний (детально)
 
-### Brand Creates Campaign
-- Campaign types: **product** (physical / digital), **service**, or **event**
-- Fields: brand name, campaign description, requirements/ТЗ (technical brief), content type (Reels, TikTok post, Threads post, or combination), tagging instructions (which accounts to tag, collab post requirements), barter/paid terms, target creator category, capacity limit (max creators), deadline
-- For events: date, time, location, dress code, specific instructions
-- Services: salon visits, consultations, procedures — creator must visit and create content about the experience
+### Бренд создаёт кампанию
+- Типы кампаний: **продукт** (физический / цифровой), **услуга** или **ивент**
+- Поля: название бренда, описание кампании, требования/ТЗ, тип контента (Reels, TikTok, Threads или комбинация), инструкции по тегированию (какие аккаунты отмечать, требования к коллаб-постам), условия (бартер/оплата), целевая категория креаторов, лимит участников, дедлайн
+- Для ивентов: дата, время, локация, дресс-код, специальные инструкции
+- Услуги: посещение салона, консультации, процедуры — креатор приходит и создаёт контент об опыте
 
-### Creator Applies
-- Creator browses available campaigns, reads full ТЗ
-- Must acknowledge they've read the brief before the "Apply" button becomes active — prevents spam applications
-- Confirmation dialog: "Are you sure you want to apply for [Brand] x [Campaign Name]?" — reduces accidental clicks
-- Creator can **withdraw their application** at any time before the brand approves them
-- Application is treated as a **preference/wish**, not a guarantee — circumstances may result in different assignment
+### Креатор подаёт заявку
+- Креатор просматривает доступные кампании, читает полное ТЗ
+- Должен подтвердить, что ознакомился с брифом, прежде чем кнопка «Подать заявку» станет активной — предотвращает спам-заявки
+- Диалог подтверждения: «Вы уверены, что хотите подать заявку на [Бренд] x [Название кампании]?» — уменьшает случайные клики
+- Креатор может **отозвать заявку** в любой момент до одобрения брендом
+- Заявка рассматривается как **пожелание**, а не гарантия — обстоятельства могут привести к другому распределению
 
-### Brand Reviews Applications (or Admin for Fashion Week MVP)
-- Brand (or admin) sees list of pre-vetted creator applications for their campaign
-- Can approve or reject individual creators
-- **Cross-campaign visibility:** admin can see if a creator is already assigned to another active campaign — visual indicator/flag
-- This prevents accidentally assigning the same creator to multiple campaigns (important when diversity of creators matters)
-- However, this is **configurable per brand** — some brands may want the same creator on multiple campaigns
+### Бренд рассматривает заявки (или админ для MVP Fashion Week)
+- Бренд (или админ) видит список заявок от предварительно отобранных креаторов на свою кампанию
+- Может одобрить или отклонить отдельных креаторов
+- **Кросс-кампанийная видимость:** админ видит, назначен ли креатор в другую активную кампанию — визуальный индикатор/флаг
+- Это предотвращает случайное назначение одного креатора на несколько кампаний (важно, когда нужно разнообразие)
+- Однако это **настраивается для каждого бренда** — некоторые бренды могут хотеть одного креатора на несколько кампаний
 
-### Creator Limit Per Campaign
-- For Eurasian Fashion Week: ideally **one campaign per creator** to maximize creator diversity across brand partners
-- But this is flexible — if a popular campaign has too many applicants and an unpopular one has too few, creators may be asked to take a second campaign
-- If a campaign fills up (e.g., 50 applicants for 20 spots), brand selects their preferred 20; remaining 30 are notified: "This campaign is full, please consider other campaigns"
-- Some creators may not want certain campaigns (e.g., alcohol brands for personal/religious reasons) — their preferences are respected
+### Лимит креаторов на кампанию
+- Для Eurasian Fashion Week: в идеале **одна кампания на креатора** для максимального разнообразия среди партнёров
+- Но это гибко — если на популярную кампанию слишком много заявок, а на непопулярную мало, креаторов могут попросить взять вторую кампанию
+- Если кампания заполнена (напр., 50 заявок на 20 мест), бренд выбирает предпочтительных 20; оставшиеся 30 получают уведомление: «Эта кампания уже заполнена, рассмотрите другие кампании»
+- Некоторые креаторы не хотят определённые кампании (напр., алкогольные бренды по личным/религиозным причинам) — их предпочтения уважаются
 
-### Work Submission
-- After completing the campaign (e.g., attending event, creating content, publishing), creator submits links to published content
-- Number of link fields is determined by campaign ТЗ: if requirement is 3 reels, 3 fields are shown by default
-- Links must be unique — cannot submit the same URL multiple times
-- "+" button to add extra links for bonus content (creator published more than required by their own initiative)
-- Content can be across multiple platforms: Instagram Reels, TikTok videos, Threads posts — all supported
-- Some campaigns may require collab posts (content appears on both creator's and brand's pages)
+### Сдача работ
+- После выполнения кампании (напр., посещение ивента, создание контента, публикация) креатор прикрепляет ссылки на опубликованный контент
+- Количество полей для ссылок определяется ТЗ кампании: если требуется 3 рилса, по умолчанию показываются 3 поля
+- Ссылки должны быть уникальными — нельзя отправить один и тот же URL несколько раз
+- Кнопка «+» для добавления дополнительных ссылок на бонусный контент (креатор опубликовал больше, чем требовалось, по собственной инициативе)
+- Контент может быть на нескольких платформах: Instagram Reels, TikTok-видео, посты в Threads — все поддерживаются
+- Некоторые кампании могут требовать коллаб-посты (контент отображается и на странице креатора, и на странице бренда)
 
-### Notifications and Reminders
-- All notifications delivered via Telegram bot (not just in-app)
-- Application status updates: submitted → under review → approved/rejected
-- Deadline reminders: 2 weeks, 1 week, 3 days, 1 day before campaign deadline
-- Possible: confirmation button in reminders (creator confirms they're still planning to deliver)
+### Уведомления и напоминания
+- Все уведомления доставляются через Telegram-бота (не только в приложении)
+- Обновления статуса заявки: подана → на рассмотрении → одобрена/отклонена
+- Напоминания о дедлайне: за 2 недели, 1 неделю, 3 дня, 1 день до дедлайна кампании
+- Возможно: кнопка подтверждения в напоминаниях (креатор подтверждает, что планирует выполнить)
 
-## Brand Dashboard Features (Full Product, Not MVP)
+## Функции дашборда брендов (полный продукт, не MVP)
 
-### Campaign Content Gallery
-- Tile/grid view showing all published UGC content from a campaign
-- Each tile: video thumbnail (auto-playing muted or paused on hover), post metrics (views, likes, comments) displayed in a format familiar from social networks
-- Designed as a "wow moment" — brand manager opens campaign and instantly sees the full wall of content
-- Desktop-optimized layout (brands use laptops/computers, not mobile)
+### Галерея контента кампании
+- Вид плиткой/сеткой со всем опубликованным UGC-контентом по кампании
+- Каждая плитка: превью видео (автовоспроизведение без звука или на паузе при наведении), метрики поста (просмотры, лайки, комментарии) в формате, знакомом по соцсетям
+- Задуман как «вау-момент» — бренд-менеджер открывает кампанию и сразу видит всю стену контента
+- Оптимизирован под десктоп (бренды используют ноутбуки/компьютеры, не мобильные)
 
-### Creator Rating and Feedback System
-- Brands rate each creator's work on a scale (e.g., 1–10)
-- Can leave qualitative feedback per creator
-- Ratings are **internal only** — not shown to creators — to avoid discouraging them over subjective brand expectations
-- Example: brand expected viral results from a barter deal and is disappointed → low rating is subjective but still captured
-- Data helps UGCBoost: identify top performers, track quality trends, build internal creator scoring
-- Future potential: surface high-rated creators as "recommended" to other brands
+### Система оценки и фидбэка по креаторам
+- Бренды оценивают работу каждого креатора по шкале (напр., 1–10)
+- Могут оставить качественный отзыв по каждому креатору
+- Оценки **видны только платформе** — не показываются креаторам — чтобы не демотивировать их из-за субъективных ожиданий бренда
+- Пример: бренд ожидал вирусных результатов от бартерной сделки и разочарован → низкая оценка субъективна, но всё равно фиксируется
+- Данные помогают UGCBoost: выявлять лучших, отслеживать тренды качества, строить внутренний скоринг
+- Перспектива: показывать высоко оценённых креаторов как «рекомендованных» другим брендам
 
-### Campaign Analytics
-- Aggregated metrics per campaign: total views, total engagement, total comments across all submitted content
-- Metrics pulled and auto-updated via LiveDune API (views on reels grow over time — a reel can "blow up" weeks after posting)
-- Update frequency: by request, or on schedule (e.g., every 3 days, once a week) — TBD
-- For MVP: analytics collected manually or post-event, not automated
+### Аналитика кампаний
+- Агрегированные метрики по кампании: общие просмотры, общая вовлечённость, общие комментарии по всему отправленному контенту
+- Метрики подтягиваются и автообновляются через LiveDune API (просмотры рилсов растут со временем — рилс может «залететь» через недели после публикации)
+- Частота обновления: по запросу или по расписанию (напр., каждые 3 дня, раз в неделю) — TBD
+- Для MVP: аналитика собирается вручную или после мероприятия, не автоматически
 
-## Admin Panel (Detailed)
+## Админ-панель (детально)
 
-- Creator moderation queue: view applications, LiveDune metrics summary, approve/reject with reason
-- Campaign management: create campaigns (under Eurasian Fashion Week for MVP), set parameters
-- Cross-campaign creator tracking: see which creators are assigned where, prevent duplicate assignments when needed
-- Contract status tracking
-- Ban/blacklist functionality: for creators who violate terms (took product, didn't post, etc.)
-- For MVP: admin = Aidana operating as Eurasian Fashion Week, creating all campaigns herself
+- Очередь модерации креаторов: просмотр заявок, сводка метрик LiveDune, одобрение/отклонение с указанием причины
+- Управление кампаниями: создание кампаний (для MVP — под Eurasian Fashion Week), настройка параметров
+- Кросс-кампанийное отслеживание креаторов: видеть, какие креаторы где назначены, предотвращать дубли при необходимости
+- Отслеживание статуса договоров
+- Функционал бана/чёрного списка: для креаторов, нарушивших условия (взял продукцию, не опубликовал и т.д.)
+- Для MVP: админ = Айдана, работает от имени Eurasian Fashion Week, создаёт все кампании сама
 
-## Technical Integrations
+## Технические интеграции
 
 ### LiveDune API
-- Documentation: https://api.livedune.com/docs/
-- Wiki/tariffs: https://wiki.livedune.com/ru/articles/11640100-api
-- Supported social networks: Instagram (instagram_new), YouTube, Twitter, VK, OK, Telegram, Dzen — **TikTok NOT confirmed in API docs**
-- Key endpoints: account analytics (followers, views, views_avg, likes, comments, er, er_views), posts list, individual post statistics, stories, videos, audience demographics (gender, age — Instagram, Threads, VK, OK only)
-- Each creator's account must be added to LiveDune dashboard before metrics can be pulled
-- **Tariff recommendation for MVP (200 creators):** Business plan (10,000 requests/month), with option to buy additional request packs
-- Tariff pricing is in Russian rubles — need to verify if tenge pricing available
-- **TikTok status: UNKNOWN** — needs direct inquiry to LiveDune. Their website has confusing info about TikTok analytics. Will contact them during business hours.
-- For MVP: LiveDune used for moderation screening; automated analytics dashboard deferred to post-event
+- Документация: https://api.livedune.com/docs/
+- Wiki/тарифы: https://wiki.livedune.com/ru/articles/11640100-api
+- Поддерживаемые соцсети: Instagram (instagram_new), YouTube, Twitter, VK, OK, Telegram, Dzen — **TikTok НЕ подтверждён в документации API**
+- Ключевые эндпоинты: аналитика аккаунта (followers, views, views_avg, likes, comments, er, er_views), список постов, статистика отдельного поста, stories, videos, демография аудитории (пол, возраст — только Instagram, Threads, VK, OK)
+- Аккаунт каждого креатора нужно сначала добавить на дашборд LiveDune, прежде чем можно будет подтягивать метрики
+- **Рекомендация тарифа для MVP (200 креаторов):** тариф «Бизнес» (10 000 запросов/мес), с возможностью докупки пакетов
+- Цены указаны в российских рублях — нужно уточнить, есть ли ценообразование в тенге
+- **Статус TikTok: НЕИЗВЕСТЕН** — нужен прямой запрос в LiveDune. На их сайте противоречивая информация об аналитике TikTok. Свяжемся с ними в рабочее время
+- Для MVP: LiveDune используется для скрининга при модерации; автоматический аналитический дашборд откладывается на пост-мероприятие
 
 ### TrustMe
-- Kazakhstan e-signing service for legally binding contracts
-- Signing via SMS verification — legally equivalent to wet signature in Kazakhstan
-- Signed documents usable in court
-- REST API available (details need to be requested from TrustMe directly)
-- **No fallback acceptable** — simple checkbox/consent is not legally binding for a service agreement; proper e-signing is required for legal protection (liability, confidentiality, content licensing)
+- Казахстанский сервис электронной подписи для юридически обязывающих договоров
+- Подписание через SMS-верификацию — юридически эквивалентно собственноручной подписи в Казахстане
+- Подписанные документы могут использоваться в суде
+- REST API доступен (детали нужно запрашивать у TrustMe напрямую)
+- **Упрощённая замена недопустима** — простой чекбокс/согласие не является юридически обязывающим для договора оказания услуг; полноценная электронная подпись необходима для юридической защиты (ответственность, конфиденциальность, лицензирование контента)
 
-### Relog (Future)
-- Logistics service for optimized delivery routing
-- Collects all delivery addresses, builds efficient route for couriers
-- Not in MVP — future integration for product delivery campaigns
+### Relog (будущее)
+- Логистический сервис для оптимизации маршрутов доставки
+- Собирает все адреса доставки, строит оптимальный маршрут для курьеров
+- Не в MVP — будущая интеграция для кампаний с доставкой продукции
 
-## Eurasian Fashion Week Context (MVP Launch Event)
+## Контекст Eurasian Fashion Week (мероприятие запуска MVP)
 
-- **Dates:** May 13–14, 2026
-- **Aidana's role:** Executive Director of Eurasian Fashion Week (EFW) — this is her day job alongside UGCBoost
-- **Event structure:**
-  - May 13: Main fashion show — Kazakhstani and international designers
-  - May 14 morning: Kids Fashion Day — children's fashion designers
-  - May 14 afternoon: Modest Fashion Day — Muslim/modest fashion designers
-  - May 14 evening: Ethno designers show
-  - After evening show: After Party (invitation-only for top creators)
-- **Partners:** diverse brands — cosmetics, logistics companies, food/beverage, champagne/alcohol brands, coffee shops, automobile brands (e.g., Audi). Partners set up corners/stands at the venue or provide gifts.
-- **Campaign structure for MVP:** Each partner integration = separate campaign. E.g.:
-  - "EFW x [Auto Brand]" — attend show, visit auto brand's corner, shoot stylish fashion reel, tag brand in description
-  - "EFW x [Food Brand]" — attend Kids Fashion Day, cover children's show, natively integrate food brand
-  - "EFW x [Cosmetics Brand]" — attend and cover, collab post with EFW account
-- **Target:** ~200 vetted creators, distributed across campaigns
-- **Incentives for creators:** networking, fashion community, content for their portfolios, invitation to After Party for top performers, gifts for top 5 creators
-- **All campaigns are barter-only** — no payments to creators, no payments from partners (free test to validate the platform)
-- **Important constraint:** Aidana has other Fashion Week responsibilities beyond UGC, so she cannot take on additional brand campaigns during this period. Post-event focus shifts to commercial brand onboarding.
+- **Даты:** 13–14 мая 2026
+- **Роль Айданы:** исполнительный директор Eurasian Fashion Week (EFW) — это её основная работа параллельно с UGCBoost
+- **Структура мероприятия:**
+  - 13 мая: основной показ — казахстанские и зарубежные дизайнеры
+  - 14 мая утро: Kids Fashion Day — детские дизайнеры
+  - 14 мая обед: Modest Fashion Day — мусульманская и modest-мода
+  - 14 мая вечер: показ этно-дизайнеров
+  - После вечернего показа: After Party (по приглашению для лучших креаторов)
+- **Партнёры:** разнообразные бренды — косметика, логистические компании, еда/напитки, алкогольные бренды, кофейни, автомобильные бренды (напр., Audi). Партнёры ставят корнеры/стенды на площадке или предоставляют подарки
+- **Структура кампаний для MVP:** каждая партнёрская интеграция = отдельная кампания. Примеры:
+  - «EFW x [Автобренд]» — прийти на показ, посетить корнер автобренда, снять стильный фэшн-рилс, отметить бренд в описании
+  - «EFW x [Продуктовый бренд]» — прийти на Kids Fashion Day, осветить детский показ, нативно интегрировать продуктовый бренд
+  - «EFW x [Косметический бренд]» — прийти и осветить, коллаб-пост с аккаунтом EFW
+- **Цель:** ~200 проверенных креаторов, распределённых по кампаниям
+- **Стимулы для креаторов:** нетворкинг, фэшн-комьюнити, контент для портфолио, приглашение на After Party для лучших, подарки для топ-5 креаторов
+- **Все кампании только бартер** — без оплаты креаторам, без оплаты от партнёров (бесплатный тест для валидации платформы)
+- **Важное ограничение:** у Айданы есть другие обязанности по Fashion Week помимо UGC, поэтому она не может брать дополнительные брендовые кампании в этот период. После мероприятия фокус смещается на привлечение коммерческих брендов
 
-## Business Model Details
+## Детали бизнес-модели
 
-- **Not finalized** — three options under consideration:
-  1. Commission per paid creator engagement
-  2. Tiered subscription (campaign count + creator count per tier)
-  3. Hybrid: subscription + commission
-- **Content licensing as monetization lever:** creator contracts grant UGCBoost the right to control whether brands can use UGC as paid ad creatives. Basic tier: content lives only on creator's page. Premium tier: brand can repurpose for targeted ads (Spark Ads, Partnership Ads). UGCBoost decides — this is an upsell opportunity.
-- **Agency/intermediary revenue:** UGCBoost as VAT-registered entity handles payments between brands and creators. Brands can claim marketing expenses as tax deductions (impossible when paying individual creators directly). UGCBoost takes a commission.
-- **MVP (Fashion Week) is free** — no payment from partners, no payment to creators. Purpose: validate operations, build case study.
-- **Post-MVP monetization plan:** approach brands from warm pipeline with proven results + ready creator pool
+- **Не зафиксирована** — три варианта на рассмотрении:
+  1. Комиссия с каждого платного заказа креатору
+  2. Тарифные планы (количество кампаний + количество креаторов на тариф)
+  3. Гибрид: подписка + комиссия
+- **Лицензирование контента как рычаг монетизации:** договоры с креаторами дают UGCBoost право контролировать, могут ли бренды использовать UGC как рекламные креативы. Базовый тариф: контент только на странице креатора. Премиум-тариф: бренд может использовать для таргета (Spark Ads, Partnership Ads). UGCBoost решает — это возможность апселла
+- **Агентский/посреднический доход:** UGCBoost как плательщик НДС обрабатывает платежи между брендами и креаторами. Бренды могут брать маркетинговые расходы на вычет (невозможно при прямой оплате физлицам-креаторам). UGCBoost берёт комиссию
+- **MVP (Fashion Week) бесплатный** — без оплаты от партнёров, без оплаты креаторам. Цель: валидация операций, создание кейса
+- **План монетизации после MVP:** прийти к брендам из тёплого пайплайна с доказанными результатами + готовый пул креаторов
 
-## Platform Strategy
+## Стратегия платформы
 
-- **UGC creators:** Telegram Mini App (MVP) → native mobile app (future, App Store / Google Play)
-- **Brands:** web-only (employees work on computers, mobile not needed)
-- **Admin:** web panel
-- **Why Telegram Mini App for MVP:**
-  - Telegram is dominant in Kazakhstan (~12–15M users)
-  - Creators already use Telegram for communication
-  - Lower friction than App Store download
-  - Built-in notification system via bot
-  - Cannot ship native app to App Store in time for May 13
-- **Design principle:** MVP should not be over-fitted to Fashion Week — build with future multi-brand usage in mind from the start
+- **UGC-креаторы:** Telegram Mini App (MVP) → нативное мобильное приложение (будущее, App Store / Google Play)
+- **Бренды:** только веб (сотрудники работают за компьютерами, мобильное не нужно)
+- **Админ:** веб-панель
+- **Почему Telegram Mini App для MVP:**
+  - Telegram доминирует в Казахстане (~12–15 млн пользователей)
+  - Креаторы уже используют Telegram для коммуникации
+  - Ниже порог входа, чем скачивание из App Store
+  - Встроенная система уведомлений через бота
+  - Не успеваем выпустить нативное приложение в App Store к 13 мая
+- **Принцип проектирования:** MVP не должен быть заточен только под Fashion Week — проектировать с учётом будущего мультибрендового использования с самого начала
 
-## Rejected Ideas and Decisions
+## Отклонённые идеи и решения
 
-- **Screenshot-based analytics:** REJECTED — views grow over time (reel can go viral weeks later), screenshots are static; also creators can photoshop screenshots to inflate numbers. LiveDune API provides live, verifiable data.
-- **Simple checkbox instead of TrustMe contract:** REJECTED — checkbox is not legally binding for service agreements in Kazakhstan. TrustMe e-signing has legal standing equivalent to wet signature, usable in court. Essential for liability protection.
-- **Kaspi Shop integration for MVP:** DEFERRED — interesting but niche (only relevant for sellers with exclusive product cards). Most Kaspi cards have multiple sellers sharing one listing, making UGC attribution unclear. May revisit when Kaspi's reported "unique seller link" feature is confirmed.
-- **Creator education/academy:** DEFERRED — good idea (convert rejected creators into future supply), but not priority for MVP or even Year 1. Will consider after platform is established.
-- **AI-assisted moderation for MVP:** DEFERRED — manual moderation is sufficient for 200 creators. Approval/rejection reasons are being stored as training data. AI consideration starts when volume exceeds manual capacity.
-- **Specific success metrics/KPIs for Fashion Week:** NOT DEFINED — team will assess success qualitatively based on operational execution and partner satisfaction, not pre-set numbers. Analytics from LiveDune will provide quantitative results post-event.
+- **Аналитика по скриншотам:** ОТКЛОНЕНО — просмотры растут со временем (рилс может завируситься через недели), скриншоты статичны; также креаторы могут фотошопить скриншоты для завышения цифр. LiveDune API даёт живые, верифицируемые данные
+- **Простой чекбокс вместо договора TrustMe:** ОТКЛОНЕНО — чекбокс не является юридически обязывающим для договоров оказания услуг в Казахстане. Электронная подпись TrustMe имеет юридическую силу, эквивалентную собственноручной подписи, может использоваться в суде. Необходимо для защиты ответственности
+- **Интеграция с Kaspi Shop для MVP:** ОТЛОЖЕНО — интересно, но нишевое применение (актуально только для продавцов с эксклюзивными карточками товаров). Большинство карточек Kaspi имеют нескольких продавцов на одном листинге, что делает атрибуцию UGC неясной. Вернуться к вопросу, когда подтвердится информация о «уникальной ссылке продавца» от Kaspi
+- **Обучение/академия для креаторов:** ОТЛОЖЕНО — хорошая идея (превратить отклонённых в будущий supply), но не приоритет для MVP и даже для 1-го года. Рассмотреть после становления платформы
+- **AI-модерация для MVP:** ОТЛОЖЕНО — ручная модерация достаточна для 200 креаторов. Причины одобрения/отклонения сохраняются как обучающие данные. AI рассмотреть, когда объём превысит ручные возможности
+- **Конкретные метрики успеха/KPI для Fashion Week:** НЕ ОПРЕДЕЛЕНЫ — команда оценит успех качественно на основе операционного исполнения и удовлетворённости партнёров, а не заранее установленных цифр. Аналитика LiveDune предоставит количественные результаты после мероприятия
 
-## Open Questions
+## Открытые вопросы
 
-- **TikTok analytics via LiveDune:** API docs don't list TikTok as supported social network. Needs direct inquiry to LiveDune. Critical because Fashion Week creators will post on both Instagram and TikTok.
-- **TrustMe API specifics:** Need to request API access and documentation. Flow, rate limits, pricing unknown.
-- **Contract duration:** Indefinite or fixed-term? Needs legal consultation.
-- **Creator verification method:** How to confirm account ownership technically? OAuth? Verification post? Screenshot? Needs technical design.
-- **Source tracking for creator recruitment:** Team is manually scouting UGC creators in Google Sheets and DMing them. Need tracking for where applications originate (UTM links? promo codes?). Not resolved — "will think about it."
-- **LiveDune pricing in tenge:** Tariffs shown in Russian rubles. Need to confirm if Kazakhstan-specific pricing exists.
-- **Category taxonomy:** Categories mentioned: fashion, beauty, lifestyle, parenting/mommy blog, food. Full category list not finalized.
-- **Multi-category creators:** Can a creator be approved in multiple categories simultaneously? Not discussed.
+- **Аналитика TikTok через LiveDune:** в документации API TikTok не указан как поддерживаемая соцсеть. Нужен прямой запрос в LiveDune. Критично, потому что креаторы Fashion Week будут публиковать и в Instagram, и в TikTok
+- **Детали API TrustMe:** нужно запросить доступ к API и документацию. Флоу, лимиты, цены неизвестны
+- **Срок договора:** бессрочный или с фиксированным сроком? Нужна юридическая консультация
+- **Метод верификации креаторов:** как технически подтвердить владение аккаунтом? OAuth? Верификационный пост? Скриншот? Нужен технический дизайн
+- **Отслеживание источника заявок:** команда вручную ищет UGC-креаторов в Google Таблицах и пишет им в DM. Нужно отслеживание, откуда приходят заявки (UTM-ссылки? промокоды?). Не решено — «подумаем»
+- **Ценообразование LiveDune в тенге:** тарифы показаны в российских рублях. Нужно уточнить, есть ли казахстанские цены
+- **Таксономия категорий:** упомянутые категории: мода, бьюти, лайфстайл, мамский блог, еда. Полный список категорий не финализирован
+- **Мультикатегорийные креаторы:** может ли креатор быть одобрен в нескольких категориях одновременно? Не обсуждалось
