@@ -8,7 +8,7 @@ UGCBoost — full-stack product (backend, frontend, landing pages, external inte
 
 ## Communication
 
-All communication in this project is in **Russian**. Code, variable names, and commits stay in English.
+All communication in this project is in **Russian**. Product documentation (briefs, PRDs, specs) is written in **Russian**. Code, variable names, and commits stay in English.
 
 ## Team
 
@@ -23,7 +23,7 @@ BMad framework (modules: Core, BMM, CIS, TEA). Use BMad skills and agents for pl
 
 BMad config files (`_bmad/*/config.yaml`) are per-user and gitignored. After cloning, run `/bmad-init` with:
 - communication_language: Russian
-- document_output_language: English
+- document_output_language: Russian
 - output_folder: _bmad-output
 - project_name: ugcboost
 
