@@ -13,6 +13,7 @@ stepsCompleted:
   - 'step-09-functional'
   - 'step-10-nonfunctional'
   - 'step-11-polish'
+  - 'step-12-complete'
 inputDocuments:
   - '_bmad-output/planning/product-brief-ugcboost.md'
   - '_bmad-output/planning/product-brief-ugcboost-distillate.md'
