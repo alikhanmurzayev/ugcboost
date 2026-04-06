@@ -7,6 +7,7 @@ stepsCompleted:
   - 'step-03-success'
   - 'step-04-journeys'
   - 'step-05-domain'
+  - 'step-06-innovation'
 inputDocuments:
   - '_bmad-output/planning/product-brief-ugcboost.md'
   - '_bmad-output/planning/product-brief-ugcboost-distillate.md'
