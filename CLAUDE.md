@@ -19,6 +19,14 @@ All communication in this project is in **Russian**. Product documentation (brie
 
 BMad framework (modules: Core, BMM, CIS, TEA). Use BMad skills and agents for planning, design, and implementation workflows.
 
+UGCBoost — стартап-MVP с командой из 2 человек и жёстким дедлайном. Это UGC-маркетплейс, не медицинский софт и не финтех. Калибруй все процессы под эту реальность:
+
+- Все артефакты (PRD, архитектура, спеки) — living documents. Написал достаточно чтобы начать кодить — начинай кодить. Детали уточняются по ходу реализации
+- Ревью и анализ — один раунд, без многофазных процессов. Нашёл проблему — пофиксил — пошёл дальше
+- Документы — средство, не цель. Рабочий код важнее идеального документа
+- Реализация вертикальными слайсами: каждая итерация заканчивается рабочим user flow
+- Внешние интеграции (LiveDune, TrustMe) мокаются до момента когда реально нужны
+
 ## BMad Setup
 
 BMad config files (`_bmad/*/config.yaml`) are per-user and gitignored. After cloning, run `/bmad-init` with:
