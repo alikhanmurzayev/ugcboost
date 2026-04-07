@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>UGCBoost — User Journey Flows</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; background: #f8f9fa; color: #1a1a1a; }
+  .header { background: #fff; border-bottom: 1px solid #e5e7eb; padding: 24px 32px; position: sticky; top: 0; z-index: 10; }
+  .header h1 { font-size: 24px; font-weight: 700; }
+  .header p { color: #6b7280; font-size: 14px; margin-top: 4px; }
+  .nav { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+  .nav a { padding: 6px 14px; border-radius: 20px; background: #f3f4f6; color: #374151; text-decoration: none; font-size: 13px; font-weight: 500; transition: all 0.2s; }
+  .nav a:hover, .nav a.active { background: #FF2D8A; color: #fff; }
+  .container { max-width: 1100px; margin: 0 auto; padding: 32px 24px; }
+  .flow-section { background: #fff; border-radius: 16px; padding: 32px; margin-bottom: 32px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+  .flow-section h2 { font-size: 20px; font-weight: 700; margin-bottom: 8px; }
+  .flow-section .subtitle { color: #6b7280; font-size: 14px; margin-bottom: 24px; }
+  .flow-section h3 { font-size: 16px; font-weight: 600; margin-top: 24px; margin-bottom: 12px; }
+  .mermaid { margin: 16px 0; overflow-x: auto; }
+  .key-points { background: #fef3f8; border-left: 4px solid #FF2D8A; padding: 16px 20px; border-radius: 0 8px 8px 0; margin-top: 20px; }
+  .key-points h4 { font-size: 14px; font-weight: 600; color: #FF2D8A; margin-bottom: 8px; }
+  .key-points ul { list-style: none; padding: 0; }
+  .key-points li { font-size: 14px; padding: 4px 0; padding-left: 20px; position: relative; color: #374151; }
+  .key-points li::before { content: '→'; position: absolute; left: 0; color: #FF2D8A; font-weight: 700; }
+  table { width: 100%; border-collapse: collapse; margin-top: 16px; font-size: 14px; }
+  th { background: #f9fafb; text-align: left; padding: 10px 14px; font-weight: 600; border-bottom: 2px solid #e5e7eb; }
+  td { padding: 10px 14px; border-bottom: 1px solid #f3f4f6; }
+  tr:hover td { background: #fef9fc; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 12px; font-weight: 500; }
+  .badge-creator { background: #dbeafe; color: #1d4ed8; }
+  .badge-brand { background: #fef3c7; color: #92400e; }
+  .badge-admin { background: #ede9fe; color: #6d28d9; }
+  .badge-edge { background: #fee2e2; color: #991b1b; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>UGCBoost — User Journey Flows</h1>
+  <p>Step 10 UX Design Specification</p>
+  <div class="nav">
+    <a href="#flow-1" class="active">Креатор: заявка → сдача</a>
+    <a href="#flow-2">Бренд: кампания → результаты</a>
+    <a href="#flow-3">Админ: операционный цикл</a>
+    <a href="#flow-4">Отклонение и повтор</a>
+    <a href="#flow-5">Dispute</a>
+    <a href="#patterns">Паттерны</a>
+  </div>
+</div>
+
+<div class="container">
+
+  <!-- FLOW 1 -->
+  <div class="flow-section" id="flow-1">
+    <h2>Флоу 1: Креатор — от заявки до сдачи работы</h2>
+    <p class="subtitle"><span class="badge badge-creator">Креатор</span> Happy path — полный цикл от регистрации до выполнения заказа</p>
+
+    <h3>Онбординг (лендинг → приложение)</h3>
+    <pre class="mermaid">
+flowchart TD
+    A["🌐 Лендинг: увидел UGCBoost"] --> B["📝 Заполняет форму заявки\n(ФИО, ИИН, соцсети, категория, 4 чекбокса ПД)"]
+    B --> B1{"✅ Валидация ОК?"}
+    B1 -->|"Нет"| B
+    B1 -->|"Да"| C["⏳ Экран «Заявка на рассмотрении»"]
+    C --> D["🤖 Telegram-бот: нажимает Старт"]
+    D --> E["🔐 Верификация аккаунта"]
+    E --> E1{"Подтверждено?"}
+    E1 -->|"Нет"| E2["❌ Отклонение + объяснение"]
+    E1 -->|"Да"| F["📊 Автомодерация LiveDune\n(ER, подписчики, просмотры)"]
+    F --> F1{"Метрики ОК?"}
+    F1 -->|"Нет"| F2["❌ Автоотклонение + фидбэк"]
+    F1 -->|"Да"| G["👁️ Ручная модерация\n(качество контента, визуал, категория)"]
+    G --> G1{"Одобрен?"}
+    G1 -->|"Нет"| G2["❌ Отклонение + рекомендация"]
+    G1 -->|"Да"| H["✍️ TrustMe: подписание договора\n(NDA, обязательства, лицензия)"]
+    H --> H1{"Подписал?"}
+    H1 -->|"Нет"| H2["🚫 Доступ не открыт"]
+    H1 -->|"Да"| I["🎉 Доступ к приложению!"]
+
+    style A fill:#dbeafe,stroke:#3b82f6
+    style I fill:#d1fae5,stroke:#10b981
+    style E2 fill:#fee2e2,stroke:#ef4444
+    style F2 fill:#fee2e2,stroke:#ef4444
+    style G2 fill:#fee2e2,stroke:#ef4444
+    style H2 fill:#fee2e2,stroke:#ef4444
+    </pre>
+
+    <h3>Рабочий цикл (кампании → сдача)</h3>
+    <pre class="mermaid">
+flowchart TD
+    I["📱 Открыл приложение"] --> J["📋 Лента кампаний\n(Grid 2× / Hero-карточки)"]
+    J --> K["👀 Читает бриф кампании\n(фото продукта, ТЗ, дедлайн, бюджет)"]
+    K --> L["👆 «Подать заявку»\n(один тап + ознакомление с ТЗ)"]
+    L --> M["⏳ Ожидание одобрения бренда"]
+    M --> M1{"Одобрен?"}
+    M1 -->|"Нет"| M2["📩 Уведомление + другие кампании"]
+    M1 -->|"Да"| N["🔔 Push: «Вас одобрили!»"]
+    N --> O["⚖️ Экран принятия заказа\n(NDA, условия, лицензия, № договора)"]
+    O --> O1{"Принял?"}
+    O1 -->|"Нет"| O2["Заказ отклонён"]
+    O1 -->|"Да"| P["🔥 Кампания в «Активные»\n+ таймер до дедлайна"]
+    P --> Q["⏰ Напоминания\n2нед → 1нед → 3дн → 1день"]
+    Q --> R["📎 Сдача работ\n(ссылки + чеклист маркировки)"]
+    R --> R1{"Валидация ОК?"}
+    R1 -->|"Нет"| R
+    R1 -->|"Да"| S["✅ Статус: «Ожидает приёмки»"]
+
+    style I fill:#dbeafe,stroke:#3b82f6
+    style L fill:#fef3c7,stroke:#f59e0b
+    style N fill:#d1fae5,stroke:#10b981
+    style O fill:#fef3f8,stroke:#FF2D8A
+    style S fill:#d1fae5,stroke:#10b981
+    style M2 fill:#fee2e2,stroke:#ef4444
+    </pre>
+
+    <div class="key-points">
+      <h4>Ключевые точки</h4>
+      <ul>
+        <li>Подача заявки на кампанию — минимальный барьер (один тап + ознакомление с ТЗ)</li>
+        <li>Принятие заказа — осознанный серьёзный момент (NDA, условия, лицензия)</li>
+        <li>4 автоматических напоминания по мере приближения дедлайна</li>
+        <li>Момент ценности: push «Вас одобрили!» — заказ пришёл без единого DM</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- FLOW 2 -->
+  <div class="flow-section" id="flow-2">
+    <h2>Флоу 2: Бренд — от кампании до результатов</h2>
+    <p class="subtitle"><span class="badge badge-brand">Бренд-менеджер</span> Happy path — создание кампании и управление креаторами</p>
+
+    <pre class="mermaid">
+flowchart TD
+    A["🏢 Аккаунт создан командой UGCBoost\n(MVP — без саморегистрации)"] --> B["💻 Веб-кабинет: создание кампании"]
+    B --> C["📋 Заполнение\n(ТЗ, тип, категория, лимит,\nдедлайн, маркировка, фото)"]
+    C --> D["⏳ Кампания на модерации UGCBoost"]
+    D --> D1{"Одобрена?"}
+    D1 -->|"Нет"| D2["📧 Email: замечания"] --> C
+    D1 -->|"Да"| E["📧 Email: «Кампания опубликована»"]
+    E --> F["⭐ Ранжированный список заявок\n(top-20/top-50 по метрикам)"]
+    F --> G["📊 Карточки креаторов\n(ER, подписчики, просмотры,\nкросс-кампанийный флаг)"]
+    G --> H["✅ Выбор top-N\n+ «Одобрить выбранных»"]
+    H --> I["📈 Дашборд кампании\n(прогресс-бар выполнения)"]
+    I --> J["👀 Просмотр сданных работ"]
+    J --> J1{"Соответствует ТЗ?"}
+    J1 -->|"Нет"| J2["⚠️ «Не по ТЗ» → эскалация"]
+    J1 -->|"Да"| K["✅ Приёмка + акт"]
+    K --> L["🖼️ Галерея контента\n(embed-посты + метрики LiveDune)"]
+
+    style A fill:#fef3c7,stroke:#f59e0b
+    style F fill:#d1fae5,stroke:#10b981
+    style L fill:#d1fae5,stroke:#10b981
+    style J2 fill:#fee2e2,stroke:#ef4444
+    </pre>
+
+    <div class="key-points">
+      <h4>Ключевые точки</h4>
+      <ul>
+        <li>Вау-момент: ранжированный список с метриками — top-20 за 15 минут вместо 2 недель поиска</li>
+        <li>Pipeline-view: заявки → одобрено → в работе → сдано → принято</li>
+        <li>Массовое одобрение — выбрал чекбоксами, нажал одну кнопку</li>
+        <li>Галерея контента — embed-посты с нативным превью из соцсетей</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- FLOW 3 -->
+  <div class="flow-section" id="flow-3">
+    <h2>Флоу 3: Админ — операционный цикл</h2>
+    <p class="subtitle"><span class="badge badge-admin">Админ (Айдана)</span> Утренняя сессия — обработка очередей модерации</p>
+
+    <pre class="mermaid">
+flowchart TD
+    A["☀️ Утро: открывает админ-панель"] --> B{"📬 Что в очередях?"}
+    B --> C["👤 Модерация креаторов"]
+    B --> D["📢 Модерация кампаний"]
+    B --> E["🚨 Алерты и проблемы"]
+
+    C --> C1["Карточка креатора:\nметрики LiveDune + ссылки на профили\n+ история заявок"]
+    C1 --> C2{"Одобрить?"}
+    C2 -->|"Да"| C3["✅ Статус обновлён → ожидает TrustMe"]
+    C2 -->|"Нет"| C4["❌ Отклонение + фидбэк + причина"]
+    C3 --> C5["⏭️ Автопереход к следующему"]
+    C4 --> C5
+
+    D --> D1["Бриф кампании:\nТЗ + правила + маркировка"]
+    D1 --> D2{"Одобрить?"}
+    D2 -->|"Да"| D3["✅ Кампания опубликована"]
+    D2 -->|"Нет"| D4["📝 Замечания → бренд"]
+
+    E --> E1["Просрочки / dispute / перегрузка"]
+    E1 --> E2["Ручная эскалация\n(Telegram / WhatsApp)"]
+
+    style A fill:#ede9fe,stroke:#8b5cf6
+    style C5 fill:#d1fae5,stroke:#10b981
+    style D3 fill:#d1fae5,stroke:#10b981
+    style E1 fill:#fee2e2,stroke:#ef4444
+    </pre>
+
+    <div class="key-points">
+      <h4>Ключевые точки</h4>
+      <ul>
+        <li>Все действия — из одной карточки, без переходов на другие страницы</li>
+        <li>Автопереход к следующему элементу в очереди после решения</li>
+        <li>Кросс-кампанийная карта: кто в скольких кампаниях одновременно</li>
+        <li>20 заявок за 30 минут вместо 3 часов в Google Sheets</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- FLOW 4 -->
+  <div class="flow-section" id="flow-4">
+    <h2>Флоу 4: Отклонение и повторная заявка</h2>
+    <p class="subtitle"><span class="badge badge-edge">Edge case</span> Креатор не прошёл модерацию — путь к исправлению</p>
+
+    <pre class="mermaid">
+flowchart TD
+    A["📝 Подал заявку, категория: мода"] --> B["📊 Автомодерация LiveDune — ОК"]
+    B --> C["👁️ Ручная модерация"]
+    C --> D{"Контент соответствует\nкатегории?"}
+    D -->|"Нет"| E["❌ Отклонение +\nконкретная рекомендация:\n«Ваш контент — лайфстайл, не мода.\nРекомендуем подать заявку\nв категорию лайфстайл»"]
+    E --> F["📩 Уведомление в Telegram:\nпричина + совет"]
+    F --> G["🔄 Повторная заявка\nс новой категорией"]
+    G --> H["👁️ Модератор видит историю:\nпредыдущее отклонение + причину"]
+    H --> I{"Одобрить?"}
+    I -->|"Да"| J["✅ → договор → кампании"]
+    I -->|"Нет"| K["❌ Повторное отклонение + фидбэк"]
+    D -->|"Да"| J
+
+    style E fill:#fef3c7,stroke:#f59e0b
+    style J fill:#d1fae5,stroke:#10b981
+    style K fill:#fee2e2,stroke:#ef4444
+    </pre>
+
+    <div class="key-points">
+      <h4>Ключевые точки</h4>
+      <ul>
+        <li>Не «отказано» — а конкретная рекомендация с путём к исправлению</li>
+        <li>Модератор видит полную историю заявок</li>
+        <li>Тон коммуникации: серьёзно, но справедливо</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- FLOW 5 -->
+  <div class="flow-section" id="flow-5">
+    <h2>Флоу 5: Dispute — невыполнение ТЗ</h2>
+    <p class="subtitle"><span class="badge badge-edge">Edge case</span> Креатор сдал работу не по ТЗ</p>
+
+    <pre class="mermaid">
+flowchart TD
+    A["📎 Работа сдана / дедлайн прошёл"] --> B{"Соответствует ТЗ?"}
+    B -->|"Да"| C["✅ Приёмка"]
+    B -->|"Нет"| D["⚠️ Бренд/админ: «Не по ТЗ»\n+ комментарий"]
+    D --> E["📋 Статус: «Требуется доработка»\n+ новый дедлайн"]
+    E --> F["💬 Эскалация: админ → креатор\nчерез Telegram/WhatsApp"]
+    F --> G{"Креатор исправил?"}
+    G -->|"Да"| H["✅ Повторная приёмка"]
+    G -->|"Нет"| I["📌 Инцидент зафиксирован\nв истории креатора"]
+    I --> J{"Повторные нарушения?"}
+    J -->|"Да"| K["🚫 Бан"]
+    J -->|"Нет"| L["⚠️ Предупреждение\n+ снижение рейтинга"]
+
+    style C fill:#d1fae5,stroke:#10b981
+    style H fill:#d1fae5,stroke:#10b981
+    style K fill:#fee2e2,stroke:#ef4444
+    style D fill:#fef3c7,stroke:#f59e0b
+    style E fill:#fef3c7,stroke:#f59e0b
+    </pre>
+
+    <div class="key-points">
+      <h4>Ключевые точки</h4>
+      <ul>
+        <li>Бренд не разруливает сам — отмечает проблему, платформа координирует</li>
+        <li>Каждый инцидент записывается в историю креатора</li>
+        <li>Прогрессивные последствия: предупреждение → снижение рейтинга → бан</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- PATTERNS -->
+  <div class="flow-section" id="patterns">
+    <h2>Паттерны поведения</h2>
+    <p class="subtitle">Общие паттерны UX, извлечённые из всех флоу</p>
+
+    <table>
+      <tr><th>Паттерн</th><th>Где</th><th>Описание</th></tr>
+      <tr><td><strong>Одно действие — одна карточка</strong></td><td>Модерация, ревью заявок</td><td>Вся информация + кнопки действий на одном экране, без переходов</td></tr>
+      <tr><td><strong>Автопереход</strong></td><td>Очередь модерации</td><td>После решения — автоматически следующий элемент</td></tr>
+      <tr><td><strong>Прогрессивная серьёзность</strong></td><td>Заявка → принятие заказа</td><td>Лёгкий старт (один тап), серьёзный коммит (NDA, условия)</td></tr>
+      <tr><td><strong>Фидбэк с контекстом</strong></td><td>Отклонения, ошибки</td><td>Не «отказано», а конкретная причина + путь к исправлению</td></tr>
+      <tr><td><strong>Напоминания-лестница</strong></td><td>Дедлайны кампаний</td><td>4 точки: 2нед → 1нед → 3дн → 1день</td></tr>
+      <tr><td><strong>Pipeline-статусы</strong></td><td>Кампания (бренд)</td><td>Заявки → одобрено → в работе → сдано → принято</td></tr>
+      <tr><td><strong>Batch-операции</strong></td><td>Одобрение креаторов</td><td>Выбрать N чекбоксами → одна кнопка «Одобрить выбранных»</td></tr>
+    </table>
+
+    <h3 style="margin-top:32px">Принципы оптимизации флоу</h3>
+    <table>
+      <tr><th>Принцип</th><th>Описание</th></tr>
+      <tr><td><strong>Минимум шагов до ценности</strong></td><td>Креатор видит кампании сразу после входа. Бренд видит заявки сразу после публикации</td></tr>
+      <tr><td><strong>Feedback на каждом шаге</strong></td><td>Статусы, toast-уведомления, progress indicators — пользователь всегда знает, что происходит</td></tr>
+      <tr><td><strong>Graceful degradation</strong></td><td>Если шаг не прошёл — конкретное объяснение + путь к исправлению, а не тупик</td></tr>
+      <tr><td><strong>Batch-операции</strong></td><td>Бренд одобряет N креаторов за раз. Админ обрабатывает очередь без лишних переходов</td></tr>
+    </table>
+  </div>
+
+</div>
+
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'default',
+    flowchart: { useMaxWidth: true, htmlLabels: true, curve: 'basis' },
+    themeVariables: {
+      primaryColor: '#fef3f8',
+      primaryBorderColor: '#FF2D8A',
+      primaryTextColor: '#1a1a1a',
+      lineColor: '#9ca3af',
+      secondaryColor: '#f3f4f6',
+      tertiaryColor: '#dbeafe'
+    }
+  });
+
+  // Smooth scroll for nav links
+  document.querySelectorAll('.nav a').forEach(link => {
+    link.addEventListener('click', (e) => {
+      e.preventDefault();
+      document.querySelectorAll('.nav a').forEach(l => l.classList.remove('active'));
+      link.classList.add('active');
+      document.querySelector(link.getAttribute('href')).scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  });
+</script>
+</body>
+</html>
