@@ -25,14 +25,18 @@ type Auth interface {
 
 // AuthHandler handles authentication endpoints.
 type AuthHandler struct {
-	auth   Auth
-	secure bool // true = Secure cookie flag (production)
+	auth    Auth
+	auditor Auditor
+	secure  bool // true = Secure cookie flag (production)
 }
 
 // NewAuthHandler creates a new AuthHandler.
 func NewAuthHandler(auth Auth, secure bool) *AuthHandler {
 	return &AuthHandler{auth: auth, secure: secure}
 }
+
+// SetAuditor sets the optional audit logger.
+func (h *AuthHandler) SetAuditor(a Auditor) { h.auditor = a }
 
 // Login handles POST /auth/login
 func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
@@ -63,6 +67,14 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.setRefreshCookie(w, result.RefreshTokenRaw, result.RefreshExpiresAt)
+
+	if h.auditor != nil {
+		h.auditor.Log(r.Context(), service.AuditEntry{
+			ActorID: result.User.ID, ActorRole: result.User.Role,
+			Action: "login", EntityType: "user", EntityID: result.User.ID,
+			IPAddress: clientIP(r),
+		})
+	}
 
 	respondJSON(w, http.StatusOK, map[string]any{
 		"accessToken": result.AccessToken,
@@ -173,6 +185,13 @@ func (h *AuthHandler) ResetPassword(w http.ResponseWriter, r *http.Request) {
 	if err := h.auth.ResetPassword(r.Context(), req.Token, req.NewPassword); err != nil {
 		respondError(w, r, err)
 		return
+	}
+
+	if h.auditor != nil {
+		h.auditor.Log(r.Context(), service.AuditEntry{
+			Action: "password_reset", EntityType: "user",
+			IPAddress: clientIP(r),
+		})
 	}
 
 	respondJSON(w, http.StatusOK, map[string]any{

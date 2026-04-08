@@ -10,6 +10,7 @@ import (
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/domain"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/middleware"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/repository"
+	"github.com/alikhanmurzayev/ugcboost/backend/internal/service"
 )
 
 // Brands is the interface BrandHandler needs from the brand service.
@@ -27,13 +28,17 @@ type Brands interface {
 
 // BrandHandler handles brand management endpoints.
 type BrandHandler struct {
-	brands Brands
+	brands  Brands
+	auditor Auditor
 }
 
 // NewBrandHandler creates a new BrandHandler.
 func NewBrandHandler(brands Brands) *BrandHandler {
 	return &BrandHandler{brands: brands}
 }
+
+// SetAuditor sets the optional audit logger.
+func (h *BrandHandler) SetAuditor(a Auditor) { h.auditor = a }
 
 // CreateBrand handles POST /api/brands
 func (h *BrandHandler) CreateBrand(w http.ResponseWriter, r *http.Request) {
@@ -56,6 +61,14 @@ func (h *BrandHandler) CreateBrand(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		respondError(w, r, err)
 		return
+	}
+
+	if h.auditor != nil {
+		h.auditor.Log(r.Context(), service.AuditEntry{
+			ActorID: middleware.UserIDFromContext(r.Context()), ActorRole: role,
+			Action: "brand_create", EntityType: "brand", EntityID: brand.ID,
+			NewValue: map[string]string{"name": brand.Name}, IPAddress: clientIP(r),
+		})
 	}
 
 	respondJSON(w, http.StatusCreated, brandToJSON(brand))
@@ -152,6 +165,14 @@ func (h *BrandHandler) UpdateBrand(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if h.auditor != nil {
+		h.auditor.Log(r.Context(), service.AuditEntry{
+			ActorID: middleware.UserIDFromContext(r.Context()), ActorRole: role,
+			Action: "brand_update", EntityType: "brand", EntityID: brandID,
+			NewValue: map[string]string{"name": brand.Name}, IPAddress: clientIP(r),
+		})
+	}
+
 	respondJSON(w, http.StatusOK, brandToJSON(brand))
 }
 
@@ -168,6 +189,14 @@ func (h *BrandHandler) DeleteBrand(w http.ResponseWriter, r *http.Request) {
 	if err := h.brands.DeleteBrand(r.Context(), brandID); err != nil {
 		respondError(w, r, err)
 		return
+	}
+
+	if h.auditor != nil {
+		h.auditor.Log(r.Context(), service.AuditEntry{
+			ActorID: middleware.UserIDFromContext(r.Context()), ActorRole: role,
+			Action: "brand_delete", EntityType: "brand", EntityID: brandID,
+			IPAddress: clientIP(r),
+		})
 	}
 
 	respondJSON(w, http.StatusOK, map[string]any{
@@ -199,6 +228,14 @@ func (h *BrandHandler) AssignManager(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if h.auditor != nil {
+		h.auditor.Log(r.Context(), service.AuditEntry{
+			ActorID: middleware.UserIDFromContext(r.Context()), ActorRole: role,
+			Action: "manager_assign", EntityType: "brand", EntityID: brandID,
+			NewValue: map[string]string{"email": user.Email}, IPAddress: clientIP(r),
+		})
+	}
+
 	resp := map[string]any{
 		"userId": user.ID,
 		"email":  user.Email,
@@ -225,6 +262,14 @@ func (h *BrandHandler) RemoveManager(w http.ResponseWriter, r *http.Request) {
 	if err := h.brands.RemoveManager(r.Context(), brandID, userID); err != nil {
 		respondError(w, r, err)
 		return
+	}
+
+	if h.auditor != nil {
+		h.auditor.Log(r.Context(), service.AuditEntry{
+			ActorID: middleware.UserIDFromContext(r.Context()), ActorRole: role,
+			Action: "manager_remove", EntityType: "brand", EntityID: brandID,
+			OldValue: map[string]string{"userId": userID}, IPAddress: clientIP(r),
+		})
 	}
 
 	respondJSON(w, http.StatusOK, map[string]any{

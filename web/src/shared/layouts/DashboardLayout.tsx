@@ -8,6 +8,7 @@ const adminNav = [
   { to: "/creators", label: "Креаторы" },
   { to: "/campaigns", label: "Кампании" },
   { to: "/moderation", label: "Модерация" },
+  { to: "/audit", label: "Журнал действий" },
 ];
 
 const brandNav = [

@@ -55,6 +55,30 @@ type AssignManagerResult struct {
 	} `json:"data"`
 }
 
+// AuditLogEntry defines model for AuditLogEntry.
+type AuditLogEntry struct {
+	Action     string      `json:"action"`
+	ActorId    string      `json:"actorId"`
+	ActorRole  string      `json:"actorRole"`
+	CreatedAt  time.Time   `json:"createdAt"`
+	EntityId   *string     `json:"entityId,omitempty"`
+	EntityType string      `json:"entityType"`
+	Id         string      `json:"id"`
+	IpAddress  string      `json:"ipAddress"`
+	NewValue   interface{} `json:"newValue,omitempty"`
+	OldValue   interface{} `json:"oldValue,omitempty"`
+}
+
+// AuditLogsResult defines model for AuditLogsResult.
+type AuditLogsResult struct {
+	Data struct {
+		Logs    []AuditLogEntry `json:"logs"`
+		Page    int             `json:"page"`
+		PerPage int             `json:"perPage"`
+		Total   int             `json:"total"`
+	} `json:"data"`
+}
+
 // Brand defines model for Brand.
 type Brand struct {
 	CreatedAt time.Time `json:"createdAt"`
@@ -173,6 +197,18 @@ type UserRole string
 // UserResponse defines model for UserResponse.
 type UserResponse struct {
 	Data User `json:"data"`
+}
+
+// ListAuditLogsParams defines parameters for ListAuditLogs.
+type ListAuditLogsParams struct {
+	ActorId    *string    `form:"actor_id,omitempty" json:"actor_id,omitempty"`
+	EntityType *string    `form:"entity_type,omitempty" json:"entity_type,omitempty"`
+	EntityId   *string    `form:"entity_id,omitempty" json:"entity_id,omitempty"`
+	Action     *string    `form:"action,omitempty" json:"action,omitempty"`
+	DateFrom   *time.Time `form:"date_from,omitempty" json:"date_from,omitempty"`
+	DateTo     *time.Time `form:"date_to,omitempty" json:"date_to,omitempty"`
+	Page       *int       `form:"page,omitempty" json:"page,omitempty"`
+	PerPage    *int       `form:"per_page,omitempty" json:"per_page,omitempty"`
 }
 
 // CreateBrandJSONRequestBody defines body for CreateBrand for application/json ContentType.

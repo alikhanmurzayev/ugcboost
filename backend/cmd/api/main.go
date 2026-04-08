@@ -84,9 +84,11 @@ func run() error {
 	// Dependencies
 	userRepo := repository.NewUserRepository(pool)
 	brandRepo := repository.NewBrandRepository(pool)
+	auditRepo := repository.NewAuditRepository(pool)
 	tokenSvc := service.NewTokenService(cfg.JWTSecret, cfg.JWTExpiry)
 	authSvc := service.NewAuthService(userRepo, tokenSvc)
 	brandSvc := service.NewBrandService(brandRepo, userRepo)
+	auditSvc := service.NewAuditService(auditRepo)
 
 	// Seed admin
 	if err := authSvc.SeedAdmin(ctx, cfg.AdminEmail, cfg.AdminPassword); err != nil {
@@ -96,7 +98,10 @@ func run() error {
 	// Handlers
 	isSecure := !strings.HasPrefix(cfg.CORSOrigins[0], "http://localhost")
 	authHandler := handler.NewAuthHandler(authSvc, isSecure)
+	authHandler.SetAuditor(auditSvc)
 	brandHandler := handler.NewBrandHandler(brandSvc)
+	brandHandler.SetAuditor(auditSvc)
+	auditHandler := handler.NewAuditHandler(auditSvc)
 
 	// Router
 	r := chi.NewRouter()
@@ -132,6 +137,9 @@ func run() error {
 			r.Post("/{brandID}/managers", brandHandler.AssignManager)
 			r.Delete("/{brandID}/managers/{userID}", brandHandler.RemoveManager)
 		})
+
+		// Audit logs
+		r.Get("/api/audit-logs", auditHandler.ListAuditLogs)
 	})
 
 	// Test endpoints (only when ENABLE_TEST_ENDPOINTS=true)

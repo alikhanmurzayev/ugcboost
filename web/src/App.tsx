@@ -6,6 +6,7 @@ import DashboardLayout from "@/shared/layouts/DashboardLayout";
 import DashboardPage from "@/features/dashboard/DashboardPage";
 import BrandsPage from "@/features/brands/BrandsPage";
 import BrandDetailPage from "@/features/brands/BrandDetailPage";
+import AuditLogPage from "@/features/audit/AuditLogPage";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -28,6 +29,7 @@ function App() {
               <Route index element={<DashboardPage />} />
               <Route path="brands" element={<BrandsPage />} />
               <Route path="brands/:brandId" element={<BrandDetailPage />} />
+              <Route path="audit" element={<AuditLogPage />} />
             </Route>
           </Route>
         </Routes>

@@ -338,6 +338,62 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/audit-logs:
+    get:
+      operationId: listAuditLogs
+      summary: List audit logs (admin only)
+      tags: [audit]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: actor_id
+          in: query
+          schema:
+            type: string
+        - name: entity_type
+          in: query
+          schema:
+            type: string
+        - name: entity_id
+          in: query
+          schema:
+            type: string
+        - name: action
+          in: query
+          schema:
+            type: string
+        - name: date_from
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: date_to
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: per_page
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Audit logs
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuditLogsResult"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /api/brands/{brandID}/managers/{userID}:
     parameters:
       - name: brandID
@@ -613,6 +669,49 @@ components:
               type: string
             tempPassword:
               type: string
+
+    AuditLogEntry:
+      type: object
+      required: [id, actorId, actorRole, action, entityType, ipAddress, createdAt]
+      properties:
+        id:
+          type: string
+        actorId:
+          type: string
+        actorRole:
+          type: string
+        action:
+          type: string
+        entityType:
+          type: string
+        entityId:
+          type: string
+        oldValue: {}
+        newValue: {}
+        ipAddress:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    AuditLogsResult:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [logs, total, page, perPage]
+          properties:
+            logs:
+              type: array
+              items:
+                $ref: "#/components/schemas/AuditLogEntry"
+            total:
+              type: integer
+            page:
+              type: integer
+            perPage:
+              type: integer
 
   securitySchemes:
     bearerAuth:
