@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -118,6 +119,14 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 
 	_ = h.auth.Logout(r.Context(), userID)
 
+	if h.auditor != nil {
+		h.auditor.Log(r.Context(), service.AuditEntry{
+			ActorID: userID, ActorRole: middleware.RoleFromContext(r.Context()),
+			Action: "logout", EntityType: "user", EntityID: userID,
+			IPAddress: clientIP(r),
+		})
+	}
+
 	// Clear cookie
 	http.SetCookie(w, &http.Cookie{
 		Name:     "refresh_token",
@@ -151,7 +160,9 @@ func (h *AuthHandler) RequestPasswordReset(w http.ResponseWriter, r *http.Reques
 	}
 
 	// Always return 200 to prevent email enumeration
-	_ = h.auth.RequestPasswordReset(r.Context(), req.Email)
+	if err := h.auth.RequestPasswordReset(r.Context(), req.Email); err != nil {
+		slog.Error("password reset request failed", "error", err)
+	}
 
 	respondJSON(w, http.StatusOK, map[string]any{
 		"message": "If the email exists, a reset link has been sent",
