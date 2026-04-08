@@ -83,8 +83,10 @@ func run() error {
 
 	// Dependencies
 	userRepo := repository.NewUserRepository(pool)
+	brandRepo := repository.NewBrandRepository(pool)
 	tokenSvc := service.NewTokenService(cfg.JWTSecret, cfg.JWTExpiry)
 	authSvc := service.NewAuthService(userRepo, tokenSvc)
+	brandSvc := service.NewBrandService(brandRepo, userRepo)
 
 	// Seed admin
 	if err := authSvc.SeedAdmin(ctx, cfg.AdminEmail, cfg.AdminPassword); err != nil {
@@ -94,6 +96,7 @@ func run() error {
 	// Handlers
 	isSecure := !strings.HasPrefix(cfg.CORSOrigins[0], "http://localhost")
 	authHandler := handler.NewAuthHandler(authSvc, isSecure)
+	brandHandler := handler.NewBrandHandler(brandSvc)
 
 	// Router
 	r := chi.NewRouter()
@@ -118,6 +121,17 @@ func run() error {
 
 		r.Post("/auth/logout", authHandler.Logout)
 		r.Get("/auth/me", authHandler.GetMe)
+
+		// Brand management
+		r.Route("/api/brands", func(r chi.Router) {
+			r.Post("/", brandHandler.CreateBrand)
+			r.Get("/", brandHandler.ListBrands)
+			r.Get("/{brandID}", brandHandler.GetBrand)
+			r.Put("/{brandID}", brandHandler.UpdateBrand)
+			r.Delete("/{brandID}", brandHandler.DeleteBrand)
+			r.Post("/{brandID}/managers", brandHandler.AssignManager)
+			r.Delete("/{brandID}/managers/{userID}", brandHandler.RemoveManager)
+		})
 	})
 
 	// Test endpoints (only when ENABLE_TEST_ENDPOINTS=true)
@@ -125,9 +139,10 @@ func run() error {
 		resetTokenStore := service.NewInMemoryResetTokenStore()
 		authSvc.SetResetTokenNotifier(resetTokenStore)
 
-		testHandler := handler.NewTestHandler(authSvc, resetTokenStore)
+		testHandler := handler.NewTestHandler(authSvc, brandSvc, resetTokenStore)
 		r.Route("/test", func(r chi.Router) {
 			r.Post("/seed-user", testHandler.SeedUser)
+			r.Post("/seed-brand", testHandler.SeedBrand)
 			r.Get("/reset-tokens", testHandler.GetResetToken)
 		})
 

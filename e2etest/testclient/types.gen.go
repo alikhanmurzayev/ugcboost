@@ -58,6 +58,21 @@ type ResetTokenResult struct {
 	} `json:"data"`
 }
 
+// SeedBrandRequest defines model for SeedBrandRequest.
+type SeedBrandRequest struct {
+	// ManagerEmail If provided, assigns this user as manager (creates user if needed)
+	ManagerEmail *openapi_types.Email `json:"managerEmail,omitempty"`
+	Name         string               `json:"name"`
+}
+
+// SeedBrandResult defines model for SeedBrandResult.
+type SeedBrandResult struct {
+	Data struct {
+		Id   string `json:"id"`
+		Name string `json:"name"`
+	} `json:"data"`
+}
+
 // SeedUserRequest defines model for SeedUserRequest.
 type SeedUserRequest struct {
 	Email    openapi_types.Email `json:"email"`
@@ -72,7 +87,7 @@ type SeedUserRequestRole string
 type SeedUserResult struct {
 	Data struct {
 		Email openapi_types.Email    `json:"email"`
-		Id    openapi_types.UUID     `json:"id"`
+		Id    string                 `json:"id"`
 		Role  SeedUserResultDataRole `json:"role"`
 	} `json:"data"`
 }
@@ -84,6 +99,9 @@ type SeedUserResultDataRole string
 type GetResetTokenParams struct {
 	Email openapi_types.Email `form:"email" json:"email"`
 }
+
+// SeedBrandJSONRequestBody defines body for SeedBrand for application/json ContentType.
+type SeedBrandJSONRequestBody = SeedBrandRequest
 
 // SeedUserJSONRequestBody defines body for SeedUser for application/json ContentType.
 type SeedUserJSONRequestBody = SeedUserRequest

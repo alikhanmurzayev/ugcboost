@@ -62,6 +62,31 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /test/seed-brand:
+    post:
+      operationId: seedBrand
+      summary: Create a test brand and optionally assign a manager
+      tags: [test]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SeedBrandRequest"
+      responses:
+        "201":
+          description: Brand created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SeedBrandResult"
+        "422":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
 components:
   schemas:
     SeedUserRequest:
@@ -88,7 +113,6 @@ components:
           properties:
             id:
               type: string
-              format: uuid
             email:
               type: string
               format: email
@@ -105,6 +129,30 @@ components:
           required: [token]
           properties:
             token:
+              type: string
+
+    SeedBrandRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        managerEmail:
+          type: string
+          format: email
+          description: If provided, assigns this user as manager (creates user if needed)
+
+    SeedBrandResult:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [id, name]
+          properties:
+            id:
+              type: string
+            name:
               type: string
 
     ErrorResponse:

@@ -4,6 +4,8 @@
 package apiclient
 
 import (
+	"time"
+
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
@@ -38,15 +40,79 @@ type APIError struct {
 	Message string `json:"message"`
 }
 
+// AssignManagerRequest defines model for AssignManagerRequest.
+type AssignManagerRequest struct {
+	Email string `json:"email"`
+}
+
+// AssignManagerResult defines model for AssignManagerResult.
+type AssignManagerResult struct {
+	Data struct {
+		Email        string  `json:"email"`
+		Role         string  `json:"role"`
+		TempPassword *string `json:"tempPassword,omitempty"`
+		UserId       string  `json:"userId"`
+	} `json:"data"`
+}
+
+// Brand defines model for Brand.
+type Brand struct {
+	CreatedAt time.Time `json:"createdAt"`
+	Id        string    `json:"id"`
+	LogoUrl   *string   `json:"logoUrl,omitempty"`
+	Name      string    `json:"name"`
+	UpdatedAt time.Time `json:"updatedAt"`
+}
+
+// BrandListItem defines model for BrandListItem.
+type BrandListItem struct {
+	CreatedAt    time.Time `json:"createdAt"`
+	Id           string    `json:"id"`
+	LogoUrl      *string   `json:"logoUrl,omitempty"`
+	ManagerCount int       `json:"managerCount"`
+	Name         string    `json:"name"`
+	UpdatedAt    time.Time `json:"updatedAt"`
+}
+
+// BrandResult defines model for BrandResult.
+type BrandResult struct {
+	Data Brand `json:"data"`
+}
+
+// CreateBrandRequest defines model for CreateBrandRequest.
+type CreateBrandRequest struct {
+	LogoUrl *string `json:"logoUrl,omitempty"`
+	Name    string  `json:"name"`
+}
+
 // ErrorResponse defines model for ErrorResponse.
 type ErrorResponse struct {
 	Error APIError `json:"error"`
+}
+
+// GetBrandResult defines model for GetBrandResult.
+type GetBrandResult struct {
+	Data struct {
+		CreatedAt time.Time     `json:"createdAt"`
+		Id        string        `json:"id"`
+		LogoUrl   *string       `json:"logoUrl,omitempty"`
+		Managers  []ManagerInfo `json:"managers"`
+		Name      string        `json:"name"`
+		UpdatedAt time.Time     `json:"updatedAt"`
+	} `json:"data"`
 }
 
 // HealthResponse defines model for HealthResponse.
 type HealthResponse struct {
 	Status  string `json:"status"`
 	Version string `json:"version"`
+}
+
+// ListBrandsResult defines model for ListBrandsResult.
+type ListBrandsResult struct {
+	Data struct {
+		Brands []BrandListItem `json:"brands"`
+	} `json:"data"`
 }
 
 // LoginRequest defines model for LoginRequest.
@@ -61,6 +127,13 @@ type LoginResult struct {
 		AccessToken string `json:"accessToken"`
 		User        User   `json:"user"`
 	} `json:"data"`
+}
+
+// ManagerInfo defines model for ManagerInfo.
+type ManagerInfo struct {
+	AssignedAt time.Time `json:"assignedAt"`
+	Email      string    `json:"email"`
+	UserId     string    `json:"userId"`
 }
 
 // MessageResponse defines model for MessageResponse.
@@ -81,10 +154,16 @@ type PasswordResetRequestBody struct {
 	Email openapi_types.Email `json:"email"`
 }
 
+// UpdateBrandRequest defines model for UpdateBrandRequest.
+type UpdateBrandRequest struct {
+	LogoUrl *string `json:"logoUrl,omitempty"`
+	Name    string  `json:"name"`
+}
+
 // User defines model for User.
 type User struct {
 	Email openapi_types.Email `json:"email"`
-	Id    openapi_types.UUID  `json:"id"`
+	Id    string              `json:"id"`
 	Role  UserRole            `json:"role"`
 }
 
@@ -95,6 +174,15 @@ type UserRole string
 type UserResponse struct {
 	Data User `json:"data"`
 }
+
+// CreateBrandJSONRequestBody defines body for CreateBrand for application/json ContentType.
+type CreateBrandJSONRequestBody = CreateBrandRequest
+
+// UpdateBrandJSONRequestBody defines body for UpdateBrand for application/json ContentType.
+type UpdateBrandJSONRequestBody = UpdateBrandRequest
+
+// AssignManagerJSONRequestBody defines body for AssignManager for application/json ContentType.
+type AssignManagerJSONRequestBody = AssignManagerRequest
 
 // LoginJSONRequestBody defines body for Login for application/json ContentType.
 type LoginJSONRequestBody = LoginRequest

@@ -151,7 +151,7 @@ paths:
 
   /auth/me:
     get:
-      operationId: getCurrentUser
+      operationId: getMe
       summary: Get current authenticated user
       tags: [auth]
       security:
@@ -165,6 +165,206 @@ paths:
                 $ref: "#/components/schemas/UserResponse"
         "401":
           description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/brands:
+    post:
+      operationId: createBrand
+      summary: Create a new brand
+      tags: [brands]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateBrandRequest"
+      responses:
+        "201":
+          description: Brand created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BrandResult"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    get:
+      operationId: listBrands
+      summary: List brands (admin sees all, manager sees own)
+      tags: [brands]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: List of brands
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListBrandsResult"
+
+  /api/brands/{brandID}:
+    parameters:
+      - name: brandID
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      operationId: getBrand
+      summary: Get brand details with managers
+      tags: [brands]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Brand details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GetBrandResult"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      operationId: updateBrand
+      summary: Update brand
+      tags: [brands]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateBrandRequest"
+      responses:
+        "200":
+          description: Brand updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BrandResult"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteBrand
+      summary: Delete brand
+      tags: [brands]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Brand deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/brands/{brandID}/managers:
+    parameters:
+      - name: brandID
+        in: path
+        required: true
+        schema:
+          type: string
+    post:
+      operationId: assignManager
+      summary: Assign manager to brand
+      tags: [brands]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AssignManagerRequest"
+      responses:
+        "201":
+          description: Manager assigned
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AssignManagerResult"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/brands/{brandID}/managers/{userID}:
+    parameters:
+      - name: brandID
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: userID
+        in: path
+        required: true
+        schema:
+          type: string
+    delete:
+      operationId: removeManager
+      summary: Remove manager from brand
+      tags: [brands]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Manager removed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+        "403":
+          description: Forbidden
           content:
             application/json:
               schema:
@@ -265,7 +465,6 @@ components:
       properties:
         id:
           type: string
-          format: uuid
         email:
           type: string
           format: email
@@ -279,6 +478,141 @@ components:
       properties:
         data:
           $ref: "#/components/schemas/User"
+
+    CreateBrandRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        logoUrl:
+          type: string
+
+    UpdateBrandRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        logoUrl:
+          type: string
+
+    Brand:
+      type: object
+      required: [id, name, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        logoUrl:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    BrandResult:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: "#/components/schemas/Brand"
+
+    BrandListItem:
+      type: object
+      required: [id, name, managerCount, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        logoUrl:
+          type: string
+        managerCount:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    ListBrandsResult:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [brands]
+          properties:
+            brands:
+              type: array
+              items:
+                $ref: "#/components/schemas/BrandListItem"
+
+    ManagerInfo:
+      type: object
+      required: [userId, email, assignedAt]
+      properties:
+        userId:
+          type: string
+        email:
+          type: string
+        assignedAt:
+          type: string
+          format: date-time
+
+    GetBrandResult:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [id, name, createdAt, updatedAt, managers]
+          properties:
+            id:
+              type: string
+            name:
+              type: string
+            logoUrl:
+              type: string
+            createdAt:
+              type: string
+              format: date-time
+            updatedAt:
+              type: string
+              format: date-time
+            managers:
+              type: array
+              items:
+                $ref: "#/components/schemas/ManagerInfo"
+
+    AssignManagerRequest:
+      type: object
+      required: [email]
+      properties:
+        email:
+          type: string
+
+    AssignManagerResult:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [userId, email, role]
+          properties:
+            userId:
+              type: string
+            email:
+              type: string
+            role:
+              type: string
+            tempPassword:
+              type: string
 
   securitySchemes:
     bearerAuth:

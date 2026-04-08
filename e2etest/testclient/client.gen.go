@@ -92,6 +92,11 @@ type ClientInterface interface {
 	// GetResetToken request
 	GetResetToken(ctx context.Context, params *GetResetTokenParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// SeedBrandWithBody request with any body
+	SeedBrandWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	SeedBrand(ctx context.Context, body SeedBrandJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// SeedUserWithBody request with any body
 	SeedUserWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -100,6 +105,30 @@ type ClientInterface interface {
 
 func (c *Client) GetResetToken(ctx context.Context, params *GetResetTokenParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetResetTokenRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) SeedBrandWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewSeedBrandRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) SeedBrand(ctx context.Context, body SeedBrandJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewSeedBrandRequest(c.Server, body)
 	if err != nil {
 		return nil, err
 	}
@@ -175,6 +204,46 @@ func NewGetResetTokenRequest(server string, params *GetResetTokenParams) (*http.
 	if err != nil {
 		return nil, err
 	}
+
+	return req, nil
+}
+
+// NewSeedBrandRequest calls the generic SeedBrand builder with application/json body
+func NewSeedBrandRequest(server string, body SeedBrandJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewSeedBrandRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewSeedBrandRequestWithBody generates requests for SeedBrand with any type of body
+func NewSeedBrandRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/test/seed-brand")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	return req, nil
 }
@@ -265,6 +334,11 @@ type ClientWithResponsesInterface interface {
 	// GetResetTokenWithResponse request
 	GetResetTokenWithResponse(ctx context.Context, params *GetResetTokenParams, reqEditors ...RequestEditorFn) (*GetResetTokenResponse, error)
 
+	// SeedBrandWithBodyWithResponse request with any body
+	SeedBrandWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SeedBrandResponse, error)
+
+	SeedBrandWithResponse(ctx context.Context, body SeedBrandJSONRequestBody, reqEditors ...RequestEditorFn) (*SeedBrandResponse, error)
+
 	// SeedUserWithBodyWithResponse request with any body
 	SeedUserWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SeedUserResponse, error)
 
@@ -288,6 +362,29 @@ func (r GetResetTokenResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r GetResetTokenResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type SeedBrandResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON201      *SeedBrandResult
+	JSON422      *ErrorResponse
+}
+
+// Status returns HTTPResponse.Status
+func (r SeedBrandResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r SeedBrandResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -324,6 +421,23 @@ func (c *ClientWithResponses) GetResetTokenWithResponse(ctx context.Context, par
 		return nil, err
 	}
 	return ParseGetResetTokenResponse(rsp)
+}
+
+// SeedBrandWithBodyWithResponse request with arbitrary body returning *SeedBrandResponse
+func (c *ClientWithResponses) SeedBrandWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SeedBrandResponse, error) {
+	rsp, err := c.SeedBrandWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseSeedBrandResponse(rsp)
+}
+
+func (c *ClientWithResponses) SeedBrandWithResponse(ctx context.Context, body SeedBrandJSONRequestBody, reqEditors ...RequestEditorFn) (*SeedBrandResponse, error) {
+	rsp, err := c.SeedBrand(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseSeedBrandResponse(rsp)
 }
 
 // SeedUserWithBodyWithResponse request with arbitrary body returning *SeedUserResponse
@@ -370,6 +484,39 @@ func ParseGetResetTokenResponse(rsp *http.Response) (*GetResetTokenResponse, err
 			return nil, err
 		}
 		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseSeedBrandResponse parses an HTTP response from a SeedBrandWithResponse call
+func ParseSeedBrandResponse(rsp *http.Response) (*SeedBrandResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &SeedBrandResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest SeedBrandResult
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON422 = &dest
 
 	}
 

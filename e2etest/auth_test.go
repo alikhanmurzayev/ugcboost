@@ -158,7 +158,7 @@ func TestGetMe_Success(t *testing.T) {
 	c := newAPIClient(t)
 	token := loginAs(t, c, email, password)
 
-	resp, err := c.GetCurrentUserWithResponse(ctx, withAuth(token))
+	resp, err := c.GetMeWithResponse(ctx, withAuth(token))
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusOK, resp.StatusCode())
 	require.NotNil(t, resp.JSON200)
@@ -168,14 +168,14 @@ func TestGetMe_Success(t *testing.T) {
 
 func TestGetMe_NoToken(t *testing.T) {
 	c := newAPIClient(t)
-	resp, err := c.GetCurrentUserWithResponse(ctx)
+	resp, err := c.GetMeWithResponse(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode())
 }
 
 func TestGetMe_InvalidToken(t *testing.T) {
 	c := newAPIClient(t)
-	resp, err := c.GetCurrentUserWithResponse(ctx, withAuth("invalid-jwt-token"))
+	resp, err := c.GetMeWithResponse(ctx, withAuth("invalid-jwt-token"))
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode())
 }
@@ -403,7 +403,7 @@ func TestFullFlow_LoginRefreshMeLogout(t *testing.T) {
 	newToken := refreshResp.JSON200.Data.AccessToken
 
 	// Me (with refreshed token)
-	meResp, err := c.GetCurrentUserWithResponse(ctx, withAuth(newToken))
+	meResp, err := c.GetMeWithResponse(ctx, withAuth(newToken))
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusOK, meResp.StatusCode())
 	assert.Equal(t, email, string(meResp.JSON200.Data.Email))
