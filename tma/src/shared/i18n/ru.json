@@ -1,0 +1,10 @@
+{
+  "app": {
+    "name": "UGCBoost"
+  },
+  "nav": {
+    "campaigns": "Кампании",
+    "myOrders": "Мои заказы",
+    "profile": "Профиль"
+  }
+}

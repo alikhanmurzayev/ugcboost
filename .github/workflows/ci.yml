@@ -1,0 +1,103 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  GO_VERSION: "1.25"
+  NODE_VERSION: "20"
+
+jobs:
+  lint-backend:
+    name: Lint Backend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          working-directory: backend
+
+  test-backend:
+    name: Test Backend
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: ugcboost
+          POSTGRES_PASSWORD: ugcboost_test
+          POSTGRES_DB: ugcboost_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ugcboost"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: Install goose
+        run: go install github.com/pressly/goose/v3/cmd/goose@latest
+      - name: Run migrations
+        run: goose -dir migrations postgres "postgres://ugcboost:ugcboost_test@localhost:5432/ugcboost_test?sslmode=disable" up
+      - name: Run tests
+        working-directory: backend
+        run: go test ./... -count=1 -race -timeout 5m
+        env:
+          DATABASE_URL: postgres://ugcboost:ugcboost_test@localhost:5432/ugcboost_test?sslmode=disable
+
+  lint-web:
+    name: Lint Web
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - run: npm ci
+        working-directory: web
+      - run: npx tsc --noEmit
+        working-directory: web
+
+  lint-tma:
+    name: Lint TMA
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - run: npm ci
+        working-directory: tma
+      - run: npx tsc --noEmit
+        working-directory: tma
+
+  build:
+    name: Build Docker Images
+    runs-on: ubuntu-latest
+    needs: [lint-backend, test-backend, lint-web, lint-tma]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install oapi-codegen
+        run: go install github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@latest
+      - name: Generate API code
+        run: |
+          oapi-codegen -package api -generate chi-server,models \
+            -o backend/internal/api/server.gen.go \
+            api/openapi.yaml
+      - name: Build backend image
+        run: docker build -t ugcboost/backend ./backend
+      - name: Build web image
+        run: docker build -t ugcboost/web ./web
+      - name: Build tma image
+        run: docker build -t ugcboost/tma ./tma

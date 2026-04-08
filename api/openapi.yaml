@@ -1,0 +1,64 @@
+openapi: "3.0.3"
+info:
+  title: UGCBoost API
+  version: "0.1.0"
+  description: UGCBoost platform API — contract-first, single source of truth.
+
+servers:
+  - url: http://localhost:8080
+    description: Local development
+  - url: https://api.ugcboost.kz
+    description: Production
+
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      summary: Health check
+      tags: [system]
+      responses:
+        "200":
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+
+components:
+  schemas:
+    HealthResponse:
+      type: object
+      required: [status, version]
+      properties:
+        status:
+          type: string
+          example: ok
+        version:
+          type: string
+          example: dev
+
+    APIError:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          description: Machine-readable error code (e.g. CREATOR_NOT_FOUND)
+          example: VALIDATION_ERROR
+        message:
+          type: string
+          description: Human-readable fallback message (English)
+          example: Invalid input
+
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          $ref: "#/components/schemas/APIError"
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

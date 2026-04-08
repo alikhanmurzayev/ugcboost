@@ -9,6 +9,17 @@ venv/
 dist/
 build/
 .next/
+*.exe
+*.out
+
+# Go
+backend/tmp/
+backend/vendor/
+
+# Generated code (regenerated via make codegen)
+backend/internal/api/server.gen.go
+web/src/api/generated/
+tma/src/api/generated/
 
 # Environment
 .env
