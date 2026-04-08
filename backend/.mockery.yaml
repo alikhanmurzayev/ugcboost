@@ -11,10 +11,13 @@ packages:
   github.com/alikhanmurzayev/ugcboost/backend/internal/handler:
     interfaces:
       Auth: {}
+      Brands: {}
   github.com/alikhanmurzayev/ugcboost/backend/internal/service:
     interfaces:
       UserRepo: {}
       TokenGenerator: {}
+      BrandRepo: {}
+      BrandUserRepo: {}
   github.com/alikhanmurzayev/ugcboost/backend/internal/middleware:
     interfaces:
       TokenValidator: {}
