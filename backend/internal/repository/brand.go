@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -165,7 +166,10 @@ func (r *BrandRepository) IsManager(ctx context.Context, userID, brandID string)
 		Limit(1)
 	_, err := dbutil.Val[int](ctx, r.db, q)
 	if err != nil {
-		return false, nil
+		if errors.Is(err, pgx.ErrNoRows) {
+			return false, nil
+		}
+		return false, err
 	}
 	return true, nil
 }

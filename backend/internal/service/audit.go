@@ -53,12 +53,18 @@ func (s *AuditService) Log(ctx context.Context, e AuditEntry) {
 	}
 
 	if e.OldValue != nil {
-		data, _ := json.Marshal(e.OldValue)
-		row.OldValue = data
+		if data, err := json.Marshal(e.OldValue); err != nil {
+			slog.Warn("audit: marshal old_value failed", "error", err, "action", e.Action)
+		} else {
+			row.OldValue = data
+		}
 	}
 	if e.NewValue != nil {
-		data, _ := json.Marshal(e.NewValue)
-		row.NewValue = data
+		if data, err := json.Marshal(e.NewValue); err != nil {
+			slog.Warn("audit: marshal new_value failed", "error", err, "action", e.Action)
+		} else {
+			row.NewValue = data
+		}
 	}
 
 	if err := s.repo.Create(ctx, row); err != nil {

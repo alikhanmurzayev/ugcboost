@@ -96,7 +96,10 @@ func run() error {
 	}
 
 	// Handlers
-	isSecure := !strings.HasPrefix(cfg.CORSOrigins[0], "http://localhost")
+	isSecure := true
+	if len(cfg.CORSOrigins) > 0 {
+		isSecure = !strings.HasPrefix(cfg.CORSOrigins[0], "http://localhost")
+	}
 	authHandler := handler.NewAuthHandler(authSvc, isSecure)
 	authHandler.SetAuditor(auditSvc)
 	brandHandler := handler.NewBrandHandler(brandSvc)

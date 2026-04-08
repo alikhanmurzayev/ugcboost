@@ -158,8 +158,8 @@ func TestIsManager_SQL(t *testing.T) {
 	gotSQL, gotArgs := captureQuery(t, db, 2)
 
 	ok, err := repo.IsManager(context.Background(), "user-1", "brand-1")
-	assert.NoError(t, err)
-	assert.False(t, ok) // captureQuery returns error, so Val fails → false
+	assert.Error(t, err) // captureQuery returns non-ErrNoRows error
+	assert.False(t, ok)
 
 	assert.Equal(t,
 		"SELECT 1 FROM brand_managers WHERE user_id = $1 AND brand_id = $2 LIMIT 1",

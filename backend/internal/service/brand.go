@@ -126,7 +126,7 @@ func (s *BrandService) AssignManager(ctx context.Context, brandID, email string)
 		if err != nil {
 			return repository.UserRow{}, "", fmt.Errorf("create user: %w", err)
 		}
-		slog.Info("temporary password for new manager", "email", email, "password", tempPassword)
+		slog.Info("temporary password generated for new manager", "email", email)
 	}
 
 	if err := s.brands.AssignManager(ctx, brandID, user.ID); err != nil {

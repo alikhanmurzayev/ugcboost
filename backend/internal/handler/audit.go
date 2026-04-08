@@ -58,6 +58,12 @@ func (h *AuditHandler) ListAuditLogs(w http.ResponseWriter, r *http.Request) {
 
 	page, _ := strconv.Atoi(q.Get("page"))
 	perPage, _ := strconv.Atoi(q.Get("per_page"))
+	if page < 1 {
+		page = 1
+	}
+	if perPage < 1 || perPage > 100 {
+		perPage = 20
+	}
 
 	logs, total, err := h.audit.List(r.Context(), f, page, perPage)
 	if err != nil {
