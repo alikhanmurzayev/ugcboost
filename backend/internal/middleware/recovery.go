@@ -21,12 +21,12 @@ func Recovery(next http.Handler) http.Handler {
 				)
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusInternalServerError)
-				json.NewEncoder(w).Encode(domain.APIResponse{
+				_ = json.NewEncoder(w).Encode(domain.APIResponse{
 					Error: &domain.APIError{
 						Code:    "INTERNAL_ERROR",
 						Message: "Internal server error",
 					},
-				}) //nolint:errcheck
+				})
 			}
 		}()
 		next.ServeHTTP(w, r)

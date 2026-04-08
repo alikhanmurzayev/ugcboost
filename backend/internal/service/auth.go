@@ -37,13 +37,20 @@ type TokenGenerator interface {
 
 // AuthService handles authentication business logic.
 type AuthService struct {
-	users  UserRepo
-	tokens TokenGenerator
+	users          UserRepo
+	tokens         TokenGenerator
+	resetNotifier  ResetTokenNotifier
 }
 
 // NewAuthService creates a new AuthService.
 func NewAuthService(users UserRepo, tokens TokenGenerator) *AuthService {
 	return &AuthService{users: users, tokens: tokens}
+}
+
+// SetResetTokenNotifier sets an optional notifier that captures raw reset tokens.
+// Used only when ENABLE_TEST_ENDPOINTS=true.
+func (s *AuthService) SetResetTokenNotifier(n ResetTokenNotifier) {
+	s.resetNotifier = n
 }
 
 // LoginResult contains the result of a successful login.
@@ -144,7 +151,7 @@ func (s *AuthService) RequestPasswordReset(ctx context.Context, email string) er
 		return nil // don't reveal if email exists
 	}
 
-	_, hash, expiresAt, err := s.tokens.GenerateResetToken()
+	raw, hash, expiresAt, err := s.tokens.GenerateResetToken()
 	if err != nil {
 		return fmt.Errorf("generate reset token: %w", err)
 	}
@@ -153,8 +160,11 @@ func (s *AuthService) RequestPasswordReset(ctx context.Context, email string) er
 		return fmt.Errorf("save reset token: %w", err)
 	}
 
+	if s.resetNotifier != nil {
+		s.resetNotifier.OnResetToken(email, raw)
+	}
+
 	// MVP: log to stdout. Email sending in Epic 3.
-	// Never log raw token — only user_id and expiry.
 	slog.Info("password reset token generated",
 		"user_id", user.ID,
 		"expires_at", expiresAt,
@@ -193,6 +203,15 @@ func (s *AuthService) ResetPassword(ctx context.Context, rawToken, newPassword s
 // GetUser returns a user by ID.
 func (s *AuthService) GetUser(ctx context.Context, userID string) (repository.UserRow, error) {
 	return s.users.GetByID(ctx, userID)
+}
+
+// SeedUser creates a user with the given role. Used by test endpoints.
+func (s *AuthService) SeedUser(ctx context.Context, email, password, role string) (repository.UserRow, error) {
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcryptCost)
+	if err != nil {
+		return repository.UserRow{}, fmt.Errorf("hash password: %w", err)
+	}
+	return s.users.Create(ctx, email, string(hash), role)
 }
 
 // SeedAdmin creates the admin user if it doesn't exist.

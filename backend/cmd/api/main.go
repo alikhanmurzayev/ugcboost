@@ -120,6 +120,20 @@ func run() error {
 		r.Get("/auth/me", authHandler.GetMe)
 	})
 
+	// Test endpoints (only when ENABLE_TEST_ENDPOINTS=true)
+	if cfg.EnableTestEndpoints {
+		resetTokenStore := service.NewInMemoryResetTokenStore()
+		authSvc.SetResetTokenNotifier(resetTokenStore)
+
+		testHandler := handler.NewTestHandler(authSvc, resetTokenStore)
+		r.Route("/test", func(r chi.Router) {
+			r.Post("/seed-user", testHandler.SeedUser)
+			r.Get("/reset-tokens", testHandler.GetResetToken)
+		})
+
+		slog.Warn("TEST ENDPOINTS ENABLED — do not use in production")
+	}
+
 	// Server
 	srv := &http.Server{
 		Addr:         fmt.Sprintf(":%d", cfg.Port),

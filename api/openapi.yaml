@@ -46,7 +46,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/LoginResponse"
+                $ref: "#/components/schemas/LoginResult"
         "401":
           description: Invalid credentials
           content:
@@ -76,7 +76,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/LoginResponse"
+                $ref: "#/components/schemas/LoginResult"
         "401":
           description: Invalid or expired refresh token
           content:
@@ -228,7 +228,7 @@ components:
           minLength: 6
           example: "password123"
 
-    LoginResponse:
+    LoginResult:
       type: object
       required: [data]
       properties:

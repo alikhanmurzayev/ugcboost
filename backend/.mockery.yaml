@@ -1,0 +1,20 @@
+dir: "{{.InterfaceDir}}/mocks"
+pkgname: mocks
+filename: "mock_{{.InterfaceName | snakecase}}.go"
+template: testify
+template-data:
+  unroll-variadic: true
+packages:
+  github.com/alikhanmurzayev/ugcboost/backend/internal/dbutil:
+    interfaces:
+      DB: {}
+  github.com/alikhanmurzayev/ugcboost/backend/internal/handler:
+    interfaces:
+      Auth: {}
+  github.com/alikhanmurzayev/ugcboost/backend/internal/service:
+    interfaces:
+      UserRepo: {}
+      TokenGenerator: {}
+  github.com/alikhanmurzayev/ugcboost/backend/internal/middleware:
+    interfaces:
+      TokenValidator: {}

@@ -20,6 +20,9 @@ type Config struct {
 	AdminEmail    string
 	AdminPassword string
 
+	// Test endpoints (never enable in production)
+	EnableTestEndpoints bool
+
 	// Feature flags for mock integrations
 	LiveDuneMock  bool
 	TrustMeMock   bool
@@ -60,6 +63,8 @@ func Load() (*Config, error) {
 
 		AdminEmail:    getEnv("ADMIN_EMAIL", "admin@ugcboost.kz"),
 		AdminPassword: getEnv("ADMIN_PASSWORD", ""),
+
+		EnableTestEndpoints: getBoolEnv("ENABLE_TEST_ENDPOINTS", false),
 
 		LiveDuneMock: getBoolEnv("LIVEDUNE_MOCK", false),
 		TrustMeMock:  getBoolEnv("TRUSTME_MOCK", false),

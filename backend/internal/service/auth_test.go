@@ -6,59 +6,15 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/domain"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/repository"
+	"github.com/alikhanmurzayev/ugcboost/backend/internal/service/mocks"
 )
-
-// --- mock repo ---
-
-type mockUserRepo struct {
-	getByEmail             func(ctx context.Context, email string) (repository.UserRow, error)
-	getByID                func(ctx context.Context, id string) (repository.UserRow, error)
-	create                 func(ctx context.Context, email, hash, role string) (repository.UserRow, error)
-	existsByEmail          func(ctx context.Context, email string) (bool, error)
-	updatePassword         func(ctx context.Context, userID, hash string) error
-	saveRefreshToken       func(ctx context.Context, userID, hash string, exp time.Time) error
-	claimRefreshToken      func(ctx context.Context, hash string) (repository.RefreshTokenRow, error)
-	deleteUserRefreshTokens func(ctx context.Context, userID string) error
-	saveResetToken         func(ctx context.Context, userID, hash string, exp time.Time) error
-	claimResetToken        func(ctx context.Context, hash string) (repository.PasswordResetTokenRow, error)
-}
-
-func (m *mockUserRepo) GetByEmail(ctx context.Context, email string) (repository.UserRow, error) {
-	return m.getByEmail(ctx, email)
-}
-func (m *mockUserRepo) GetByID(ctx context.Context, id string) (repository.UserRow, error) {
-	return m.getByID(ctx, id)
-}
-func (m *mockUserRepo) Create(ctx context.Context, email, hash, role string) (repository.UserRow, error) {
-	return m.create(ctx, email, hash, role)
-}
-func (m *mockUserRepo) ExistsByEmail(ctx context.Context, email string) (bool, error) {
-	return m.existsByEmail(ctx, email)
-}
-func (m *mockUserRepo) UpdatePassword(ctx context.Context, userID, hash string) error {
-	return m.updatePassword(ctx, userID, hash)
-}
-func (m *mockUserRepo) SaveRefreshToken(ctx context.Context, userID, hash string, exp time.Time) error {
-	return m.saveRefreshToken(ctx, userID, hash, exp)
-}
-func (m *mockUserRepo) ClaimRefreshToken(ctx context.Context, hash string) (repository.RefreshTokenRow, error) {
-	return m.claimRefreshToken(ctx, hash)
-}
-func (m *mockUserRepo) DeleteUserRefreshTokens(ctx context.Context, userID string) error {
-	return m.deleteUserRefreshTokens(ctx, userID)
-}
-func (m *mockUserRepo) SaveResetToken(ctx context.Context, userID, hash string, exp time.Time) error {
-	return m.saveResetToken(ctx, userID, hash, exp)
-}
-func (m *mockUserRepo) ClaimResetToken(ctx context.Context, hash string) (repository.PasswordResetTokenRow, error) {
-	return m.claimResetToken(ctx, hash)
-}
-
-// --- helpers ---
 
 var errNotFound = errors.New("not found")
 
@@ -76,226 +32,179 @@ func testUser() repository.UserRow {
 	}
 }
 
-func newTestService(repo *mockUserRepo) *AuthService {
-	tokens := NewTokenService("test-secret", 15*time.Minute)
-	return NewAuthService(repo, tokens)
-}
+var futureTime = time.Date(2026, 5, 1, 0, 0, 0, 0, time.UTC)
 
 // --- Login tests ---
 
 func TestLogin_Success(t *testing.T) {
 	user := testUser()
-	repo := &mockUserRepo{
-		getByEmail: func(_ context.Context, email string) (repository.UserRow, error) {
-			if email == user.Email {
-				return user, nil
-			}
-			return repository.UserRow{}, errNotFound
-		},
-		saveRefreshToken: func(_ context.Context, _ string, _ string, _ time.Time) error {
-			return nil
-		},
-	}
 
-	result, err := newTestService(repo).Login(context.Background(), user.Email, "password123")
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-	if result.AccessToken == "" {
-		t.Error("expected access token")
-	}
-	if result.RefreshTokenRaw == "" {
-		t.Error("expected refresh token")
-	}
-	if result.User.ID != user.ID {
-		t.Errorf("expected user ID %q, got %q", user.ID, result.User.ID)
-	}
+	repo := mocks.NewMockUserRepo(t)
+	repo.EXPECT().GetByEmail(mock.Anything, user.Email).Return(user, nil)
+	repo.EXPECT().SaveRefreshToken(mock.Anything, user.ID, "hash-refresh", futureTime).Return(nil)
+
+	tokens := mocks.NewMockTokenGenerator(t)
+	tokens.EXPECT().GenerateAccessToken(user.ID, user.Role).Return("mock-access-token", nil)
+	tokens.EXPECT().GenerateRefreshToken().Return("raw-refresh", "hash-refresh", futureTime, nil)
+
+	svc := NewAuthService(repo, tokens)
+	result, err := svc.Login(context.Background(), user.Email, "password123")
+
+	require.NoError(t, err)
+	assert.Equal(t, "mock-access-token", result.AccessToken)
+	assert.Equal(t, "raw-refresh", result.RefreshTokenRaw)
+	assert.Equal(t, futureTime.Unix(), result.RefreshExpiresAt)
+	assert.Equal(t, user.ID, result.User.ID)
 }
 
 func TestLogin_WrongPassword(t *testing.T) {
 	user := testUser()
-	repo := &mockUserRepo{
-		getByEmail: func(_ context.Context, _ string) (repository.UserRow, error) {
-			return user, nil
-		},
-	}
 
-	_, err := newTestService(repo).Login(context.Background(), user.Email, "wrongpass")
-	if !errors.Is(err, domain.ErrUnauthorized) {
-		t.Fatalf("expected ErrUnauthorized, got %v", err)
-	}
+	repo := mocks.NewMockUserRepo(t)
+	repo.EXPECT().GetByEmail(mock.Anything, user.Email).Return(user, nil)
+
+	tokens := mocks.NewMockTokenGenerator(t)
+
+	svc := NewAuthService(repo, tokens)
+	_, err := svc.Login(context.Background(), user.Email, "wrongpass")
+
+	assert.ErrorIs(t, err, domain.ErrUnauthorized)
 }
 
 func TestLogin_UserNotFound(t *testing.T) {
-	repo := &mockUserRepo{
-		getByEmail: func(_ context.Context, _ string) (repository.UserRow, error) {
-			return repository.UserRow{}, errNotFound
-		},
-	}
+	repo := mocks.NewMockUserRepo(t)
+	repo.EXPECT().GetByEmail(mock.Anything, "nobody@example.com").
+		Return(repository.UserRow{}, errNotFound)
 
-	_, err := newTestService(repo).Login(context.Background(), "nobody@example.com", "password")
-	if !errors.Is(err, domain.ErrUnauthorized) {
-		t.Fatalf("expected ErrUnauthorized, got %v", err)
-	}
+	tokens := mocks.NewMockTokenGenerator(t)
+
+	svc := NewAuthService(repo, tokens)
+	_, err := svc.Login(context.Background(), "nobody@example.com", "password")
+
+	assert.ErrorIs(t, err, domain.ErrUnauthorized)
 }
 
 // --- Refresh tests ---
 
 func TestRefresh_Success(t *testing.T) {
 	user := testUser()
-	repo := &mockUserRepo{
-		claimRefreshToken: func(_ context.Context, _ string) (repository.RefreshTokenRow, error) {
-			return repository.RefreshTokenRow{UserID: user.ID}, nil
-		},
-		getByID: func(_ context.Context, id string) (repository.UserRow, error) {
-			if id == user.ID {
-				return user, nil
-			}
-			return repository.UserRow{}, errNotFound
-		},
-		saveRefreshToken: func(_ context.Context, _ string, _ string, _ time.Time) error {
-			return nil
-		},
-	}
+	tokenHash := HashToken("some-raw-token")
 
-	result, err := newTestService(repo).Refresh(context.Background(), "some-raw-token")
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-	if result.AccessToken == "" {
-		t.Error("expected new access token")
-	}
-	if result.RefreshTokenRaw == "" {
-		t.Error("expected new refresh token")
-	}
+	repo := mocks.NewMockUserRepo(t)
+	repo.EXPECT().ClaimRefreshToken(mock.Anything, tokenHash).
+		Return(repository.RefreshTokenRow{UserID: user.ID}, nil)
+	repo.EXPECT().GetByID(mock.Anything, user.ID).Return(user, nil)
+	repo.EXPECT().SaveRefreshToken(mock.Anything, user.ID, "new-hash", futureTime).Return(nil)
+
+	tokens := mocks.NewMockTokenGenerator(t)
+	tokens.EXPECT().GenerateAccessToken(user.ID, user.Role).Return("new-access", nil)
+	tokens.EXPECT().GenerateRefreshToken().Return("new-raw", "new-hash", futureTime, nil)
+
+	svc := NewAuthService(repo, tokens)
+	result, err := svc.Refresh(context.Background(), "some-raw-token")
+
+	require.NoError(t, err)
+	assert.Equal(t, "new-access", result.AccessToken)
+	assert.Equal(t, "new-raw", result.RefreshTokenRaw)
 }
 
 func TestRefresh_InvalidToken(t *testing.T) {
-	repo := &mockUserRepo{
-		claimRefreshToken: func(_ context.Context, _ string) (repository.RefreshTokenRow, error) {
-			return repository.RefreshTokenRow{}, errNotFound
-		},
-	}
+	tokenHash := HashToken("invalid-token")
 
-	_, err := newTestService(repo).Refresh(context.Background(), "invalid-token")
-	if !errors.Is(err, domain.ErrUnauthorized) {
-		t.Fatalf("expected ErrUnauthorized, got %v", err)
-	}
+	repo := mocks.NewMockUserRepo(t)
+	repo.EXPECT().ClaimRefreshToken(mock.Anything, tokenHash).
+		Return(repository.RefreshTokenRow{}, errNotFound)
+
+	tokens := mocks.NewMockTokenGenerator(t)
+
+	svc := NewAuthService(repo, tokens)
+	_, err := svc.Refresh(context.Background(), "invalid-token")
+
+	assert.ErrorIs(t, err, domain.ErrUnauthorized)
 }
 
 // --- Logout tests ---
 
 func TestLogout_Success(t *testing.T) {
-	repo := &mockUserRepo{
-		deleteUserRefreshTokens: func(_ context.Context, userID string) error {
-			if userID != "user-1" {
-				t.Errorf("expected user-1, got %q", userID)
-			}
-			return nil
-		},
-	}
+	repo := mocks.NewMockUserRepo(t)
+	repo.EXPECT().DeleteUserRefreshTokens(mock.Anything, "user-1").Return(nil)
 
-	err := newTestService(repo).Logout(context.Background(), "user-1")
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
+	tokens := mocks.NewMockTokenGenerator(t)
+
+	svc := NewAuthService(repo, tokens)
+	err := svc.Logout(context.Background(), "user-1")
+
+	assert.NoError(t, err)
 }
 
 // --- ResetPassword tests ---
 
 func TestResetPassword_Success(t *testing.T) {
-	var passwordUpdated, tokensDeleted bool
+	tokenHash := HashToken("raw-reset-token")
 
-	repo := &mockUserRepo{
-		claimResetToken: func(_ context.Context, _ string) (repository.PasswordResetTokenRow, error) {
-			return repository.PasswordResetTokenRow{ID: "rt-1", UserID: "user-1"}, nil
-		},
-		updatePassword: func(_ context.Context, userID, _ string) error {
-			if userID != "user-1" {
-				t.Errorf("expected user-1, got %q", userID)
-			}
-			passwordUpdated = true
-			return nil
-		},
-		deleteUserRefreshTokens: func(_ context.Context, userID string) error {
-			if userID != "user-1" {
-				t.Errorf("expected user-1, got %q", userID)
-			}
-			tokensDeleted = true
-			return nil
-		},
-	}
+	repo := mocks.NewMockUserRepo(t)
+	repo.EXPECT().ClaimResetToken(mock.Anything, tokenHash).
+		Return(repository.PasswordResetTokenRow{ID: "rt-1", UserID: "user-1"}, nil)
+	repo.EXPECT().UpdatePassword(mock.Anything, "user-1", mock.AnythingOfType("string")).Return(nil)
+	repo.EXPECT().DeleteUserRefreshTokens(mock.Anything, "user-1").Return(nil)
 
-	err := newTestService(repo).ResetPassword(context.Background(), "raw-reset-token", "newpass123")
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-	if !passwordUpdated {
-		t.Error("password was not updated")
-	}
-	if !tokensDeleted {
-		t.Error("refresh tokens were not deleted")
-	}
+	tokens := mocks.NewMockTokenGenerator(t)
+
+	svc := NewAuthService(repo, tokens)
+	err := svc.ResetPassword(context.Background(), "raw-reset-token", "newpass123")
+
+	assert.NoError(t, err)
 }
 
 func TestResetPassword_InvalidToken(t *testing.T) {
-	repo := &mockUserRepo{
-		claimResetToken: func(_ context.Context, _ string) (repository.PasswordResetTokenRow, error) {
-			return repository.PasswordResetTokenRow{}, errNotFound
-		},
-	}
+	tokenHash := HashToken("bad-token")
 
-	err := newTestService(repo).ResetPassword(context.Background(), "bad-token", "newpass123")
-	if !errors.Is(err, domain.ErrUnauthorized) {
-		t.Fatalf("expected ErrUnauthorized, got %v", err)
-	}
+	repo := mocks.NewMockUserRepo(t)
+	repo.EXPECT().ClaimResetToken(mock.Anything, tokenHash).
+		Return(repository.PasswordResetTokenRow{}, errNotFound)
+
+	tokens := mocks.NewMockTokenGenerator(t)
+
+	svc := NewAuthService(repo, tokens)
+	err := svc.ResetPassword(context.Background(), "bad-token", "newpass123")
+
+	assert.ErrorIs(t, err, domain.ErrUnauthorized)
 }
 
 // --- SeedAdmin tests ---
 
 func TestSeedAdmin_CreatesWhenMissing(t *testing.T) {
-	var created bool
-	repo := &mockUserRepo{
-		existsByEmail: func(_ context.Context, _ string) (bool, error) {
-			return false, nil
-		},
-		create: func(_ context.Context, email, _, role string) (repository.UserRow, error) {
-			if email != "admin@test.com" {
-				t.Errorf("unexpected email %q", email)
-			}
-			if role != "admin" {
-				t.Errorf("unexpected role %q", role)
-			}
-			created = true
-			return repository.UserRow{ID: "new-admin"}, nil
-		},
-	}
+	repo := mocks.NewMockUserRepo(t)
+	repo.EXPECT().ExistsByEmail(mock.Anything, "admin@test.com").Return(false, nil)
+	repo.EXPECT().Create(mock.Anything, "admin@test.com", mock.AnythingOfType("string"), "admin").
+		Return(repository.UserRow{ID: "new-admin"}, nil)
 
-	err := newTestService(repo).SeedAdmin(context.Background(), "admin@test.com", "secret")
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
-	if !created {
-		t.Error("admin was not created")
-	}
+	tokens := mocks.NewMockTokenGenerator(t)
+
+	svc := NewAuthService(repo, tokens)
+	err := svc.SeedAdmin(context.Background(), "admin@test.com", "secret")
+
+	assert.NoError(t, err)
 }
 
 func TestSeedAdmin_SkipsWhenExists(t *testing.T) {
-	repo := &mockUserRepo{
-		existsByEmail: func(_ context.Context, _ string) (bool, error) {
-			return true, nil
-		},
-	}
+	repo := mocks.NewMockUserRepo(t)
+	repo.EXPECT().ExistsByEmail(mock.Anything, "admin@test.com").Return(true, nil)
 
-	err := newTestService(repo).SeedAdmin(context.Background(), "admin@test.com", "secret")
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
+	tokens := mocks.NewMockTokenGenerator(t)
+
+	svc := NewAuthService(repo, tokens)
+	err := svc.SeedAdmin(context.Background(), "admin@test.com", "secret")
+
+	assert.NoError(t, err)
 }
 
 func TestSeedAdmin_SkipsWhenEmpty(t *testing.T) {
-	err := newTestService(&mockUserRepo{}).SeedAdmin(context.Background(), "", "")
-	if err != nil {
-		t.Fatalf("expected no error, got %v", err)
-	}
+	repo := mocks.NewMockUserRepo(t)
+	tokens := mocks.NewMockTokenGenerator(t)
+
+	svc := NewAuthService(repo, tokens)
+	err := svc.SeedAdmin(context.Background(), "", "")
+
+	assert.NoError(t, err)
 }

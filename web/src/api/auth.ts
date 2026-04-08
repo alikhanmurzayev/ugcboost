@@ -34,24 +34,38 @@ export function getMe() {
   return api<UserResponse>("/auth/me");
 }
 
+// Singleton promise prevents double-fire from React strict mode.
+let restorePromise: Promise<{ user: User; token: string } | null> | null =
+  null;
+
 // restoreSession tries to get a new access token via the refresh cookie,
 // then fetches the current user. Used on page reload when token is lost.
-export async function restoreSession(): Promise<{
+export function restoreSession(): Promise<{
   user: User;
   token: string;
 } | null> {
-  const BASE = "/api";
+  if (restorePromise) return restorePromise;
 
-  const res = await fetch(`${BASE}/auth/refresh`, {
-    method: "POST",
-    credentials: "include",
+  restorePromise = (async () => {
+    const BASE = "/api";
+
+    const res = await fetch(`${BASE}/auth/refresh`, {
+      method: "POST",
+      credentials: "include",
+    });
+
+    if (!res.ok) return null;
+
+    const body = (await res.json()) as LoginResponse;
+    return {
+      user: body.data.user,
+      token: body.data.accessToken,
+    };
+  })();
+
+  restorePromise.finally(() => {
+    restorePromise = null;
   });
 
-  if (!res.ok) return null;
-
-  const body = (await res.json()) as LoginResponse;
-  return {
-    user: body.data.user,
-    token: body.data.accessToken,
-  };
+  return restorePromise;
 }

@@ -1,0 +1,121 @@
+openapi: "3.0.3"
+info:
+  title: UGCBoost Test API
+  version: "0.1.0"
+  description: |
+    Test-only endpoints for E2E testing. Available only when ENABLE_TEST_ENDPOINTS=true.
+    NEVER enabled in production.
+
+servers:
+  - url: http://localhost:8081
+    description: E2E test environment
+
+paths:
+  /test/seed-user:
+    post:
+      operationId: seedUser
+      summary: Create a test user with given credentials and role
+      tags: [test]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SeedUserRequest"
+      responses:
+        "201":
+          description: User created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SeedUserResult"
+        "422":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /test/reset-tokens:
+    get:
+      operationId: getResetToken
+      summary: Get the raw reset token captured for the given email
+      tags: [test]
+      parameters:
+        - name: email
+          in: query
+          required: true
+          schema:
+            type: string
+            format: email
+      responses:
+        "200":
+          description: Token found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResetTokenResult"
+        "404":
+          description: No token found for this email
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+components:
+  schemas:
+    SeedUserRequest:
+      type: object
+      required: [email, password, role]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 6
+        role:
+          type: string
+          enum: [admin, brand_manager]
+
+    SeedUserResult:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [id, email, role]
+          properties:
+            id:
+              type: string
+              format: uuid
+            email:
+              type: string
+              format: email
+            role:
+              type: string
+              enum: [admin, brand_manager]
+
+    ResetTokenResult:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [token]
+          properties:
+            token:
+              type: string
+
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+            message:
+              type: string

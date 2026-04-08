@@ -41,8 +41,8 @@ services:
 
   web:
     build:
-      context: ./web
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: web/Dockerfile
     ports:
       - "5173:80"
     depends_on:
@@ -50,8 +50,8 @@ services:
 
   tma:
     build:
-      context: ./tma
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: tma/Dockerfile
     ports:
       - "5174:80"
     depends_on:

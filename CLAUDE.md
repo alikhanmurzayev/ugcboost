@@ -64,16 +64,44 @@ feature branch → PR → merge to main → CI (lint → test-unit → build ima
 ### Makefile targets
 
 ```
+make test               # Unit-тесты бэкенда (без БД, быстро)
+make test-all           # ВСЕ тесты (unit + backend E2E + browser E2E)
+make test-e2e-backend   # Backend E2E (docker-compose.test.yml)
+make test-coverage      # Unit-тесты с отчётом покрытия
+make test-e2e           # Browser E2E headless (поднимает PostgreSQL + миграции автоматически)
+make test-e2e-ui        # Browser E2E с Playwright UI (порт 3333, для визуального просмотра)
+make test-e2e-report    # Открыть HTML-отчёт последнего прогона
 make local              # Docker Compose up (PostgreSQL + backend + web + tma)
 make local-down         # Docker Compose down
-make test               # Unit-тесты бэкенда (без БД, быстро)
-make test-e2e-backend   # Backend E2E (Docker: postgres + migrations + backend)
-make test-e2e-ui        # Browser E2E (Docker: postgres + migrations + backend + web)
-make test-coverage      # Unit-тесты с отчётом покрытия
+make dev                # PostgreSQL + миграции, app-код запускаешь сам
 make lint               # golangci-lint + eslint
 make migrate            # Применить миграции
+make generate           # mockery + OpenAPI codegen
 make codegen            # OpenAPI → Go + TS
 make build              # Собрать Docker-образы
+```
+
+### Запуск тестов агентами
+
+Makefile автоматически определяет доступность Docker и при необходимости оборачивает команды через `sg docker`. Никаких ручных обёрток не нужно:
+
+```
+make test           # только unit (быстро)
+make test-all       # unit + backend E2E + browser E2E
+make test-e2e-backend  # только backend E2E
+```
+
+**Визуальный просмотр E2E** (Playwright UI):
+```
+make test-e2e-ui
+# Потом пользователь подключается через SSH-туннель:
+# ssh -L 3333:localhost:3333 alikhan@<server-ip>
+# Открывает http://localhost:3333
+```
+
+**Перед повторным запуском E2E** — убить зависшие процессы:
+```
+pkill -f playwright 2>/dev/null; sleep 1
 ```
 
 ## Testing
