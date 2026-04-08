@@ -4,6 +4,7 @@ import { logout } from "@/api/auth";
 
 const adminNav = [
   { to: "/", label: "Дашборд" },
+  { to: "/brands", label: "Бренды" },
   { to: "/creators", label: "Креаторы" },
   { to: "/campaigns", label: "Кампании" },
   { to: "/moderation", label: "Модерация" },
@@ -11,6 +12,7 @@ const adminNav = [
 
 const brandNav = [
   { to: "/", label: "Дашборд" },
+  { to: "/brands", label: "Мои бренды" },
   { to: "/campaigns", label: "Кампании" },
   { to: "/creators", label: "Каталог креаторов" },
 ];

@@ -4,6 +4,8 @@ import LoginPage from "@/features/auth/LoginPage";
 import AuthGuard from "@/features/auth/AuthGuard";
 import DashboardLayout from "@/shared/layouts/DashboardLayout";
 import DashboardPage from "@/features/dashboard/DashboardPage";
+import BrandsPage from "@/features/brands/BrandsPage";
+import BrandDetailPage from "@/features/brands/BrandDetailPage";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -24,6 +26,8 @@ function App() {
           <Route element={<AuthGuard />}>
             <Route element={<DashboardLayout />}>
               <Route index element={<DashboardPage />} />
+              <Route path="brands" element={<BrandsPage />} />
+              <Route path="brands/:brandId" element={<BrandDetailPage />} />
             </Route>
           </Route>
         </Routes>
