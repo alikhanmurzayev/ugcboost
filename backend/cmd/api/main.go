@@ -2,11 +2,13 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -14,9 +16,12 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/robfig/cron/v3"
 
+	"github.com/alikhanmurzayev/ugcboost/backend/internal/closer"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/config"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/handler"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/middleware"
+	"github.com/alikhanmurzayev/ugcboost/backend/internal/repository"
+	"github.com/alikhanmurzayev/ugcboost/backend/internal/service"
 )
 
 func main() {
@@ -47,13 +52,19 @@ func run() error {
 	}
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: logLevel})))
 
+	// Closer (LIFO: last added = first closed)
+	cl := closer.New()
+
 	// Database
 	ctx := context.Background()
 	pool, err := pgxpool.New(ctx, cfg.DatabaseURL)
 	if err != nil {
 		return fmt.Errorf("connect to database: %w", err)
 	}
-	defer pool.Close()
+	cl.Add("postgres", func(_ context.Context) error {
+		pool.Close()
+		return nil
+	})
 
 	if err := pool.Ping(ctx); err != nil {
 		return fmt.Errorf("ping database: %w", err)
@@ -63,20 +74,51 @@ func run() error {
 	// Cron scheduler
 	scheduler := cron.New(cron.WithSeconds())
 	scheduler.Start()
-	defer scheduler.Stop()
+	cl.Add("cron", func(_ context.Context) error {
+		ctx := scheduler.Stop()
+		<-ctx.Done()
+		return nil
+	})
 	slog.Info("cron scheduler started")
+
+	// Dependencies
+	userRepo := repository.NewUserRepository(pool)
+	tokenSvc := service.NewTokenService(cfg.JWTSecret, cfg.JWTExpiry)
+	authSvc := service.NewAuthService(userRepo, tokenSvc)
+
+	// Seed admin
+	if err := authSvc.SeedAdmin(ctx, cfg.AdminEmail, cfg.AdminPassword); err != nil {
+		return fmt.Errorf("seed admin: %w", err)
+	}
+
+	// Handlers
+	isSecure := !strings.HasPrefix(cfg.CORSOrigins[0], "http://localhost")
+	authHandler := handler.NewAuthHandler(authSvc, isSecure)
 
 	// Router
 	r := chi.NewRouter()
 
 	// Global middleware
 	r.Use(middleware.Recovery)
+	r.Use(middleware.BodyLimit(1 << 20)) // 1 MB
 	r.Use(middleware.SecureHeaders)
 	r.Use(middleware.CORS(cfg.CORSOrigins))
 	r.Use(middleware.Logging)
 
-	// Routes
+	// Public routes
 	r.Get("/healthz", handler.HandleHealthz())
+	r.Post("/auth/login", authHandler.Login)
+	r.Post("/auth/refresh", authHandler.Refresh)
+	r.Post("/auth/password-reset-request", authHandler.RequestPasswordReset)
+	r.Post("/auth/password-reset", authHandler.ResetPassword)
+
+	// Protected routes
+	r.Group(func(r chi.Router) {
+		r.Use(middleware.Auth(tokenSvc))
+
+		r.Post("/auth/logout", authHandler.Logout)
+		r.Get("/auth/me", authHandler.GetMe)
+	})
 
 	// Server
 	srv := &http.Server{
@@ -87,7 +129,10 @@ func run() error {
 		IdleTimeout:  60 * time.Second,
 	}
 
-	// Graceful shutdown
+	// Register HTTP server in closer (will be shut down first due to LIFO)
+	cl.Add("http-server", srv.Shutdown)
+
+	// Start server
 	errCh := make(chan error, 1)
 	go func() {
 		slog.Info("server starting", "port", cfg.Port)
@@ -101,7 +146,7 @@ func run() error {
 	case sig := <-quit:
 		slog.Info("shutting down", "signal", sig.String())
 	case err := <-errCh:
-		if err != nil && err != http.ErrServerClosed {
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
 			return fmt.Errorf("server error: %w", err)
 		}
 	}
@@ -109,5 +154,5 @@ func run() error {
 	shutdownCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 
-	return srv.Shutdown(shutdownCtx)
+	return cl.Close(shutdownCtx)
 }

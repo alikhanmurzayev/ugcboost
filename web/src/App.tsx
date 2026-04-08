@@ -1,5 +1,9 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import LoginPage from "@/features/auth/LoginPage";
+import AuthGuard from "@/features/auth/AuthGuard";
+import DashboardLayout from "@/shared/layouts/DashboardLayout";
+import DashboardPage from "@/features/dashboard/DashboardPage";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -15,19 +19,13 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <Routes>
-          <Route
-            path="/"
-            element={
-              <div className="flex min-h-screen items-center justify-center bg-surface">
-                <div className="text-center">
-                  <h1 className="text-4xl font-bold text-gray-900">
-                    UGCBoost
-                  </h1>
-                  <p className="mt-2 text-gray-500">Веб-кабинет</p>
-                </div>
-              </div>
-            }
-          />
+          <Route path="/login" element={<LoginPage />} />
+
+          <Route element={<AuthGuard />}>
+            <Route element={<DashboardLayout />}>
+              <Route index element={<DashboardPage />} />
+            </Route>
+          </Route>
         </Routes>
       </BrowserRouter>
     </QueryClientProvider>

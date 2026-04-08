@@ -49,8 +49,23 @@ test-unit:
 	-cd web && npm test -- --run
 	-cd tma && npm test -- --run
 
+test-coverage:
+	cd backend && go test ./internal/handler/... ./internal/service/... -count=1 -coverprofile=coverage.out -covermode=atomic
+	@cd backend && go tool cover -func=coverage.out | tail -1
+	cd backend && go tool cover -html=coverage.out -o coverage.html
+	@echo "Coverage report: backend/coverage.html"
+
 test-e2e:
-	-cd e2e && npx playwright test
+	cd web && npx playwright test
+
+test-e2e-headed:
+	cd web && npx playwright test --headed
+
+test-e2e-ui:
+	cd web && npx playwright test --ui
+
+test-e2e-report:
+	cd web && npx playwright show-report
 
 # Lint
 lint:

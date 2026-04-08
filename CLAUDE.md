@@ -61,26 +61,50 @@ feature branch → PR → merge to main → CI (lint → test-unit → build ima
   → manual approve → deploy production
 ```
 
-### Тестирование по окружениям
-
-- **local**: ВСЕ тесты (unit + integration + E2E) на **чистой** БД. `make test` запускает полный набор
-- **staging**: ВСЕ тесты на **непустой** БД (данные накапливаются). E2E прогоняются автоматически после деплоя
-- Тесты **идемпотентны**: создают свои данные (UUID, уникальные emails), не зависят от состояния БД, не удаляют чужие данные
-- Два уровня защиты: чистая БД ловит логические ошибки, непустая — проблемы с миграциями и конфликтами данных
-
 ### Makefile targets
 
 ```
-make local          # Docker Compose up (PostgreSQL + backend + web + tma)
-make local-down     # Docker Compose down
-make test           # Все тесты (unit + integration + E2E) на чистой БД
-make test-unit      # Только unit-тесты
-make test-e2e       # Только E2E
-make lint           # golangci-lint + eslint
-make migrate        # Применить миграции
-make codegen        # OpenAPI → Go + TS
-make build          # Собрать Docker-образы
+make local              # Docker Compose up (PostgreSQL + backend + web + tma)
+make local-down         # Docker Compose down
+make test               # Unit-тесты бэкенда (без БД, быстро)
+make test-e2e-backend   # Backend E2E (Docker: postgres + migrations + backend)
+make test-e2e-ui        # Browser E2E (Docker: postgres + migrations + backend + web)
+make test-coverage      # Unit-тесты с отчётом покрытия
+make lint               # golangci-lint + eslint
+make migrate            # Применить миграции
+make codegen            # OpenAPI → Go + TS
+make build              # Собрать Docker-образы
 ```
+
+## Testing
+
+**MANDATORY: Before writing, modifying, or reviewing ANY test code, read `_bmad-output/planning-artifacts/testing-architecture.md` in full. This applies to: `*_test.go`, `*.spec.ts`, `e2etest/`, `docker-compose.test.yml`, Makefile test targets, CI test jobs.**
+
+Three levels:
+
+### Level 1: Unit tests (`make test`)
+- mockery + testify. No hand-rolled mocks.
+- Repository tests MUST assert exact SQL string + arguments.
+- Every layer: middleware, handler, service, repository, token, closer.
+
+### Level 2: Backend E2E (`make test-e2e-backend`)
+- Black box. Separate Go module `e2etest/`. NEVER import internal packages.
+- HTTP client auto-generated from OpenAPI (oapi-codegen).
+- All infra in Docker (`docker-compose.test.yml`). Tests run on host.
+- Test data via `/test/*` endpoints only. No direct DB access from tests.
+- Covers ALL business scenarios and edge cases through API.
+
+### Level 3: Browser E2E (`make test-e2e-ui`)
+- Playwright. Full stack in Docker (postgres + migrations + backend + web).
+- Critical user flows only. Don't duplicate L2 edge cases.
+- Setup via backend API (`:8081/test/*`), actions via browser (`:3001`).
+
+### Hard rules
+- `ENABLE_TEST_ENDPOINTS=true` — test-only `/test/*` routes. NEVER in production.
+- Migrations always separate from backend (init container in tests, separate job in CI/CD).
+- Tests idempotent, work on non-empty DB, `uniqueEmail()`.
+- No manual testing via Playwright MCP. All tests via `make` targets only.
+- E2E tests target Docker containers, not `go run` on host.
 
 ### Безопасность
 
