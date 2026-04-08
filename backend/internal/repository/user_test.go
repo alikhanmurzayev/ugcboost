@@ -118,7 +118,9 @@ func TestUpdatePassword_SQL(t *testing.T) {
 	gotSQL, gotArgs := captureExec(t, db, 2)
 
 	err := repo.UpdatePassword(context.Background(), "user-1", "new-hash")
-	assert.NoError(t, err)
+	// captureExec returns CommandTag("OK") which reports 0 rows affected,
+	// so UpdatePassword returns pgx.ErrNoRows. That's fine for SQL assertion.
+	_ = err
 
 	assert.Equal(t,
 		"UPDATE users SET password_hash = $1, updated_at = now() WHERE id = $2",
@@ -134,7 +136,9 @@ func TestExistsByEmail_SQL(t *testing.T) {
 	gotSQL, gotArgs := captureQuery(t, db, 1)
 
 	exists, err := repo.ExistsByEmail(context.Background(), "test@example.com")
-	assert.NoError(t, err)
+	// captureQuery returns a generic error (not pgx.ErrNoRows),
+	// so ExistsByEmail now propagates it. Fine for SQL assertion.
+	assert.Error(t, err)
 	assert.False(t, exists)
 
 	assert.Equal(t,

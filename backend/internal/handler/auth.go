@@ -19,7 +19,7 @@ type Auth interface {
 	Refresh(ctx context.Context, rawRefreshToken string) (*service.RefreshResult, error)
 	Logout(ctx context.Context, userID string) error
 	RequestPasswordReset(ctx context.Context, email string) error
-	ResetPassword(ctx context.Context, rawToken, newPassword string) error
+	ResetPassword(ctx context.Context, rawToken, newPassword string) (string, error)
 	GetUser(ctx context.Context, userID string) (repository.UserRow, error)
 }
 
@@ -53,10 +53,6 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 
 	if req.Email == "" || req.Password == "" {
 		respondError(w, r, domain.NewValidationError("VALIDATION_ERROR", "Email and password are required"))
-		return
-	}
-	if len(req.Password) < 6 {
-		respondError(w, r, domain.NewValidationError("VALIDATION_ERROR", "Password must be at least 6 characters"))
 		return
 	}
 
@@ -182,15 +178,16 @@ func (h *AuthHandler) ResetPassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.auth.ResetPassword(r.Context(), req.Token, req.NewPassword); err != nil {
+	resetUserID, err := h.auth.ResetPassword(r.Context(), req.Token, req.NewPassword)
+	if err != nil {
 		respondError(w, r, err)
 		return
 	}
 
 	if h.auditor != nil {
 		h.auditor.Log(r.Context(), service.AuditEntry{
-			Action: "password_reset", EntityType: "user",
-			IPAddress: clientIP(r),
+			ActorID: resetUserID, EntityType: "user", EntityID: resetUserID,
+			Action: "password_reset", IPAddress: clientIP(r),
 		})
 	}
 

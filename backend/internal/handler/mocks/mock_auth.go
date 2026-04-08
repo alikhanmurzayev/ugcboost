@@ -362,20 +362,29 @@ func (_c *MockAuth_RequestPasswordReset_Call) RunAndReturn(run func(ctx context.
 }
 
 // ResetPassword provides a mock function for the type MockAuth
-func (_mock *MockAuth) ResetPassword(ctx context.Context, rawToken string, newPassword string) error {
+func (_mock *MockAuth) ResetPassword(ctx context.Context, rawToken string, newPassword string) (string, error) {
 	ret := _mock.Called(ctx, rawToken, newPassword)
 
 	if len(ret) == 0 {
 		panic("no return value specified for ResetPassword")
 	}
 
-	var r0 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) error); ok {
+	var r0 string
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) (string, error)); ok {
+		return returnFunc(ctx, rawToken, newPassword)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) string); ok {
 		r0 = returnFunc(ctx, rawToken, newPassword)
 	} else {
-		r0 = ret.Error(0)
+		r0 = ret.Get(0).(string)
 	}
-	return r0
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string) error); ok {
+		r1 = returnFunc(ctx, rawToken, newPassword)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
 }
 
 // MockAuth_ResetPassword_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ResetPassword'
@@ -414,12 +423,12 @@ func (_c *MockAuth_ResetPassword_Call) Run(run func(ctx context.Context, rawToke
 	return _c
 }
 
-func (_c *MockAuth_ResetPassword_Call) Return(err error) *MockAuth_ResetPassword_Call {
-	_c.Call.Return(err)
+func (_c *MockAuth_ResetPassword_Call) Return(s string, err error) *MockAuth_ResetPassword_Call {
+	_c.Call.Return(s, err)
 	return _c
 }
 
-func (_c *MockAuth_ResetPassword_Call) RunAndReturn(run func(ctx context.Context, rawToken string, newPassword string) error) *MockAuth_ResetPassword_Call {
+func (_c *MockAuth_ResetPassword_Call) RunAndReturn(run func(ctx context.Context, rawToken string, newPassword string) (string, error)) *MockAuth_ResetPassword_Call {
 	_c.Call.Return(run)
 	return _c
 }

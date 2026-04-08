@@ -93,7 +93,9 @@ func TestLogin_ShortPassword(t *testing.T) {
 		Email: openapi_types.Email(email), Password: "12345",
 	})
 	require.NoError(t, err)
-	assert.Equal(t, http.StatusUnprocessableEntity, resp.StatusCode())
+	// Short password is not pre-validated on login (prevents info leak);
+	// bcrypt comparison fails → 401
+	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode())
 }
 
 func TestLogin_EmailNormalization(t *testing.T) {

@@ -481,7 +481,6 @@ components:
           example: admin@ugcboost.kz
         password:
           type: string
-          minLength: 6
           example: "password123"
 
     LoginResult:

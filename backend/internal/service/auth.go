@@ -174,30 +174,31 @@ func (s *AuthService) RequestPasswordReset(ctx context.Context, email string) er
 }
 
 // ResetPassword validates a reset token and updates the password.
-func (s *AuthService) ResetPassword(ctx context.Context, rawToken, newPassword string) error {
+// Returns the user ID of the account whose password was reset.
+func (s *AuthService) ResetPassword(ctx context.Context, rawToken, newPassword string) (string, error) {
 	hash := HashToken(rawToken)
 
 	// Atomic claim: UPDATE SET used=true...RETURNING prevents TOCTOU race
 	rt, err := s.users.ClaimResetToken(ctx, hash)
 	if err != nil {
-		return domain.ErrUnauthorized
+		return "", domain.ErrUnauthorized
 	}
 
 	passwordHash, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcryptCost)
 	if err != nil {
-		return fmt.Errorf("hash password: %w", err)
+		return "", fmt.Errorf("hash password: %w", err)
 	}
 
 	if err := s.users.UpdatePassword(ctx, rt.UserID, string(passwordHash)); err != nil {
-		return fmt.Errorf("update password: %w", err)
+		return "", fmt.Errorf("update password: %w", err)
 	}
 
 	// Invalidate all refresh tokens on password change
 	if err := s.users.DeleteUserRefreshTokens(ctx, rt.UserID); err != nil {
-		return fmt.Errorf("delete refresh tokens: %w", err)
+		return "", fmt.Errorf("delete refresh tokens: %w", err)
 	}
 
-	return nil
+	return rt.UserID, nil
 }
 
 // GetUser returns a user by ID.

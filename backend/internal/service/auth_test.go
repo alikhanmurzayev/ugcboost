@@ -151,9 +151,10 @@ func TestResetPassword_Success(t *testing.T) {
 	tokens := mocks.NewMockTokenGenerator(t)
 
 	svc := NewAuthService(repo, tokens)
-	err := svc.ResetPassword(context.Background(), "raw-reset-token", "newpass123")
+	userID, err := svc.ResetPassword(context.Background(), "raw-reset-token", "newpass123")
 
 	assert.NoError(t, err)
+	assert.Equal(t, "user-1", userID)
 }
 
 func TestResetPassword_InvalidToken(t *testing.T) {
@@ -166,9 +167,10 @@ func TestResetPassword_InvalidToken(t *testing.T) {
 	tokens := mocks.NewMockTokenGenerator(t)
 
 	svc := NewAuthService(repo, tokens)
-	err := svc.ResetPassword(context.Background(), "bad-token", "newpass123")
+	userID, err := svc.ResetPassword(context.Background(), "bad-token", "newpass123")
 
 	assert.ErrorIs(t, err, domain.ErrUnauthorized)
+	assert.Empty(t, userID)
 }
 
 // --- SeedAdmin tests ---

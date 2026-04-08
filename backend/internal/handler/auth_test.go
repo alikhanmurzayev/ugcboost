@@ -89,9 +89,12 @@ func TestLoginHandler_MissingFields(t *testing.T) {
 
 func TestLoginHandler_ShortPassword(t *testing.T) {
 	auth := mocks.NewMockAuth(t)
+	auth.EXPECT().Login(mock.Anything, "a@b.com", "12345").
+		Return(nil, domain.ErrUnauthorized)
+
 	h := NewAuthHandler(auth, false)
 	w := doRequest(h.Login, "POST", `{"email":"a@b.com","password":"12345"}`)
-	assert.Equal(t, http.StatusUnprocessableEntity, w.Code)
+	assert.Equal(t, http.StatusUnauthorized, w.Code)
 }
 
 func TestLoginHandler_WrongCredentials(t *testing.T) {
@@ -154,7 +157,7 @@ func TestPasswordResetRequest_EmptyEmail(t *testing.T) {
 
 func TestResetPassword_Success(t *testing.T) {
 	auth := mocks.NewMockAuth(t)
-	auth.EXPECT().ResetPassword(mock.Anything, "abc", "newpass123").Return(nil)
+	auth.EXPECT().ResetPassword(mock.Anything, "abc", "newpass123").Return("user-1", nil)
 
 	h := NewAuthHandler(auth, false)
 	w := doRequest(h.ResetPassword, "POST", `{"token":"abc","newPassword":"newpass123"}`)

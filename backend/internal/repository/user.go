@@ -2,8 +2,10 @@ package repository
 
 import (
 	"context"
+	"errors"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	sq "github.com/Masterminds/squirrel"
 
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/dbutil"
@@ -79,8 +81,14 @@ func (r *UserRepository) UpdatePassword(ctx context.Context, userID, passwordHas
 		Set("password_hash", passwordHash).
 		Set("updated_at", sq.Expr("now()")).
 		Where("id = ?", userID)
-	_, err := dbutil.Exec(ctx, r.db, q)
-	return err
+	n, err := dbutil.Exec(ctx, r.db, q)
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return pgx.ErrNoRows
+	}
+	return nil
 }
 
 // ExistsByEmail checks if a user with the given email exists.
@@ -88,7 +96,10 @@ func (r *UserRepository) ExistsByEmail(ctx context.Context, email string) (bool,
 	q := dbutil.Psql.Select("1").From("users").Where("email = ?", email).Limit(1)
 	_, err := dbutil.Val[int](ctx, r.db, q)
 	if err != nil {
-		return false, nil // not found = doesn't exist
+		if errors.Is(err, pgx.ErrNoRows) {
+			return false, nil
+		}
+		return false, err
 	}
 	return true, nil
 }
