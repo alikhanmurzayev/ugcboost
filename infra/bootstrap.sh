@@ -42,9 +42,10 @@ sshd_set() {
   fi
 }
 
-# --- 0. Update package lists (once) ---
-echo ">>> Updating package lists..."
+# --- 0. Update and upgrade packages ---
+echo ">>> Updating and upgrading packages..."
 apt-get update -qq
+apt-get upgrade -y -qq > /dev/null
 
 # --- 1. Create deploy user ---
 echo ">>> Creating deploy user..."
@@ -61,15 +62,16 @@ echo "deploy ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/deploy
 mkdir -p /home/deploy/.ssh
 chmod 700 /home/deploy/.ssh
 
-if [[ -f /root/.ssh/authorized_keys ]]; then
-  cp /root/.ssh/authorized_keys /home/deploy/.ssh/authorized_keys
-  chmod 600 /home/deploy/.ssh/authorized_keys
-  chown -R deploy:deploy /home/deploy/.ssh
-  echo "  SSH keys synced from root to deploy"
-else
-  echo "  WARNING: No /root/.ssh/authorized_keys found."
-  echo "  Add your SSH public key to /home/deploy/.ssh/authorized_keys manually!"
+if [[ ! -s /root/.ssh/authorized_keys ]]; then
+  echo "  FATAL: /root/.ssh/authorized_keys missing or empty."
+  echo "  Cannot proceed — SSH hardening would lock out all access."
+  exit 1
 fi
+
+cp /root/.ssh/authorized_keys /home/deploy/.ssh/authorized_keys
+chmod 600 /home/deploy/.ssh/authorized_keys
+chown -R deploy:deploy /home/deploy/.ssh
+echo "  SSH keys synced from root to deploy"
 
 # --- 2. SSH hardening ---
 echo ">>> SSH hardening (port $SSH_PORT)..."
@@ -80,6 +82,13 @@ sshd_set Port "$SSH_PORT"
 sshd_set PermitRootLogin no
 sshd_set PasswordAuthentication no
 sshd_set PubkeyAuthentication yes
+
+# Validate config before restarting — broken config = lockout
+if ! sshd -t 2>/dev/null; then
+  echo "  FATAL: sshd config validation failed!"
+  sshd -t
+  exit 1
+fi
 
 # Ubuntu 22.10+ uses socket activation for SSH.
 # When ssh.socket is active, the Port directive in sshd_config is IGNORED —
@@ -159,10 +168,19 @@ echo "  fail2ban configured"
 # --- 5. Docker ---
 echo ">>> Installing Docker..."
 if ! command -v docker &>/dev/null; then
-  curl -fsSL https://get.docker.com | sh
+  curl -fsSL --retry 3 --max-time 120 https://get.docker.com -o /tmp/get-docker.sh
+  sh /tmp/get-docker.sh
+  rm -f /tmp/get-docker.sh
   echo "  Docker installed"
 else
   echo "  Docker already installed"
+fi
+
+# Verify Docker is running
+if ! systemctl is-active docker &>/dev/null; then
+  echo "  FATAL: Docker installed but not running!"
+  systemctl status docker --no-pager || true
+  exit 1
 fi
 
 usermod -aG docker deploy
@@ -170,7 +188,9 @@ usermod -aG docker deploy
 # --- 6. Dokploy ---
 echo ">>> Installing Dokploy..."
 if ! docker ps --format '{{.Names}}' 2>/dev/null | grep -q dokploy; then
-  curl -sSL https://dokploy.com/install.sh | sh
+  curl -sSL --retry 3 --max-time 120 https://dokploy.com/install.sh -o /tmp/install-dokploy.sh
+  sh /tmp/install-dokploy.sh
+  rm -f /tmp/install-dokploy.sh
   echo "  Dokploy installed"
 else
   echo "  Dokploy already running"
