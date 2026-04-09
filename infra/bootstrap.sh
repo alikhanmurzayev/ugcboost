@@ -41,6 +41,8 @@ fi
 
 echo "=== UGCBoost Bootstrap: env=$ENV domain=$DOMAIN ssh_port=$SSH_PORT ==="
 
+export DEBIAN_FRONTEND=noninteractive
+
 # --- 1. Create deploy user ---
 echo ">>> Creating deploy user..."
 if ! id deploy &>/dev/null; then
@@ -65,15 +67,27 @@ fi
 
 # --- 2. SSH hardening ---
 echo ">>> SSH hardening (port $SSH_PORT)..."
-SSHD_CONFIG="/etc/ssh/sshd_config"
-cp "$SSHD_CONFIG" "${SSHD_CONFIG}.bak"
 
-sed -i "s/^#\?Port .*/Port $SSH_PORT/" "$SSHD_CONFIG"
-sed -i "s/^#\?PermitRootLogin .*/PermitRootLogin no/" "$SSHD_CONFIG"
-sed -i "s/^#\?PasswordAuthentication .*/PasswordAuthentication no/" "$SSHD_CONFIG"
-sed -i "s/^#\?PubkeyAuthentication .*/PubkeyAuthentication yes/" "$SSHD_CONFIG"
+# Remove cloud-init SSH override (Ubuntu 22.04/24.04 sets PasswordAuthentication there)
+rm -f /etc/ssh/sshd_config.d/50-cloud-init.conf 2>/dev/null || true
 
-systemctl restart sshd
+# Write drop-in config (cleanest approach, overrides main sshd_config)
+mkdir -p /etc/ssh/sshd_config.d
+cat > /etc/ssh/sshd_config.d/99-ugcboost.conf <<SSHCONF
+Port $SSH_PORT
+PermitRootLogin no
+PasswordAuthentication no
+PubkeyAuthentication yes
+SSHCONF
+
+# Ubuntu 24.04 uses "ssh", older versions use "sshd"
+if systemctl list-units --type=service | grep -q 'ssh.service'; then
+  systemctl restart ssh
+elif systemctl list-units --type=service | grep -q 'sshd.service'; then
+  systemctl restart sshd
+else
+  echo "  WARNING: Could not find ssh/sshd service. Restart SSH manually."
+fi
 echo "  SSH reconfigured on port $SSH_PORT"
 
 # --- 3. UFW firewall ---
