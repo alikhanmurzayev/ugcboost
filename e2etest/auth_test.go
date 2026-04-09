@@ -80,7 +80,10 @@ func TestLogin_NonExistentEmail(t *testing.T) {
 func TestLogin_EmptyEmail(t *testing.T) {
 	// Use raw HTTP — the generated client validates Email format before sending
 	body, _ := json.Marshal(map[string]string{"email": "", "password": "password123"})
-	resp, err := http.Post(baseURL+"/auth/login", "application/json", bytes.NewReader(body))
+	req, err := http.NewRequest("POST", baseURL+"/auth/login", bytes.NewReader(body))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := httpClient(nil).Do(req)
 	require.NoError(t, err)
 	defer resp.Body.Close()
 	assert.Equal(t, http.StatusUnprocessableEntity, resp.StatusCode)
@@ -242,11 +245,12 @@ func TestPasswordResetRequest_NonExistentEmail(t *testing.T) {
 }
 
 func TestPasswordResetRequest_EmptyEmail(t *testing.T) {
-	body, _ := json.Marshal(map[string]string{"email": ""})
-	resp, err := http.Post(baseURL+"/auth/password-reset-request", "application/json", bytes.NewReader(body))
+	c := newAPIClient(t)
+	resp, err := c.RequestPasswordResetWithResponse(context.Background(), apiclient.RequestPasswordResetJSONRequestBody{
+		Email: "",
+	})
 	require.NoError(t, err)
-	defer resp.Body.Close()
-	assert.Equal(t, http.StatusUnprocessableEntity, resp.StatusCode)
+	assert.Equal(t, http.StatusUnprocessableEntity, resp.StatusCode())
 }
 
 // --- Password Reset Execute ---
