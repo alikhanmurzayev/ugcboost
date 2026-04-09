@@ -1,6 +1,6 @@
 import { defineConfig } from "@playwright/test";
 
-const BASE_URL = "http://localhost:5173";
+const BASE_URL = process.env.BASE_URL || "http://localhost:5173";
 
 export default defineConfig({
   testDir: "./e2e",
@@ -18,19 +18,21 @@ export default defineConfig({
       use: { browserName: "chromium" },
     },
   ],
-  webServer: [
-    {
-      command:
-        "cd ../backend && DATABASE_URL='postgres://ugcboost:ugcboost_dev@localhost:5433/ugcboost?sslmode=disable' JWT_SECRET='test-secret' ADMIN_PASSWORD='admin123' JWT_EXPIRY='15m' PORT=8080 go run ./cmd/api/",
-      port: 8080,
-      reuseExistingServer: true,
-      timeout: 30_000,
-    },
-    {
-      command: "npx vite dev --port 5173",
-      port: 5173,
-      reuseExistingServer: true,
-      timeout: 15_000,
-    },
-  ],
+  webServer: process.env.CI
+    ? undefined
+    : [
+        {
+          command:
+            "cd ../backend && DATABASE_URL='postgres://ugcboost:ugcboost_dev@localhost:5433/ugcboost?sslmode=disable' JWT_SECRET='test-secret' ADMIN_PASSWORD='admin123' JWT_EXPIRY='15m' PORT=8080 go run ./cmd/api/",
+          port: 8080,
+          reuseExistingServer: true,
+          timeout: 30_000,
+        },
+        {
+          command: "npx vite dev --port 5173",
+          port: 5173,
+          reuseExistingServer: true,
+          timeout: 15_000,
+        },
+      ],
 });

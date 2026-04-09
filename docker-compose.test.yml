@@ -55,3 +55,15 @@ services:
       interval: 2s
       timeout: 5s
       retries: 10
+
+  web:
+    build:
+      context: .
+      dockerfile: web/Dockerfile
+    ports:
+      - "3001:80"
+    environment:
+      API_URL: http://localhost:8082
+    depends_on:
+      backend:
+        condition: service_healthy

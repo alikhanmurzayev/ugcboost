@@ -12,3 +12,7 @@ services:
   backend:
     build: !reset null
     image: ${IMAGE_PREFIX}/backend:${IMAGE_TAG}
+
+  web:
+    build: !reset null
+    image: ${IMAGE_PREFIX}/web:${IMAGE_TAG}
