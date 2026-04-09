@@ -84,9 +84,9 @@ sshd_set PasswordAuthentication no
 sshd_set PubkeyAuthentication yes
 
 # Validate config before restarting — broken config = lockout
-if ! sshd -t 2>/dev/null; then
+mkdir -p /run/sshd
+if ! sshd -t; then
   echo "  FATAL: sshd config validation failed!"
-  sshd -t
   exit 1
 fi
 
