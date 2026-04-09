@@ -193,14 +193,14 @@ jobs:
         if: always()
         run: docker compose -f docker-compose.test.yml -f docker-compose.ci.yml down
 
-  # ── Stage 4: Deploy staging ──────────────────────────────────────
+  # ── Stage 4: Migrate staging DB ──────────────────────────────────
 
-  deploy-staging:
-    name: Deploy to Staging
+  migrate-staging:
+    name: Migrate Staging DB
     runs-on: ubuntu-latest
     needs: [test-e2e-backend, test-e2e-browser]
     steps:
-      - name: Run migrations
+      - name: Run migrations via SSH
         uses: appleboy/ssh-action@v1
         with:
           host: ${{ vars.STAGING_HOST }}
@@ -213,12 +213,25 @@ jobs:
             docker run --rm --network=dokploy-network \
               -e DATABASE_URL="${{ secrets.STAGING_DATABASE_URL }}" \
               ${{ env.IMAGE_PREFIX }}/migrations:staging
-      - name: Deploy backend
-        run: curl -sSf -X POST "${{ secrets.DOKPLOY_WEBHOOK_BACKEND }}"
-      - name: Deploy web
-        run: curl -sSf -X POST "${{ secrets.DOKPLOY_WEBHOOK_WEB }}"
-      - name: Deploy TMA
-        run: curl -sSf -X POST "${{ secrets.DOKPLOY_WEBHOOK_TMA }}"
+
+  # ── Stage 5: Deploy staging ──────────────────────────────────────
+
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: [migrate-staging]
+    steps:
+      - name: Deploy services via Dokploy
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ vars.STAGING_HOST }}
+          username: deploy
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          port: 2222
+          script: |
+            curl -sSf -X POST "${{ secrets.DOKPLOY_WEBHOOK_BACKEND }}"
+            curl -sSf -X POST "${{ secrets.DOKPLOY_WEBHOOK_WEB }}"
+            curl -sSf -X POST "${{ secrets.DOKPLOY_WEBHOOK_TMA }}"
       - name: Health check
         run: |
           sleep 15
