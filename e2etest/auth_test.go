@@ -245,12 +245,15 @@ func TestPasswordResetRequest_NonExistentEmail(t *testing.T) {
 }
 
 func TestPasswordResetRequest_EmptyEmail(t *testing.T) {
-	c := newAPIClient(t)
-	resp, err := c.RequestPasswordResetWithResponse(context.Background(), apiclient.RequestPasswordResetJSONRequestBody{
-		Email: "",
-	})
+	// Use raw HTTP — the generated client validates Email format before sending
+	body, _ := json.Marshal(map[string]string{"email": ""})
+	req, err := http.NewRequest("POST", baseURL+"/auth/password-reset-request", bytes.NewReader(body))
 	require.NoError(t, err)
-	assert.Equal(t, http.StatusUnprocessableEntity, resp.StatusCode())
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := httpClient(nil).Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusUnprocessableEntity, resp.StatusCode)
 }
 
 // --- Password Reset Execute ---
