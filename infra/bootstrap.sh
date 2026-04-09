@@ -4,7 +4,7 @@
 #
 # Usage:
 #   scp bootstrap.sh root@<vps-ip>:/tmp/
-#   ssh root@<vps-ip> 'bash /tmp/bootstrap.sh --env staging --domain ugcboost.kz'
+#   ssh root@<vps-ip> 'bash /tmp/bootstrap.sh --domain ugcboost.kz'
 #
 # What it does:
 #   1. Creates 'deploy' user with SSH key
@@ -24,25 +24,23 @@ if [[ $EUID -ne 0 ]]; then
 fi
 
 # --- Parse arguments ---
-ENV=""
 DOMAIN=""
 SSH_PORT=2222
 
 while [[ $# -gt 0 ]]; do
   case $1 in
-    --env)      ENV="$2"; shift 2 ;;
     --domain)   DOMAIN="$2"; shift 2 ;;
     --ssh-port) SSH_PORT="$2"; shift 2 ;;
     *) echo "Unknown option: $1"; exit 1 ;;
   esac
 done
 
-if [[ -z "$ENV" || -z "$DOMAIN" ]]; then
-  echo "Usage: $0 --env <staging|production> --domain <domain>"
+if [[ -z "$DOMAIN" ]]; then
+  echo "Usage: $0 --domain <domain> [--ssh-port <port>]"
   exit 1
 fi
 
-echo "=== UGCBoost Bootstrap: env=$ENV domain=$DOMAIN ssh_port=$SSH_PORT ==="
+echo "=== UGCBoost Bootstrap: domain=$DOMAIN ssh_port=$SSH_PORT ==="
 
 export DEBIAN_FRONTEND=noninteractive
 
