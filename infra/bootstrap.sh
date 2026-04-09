@@ -90,18 +90,13 @@ if ! sshd -t; then
   exit 1
 fi
 
-# Ubuntu 22.10+ uses socket activation for SSH.
-# When ssh.socket is active, the Port directive in sshd_config is IGNORED —
-# the listening port is controlled by the systemd socket unit.
-# We must override ssh.socket to change the port.
+# Ubuntu 22.10+ uses socket activation with sshd-socket-generator,
+# which auto-reads Port from sshd_config and creates dual-stack listeners.
+# We only need daemon-reload + restart. No manual socket override needed.
 if systemctl is-active ssh.socket &>/dev/null; then
-  echo "  Socket activation detected — overriding ssh.socket"
-  mkdir -p /etc/systemd/system/ssh.socket.d
-  cat > /etc/systemd/system/ssh.socket.d/listen.conf <<EOF
-[Socket]
-ListenStream=
-ListenStream=$SSH_PORT
-EOF
+  echo "  Socket activation detected — reloading"
+  # Remove any stale manual overrides (they break the generator's dual-stack config)
+  rm -rf /etc/systemd/system/ssh.socket.d
   systemctl daemon-reload
   systemctl restart ssh.socket
 else
