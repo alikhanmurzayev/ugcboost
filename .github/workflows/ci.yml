@@ -29,7 +29,7 @@ jobs:
     runs-on: ubuntu-latest
     services:
       postgres:
-        image: postgres:16-alpine
+        image: postgres:17-alpine
         env:
           POSTGRES_USER: ugcboost
           POSTGRES_PASSWORD: ugcboost_test
@@ -104,7 +104,6 @@ jobs:
 
   push-images:
     name: Push Images to GHCR
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     needs: [build]
     permissions:
@@ -122,14 +121,22 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Set image tags
         id: tags
-        run: echo "sha=sha-$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+        run: |
+          SHA="sha-$(git rev-parse --short HEAD)"
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          # PR builds get :staging tag, main branch gets :main tag
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            echo "env_tag=staging" >> "$GITHUB_OUTPUT"
+          else
+            echo "env_tag=main" >> "$GITHUB_OUTPUT"
+          fi
       - name: Build & push backend
         uses: docker/build-push-action@v6
         with:
           context: ./backend
           push: true
           tags: |
-            ${{ env.IMAGE_PREFIX }}/backend:main
+            ${{ env.IMAGE_PREFIX }}/backend:${{ steps.tags.outputs.env_tag }}
             ${{ env.IMAGE_PREFIX }}/backend:${{ steps.tags.outputs.sha }}
       - name: Build & push web
         uses: docker/build-push-action@v6
@@ -138,7 +145,7 @@ jobs:
           file: web/Dockerfile
           push: true
           tags: |
-            ${{ env.IMAGE_PREFIX }}/web:main
+            ${{ env.IMAGE_PREFIX }}/web:${{ steps.tags.outputs.env_tag }}
             ${{ env.IMAGE_PREFIX }}/web:${{ steps.tags.outputs.sha }}
       - name: Build & push tma
         uses: docker/build-push-action@v6
@@ -147,7 +154,7 @@ jobs:
           file: tma/Dockerfile
           push: true
           tags: |
-            ${{ env.IMAGE_PREFIX }}/tma:main
+            ${{ env.IMAGE_PREFIX }}/tma:${{ steps.tags.outputs.env_tag }}
             ${{ env.IMAGE_PREFIX }}/tma:${{ steps.tags.outputs.sha }}
       - name: Build & push migrations
         uses: docker/build-push-action@v6
@@ -156,12 +163,11 @@ jobs:
           file: Dockerfile.migrations
           push: true
           tags: |
-            ${{ env.IMAGE_PREFIX }}/migrations:main
+            ${{ env.IMAGE_PREFIX }}/migrations:${{ steps.tags.outputs.env_tag }}
             ${{ env.IMAGE_PREFIX }}/migrations:${{ steps.tags.outputs.sha }}
 
   deploy-staging:
     name: Deploy to Staging
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     needs: [push-images]
     steps:
@@ -174,4 +180,4 @@ jobs:
       - name: Health check
         run: |
           sleep 15
-          curl -sSf --retry 3 --retry-delay 5 https://staging-api.ugcboost.kz/healthz
+          curl -sSf --retry 5 --retry-delay 10 https://staging-api.ugcboost.kz/healthz
