@@ -111,15 +111,23 @@ else
   echo "PubkeyAuthentication yes" >> "$SSHD_CFG"
 fi
 
-# Ubuntu 24.04 uses "ssh", older versions use "sshd"
-if systemctl list-units --type=service | grep -q 'ssh.service'; then
-  systemctl restart ssh
-elif systemctl list-units --type=service | grep -q 'sshd.service'; then
-  systemctl restart sshd
+# Restart SSH — Ubuntu 24.04 uses socket-activated "ssh", older uses "sshd".
+# systemctl list-units may not show socket-activated services, so just try directly.
+if systemctl restart ssh 2>/dev/null; then
+  echo "  Restarted ssh (Ubuntu 24.04+)"
+elif systemctl restart sshd 2>/dev/null; then
+  echo "  Restarted sshd"
 else
-  echo "  WARNING: Could not find ssh/sshd service. Restart SSH manually."
+  echo "  WARNING: Could not restart SSH service. Restart manually!"
 fi
-echo "  SSH reconfigured on port $SSH_PORT"
+
+# Verify SSH is listening on the correct port
+sleep 1
+if ss -tlnp | grep -q ":$SSH_PORT"; then
+  echo "  SSH confirmed on port $SSH_PORT"
+else
+  echo "  WARNING: SSH not detected on port $SSH_PORT. Check sshd_config manually."
+fi
 
 # --- 3. UFW firewall ---
 echo ">>> Configuring UFW..."
