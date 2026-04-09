@@ -89,13 +89,6 @@ jobs:
     needs: [lint-backend, test-backend, lint-web, lint-tma]
     steps:
       - uses: actions/checkout@v4
-      - name: Install oapi-codegen
-        run: go install github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen@latest
-      - name: Generate API code
-        run: |
-          oapi-codegen -package api -generate chi-server,models \
-            -o backend/internal/api/server.gen.go \
-            api/openapi.yaml
       - name: Build backend image
         run: docker build -t ugcboost/backend ./backend
       - name: Build web image
