@@ -9,8 +9,11 @@ on:
 env:
   GO_VERSION: "1.25"
   NODE_VERSION: "20"
+  IMAGE_PREFIX: ghcr.io/${{ github.repository_owner }}/ugcboost
 
 jobs:
+  # ── Stage 1: Lint + Unit (parallel) ──────────────────────────────
+
   lint-backend:
     name: Lint Backend
     runs-on: ubuntu-latest
@@ -25,37 +28,17 @@ jobs:
           working-directory: backend
           version: v2.11.4
 
-  test-backend:
-    name: Test Backend
+  test-unit:
+    name: Unit Tests
     runs-on: ubuntu-latest
-    services:
-      postgres:
-        image: postgres:17-alpine
-        env:
-          POSTGRES_USER: ugcboost
-          POSTGRES_PASSWORD: ugcboost_test
-          POSTGRES_DB: ugcboost_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U ugcboost"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
-      - name: Install goose
-        run: go install github.com/pressly/goose/v3/cmd/goose@latest
-      - name: Run migrations
-        run: goose -dir migrations postgres "postgres://ugcboost:ugcboost_test@localhost:5432/ugcboost_test?sslmode=disable" up
-      - name: Run tests
+      - name: Backend unit tests
         working-directory: backend
         run: go test ./... -count=1 -race -timeout 5m
-        env:
-          DATABASE_URL: postgres://ugcboost:ugcboost_test@localhost:5432/ugcboost_test?sslmode=disable
 
   lint-web:
     name: Lint Web
@@ -83,28 +66,14 @@ jobs:
       - run: npx tsc --noEmit
         working-directory: tma
 
-  build:
-    name: Build Docker Images
-    runs-on: ubuntu-latest
-    needs: [lint-backend, test-backend, lint-web, lint-tma]
-    steps:
-      - uses: actions/checkout@v4
-      - name: Build backend image
-        run: docker build -t ugcboost/backend ./backend
-      - name: Build web image
-        run: docker build -t ugcboost/web -f web/Dockerfile .
-      - name: Build tma image
-        run: docker build -t ugcboost/tma -f tma/Dockerfile .
+  # ── Stage 2: Build & Push images ─────────────────────────────────
 
   push-images:
-    name: Push Images to GHCR
+    name: Build & Push Images
     runs-on: ubuntu-latest
-    needs: [build]
+    needs: [lint-backend, test-unit, lint-web, lint-tma]
     permissions:
       packages: write
-    env:
-      REGISTRY: ghcr.io
-      IMAGE_PREFIX: ghcr.io/${{ github.repository_owner }}/ugcboost
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
@@ -118,19 +87,13 @@ jobs:
         run: |
           SHA="sha-$(git rev-parse --short HEAD)"
           echo "sha=$SHA" >> "$GITHUB_OUTPUT"
-          # PR builds get :staging tag, main branch gets :main tag
-          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-            echo "env_tag=staging" >> "$GITHUB_OUTPUT"
-          else
-            echo "env_tag=main" >> "$GITHUB_OUTPUT"
-          fi
       - name: Build & push backend
         uses: docker/build-push-action@v6
         with:
           context: ./backend
           push: true
           tags: |
-            ${{ env.IMAGE_PREFIX }}/backend:${{ steps.tags.outputs.env_tag }}
+            ${{ env.IMAGE_PREFIX }}/backend:staging
             ${{ env.IMAGE_PREFIX }}/backend:${{ steps.tags.outputs.sha }}
       - name: Build & push web
         uses: docker/build-push-action@v6
@@ -139,7 +102,7 @@ jobs:
           file: web/Dockerfile
           push: true
           tags: |
-            ${{ env.IMAGE_PREFIX }}/web:${{ steps.tags.outputs.env_tag }}
+            ${{ env.IMAGE_PREFIX }}/web:staging
             ${{ env.IMAGE_PREFIX }}/web:${{ steps.tags.outputs.sha }}
       - name: Build & push tma
         uses: docker/build-push-action@v6
@@ -148,7 +111,7 @@ jobs:
           file: tma/Dockerfile
           push: true
           tags: |
-            ${{ env.IMAGE_PREFIX }}/tma:${{ steps.tags.outputs.env_tag }}
+            ${{ env.IMAGE_PREFIX }}/tma:staging
             ${{ env.IMAGE_PREFIX }}/tma:${{ steps.tags.outputs.sha }}
       - name: Build & push migrations
         uses: docker/build-push-action@v6
@@ -157,14 +120,60 @@ jobs:
           file: Dockerfile.migrations
           push: true
           tags: |
-            ${{ env.IMAGE_PREFIX }}/migrations:${{ steps.tags.outputs.env_tag }}
+            ${{ env.IMAGE_PREFIX }}/migrations:staging
             ${{ env.IMAGE_PREFIX }}/migrations:${{ steps.tags.outputs.sha }}
+
+  # ── Stage 3: Isolated E2E (pre-built images) ────────────────────
+
+  test-e2e-backend:
+    name: Backend E2E Tests
+    runs-on: ubuntu-latest
+    needs: [push-images]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Start services
+        run: |
+          IMAGE_PREFIX=${{ env.IMAGE_PREFIX }} IMAGE_TAG=staging \
+            docker compose -f docker-compose.test.yml -f docker-compose.ci.yml up -d --wait
+      - name: Run E2E tests
+        working-directory: e2etest
+        run: go test ./... -count=1 -v -race -timeout 5m
+      - name: Dump logs on failure
+        if: failure()
+        run: docker compose -f docker-compose.test.yml -f docker-compose.ci.yml logs
+      - name: Teardown
+        if: always()
+        run: docker compose -f docker-compose.test.yml -f docker-compose.ci.yml down
+
+  # ── Stage 4: Deploy staging ──────────────────────────────────────
 
   deploy-staging:
     name: Deploy to Staging
     runs-on: ubuntu-latest
-    needs: [push-images]
+    needs: [test-e2e-backend]
+    if: github.event_name == 'push'
     steps:
+      - name: Run migrations
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ vars.STAGING_HOST }}
+          username: deploy
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          port: 2222
+          script: |
+            echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            docker pull ${{ env.IMAGE_PREFIX }}/migrations:staging
+            docker run --rm --network=dokploy-network \
+              -e DATABASE_URL="${{ secrets.STAGING_DATABASE_URL }}" \
+              ${{ env.IMAGE_PREFIX }}/migrations:staging
       - name: Deploy backend
         run: curl -sSf -X POST "${{ secrets.DOKPLOY_WEBHOOK_BACKEND }}"
       - name: Deploy web
