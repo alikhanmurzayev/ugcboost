@@ -6,6 +6,7 @@ export default defineConfig({
   testDir: "./e2e",
   timeout: 30_000,
   retries: 0,
+  reporter: [["html", { open: "never" }]],
   use: {
     baseURL: BASE_URL,
     headless: true,
