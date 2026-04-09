@@ -1,10 +1,17 @@
 import { test, expect } from "@playwright/test";
 
-// Each test uses the seeded admin account (created by backend on startup).
-// Tests are idempotent — no test depends on another's state.
+// API URL for test setup (seed users). Falls back to docker-compose.test.yml backend.
+const API_URL = process.env.API_URL || "http://localhost:8082";
+const TEST_EMAIL = `test-web-${Date.now()}@e2e.test`;
+const TEST_PASSWORD = "testpass123";
 
-const ADMIN_EMAIL = "admin@ugcboost.kz";
-const ADMIN_PASSWORD = "admin123";
+// Seed a test admin user via /test/seed-user before all tests.
+test.beforeAll(async ({ request }) => {
+  const resp = await request.post(`${API_URL}/test/seed-user`, {
+    data: { email: TEST_EMAIL, password: TEST_PASSWORD, role: "admin" },
+  });
+  expect(resp.status()).toBe(201);
+});
 
 test.describe("Auth flow", () => {
   test("1. Happy login — email + password → dashboard with sidebar", async ({
@@ -12,8 +19,8 @@ test.describe("Auth flow", () => {
   }) => {
     await page.goto("/login");
 
-    await page.getByRole("textbox", { name: "Email" }).fill(ADMIN_EMAIL);
-    await page.getByRole("textbox", { name: "Пароль" }).fill(ADMIN_PASSWORD);
+    await page.getByRole("textbox", { name: "Email" }).fill(TEST_EMAIL);
+    await page.getByRole("textbox", { name: "Пароль" }).fill(TEST_PASSWORD);
     await page.getByRole("button", { name: "Войти" }).click();
 
     // Should redirect to dashboard
@@ -21,7 +28,7 @@ test.describe("Auth flow", () => {
     await expect(page.getByRole("heading", { name: "Дашборд" })).toBeVisible();
 
     // Sidebar shows user info
-    await expect(page.getByText(ADMIN_EMAIL, { exact: true })).toBeVisible();
+    await expect(page.getByText(TEST_EMAIL, { exact: true })).toBeVisible();
     await expect(page.getByText("Админ")).toBeVisible();
 
     // Sidebar navigation present (admin role)
@@ -33,7 +40,7 @@ test.describe("Auth flow", () => {
   test("2. Wrong password — error shown, stay on login", async ({ page }) => {
     await page.goto("/login");
 
-    await page.getByRole("textbox", { name: "Email" }).fill(ADMIN_EMAIL);
+    await page.getByRole("textbox", { name: "Email" }).fill(TEST_EMAIL);
     await page.getByRole("textbox", { name: "Пароль" }).fill("wrongpassword");
     await page.getByRole("button", { name: "Войти" }).click();
 
@@ -47,8 +54,8 @@ test.describe("Auth flow", () => {
   test("3. Session restore — F5 keeps user logged in", async ({ page }) => {
     // Login first
     await page.goto("/login");
-    await page.getByRole("textbox", { name: "Email" }).fill(ADMIN_EMAIL);
-    await page.getByRole("textbox", { name: "Пароль" }).fill(ADMIN_PASSWORD);
+    await page.getByRole("textbox", { name: "Email" }).fill(TEST_EMAIL);
+    await page.getByRole("textbox", { name: "Пароль" }).fill(TEST_PASSWORD);
     await page.getByRole("button", { name: "Войти" }).click();
     await expect(page).toHaveURL("/");
 
@@ -58,7 +65,7 @@ test.describe("Auth flow", () => {
     // Should still be on dashboard, not redirected to login
     await expect(page).toHaveURL("/");
     await expect(page.getByRole("heading", { name: "Дашборд" })).toBeVisible();
-    await expect(page.getByText(ADMIN_EMAIL, { exact: true })).toBeVisible();
+    await expect(page.getByText(TEST_EMAIL, { exact: true })).toBeVisible();
   });
 
   test("4. Logout — redirects to login, session destroyed", async ({
@@ -66,8 +73,8 @@ test.describe("Auth flow", () => {
   }) => {
     // Login first
     await page.goto("/login");
-    await page.getByRole("textbox", { name: "Email" }).fill(ADMIN_EMAIL);
-    await page.getByRole("textbox", { name: "Пароль" }).fill(ADMIN_PASSWORD);
+    await page.getByRole("textbox", { name: "Email" }).fill(TEST_EMAIL);
+    await page.getByRole("textbox", { name: "Пароль" }).fill(TEST_PASSWORD);
     await page.getByRole("button", { name: "Войти" }).click();
     await expect(page).toHaveURL("/");
 

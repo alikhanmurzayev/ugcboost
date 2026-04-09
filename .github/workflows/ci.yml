@@ -189,6 +189,7 @@ jobs:
         run: npx playwright test
         env:
           BASE_URL: http://localhost:3001
+          API_URL: http://localhost:8082
       - name: Upload report
         if: always()
         uses: actions/upload-artifact@v4
@@ -287,6 +288,7 @@ jobs:
         run: npx playwright test
         env:
           BASE_URL: https://staging-app.ugcboost.kz
+          API_URL: https://staging-api.ugcboost.kz
           CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
           CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
       - name: Upload report
