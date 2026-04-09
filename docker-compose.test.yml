@@ -2,7 +2,7 @@ name: ugcboost-test
 
 services:
   postgres:
-    image: postgres:16-alpine
+    image: postgres:17-alpine
     environment:
       POSTGRES_USER: ugcboost
       POSTGRES_PASSWORD: ugcboost_test
