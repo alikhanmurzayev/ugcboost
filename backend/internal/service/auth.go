@@ -12,7 +12,7 @@ import (
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/repository"
 )
 
-const bcryptCost = 12
+var bcryptCost = 12
 
 // UserRepo is the interface AuthService needs from the user repository.
 type UserRepo interface {

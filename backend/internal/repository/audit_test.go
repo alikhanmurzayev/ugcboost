@@ -11,6 +11,7 @@ import (
 )
 
 func TestAuditCreate_SQL(t *testing.T) {
+	t.Parallel()
 	db := mocks.NewMockDB(t)
 	repo := NewAuditRepository(db)
 	entityID := "e-1"

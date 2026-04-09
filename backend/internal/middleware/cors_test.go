@@ -9,6 +9,7 @@ import (
 )
 
 func TestCORS_AllowedOrigin(t *testing.T) {
+	t.Parallel()
 	handler := CORS([]string{"http://localhost:5173"})(okHandler())
 
 	r := httptest.NewRequest("GET", "/", nil)
@@ -23,6 +24,7 @@ func TestCORS_AllowedOrigin(t *testing.T) {
 }
 
 func TestCORS_DisallowedOrigin(t *testing.T) {
+	t.Parallel()
 	handler := CORS([]string{"http://localhost:5173"})(okHandler())
 
 	r := httptest.NewRequest("GET", "/", nil)
@@ -35,6 +37,7 @@ func TestCORS_DisallowedOrigin(t *testing.T) {
 }
 
 func TestCORS_PreflightAllowed(t *testing.T) {
+	t.Parallel()
 	handler := CORS([]string{"http://localhost:5173"})(okHandler())
 
 	r := httptest.NewRequest("OPTIONS", "/", nil)
@@ -48,6 +51,7 @@ func TestCORS_PreflightAllowed(t *testing.T) {
 }
 
 func TestCORS_PreflightDenied(t *testing.T) {
+	t.Parallel()
 	handler := CORS([]string{"http://localhost:5173"})(okHandler())
 
 	r := httptest.NewRequest("OPTIONS", "/", nil)
@@ -59,6 +63,7 @@ func TestCORS_PreflightDenied(t *testing.T) {
 }
 
 func TestCORS_NoOrigin(t *testing.T) {
+	t.Parallel()
 	handler := CORS([]string{"http://localhost:5173"})(okHandler())
 
 	r := httptest.NewRequest("GET", "/", nil)

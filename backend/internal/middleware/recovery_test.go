@@ -9,6 +9,7 @@ import (
 )
 
 func TestRecovery_NoPanic(t *testing.T) {
+	t.Parallel()
 	handler := Recovery(okHandler())
 
 	r := httptest.NewRequest("GET", "/", nil)
@@ -19,6 +20,7 @@ func TestRecovery_NoPanic(t *testing.T) {
 }
 
 func TestRecovery_PanicReturns500(t *testing.T) {
+	t.Parallel()
 	handler := Recovery(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
 		panic("something broke")
 	}))
@@ -35,6 +37,7 @@ func TestRecovery_PanicReturns500(t *testing.T) {
 }
 
 func TestRecovery_PanicWithError(t *testing.T) {
+	t.Parallel()
 	handler := Recovery(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
 		panic(assert.AnError)
 	}))

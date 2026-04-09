@@ -15,6 +15,7 @@ func newTestTokenService() *TokenService {
 // --- GenerateAccessToken + ValidateAccessToken ---
 
 func TestAccessToken_CorrectClaims(t *testing.T) {
+	t.Parallel()
 	svc := newTestTokenService()
 	token, err := svc.GenerateAccessToken("user-1", "admin")
 	require.NoError(t, err)
@@ -27,6 +28,7 @@ func TestAccessToken_CorrectClaims(t *testing.T) {
 }
 
 func TestAccessToken_DifferentRoles(t *testing.T) {
+	t.Parallel()
 	svc := newTestTokenService()
 
 	for _, role := range []string{"admin", "brand_manager"} {
@@ -40,6 +42,7 @@ func TestAccessToken_DifferentRoles(t *testing.T) {
 }
 
 func TestAccessToken_ExpiredToken(t *testing.T) {
+	t.Parallel()
 	svc := NewTokenService("secret", -1*time.Second) // negative expiry = already expired
 	token, err := svc.GenerateAccessToken("u-1", "admin")
 	require.NoError(t, err)
@@ -49,6 +52,7 @@ func TestAccessToken_ExpiredToken(t *testing.T) {
 }
 
 func TestAccessToken_WrongSecret(t *testing.T) {
+	t.Parallel()
 	svc1 := NewTokenService("secret-A", 15*time.Minute)
 	svc2 := NewTokenService("secret-B", 15*time.Minute)
 
@@ -60,12 +64,14 @@ func TestAccessToken_WrongSecret(t *testing.T) {
 }
 
 func TestAccessToken_Garbage(t *testing.T) {
+	t.Parallel()
 	svc := newTestTokenService()
 	_, _, err := svc.ValidateAccessToken("not.a.jwt")
 	assert.Error(t, err)
 }
 
 func TestAccessToken_EmptyString(t *testing.T) {
+	t.Parallel()
 	svc := newTestTokenService()
 	_, _, err := svc.ValidateAccessToken("")
 	assert.Error(t, err)
@@ -74,6 +80,7 @@ func TestAccessToken_EmptyString(t *testing.T) {
 // --- GenerateRefreshToken ---
 
 func TestRefreshToken_UniqueAndHashed(t *testing.T) {
+	t.Parallel()
 	svc := newTestTokenService()
 
 	raw1, hash1, exp1, err := svc.GenerateRefreshToken()
@@ -90,6 +97,7 @@ func TestRefreshToken_UniqueAndHashed(t *testing.T) {
 // --- GenerateResetToken ---
 
 func TestResetToken_UniqueAndHashed(t *testing.T) {
+	t.Parallel()
 	svc := newTestTokenService()
 
 	raw, hash, exp, err := svc.GenerateResetToken()
@@ -104,12 +112,14 @@ func TestResetToken_UniqueAndHashed(t *testing.T) {
 // --- HashToken ---
 
 func TestHashToken_Deterministic(t *testing.T) {
+	t.Parallel()
 	h1 := HashToken("abc")
 	h2 := HashToken("abc")
 	assert.Equal(t, h1, h2)
 }
 
 func TestHashToken_DifferentInputs(t *testing.T) {
+	t.Parallel()
 	h1 := HashToken("abc")
 	h2 := HashToken("def")
 	assert.NotEqual(t, h1, h2)

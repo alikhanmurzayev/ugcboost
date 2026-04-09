@@ -9,6 +9,7 @@ import (
 )
 
 func TestSecureHeaders_Present(t *testing.T) {
+	t.Parallel()
 	handler := SecureHeaders(okHandler())
 
 	r := httptest.NewRequest("GET", "/", nil)
@@ -21,6 +22,7 @@ func TestSecureHeaders_Present(t *testing.T) {
 }
 
 func TestSecureHeaders_DeletesBeforeNext(t *testing.T) {
+	t.Parallel()
 	var serverInNext, poweredInNext string
 	inner := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		// SecureHeaders calls Del() before next, so these should be empty

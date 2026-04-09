@@ -35,6 +35,7 @@ func parseError(t *testing.T, w *httptest.ResponseRecorder) domain.APIResponse {
 // --- Auth middleware tests ---
 
 func TestAuth_ValidToken(t *testing.T) {
+	t.Parallel()
 	v := mocks.NewMockTokenValidator(t)
 	v.EXPECT().ValidateAccessToken("good-token").Return("user-1", "admin", nil)
 
@@ -53,6 +54,7 @@ func TestAuth_ValidToken(t *testing.T) {
 }
 
 func TestAuth_MissingHeader(t *testing.T) {
+	t.Parallel()
 	v := mocks.NewMockTokenValidator(t)
 	handler := Auth(v)(okHandler())
 
@@ -66,6 +68,7 @@ func TestAuth_MissingHeader(t *testing.T) {
 }
 
 func TestAuth_InvalidHeaderFormat(t *testing.T) {
+	t.Parallel()
 	v := mocks.NewMockTokenValidator(t)
 	handler := Auth(v)(okHandler())
 
@@ -78,6 +81,7 @@ func TestAuth_InvalidHeaderFormat(t *testing.T) {
 }
 
 func TestAuth_BearerOnly(t *testing.T) {
+	t.Parallel()
 	v := mocks.NewMockTokenValidator(t)
 	handler := Auth(v)(okHandler())
 
@@ -90,6 +94,7 @@ func TestAuth_BearerOnly(t *testing.T) {
 }
 
 func TestAuth_InvalidToken(t *testing.T) {
+	t.Parallel()
 	v := mocks.NewMockTokenValidator(t)
 	v.EXPECT().ValidateAccessToken("bad-token").Return("", "", fmt.Errorf("expired"))
 
@@ -106,6 +111,7 @@ func TestAuth_InvalidToken(t *testing.T) {
 }
 
 func TestAuth_CaseInsensitiveBearer(t *testing.T) {
+	t.Parallel()
 	v := mocks.NewMockTokenValidator(t)
 	v.EXPECT().ValidateAccessToken("tok").Return("u-1", "admin", nil)
 
@@ -122,6 +128,7 @@ func TestAuth_CaseInsensitiveBearer(t *testing.T) {
 // --- RequireRole tests ---
 
 func TestRequireRole_Allowed(t *testing.T) {
+	t.Parallel()
 	handler := RequireRole("admin", "brand_manager")(okHandler())
 
 	r := httptest.NewRequest("GET", "/", nil)
@@ -134,6 +141,7 @@ func TestRequireRole_Allowed(t *testing.T) {
 }
 
 func TestRequireRole_Denied(t *testing.T) {
+	t.Parallel()
 	handler := RequireRole("admin")(okHandler())
 
 	r := httptest.NewRequest("GET", "/", nil)
@@ -147,6 +155,7 @@ func TestRequireRole_Denied(t *testing.T) {
 }
 
 func TestRequireRole_EmptyRole(t *testing.T) {
+	t.Parallel()
 	handler := RequireRole("admin")(okHandler())
 
 	r := httptest.NewRequest("GET", "/", nil)
@@ -159,6 +168,7 @@ func TestRequireRole_EmptyRole(t *testing.T) {
 // --- Context helpers tests ---
 
 func TestContextHelpers_Empty(t *testing.T) {
+	t.Parallel()
 	r := httptest.NewRequest("GET", "/", nil)
 	assert.Equal(t, "", UserIDFromContext(r.Context()))
 	assert.Equal(t, "", RoleFromContext(r.Context()))

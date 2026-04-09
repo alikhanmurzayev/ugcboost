@@ -12,6 +12,7 @@ import (
 )
 
 func TestBodyLimit_UnderLimit(t *testing.T) {
+	t.Parallel()
 	handler := BodyLimit(1024)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, err := io.ReadAll(r.Body)
 		require.NoError(t, err)
@@ -27,6 +28,7 @@ func TestBodyLimit_UnderLimit(t *testing.T) {
 }
 
 func TestBodyLimit_OverLimit(t *testing.T) {
+	t.Parallel()
 	handler := BodyLimit(10)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, err := io.ReadAll(r.Body)
 		assert.Error(t, err)

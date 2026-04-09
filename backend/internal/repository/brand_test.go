@@ -12,6 +12,7 @@ import (
 // --- Brand Create ---
 
 func TestBrandCreate_SQL(t *testing.T) {
+	t.Parallel()
 	db := mocks.NewMockDB(t)
 	repo := NewBrandRepository(db)
 	logoURL := "https://example.com/logo.png"
@@ -28,6 +29,7 @@ func TestBrandCreate_SQL(t *testing.T) {
 // --- Brand GetByID ---
 
 func TestBrandGetByID_SQL(t *testing.T) {
+	t.Parallel()
 	db := mocks.NewMockDB(t)
 	repo := NewBrandRepository(db)
 	gotSQL, gotArgs := captureQuery(t, db, 1)
@@ -43,6 +45,7 @@ func TestBrandGetByID_SQL(t *testing.T) {
 // --- Brand List ---
 
 func TestBrandList_SQL(t *testing.T) {
+	t.Parallel()
 	db := mocks.NewMockDB(t)
 	repo := NewBrandRepository(db)
 	gotSQL, _ := captureQuery(t, db, 0)
@@ -57,6 +60,7 @@ func TestBrandList_SQL(t *testing.T) {
 // --- Brand ListByUser ---
 
 func TestBrandListByUser_SQL(t *testing.T) {
+	t.Parallel()
 	db := mocks.NewMockDB(t)
 	repo := NewBrandRepository(db)
 	gotSQL, gotArgs := captureQuery(t, db, 1)
@@ -72,6 +76,7 @@ func TestBrandListByUser_SQL(t *testing.T) {
 // --- Brand Update ---
 
 func TestBrandUpdate_SQL(t *testing.T) {
+	t.Parallel()
 	db := mocks.NewMockDB(t)
 	repo := NewBrandRepository(db)
 	gotSQL, gotArgs := captureQuery(t, db, 3)
@@ -87,6 +92,7 @@ func TestBrandUpdate_SQL(t *testing.T) {
 // --- Brand Delete ---
 
 func TestBrandDelete_SQL(t *testing.T) {
+	t.Parallel()
 	db := mocks.NewMockDB(t)
 	repo := NewBrandRepository(db)
 	gotSQL, gotArgs := captureExec(t, db, 1)
@@ -107,6 +113,7 @@ func TestBrandDelete_SQL(t *testing.T) {
 // --- AssignManager ---
 
 func TestAssignManager_SQL(t *testing.T) {
+	t.Parallel()
 	db := mocks.NewMockDB(t)
 	repo := NewBrandRepository(db)
 	gotSQL, gotArgs := captureExec(t, db, 2)
@@ -123,6 +130,7 @@ func TestAssignManager_SQL(t *testing.T) {
 // --- RemoveManager ---
 
 func TestRemoveManager_SQL(t *testing.T) {
+	t.Parallel()
 	db := mocks.NewMockDB(t)
 	repo := NewBrandRepository(db)
 	gotSQL, gotArgs := captureExec(t, db, 2)
@@ -138,6 +146,7 @@ func TestRemoveManager_SQL(t *testing.T) {
 // --- ListManagers ---
 
 func TestListManagers_SQL(t *testing.T) {
+	t.Parallel()
 	db := mocks.NewMockDB(t)
 	repo := NewBrandRepository(db)
 	gotSQL, gotArgs := captureQuery(t, db, 1)
@@ -153,6 +162,7 @@ func TestListManagers_SQL(t *testing.T) {
 // --- IsManager ---
 
 func TestIsManager_SQL(t *testing.T) {
+	t.Parallel()
 	db := mocks.NewMockDB(t)
 	repo := NewBrandRepository(db)
 	gotSQL, gotArgs := captureQuery(t, db, 2)

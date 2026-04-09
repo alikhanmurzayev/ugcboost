@@ -20,6 +20,7 @@ func testBrand() repository.BrandRow {
 // --- CreateBrand ---
 
 func TestCreateBrand_Success(t *testing.T) {
+	t.Parallel()
 	brands := mocks.NewMockBrandRepo(t)
 	brands.EXPECT().Create(mock.Anything, "My Brand", (*string)(nil)).
 		Return(repository.BrandRow{ID: "b-1", Name: "My Brand"}, nil)
@@ -33,6 +34,7 @@ func TestCreateBrand_Success(t *testing.T) {
 }
 
 func TestCreateBrand_EmptyName(t *testing.T) {
+	t.Parallel()
 	svc := NewBrandService(nil, nil)
 	_, err := svc.CreateBrand(context.Background(), "  ", nil)
 
@@ -41,6 +43,7 @@ func TestCreateBrand_EmptyName(t *testing.T) {
 }
 
 func TestCreateBrand_TrimsWhitespace(t *testing.T) {
+	t.Parallel()
 	brands := mocks.NewMockBrandRepo(t)
 	brands.EXPECT().Create(mock.Anything, "Trimmed", (*string)(nil)).
 		Return(repository.BrandRow{ID: "b-1", Name: "Trimmed"}, nil)
@@ -54,6 +57,7 @@ func TestCreateBrand_TrimsWhitespace(t *testing.T) {
 // --- ListBrands ---
 
 func TestListBrands_Admin(t *testing.T) {
+	t.Parallel()
 	brands := mocks.NewMockBrandRepo(t)
 	brands.EXPECT().List(mock.Anything).
 		Return([]repository.BrandWithManagerCount{{ID: "b-1"}}, nil)
@@ -66,6 +70,7 @@ func TestListBrands_Admin(t *testing.T) {
 }
 
 func TestListBrands_Manager(t *testing.T) {
+	t.Parallel()
 	brands := mocks.NewMockBrandRepo(t)
 	brands.EXPECT().ListByUser(mock.Anything, "u-1").
 		Return([]repository.BrandWithManagerCount{{ID: "b-1"}}, nil)
@@ -80,6 +85,7 @@ func TestListBrands_Manager(t *testing.T) {
 // --- UpdateBrand ---
 
 func TestUpdateBrand_Success(t *testing.T) {
+	t.Parallel()
 	brands := mocks.NewMockBrandRepo(t)
 	brands.EXPECT().Update(mock.Anything, "b-1", "New Name", (*string)(nil)).
 		Return(repository.BrandRow{ID: "b-1", Name: "New Name"}, nil)
@@ -92,6 +98,7 @@ func TestUpdateBrand_Success(t *testing.T) {
 }
 
 func TestUpdateBrand_EmptyName(t *testing.T) {
+	t.Parallel()
 	svc := NewBrandService(nil, nil)
 	_, err := svc.UpdateBrand(context.Background(), "b-1", "", nil)
 
@@ -102,6 +109,7 @@ func TestUpdateBrand_EmptyName(t *testing.T) {
 // --- AssignManager ---
 
 func TestAssignManager_NewUser(t *testing.T) {
+	t.Parallel()
 	brands := mocks.NewMockBrandRepo(t)
 	users := mocks.NewMockBrandUserRepo(t)
 
@@ -123,6 +131,7 @@ func TestAssignManager_NewUser(t *testing.T) {
 }
 
 func TestAssignManager_ExistingUser(t *testing.T) {
+	t.Parallel()
 	brands := mocks.NewMockBrandRepo(t)
 	users := mocks.NewMockBrandUserRepo(t)
 
@@ -144,6 +153,7 @@ func TestAssignManager_ExistingUser(t *testing.T) {
 }
 
 func TestAssignManager_EmptyEmail(t *testing.T) {
+	t.Parallel()
 	svc := NewBrandService(nil, nil)
 	_, _, err := svc.AssignManager(context.Background(), "b-1", "")
 
@@ -152,6 +162,7 @@ func TestAssignManager_EmptyEmail(t *testing.T) {
 }
 
 func TestAssignManager_NormalizesEmail(t *testing.T) {
+	t.Parallel()
 	brands := mocks.NewMockBrandRepo(t)
 	users := mocks.NewMockBrandUserRepo(t)
 
@@ -172,12 +183,14 @@ func TestAssignManager_NormalizesEmail(t *testing.T) {
 // --- CanViewBrand ---
 
 func TestCanViewBrand_Admin(t *testing.T) {
+	t.Parallel()
 	svc := NewBrandService(nil, nil)
 	err := svc.CanViewBrand(context.Background(), "u-1", "admin", "b-1")
 	assert.NoError(t, err)
 }
 
 func TestCanViewBrand_Manager_IsManager(t *testing.T) {
+	t.Parallel()
 	brands := mocks.NewMockBrandRepo(t)
 	brands.EXPECT().IsManager(mock.Anything, "u-1", "b-1").Return(true, nil)
 
@@ -187,6 +200,7 @@ func TestCanViewBrand_Manager_IsManager(t *testing.T) {
 }
 
 func TestCanViewBrand_Manager_NotManager(t *testing.T) {
+	t.Parallel()
 	brands := mocks.NewMockBrandRepo(t)
 	brands.EXPECT().IsManager(mock.Anything, "u-1", "b-1").Return(false, nil)
 

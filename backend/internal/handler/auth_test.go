@@ -48,6 +48,7 @@ func parseResponse(t *testing.T, w *httptest.ResponseRecorder) apiResponse {
 // --- Login handler tests ---
 
 func TestLoginHandler_Success(t *testing.T) {
+	t.Parallel()
 	auth := mocks.NewMockAuth(t)
 	auth.EXPECT().Login(mock.Anything, "test@example.com", "password123").
 		Return(&service.LoginResult{
@@ -74,6 +75,7 @@ func TestLoginHandler_Success(t *testing.T) {
 }
 
 func TestLoginHandler_InvalidJSON(t *testing.T) {
+	t.Parallel()
 	auth := mocks.NewMockAuth(t)
 	h := NewAuthHandler(auth, false)
 	w := doRequest(h.Login, "POST", `not json`)
@@ -81,6 +83,7 @@ func TestLoginHandler_InvalidJSON(t *testing.T) {
 }
 
 func TestLoginHandler_MissingFields(t *testing.T) {
+	t.Parallel()
 	auth := mocks.NewMockAuth(t)
 	h := NewAuthHandler(auth, false)
 	w := doRequest(h.Login, "POST", `{"email":"","password":""}`)
@@ -88,6 +91,7 @@ func TestLoginHandler_MissingFields(t *testing.T) {
 }
 
 func TestLoginHandler_ShortPassword(t *testing.T) {
+	t.Parallel()
 	auth := mocks.NewMockAuth(t)
 	auth.EXPECT().Login(mock.Anything, "a@b.com", "12345").
 		Return(nil, domain.ErrUnauthorized)
@@ -98,6 +102,7 @@ func TestLoginHandler_ShortPassword(t *testing.T) {
 }
 
 func TestLoginHandler_WrongCredentials(t *testing.T) {
+	t.Parallel()
 	auth := mocks.NewMockAuth(t)
 	auth.EXPECT().Login(mock.Anything, "a@b.com", "wrongpass").
 		Return(nil, domain.ErrUnauthorized)
@@ -112,6 +117,7 @@ func TestLoginHandler_WrongCredentials(t *testing.T) {
 }
 
 func TestLoginHandler_EmailNormalization(t *testing.T) {
+	t.Parallel()
 	auth := mocks.NewMockAuth(t)
 	// Mock expects normalized email — if handler doesn't normalize, AssertExpectations fails
 	auth.EXPECT().Login(mock.Anything, "admin@example.com", "password123").
@@ -124,6 +130,7 @@ func TestLoginHandler_EmailNormalization(t *testing.T) {
 // --- Refresh handler tests ---
 
 func TestRefreshHandler_NoCookie(t *testing.T) {
+	t.Parallel()
 	auth := mocks.NewMockAuth(t)
 	h := NewAuthHandler(auth, false)
 
@@ -137,6 +144,7 @@ func TestRefreshHandler_NoCookie(t *testing.T) {
 // --- Password reset request tests ---
 
 func TestPasswordResetRequest_AlwaysReturns200(t *testing.T) {
+	t.Parallel()
 	auth := mocks.NewMockAuth(t)
 	auth.EXPECT().RequestPasswordReset(mock.Anything, "anyone@test.com").Return(nil)
 
@@ -147,6 +155,7 @@ func TestPasswordResetRequest_AlwaysReturns200(t *testing.T) {
 }
 
 func TestPasswordResetRequest_EmptyEmail(t *testing.T) {
+	t.Parallel()
 	auth := mocks.NewMockAuth(t)
 	h := NewAuthHandler(auth, false)
 	w := doRequest(h.RequestPasswordReset, "POST", `{"email":""}`)
@@ -156,6 +165,7 @@ func TestPasswordResetRequest_EmptyEmail(t *testing.T) {
 // --- ResetPassword handler tests ---
 
 func TestResetPassword_Success(t *testing.T) {
+	t.Parallel()
 	auth := mocks.NewMockAuth(t)
 	auth.EXPECT().ResetPassword(mock.Anything, "abc", "newpass123").Return("user-1", nil)
 
@@ -166,6 +176,7 @@ func TestResetPassword_Success(t *testing.T) {
 }
 
 func TestResetPassword_MissingToken(t *testing.T) {
+	t.Parallel()
 	auth := mocks.NewMockAuth(t)
 	h := NewAuthHandler(auth, false)
 	w := doRequest(h.ResetPassword, "POST", `{"token":"","newPassword":"newpass123"}`)
@@ -173,6 +184,7 @@ func TestResetPassword_MissingToken(t *testing.T) {
 }
 
 func TestResetPassword_ShortPassword(t *testing.T) {
+	t.Parallel()
 	auth := mocks.NewMockAuth(t)
 	h := NewAuthHandler(auth, false)
 	w := doRequest(h.ResetPassword, "POST", `{"token":"abc","newPassword":"12345"}`)

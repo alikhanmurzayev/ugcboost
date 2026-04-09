@@ -46,6 +46,7 @@ func brandRequest(method, body, userID, role string, params map[string]string) *
 // --- CreateBrand ---
 
 func TestCreateBrandHandler_Success(t *testing.T) {
+	t.Parallel()
 	brands := mocks.NewMockBrands(t)
 	brands.EXPECT().CreateBrand(mock.Anything, "Test Brand", (*string)(nil)).
 		Return(repository.BrandRow{ID: "b-1", Name: "Test Brand"}, nil)
@@ -63,6 +64,7 @@ func TestCreateBrandHandler_Success(t *testing.T) {
 }
 
 func TestCreateBrandHandler_ForbiddenForManager(t *testing.T) {
+	t.Parallel()
 	h := NewBrandHandler(nil)
 	w := httptest.NewRecorder()
 	r := brandRequest("POST", `{"name":"Test"}`, "u-1", "brand_manager", nil)
@@ -72,6 +74,7 @@ func TestCreateBrandHandler_ForbiddenForManager(t *testing.T) {
 }
 
 func TestCreateBrandHandler_InvalidJSON(t *testing.T) {
+	t.Parallel()
 	h := NewBrandHandler(nil)
 	w := httptest.NewRecorder()
 	r := brandRequest("POST", "not json", "u-1", "admin", nil)
@@ -81,6 +84,7 @@ func TestCreateBrandHandler_InvalidJSON(t *testing.T) {
 }
 
 func TestCreateBrandHandler_ValidationError(t *testing.T) {
+	t.Parallel()
 	brands := mocks.NewMockBrands(t)
 	brands.EXPECT().CreateBrand(mock.Anything, "", (*string)(nil)).
 		Return(repository.BrandRow{}, domain.NewValidationError("VALIDATION_ERROR", "Brand name is required"))
@@ -96,6 +100,7 @@ func TestCreateBrandHandler_ValidationError(t *testing.T) {
 // --- ListBrands ---
 
 func TestListBrandsHandler_Success(t *testing.T) {
+	t.Parallel()
 	brands := mocks.NewMockBrands(t)
 	brands.EXPECT().ListBrands(mock.Anything, "u-1", "admin").
 		Return([]repository.BrandWithManagerCount{
@@ -113,6 +118,7 @@ func TestListBrandsHandler_Success(t *testing.T) {
 // --- GetBrand ---
 
 func TestGetBrandHandler_Success(t *testing.T) {
+	t.Parallel()
 	brands := mocks.NewMockBrands(t)
 	brands.EXPECT().CanViewBrand(mock.Anything, "u-1", "admin", "b-1").Return(nil)
 	brands.EXPECT().GetBrand(mock.Anything, "b-1").
@@ -134,6 +140,7 @@ func TestGetBrandHandler_Success(t *testing.T) {
 }
 
 func TestGetBrandHandler_Forbidden(t *testing.T) {
+	t.Parallel()
 	brands := mocks.NewMockBrands(t)
 	brands.EXPECT().CanViewBrand(mock.Anything, "u-1", "brand_manager", "b-1").
 		Return(domain.ErrForbidden)
@@ -149,6 +156,7 @@ func TestGetBrandHandler_Forbidden(t *testing.T) {
 // --- UpdateBrand ---
 
 func TestUpdateBrandHandler_Success(t *testing.T) {
+	t.Parallel()
 	brands := mocks.NewMockBrands(t)
 	brands.EXPECT().UpdateBrand(mock.Anything, "b-1", "New Name", (*string)(nil)).
 		Return(repository.BrandRow{ID: "b-1", Name: "New Name"}, nil)
@@ -162,6 +170,7 @@ func TestUpdateBrandHandler_Success(t *testing.T) {
 }
 
 func TestUpdateBrandHandler_ForbiddenForManager(t *testing.T) {
+	t.Parallel()
 	h := NewBrandHandler(nil)
 	w := httptest.NewRecorder()
 	r := brandRequest("PUT", `{"name":"X"}`, "u-1", "brand_manager", map[string]string{"brandID": "b-1"})
@@ -173,6 +182,7 @@ func TestUpdateBrandHandler_ForbiddenForManager(t *testing.T) {
 // --- DeleteBrand ---
 
 func TestDeleteBrandHandler_Success(t *testing.T) {
+	t.Parallel()
 	brands := mocks.NewMockBrands(t)
 	brands.EXPECT().DeleteBrand(mock.Anything, "b-1").Return(nil)
 
@@ -185,6 +195,7 @@ func TestDeleteBrandHandler_Success(t *testing.T) {
 }
 
 func TestDeleteBrandHandler_ForbiddenForManager(t *testing.T) {
+	t.Parallel()
 	h := NewBrandHandler(nil)
 	w := httptest.NewRecorder()
 	r := brandRequest("DELETE", "", "u-1", "brand_manager", map[string]string{"brandID": "b-1"})
@@ -196,6 +207,7 @@ func TestDeleteBrandHandler_ForbiddenForManager(t *testing.T) {
 // --- AssignManager ---
 
 func TestAssignManagerHandler_Success(t *testing.T) {
+	t.Parallel()
 	brands := mocks.NewMockBrands(t)
 	brands.EXPECT().AssignManager(mock.Anything, "b-1", "mgr@example.com").
 		Return(repository.UserRow{ID: "u-2", Email: "mgr@example.com", Role: "brand_manager"}, "temp123", nil)
@@ -214,6 +226,7 @@ func TestAssignManagerHandler_Success(t *testing.T) {
 }
 
 func TestAssignManagerHandler_ExistingUser(t *testing.T) {
+	t.Parallel()
 	brands := mocks.NewMockBrands(t)
 	brands.EXPECT().AssignManager(mock.Anything, "b-1", "existing@example.com").
 		Return(repository.UserRow{ID: "u-2", Email: "existing@example.com", Role: "brand_manager"}, "", nil)
@@ -231,6 +244,7 @@ func TestAssignManagerHandler_ExistingUser(t *testing.T) {
 }
 
 func TestAssignManagerHandler_ForbiddenForManager(t *testing.T) {
+	t.Parallel()
 	h := NewBrandHandler(nil)
 	w := httptest.NewRecorder()
 	r := brandRequest("POST", `{"email":"x@x.com"}`, "u-1", "brand_manager", map[string]string{"brandID": "b-1"})
@@ -242,6 +256,7 @@ func TestAssignManagerHandler_ForbiddenForManager(t *testing.T) {
 // --- RemoveManager ---
 
 func TestRemoveManagerHandler_Success(t *testing.T) {
+	t.Parallel()
 	brands := mocks.NewMockBrands(t)
 	brands.EXPECT().RemoveManager(mock.Anything, "b-1", "u-2").Return(nil)
 
@@ -254,6 +269,7 @@ func TestRemoveManagerHandler_Success(t *testing.T) {
 }
 
 func TestRemoveManagerHandler_ForbiddenForManager(t *testing.T) {
+	t.Parallel()
 	h := NewBrandHandler(nil)
 	w := httptest.NewRecorder()
 	r := brandRequest("DELETE", "", "u-1", "brand_manager", map[string]string{"brandID": "b-1", "userID": "u-2"})

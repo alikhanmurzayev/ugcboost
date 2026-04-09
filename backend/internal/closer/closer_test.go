@@ -10,6 +10,7 @@ import (
 )
 
 func TestCloser_LIFOOrder(t *testing.T) {
+	t.Parallel()
 	var order []string
 	c := New()
 
@@ -32,6 +33,7 @@ func TestCloser_LIFOOrder(t *testing.T) {
 }
 
 func TestCloser_AllCalledOnError(t *testing.T) {
+	t.Parallel()
 	var called []string
 	c := New()
 
@@ -55,6 +57,7 @@ func TestCloser_AllCalledOnError(t *testing.T) {
 }
 
 func TestCloser_ReturnsFirstError(t *testing.T) {
+	t.Parallel()
 	c := New()
 
 	c.Add("a", func(_ context.Context) error { return errors.New("err-a") })
@@ -65,12 +68,14 @@ func TestCloser_ReturnsFirstError(t *testing.T) {
 }
 
 func TestCloser_Empty(t *testing.T) {
+	t.Parallel()
 	c := New()
 	err := c.Close(context.Background())
 	assert.NoError(t, err)
 }
 
 func TestCloser_ContextPassed(t *testing.T) {
+	t.Parallel()
 	c := New()
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()

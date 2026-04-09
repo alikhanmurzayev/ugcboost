@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"os"
 	"testing"
 	"time"
 
@@ -15,6 +16,11 @@ import (
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/repository"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/service/mocks"
 )
+
+func TestMain(m *testing.M) {
+	bcryptCost = bcrypt.MinCost
+	os.Exit(m.Run())
+}
 
 var errNotFound = errors.New("not found")
 
@@ -37,6 +43,7 @@ var futureTime = time.Date(2026, 5, 1, 0, 0, 0, 0, time.UTC)
 // --- Login tests ---
 
 func TestLogin_Success(t *testing.T) {
+	t.Parallel()
 	user := testUser()
 
 	repo := mocks.NewMockUserRepo(t)
@@ -58,6 +65,7 @@ func TestLogin_Success(t *testing.T) {
 }
 
 func TestLogin_WrongPassword(t *testing.T) {
+	t.Parallel()
 	user := testUser()
 
 	repo := mocks.NewMockUserRepo(t)
@@ -72,6 +80,7 @@ func TestLogin_WrongPassword(t *testing.T) {
 }
 
 func TestLogin_UserNotFound(t *testing.T) {
+	t.Parallel()
 	repo := mocks.NewMockUserRepo(t)
 	repo.EXPECT().GetByEmail(mock.Anything, "nobody@example.com").
 		Return(repository.UserRow{}, errNotFound)
@@ -87,6 +96,7 @@ func TestLogin_UserNotFound(t *testing.T) {
 // --- Refresh tests ---
 
 func TestRefresh_Success(t *testing.T) {
+	t.Parallel()
 	user := testUser()
 	tokenHash := HashToken("some-raw-token")
 
@@ -109,6 +119,7 @@ func TestRefresh_Success(t *testing.T) {
 }
 
 func TestRefresh_InvalidToken(t *testing.T) {
+	t.Parallel()
 	tokenHash := HashToken("invalid-token")
 
 	repo := mocks.NewMockUserRepo(t)
@@ -126,6 +137,7 @@ func TestRefresh_InvalidToken(t *testing.T) {
 // --- Logout tests ---
 
 func TestLogout_Success(t *testing.T) {
+	t.Parallel()
 	repo := mocks.NewMockUserRepo(t)
 	repo.EXPECT().DeleteUserRefreshTokens(mock.Anything, "user-1").Return(nil)
 
@@ -140,6 +152,7 @@ func TestLogout_Success(t *testing.T) {
 // --- ResetPassword tests ---
 
 func TestResetPassword_Success(t *testing.T) {
+	t.Parallel()
 	tokenHash := HashToken("raw-reset-token")
 
 	repo := mocks.NewMockUserRepo(t)
@@ -158,6 +171,7 @@ func TestResetPassword_Success(t *testing.T) {
 }
 
 func TestResetPassword_InvalidToken(t *testing.T) {
+	t.Parallel()
 	tokenHash := HashToken("bad-token")
 
 	repo := mocks.NewMockUserRepo(t)
@@ -176,6 +190,7 @@ func TestResetPassword_InvalidToken(t *testing.T) {
 // --- SeedAdmin tests ---
 
 func TestSeedAdmin_CreatesWhenMissing(t *testing.T) {
+	t.Parallel()
 	repo := mocks.NewMockUserRepo(t)
 	repo.EXPECT().ExistsByEmail(mock.Anything, "admin@test.com").Return(false, nil)
 	repo.EXPECT().Create(mock.Anything, "admin@test.com", mock.AnythingOfType("string"), "admin").
@@ -190,6 +205,7 @@ func TestSeedAdmin_CreatesWhenMissing(t *testing.T) {
 }
 
 func TestSeedAdmin_SkipsWhenExists(t *testing.T) {
+	t.Parallel()
 	repo := mocks.NewMockUserRepo(t)
 	repo.EXPECT().ExistsByEmail(mock.Anything, "admin@test.com").Return(true, nil)
 
@@ -202,6 +218,7 @@ func TestSeedAdmin_SkipsWhenExists(t *testing.T) {
 }
 
 func TestSeedAdmin_SkipsWhenEmpty(t *testing.T) {
+	t.Parallel()
 	repo := mocks.NewMockUserRepo(t)
 	tokens := mocks.NewMockTokenGenerator(t)
 

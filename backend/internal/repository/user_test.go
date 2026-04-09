@@ -68,6 +68,7 @@ func captureExec(t *testing.T, db *mocks.MockDB, numExecArgs int) (sql *string, 
 // --- GetByEmail ---
 
 func TestGetByEmail_SQL(t *testing.T) {
+	t.Parallel()
 	db := mocks.NewMockDB(t)
 	repo := NewUserRepository(db)
 	gotSQL, gotArgs := captureQuery(t, db, 1)
@@ -83,6 +84,7 @@ func TestGetByEmail_SQL(t *testing.T) {
 // --- GetByID ---
 
 func TestGetByID_SQL(t *testing.T) {
+	t.Parallel()
 	db := mocks.NewMockDB(t)
 	repo := NewUserRepository(db)
 	gotSQL, gotArgs := captureQuery(t, db, 1)
@@ -98,6 +100,7 @@ func TestGetByID_SQL(t *testing.T) {
 // --- Create ---
 
 func TestCreate_SQL(t *testing.T) {
+	t.Parallel()
 	db := mocks.NewMockDB(t)
 	repo := NewUserRepository(db)
 	gotSQL, gotArgs := captureQuery(t, db, 3)
@@ -113,6 +116,7 @@ func TestCreate_SQL(t *testing.T) {
 // --- UpdatePassword ---
 
 func TestUpdatePassword_SQL(t *testing.T) {
+	t.Parallel()
 	db := mocks.NewMockDB(t)
 	repo := NewUserRepository(db)
 	gotSQL, gotArgs := captureExec(t, db, 2)
@@ -131,6 +135,7 @@ func TestUpdatePassword_SQL(t *testing.T) {
 // --- ExistsByEmail ---
 
 func TestExistsByEmail_SQL(t *testing.T) {
+	t.Parallel()
 	db := mocks.NewMockDB(t)
 	repo := NewUserRepository(db)
 	gotSQL, gotArgs := captureQuery(t, db, 1)
@@ -150,6 +155,7 @@ func TestExistsByEmail_SQL(t *testing.T) {
 // --- SaveRefreshToken ---
 
 func TestSaveRefreshToken_SQL(t *testing.T) {
+	t.Parallel()
 	db := mocks.NewMockDB(t)
 	repo := NewUserRepository(db)
 	expiresAt := time.Date(2026, 5, 1, 12, 0, 0, 0, time.UTC)
@@ -167,6 +173,7 @@ func TestSaveRefreshToken_SQL(t *testing.T) {
 // --- ClaimRefreshToken ---
 
 func TestClaimRefreshToken_SQL(t *testing.T) {
+	t.Parallel()
 	db := mocks.NewMockDB(t)
 	repo := NewUserRepository(db)
 	gotSQL, gotArgs := captureQuery(t, db, 1)
@@ -182,6 +189,7 @@ func TestClaimRefreshToken_SQL(t *testing.T) {
 // --- DeleteUserRefreshTokens ---
 
 func TestDeleteUserRefreshTokens_SQL(t *testing.T) {
+	t.Parallel()
 	db := mocks.NewMockDB(t)
 	repo := NewUserRepository(db)
 	gotSQL, gotArgs := captureExec(t, db, 1)
@@ -198,6 +206,7 @@ func TestDeleteUserRefreshTokens_SQL(t *testing.T) {
 // --- SaveResetToken ---
 
 func TestSaveResetToken_SQL(t *testing.T) {
+	t.Parallel()
 	db := mocks.NewMockDB(t)
 	repo := NewUserRepository(db)
 	expiresAt := time.Date(2026, 5, 1, 14, 0, 0, 0, time.UTC)
@@ -215,6 +224,7 @@ func TestSaveResetToken_SQL(t *testing.T) {
 // --- ClaimResetToken ---
 
 func TestClaimResetToken_SQL(t *testing.T) {
+	t.Parallel()
 	db := mocks.NewMockDB(t)
 	repo := NewUserRepository(db)
 	gotSQL, gotArgs := captureQuery(t, db, 2)
