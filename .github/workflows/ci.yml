@@ -69,11 +69,29 @@ jobs:
   # ── Stage 2: Build & Push images ─────────────────────────────────
 
   push-images:
-    name: Build & Push Images
+    name: Build & Push (${{ matrix.image }})
     runs-on: ubuntu-latest
     needs: [lint-backend, test-unit, lint-web, lint-tma]
     permissions:
       packages: write
+    strategy:
+      matrix:
+        include:
+          - image: backend
+            context: ./backend
+            file: ./backend/Dockerfile
+          - image: web
+            context: .
+            file: web/Dockerfile
+          - image: tma
+            context: .
+            file: tma/Dockerfile
+          - image: landing
+            context: .
+            file: landing/Dockerfile
+          - image: migrations
+            context: .
+            file: Dockerfile.migrations
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-buildx-action@v3
@@ -82,55 +100,18 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Set image tags
+      - name: Set image tag
         id: tags
-        run: |
-          SHA="sha-$(git rev-parse --short HEAD)"
-          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
-      - name: Build & push backend
+        run: echo "sha=sha-$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+      - name: Build & push
         uses: docker/build-push-action@v6
         with:
-          context: ./backend
+          context: ${{ matrix.context }}
+          file: ${{ matrix.file }}
           push: true
           tags: |
-            ${{ env.IMAGE_PREFIX }}/backend:staging
-            ${{ env.IMAGE_PREFIX }}/backend:${{ steps.tags.outputs.sha }}
-      - name: Build & push web
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: web/Dockerfile
-          push: true
-          tags: |
-            ${{ env.IMAGE_PREFIX }}/web:staging
-            ${{ env.IMAGE_PREFIX }}/web:${{ steps.tags.outputs.sha }}
-      - name: Build & push tma
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: tma/Dockerfile
-          push: true
-          tags: |
-            ${{ env.IMAGE_PREFIX }}/tma:staging
-            ${{ env.IMAGE_PREFIX }}/tma:${{ steps.tags.outputs.sha }}
-      - name: Build & push landing
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: landing/Dockerfile
-          push: true
-          tags: |
-            ${{ env.IMAGE_PREFIX }}/landing:staging
-            ${{ env.IMAGE_PREFIX }}/landing:${{ steps.tags.outputs.sha }}
-      - name: Build & push migrations
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: Dockerfile.migrations
-          push: true
-          tags: |
-            ${{ env.IMAGE_PREFIX }}/migrations:staging
-            ${{ env.IMAGE_PREFIX }}/migrations:${{ steps.tags.outputs.sha }}
+            ${{ env.IMAGE_PREFIX }}/${{ matrix.image }}:staging
+            ${{ env.IMAGE_PREFIX }}/${{ matrix.image }}:${{ steps.tags.outputs.sha }}
 
   # ── Stage 3: Isolated E2E (pre-built images) ────────────────────
 
