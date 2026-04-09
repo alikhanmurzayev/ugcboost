@@ -4,7 +4,7 @@
 #
 # Usage:
 #   scp bootstrap.sh root@<vps-ip>:/tmp/
-#   ssh root@<vps-ip> 'bash /tmp/bootstrap.sh --domain ugcboost.kz'
+#   ssh root@<vps-ip> 'bash /tmp/bootstrap.sh'
 #
 # What it does:
 #   1. Creates 'deploy' user with SSH key
@@ -23,24 +23,10 @@ if [[ $EUID -ne 0 ]]; then
   exit 1
 fi
 
-# --- Parse arguments ---
-DOMAIN=""
+# --- Config ---
 SSH_PORT=2222
 
-while [[ $# -gt 0 ]]; do
-  case $1 in
-    --domain)   DOMAIN="$2"; shift 2 ;;
-    --ssh-port) SSH_PORT="$2"; shift 2 ;;
-    *) echo "Unknown option: $1"; exit 1 ;;
-  esac
-done
-
-if [[ -z "$DOMAIN" ]]; then
-  echo "Usage: $0 --domain <domain> [--ssh-port <port>]"
-  exit 1
-fi
-
-echo "=== UGCBoost Bootstrap: domain=$DOMAIN ssh_port=$SSH_PORT ==="
+echo "=== UGCBoost Bootstrap: ssh_port=$SSH_PORT ==="
 
 export DEBIAN_FRONTEND=noninteractive
 
@@ -273,5 +259,3 @@ echo "Next steps:"
 echo "  1. Test SSH: ssh deploy@<vps-ip> -p $SSH_PORT"
 echo "  2. Access Dokploy: ssh -L 3000:localhost:3000 deploy@<vps-ip> -p $SSH_PORT"
 echo "     Then open http://localhost:3000 in browser"
-echo "  3. Configure Cloudflare DNS for $DOMAIN"
-echo "  4. Create Dokploy project and add services"
