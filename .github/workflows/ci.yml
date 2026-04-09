@@ -185,7 +185,7 @@ jobs:
         if: always()
         run: docker compose -f docker-compose.test.yml -f docker-compose.ci.yml down
 
-  # ── Stage 4: Migrate staging DB ──────────────────────────────────
+  # ── Stage 4: Migrate + Deploy staging (parallel) ─────────────────
 
   migrate-staging:
     name: Migrate Staging DB
@@ -206,12 +206,12 @@ jobs:
               -e DATABASE_URL="${{ secrets.STAGING_DATABASE_URL }}" \
               ${{ env.IMAGE_PREFIX }}/migrations:staging
 
-  # ── Stage 5: Deploy staging ──────────────────────────────────────
+  # (deploy runs in parallel with migrate-staging)
 
   deploy-staging:
     name: Deploy to Staging
     runs-on: ubuntu-latest
-    needs: [migrate-staging]
+    needs: [test-e2e-backend, test-e2e-browser]
     steps:
       - name: Deploy services via Dokploy
         uses: appleboy/ssh-action@v1
@@ -233,12 +233,12 @@ jobs:
             -H "CF-Access-Client-Secret: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}" \
             https://staging-api.ugcboost.kz/healthz
 
-  # ── Stage 6: Staging E2E (live DB) ────────────────────────────────
+  # ── Stage 5: Staging E2E (live DB) ────────────────────────────────
 
   test-staging-backend:
     name: Staging Backend E2E
     runs-on: ubuntu-latest
-    needs: [deploy-staging]
+    needs: [migrate-staging, deploy-staging]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -255,7 +255,7 @@ jobs:
   test-staging-web:
     name: Staging Web E2E
     runs-on: ubuntu-latest
-    needs: [deploy-staging]
+    needs: [migrate-staging, deploy-staging]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
