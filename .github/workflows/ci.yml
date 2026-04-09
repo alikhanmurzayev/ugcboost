@@ -113,6 +113,15 @@ jobs:
           tags: |
             ${{ env.IMAGE_PREFIX }}/tma:staging
             ${{ env.IMAGE_PREFIX }}/tma:${{ steps.tags.outputs.sha }}
+      - name: Build & push landing
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: landing/Dockerfile
+          push: true
+          tags: |
+            ${{ env.IMAGE_PREFIX }}/landing:staging
+            ${{ env.IMAGE_PREFIX }}/landing:${{ steps.tags.outputs.sha }}
       - name: Build & push migrations
         uses: docker/build-push-action@v6
         with:
@@ -232,6 +241,7 @@ jobs:
             curl -sSf -X POST "${{ secrets.DOKPLOY_WEBHOOK_BACKEND }}"
             curl -sSf -X POST "${{ secrets.DOKPLOY_WEBHOOK_WEB }}"
             curl -sSf -X POST "${{ secrets.DOKPLOY_WEBHOOK_TMA }}"
+            curl -sSf -X POST "${{ secrets.DOKPLOY_WEBHOOK_LANDING }}"
       - name: Health check
         run: |
           sleep 15

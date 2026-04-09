@@ -46,6 +46,7 @@ sshd_set() {
 echo ">>> Updating and upgrading packages..."
 apt-get update -qq
 apt-get upgrade -y -qq > /dev/null
+apt-get install -y -qq openssh-server > /dev/null
 
 # --- 1. Create deploy user ---
 echo ">>> Creating deploy user..."
@@ -70,7 +71,7 @@ if [[ ! -s /root/.ssh/authorized_keys ]]; then
   exit 1
 fi
 
-if [[ ! -f /home/deploy/.ssh/authorized_keys ]]; then
+if [[ ! -s /home/deploy/.ssh/authorized_keys ]]; then
   cp /root/.ssh/authorized_keys /home/deploy/.ssh/authorized_keys
   chmod 600 /home/deploy/.ssh/authorized_keys
   chown -R deploy:deploy /home/deploy/.ssh
