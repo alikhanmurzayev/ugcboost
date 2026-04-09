@@ -170,7 +170,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
-  /api/brands:
+  /brands:
     post:
       operationId: createBrand
       summary: Create a new brand
@@ -216,7 +216,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ListBrandsResult"
 
-  /api/brands/{brandID}:
+  /brands/{brandID}:
     parameters:
       - name: brandID
         in: path
@@ -305,7 +305,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
-  /api/brands/{brandID}/managers:
+  /brands/{brandID}/managers:
     parameters:
       - name: brandID
         in: path
@@ -338,7 +338,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
-  /api/audit-logs:
+  /audit-logs:
     get:
       operationId: listAuditLogs
       summary: List audit logs (admin only)
@@ -394,7 +394,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
-  /api/brands/{brandID}/managers/{userID}:
+  /brands/{brandID}/managers/{userID}:
     parameters:
       - name: brandID
         in: path

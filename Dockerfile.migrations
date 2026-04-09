@@ -5,4 +5,4 @@ FROM alpine:3.20
 COPY --from=builder /go/bin/goose /usr/local/bin/goose
 COPY migrations/ /migrations/
 
-ENTRYPOINT ["goose", "-dir", "/migrations", "postgres", "postgres://ugcboost:ugcboost_test@postgres:5432/ugcboost_test?sslmode=disable", "up"]
+ENTRYPOINT ["sh", "-c", "goose -dir /migrations postgres \"$DATABASE_URL\" up"]

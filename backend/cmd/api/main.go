@@ -131,7 +131,7 @@ func run() error {
 		r.Get("/auth/me", authHandler.GetMe)
 
 		// Brand management
-		r.Route("/api/brands", func(r chi.Router) {
+		r.Route("/brands", func(r chi.Router) {
 			r.Post("/", brandHandler.CreateBrand)
 			r.Get("/", brandHandler.ListBrands)
 			r.Get("/{brandID}", brandHandler.GetBrand)
@@ -142,7 +142,7 @@ func run() error {
 		})
 
 		// Audit logs
-		r.Get("/api/audit-logs", auditHandler.ListAuditLogs)
+		r.Get("/audit-logs", auditHandler.ListAuditLogs)
 	})
 
 	// Test endpoints (only when ENABLE_TEST_ENDPOINTS=true)

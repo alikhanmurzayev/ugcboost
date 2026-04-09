@@ -211,15 +211,6 @@ type ListAuditLogsParams struct {
 	PerPage    *int       `form:"per_page,omitempty" json:"per_page,omitempty"`
 }
 
-// CreateBrandJSONRequestBody defines body for CreateBrand for application/json ContentType.
-type CreateBrandJSONRequestBody = CreateBrandRequest
-
-// UpdateBrandJSONRequestBody defines body for UpdateBrand for application/json ContentType.
-type UpdateBrandJSONRequestBody = UpdateBrandRequest
-
-// AssignManagerJSONRequestBody defines body for AssignManager for application/json ContentType.
-type AssignManagerJSONRequestBody = AssignManagerRequest
-
 // LoginJSONRequestBody defines body for Login for application/json ContentType.
 type LoginJSONRequestBody = LoginRequest
 
@@ -228,3 +219,12 @@ type ResetPasswordJSONRequestBody = PasswordResetBody
 
 // RequestPasswordResetJSONRequestBody defines body for RequestPasswordReset for application/json ContentType.
 type RequestPasswordResetJSONRequestBody = PasswordResetRequestBody
+
+// CreateBrandJSONRequestBody defines body for CreateBrand for application/json ContentType.
+type CreateBrandJSONRequestBody = CreateBrandRequest
+
+// UpdateBrandJSONRequestBody defines body for UpdateBrand for application/json ContentType.
+type UpdateBrandJSONRequestBody = UpdateBrandRequest
+
+// AssignManagerJSONRequestBody defines body for AssignManager for application/json ContentType.
+type AssignManagerJSONRequestBody = AssignManagerRequest

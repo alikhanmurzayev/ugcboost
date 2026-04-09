@@ -45,6 +45,8 @@ services:
       dockerfile: web/Dockerfile
     ports:
       - "5173:80"
+    environment:
+      API_URL: http://localhost:8080
     depends_on:
       - backend
 
@@ -54,6 +56,8 @@ services:
       dockerfile: tma/Dockerfile
     ports:
       - "5174:80"
+    environment:
+      API_URL: http://localhost:8080
     depends_on:
       - backend
 

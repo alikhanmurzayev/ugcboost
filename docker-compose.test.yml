@@ -21,6 +21,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.migrations
+    environment:
+      DATABASE_URL: postgres://ugcboost:ugcboost_test@postgres:5432/ugcboost_test?sslmode=disable
     depends_on:
       postgres:
         condition: service_healthy

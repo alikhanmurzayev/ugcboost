@@ -9,4 +9,7 @@ RUN npm run build
 FROM nginx:alpine
 COPY --from=builder /build/tma/dist /usr/share/nginx/html
 COPY tma/nginx.conf /etc/nginx/conf.d/default.conf
+COPY tma/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 EXPOSE 80
+ENTRYPOINT ["/entrypoint.sh"]

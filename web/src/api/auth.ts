@@ -1,4 +1,4 @@
-import { api } from "./client";
+import { api, apiBase } from "./client";
 
 interface User {
   id: string;
@@ -47,9 +47,7 @@ export function restoreSession(): Promise<{
   if (restorePromise) return restorePromise;
 
   restorePromise = (async () => {
-    const BASE = "/api";
-
-    const res = await fetch(`${BASE}/auth/refresh`, {
+    const res = await fetch(`${apiBase}/auth/refresh`, {
       method: "POST",
       credentials: "include",
     });

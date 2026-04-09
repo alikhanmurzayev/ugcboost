@@ -1,6 +1,14 @@
 import { useAuthStore } from "@/stores/auth";
 
-const BASE = "/api";
+function getApiBase(): string {
+  if (typeof window !== "undefined" && window.__RUNTIME_CONFIG__?.apiUrl) {
+    return window.__RUNTIME_CONFIG__.apiUrl;
+  }
+  return "/api"; // Vite dev proxy fallback
+}
+
+const BASE = getApiBase();
+export { BASE as apiBase };
 
 interface APIError {
   code: string;

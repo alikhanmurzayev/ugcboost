@@ -1,0 +1,39 @@
+name: Run Migrations
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Target environment
+        type: choice
+        options:
+          - staging
+          - production
+        default: staging
+
+jobs:
+  migrate:
+    name: Run Migrations (${{ inputs.environment }})
+    runs-on: ubuntu-latest
+    steps:
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull migrations image
+        run: docker pull ghcr.io/${{ github.repository_owner }}/ugcboost/migrations:main
+
+      - name: Run migrations via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ inputs.environment == 'staging' && vars.STAGING_HOST || vars.PRODUCTION_HOST }}
+          username: deploy
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script: |
+            docker pull ghcr.io/${{ github.repository_owner }}/ugcboost/migrations:main
+            docker run --rm --network=dokploy-network \
+              -e DATABASE_URL="${{ inputs.environment == 'staging' && secrets.STAGING_DATABASE_URL || secrets.PRODUCTION_DATABASE_URL }}" \
+              ghcr.io/${{ github.repository_owner }}/ugcboost/migrations:main
+            echo "Migrations completed for ${{ inputs.environment }}"
