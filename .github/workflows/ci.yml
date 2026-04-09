@@ -71,7 +71,6 @@ jobs:
   push-images:
     name: Build & Push (${{ matrix.image }})
     runs-on: ubuntu-latest
-    needs: [lint-backend, test-unit, lint-web, lint-tma]
     permissions:
       packages: write
     strategy:
@@ -120,7 +119,7 @@ jobs:
   test-e2e-backend:
     name: Isolated Backend E2E
     runs-on: ubuntu-latest
-    needs: [push-images]
+    needs: [push-images, lint-backend, test-unit, lint-web, lint-tma]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -148,7 +147,7 @@ jobs:
   test-e2e-browser:
     name: Isolated Web E2E
     runs-on: ubuntu-latest
-    needs: [push-images]
+    needs: [push-images, lint-backend, test-unit, lint-web, lint-tma]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
