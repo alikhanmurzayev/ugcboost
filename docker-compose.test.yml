@@ -37,7 +37,7 @@ services:
       PORT: "8080"
       JWT_SECRET: test-secret-for-e2e
       JWT_EXPIRY: "15m"
-      CORS_ORIGINS: "http://localhost:8082"
+      CORS_ORIGINS: "http://localhost:3001"
       LOG_LEVEL: warn
       ADMIN_EMAIL: admin@ugcboost.kz
       ADMIN_PASSWORD: admin123
