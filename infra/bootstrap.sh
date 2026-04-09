@@ -71,14 +71,45 @@ echo ">>> SSH hardening (port $SSH_PORT)..."
 # Remove cloud-init SSH override (Ubuntu 22.04/24.04 sets PasswordAuthentication there)
 rm -f /etc/ssh/sshd_config.d/50-cloud-init.conf 2>/dev/null || true
 
-# Write drop-in config (cleanest approach, overrides main sshd_config)
-mkdir -p /etc/ssh/sshd_config.d
-cat > /etc/ssh/sshd_config.d/99-ugcboost.conf <<SSHCONF
-Port $SSH_PORT
-PermitRootLogin no
-PasswordAuthentication no
-PubkeyAuthentication yes
-SSHCONF
+# Some VPS images lack "Include /etc/ssh/sshd_config.d/*.conf" in sshd_config,
+# so drop-in files get silently ignored. Apply settings to main config as well.
+SSHD_CFG="/etc/ssh/sshd_config"
+
+# Port
+if grep -q "^Port " "$SSHD_CFG"; then
+  sed -i "s/^Port .*/Port $SSH_PORT/" "$SSHD_CFG"
+elif grep -q "^#Port " "$SSHD_CFG"; then
+  sed -i "s/^#Port .*/Port $SSH_PORT/" "$SSHD_CFG"
+else
+  echo "Port $SSH_PORT" >> "$SSHD_CFG"
+fi
+
+# PermitRootLogin
+if grep -q "^PermitRootLogin " "$SSHD_CFG"; then
+  sed -i "s/^PermitRootLogin .*/PermitRootLogin no/" "$SSHD_CFG"
+elif grep -q "^#PermitRootLogin " "$SSHD_CFG"; then
+  sed -i "s/^#PermitRootLogin .*/PermitRootLogin no/" "$SSHD_CFG"
+else
+  echo "PermitRootLogin no" >> "$SSHD_CFG"
+fi
+
+# PasswordAuthentication
+if grep -q "^PasswordAuthentication " "$SSHD_CFG"; then
+  sed -i "s/^PasswordAuthentication .*/PasswordAuthentication no/" "$SSHD_CFG"
+elif grep -q "^#PasswordAuthentication " "$SSHD_CFG"; then
+  sed -i "s/^#PasswordAuthentication .*/PasswordAuthentication no/" "$SSHD_CFG"
+else
+  echo "PasswordAuthentication no" >> "$SSHD_CFG"
+fi
+
+# PubkeyAuthentication
+if grep -q "^PubkeyAuthentication " "$SSHD_CFG"; then
+  sed -i "s/^PubkeyAuthentication .*/PubkeyAuthentication yes/" "$SSHD_CFG"
+elif grep -q "^#PubkeyAuthentication " "$SSHD_CFG"; then
+  sed -i "s/^#PubkeyAuthentication .*/PubkeyAuthentication yes/" "$SSHD_CFG"
+else
+  echo "PubkeyAuthentication yes" >> "$SSHD_CFG"
+fi
 
 # Ubuntu 24.04 uses "ssh", older versions use "sshd"
 if systemctl list-units --type=service | grep -q 'ssh.service'; then
@@ -153,9 +184,37 @@ else
 fi
 
 # --- 7. Close Dokploy UI port (SSH tunnel only) ---
+# Docker bypasses UFW (writes iptables directly), so ufw deny has no effect
+# on Docker-published ports. Use DOCKER-USER chain instead.
 echo ">>> Closing Dokploy UI port 3000 (use SSH tunnel)..."
-ufw deny 3000/tcp comment "Dokploy UI - SSH tunnel only" > /dev/null
-echo "  Port 3000 blocked. Access via: ssh -L 3000:localhost:3000 deploy@<vps-ip> -p $SSH_PORT"
+
+# Wait for Docker to create DOCKER-USER chain (Dokploy starts containers)
+for i in $(seq 1 30); do
+  if iptables -L DOCKER-USER -n &>/dev/null; then
+    break
+  fi
+  echo "  Waiting for Docker DOCKER-USER chain... ($i/30)"
+  sleep 2
+done
+
+if iptables -L DOCKER-USER -n &>/dev/null; then
+  # Allow localhost (SSH tunnel), drop everything else to port 3000
+  iptables -I DOCKER-USER -s 127.0.0.1 -p tcp --dport 3000 -j ACCEPT
+  iptables -I DOCKER-USER 2 -p tcp --dport 3000 -j DROP
+
+  # Persist iptables rules across reboots
+  echo iptables-persistent iptables-persistent/autosave_v4 boolean true | debconf-set-selections
+  echo iptables-persistent iptables-persistent/autosave_v6 boolean true | debconf-set-selections
+  apt-get install -y -qq iptables-persistent > /dev/null
+  netfilter-persistent save > /dev/null 2>&1
+
+  echo "  Port 3000 blocked via iptables DOCKER-USER chain"
+else
+  echo "  WARNING: DOCKER-USER chain not found. Block port 3000 manually:"
+  echo "    iptables -I DOCKER-USER -s 127.0.0.1 -p tcp --dport 3000 -j ACCEPT"
+  echo "    iptables -I DOCKER-USER 2 -p tcp --dport 3000 -j DROP"
+fi
+echo "  Access via: ssh -L 3000:localhost:3000 deploy@<vps-ip> -p $SSH_PORT"
 
 # --- Done ---
 echo ""
