@@ -12,6 +12,13 @@ export default defineConfig({
     headless: true,
     screenshot: "only-on-failure",
     trace: "retain-on-failure",
+    extraHTTPHeaders:
+      process.env.CF_ACCESS_CLIENT_ID
+        ? {
+            "CF-Access-Client-Id": process.env.CF_ACCESS_CLIENT_ID,
+            "CF-Access-Client-Secret": process.env.CF_ACCESS_CLIENT_SECRET ?? "",
+          }
+        : undefined,
   },
   projects: [
     {
