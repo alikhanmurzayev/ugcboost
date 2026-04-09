@@ -6,6 +6,7 @@ import (
 	"math/rand"
 	"net/http"
 	"net/http/cookiejar"
+	"os"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -17,7 +18,34 @@ import (
 	"github.com/alikhanmurzayev/ugcboost/e2etest/testclient"
 )
 
-const baseURL = "http://localhost:8082"
+var baseURL = getBaseURL()
+
+func getBaseURL() string {
+	if url := os.Getenv("E2E_BASE_URL"); url != "" {
+		return url
+	}
+	return "http://localhost:8082"
+}
+
+// cfAccessTransport injects Cloudflare Access headers when CF_ACCESS_CLIENT_ID is set.
+type cfAccessTransport struct {
+	base http.RoundTripper
+}
+
+func (t *cfAccessTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	if id := os.Getenv("CF_ACCESS_CLIENT_ID"); id != "" {
+		req.Header.Set("CF-Access-Client-Id", id)
+		req.Header.Set("CF-Access-Client-Secret", os.Getenv("CF_ACCESS_CLIENT_SECRET"))
+	}
+	return t.base.RoundTrip(req)
+}
+
+func httpClient(jar http.CookieJar) *http.Client {
+	return &http.Client{
+		Jar:       jar,
+		Transport: &cfAccessTransport{base: http.DefaultTransport},
+	}
+}
 
 var (
 	counter uint64
@@ -35,7 +63,7 @@ func newAPIClient(t *testing.T) *apiclient.ClientWithResponses {
 	jar, err := cookiejar.New(nil)
 	require.NoError(t, err)
 	c, err := apiclient.NewClientWithResponses(baseURL,
-		apiclient.WithHTTPClient(&http.Client{Jar: jar}))
+		apiclient.WithHTTPClient(httpClient(jar)))
 	require.NoError(t, err)
 	return c
 }
@@ -43,7 +71,8 @@ func newAPIClient(t *testing.T) *apiclient.ClientWithResponses {
 // newTestClient creates a client for test-only endpoints.
 func newTestClient(t *testing.T) *testclient.ClientWithResponses {
 	t.Helper()
-	c, err := testclient.NewClientWithResponses(baseURL)
+	c, err := testclient.NewClientWithResponses(baseURL,
+		testclient.WithHTTPClient(httpClient(nil)))
 	require.NoError(t, err)
 	return c
 }
