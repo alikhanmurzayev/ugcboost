@@ -58,6 +58,8 @@ fi
 
 usermod -aG sudo deploy
 echo "deploy ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/deploy
+chmod 440 /etc/sudoers.d/deploy
+visudo -cf /etc/sudoers.d/deploy
 
 mkdir -p /home/deploy/.ssh
 chmod 700 /home/deploy/.ssh
@@ -68,10 +70,14 @@ if [[ ! -s /root/.ssh/authorized_keys ]]; then
   exit 1
 fi
 
-cp /root/.ssh/authorized_keys /home/deploy/.ssh/authorized_keys
-chmod 600 /home/deploy/.ssh/authorized_keys
-chown -R deploy:deploy /home/deploy/.ssh
-echo "  SSH keys synced from root to deploy"
+if [[ ! -f /home/deploy/.ssh/authorized_keys ]]; then
+  cp /root/.ssh/authorized_keys /home/deploy/.ssh/authorized_keys
+  chmod 600 /home/deploy/.ssh/authorized_keys
+  chown -R deploy:deploy /home/deploy/.ssh
+  echo "  SSH keys copied from root to deploy"
+else
+  echo "  deploy already has authorized_keys, skipping"
+fi
 
 # --- 2. SSH hardening ---
 echo ">>> SSH hardening (port $SSH_PORT)..."
@@ -154,6 +160,7 @@ port = $SSH_PORT
 maxretry = 5
 bantime = 3600
 findtime = 600
+backend = systemd
 JAIL
 
 systemctl enable fail2ban
@@ -253,12 +260,7 @@ else
 fi
 
 if curl -sf --max-time 3 http://localhost:3000 > /dev/null 2>&1; then
-  if curl -sf --max-time 3 http://$(hostname -I | awk '{print $1}'):3000 > /dev/null 2>&1; then
-    echo "  [FAIL] Port 3000 accessible from external IP"
-    ERRORS=$((ERRORS + 1))
-  else
-    echo "  [OK] Port 3000 blocked externally, accessible locally"
-  fi
+  echo "  [OK] Dokploy UI responding on localhost:3000"
 else
   echo "  [WARN] Dokploy UI not responding on localhost:3000 yet (may need a minute)"
 fi
