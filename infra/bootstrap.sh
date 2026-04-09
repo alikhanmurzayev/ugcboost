@@ -1,11 +1,8 @@
 #!/usr/bin/env bash
 #
-# UGCBoost VPS Bootstrap Script
+# UGCBoost VPS Bootstrap Script (idempotent — safe to re-run)
 #
-# Usage (run as root on a fresh Ubuntu 22.04/24.04 VPS):
-#   curl -sSL <raw-url>/bootstrap.sh | bash -s -- --env staging --domain ugcboost.kz
-#
-# Or locally:
+# Usage:
 #   scp bootstrap.sh root@<vps-ip>:/tmp/
 #   ssh root@<vps-ip> 'bash /tmp/bootstrap.sh --env staging --domain ugcboost.kz'
 #
@@ -20,6 +17,12 @@
 
 set -euo pipefail
 
+# --- Must run as root ---
+if [[ $EUID -ne 0 ]]; then
+  echo "ERROR: This script must be run as root"
+  exit 1
+fi
+
 # --- Parse arguments ---
 ENV=""
 DOMAIN=""
@@ -27,8 +30,8 @@ SSH_PORT=2222
 
 while [[ $# -gt 0 ]]; do
   case $1 in
-    --env)     ENV="$2"; shift 2 ;;
-    --domain)  DOMAIN="$2"; shift 2 ;;
+    --env)      ENV="$2"; shift 2 ;;
+    --domain)   DOMAIN="$2"; shift 2 ;;
     --ssh-port) SSH_PORT="$2"; shift 2 ;;
     *) echo "Unknown option: $1"; exit 1 ;;
   esac
@@ -43,23 +46,42 @@ echo "=== UGCBoost Bootstrap: env=$ENV domain=$DOMAIN ssh_port=$SSH_PORT ==="
 
 export DEBIAN_FRONTEND=noninteractive
 
+# --- Helper: set sshd_config directive (idempotent) ---
+sshd_set() {
+  local key="$1" value="$2" cfg="/etc/ssh/sshd_config"
+  if grep -q "^${key} " "$cfg"; then
+    sed -i "s/^${key} .*/${key} ${value}/" "$cfg"
+  elif grep -q "^#${key} " "$cfg"; then
+    sed -i "s/^#${key} .*/${key} ${value}/" "$cfg"
+  else
+    echo "${key} ${value}" >> "$cfg"
+  fi
+}
+
+# --- 0. Update package lists (once) ---
+echo ">>> Updating package lists..."
+apt-get update -qq
+
 # --- 1. Create deploy user ---
 echo ">>> Creating deploy user..."
 if ! id deploy &>/dev/null; then
   adduser --disabled-password --gecos "" deploy
-  usermod -aG sudo deploy
-  echo "deploy ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/deploy
+  echo "  Created user 'deploy'"
+else
+  echo "  User 'deploy' already exists"
 fi
+
+usermod -aG sudo deploy
+echo "deploy ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/deploy
 
 mkdir -p /home/deploy/.ssh
 chmod 700 /home/deploy/.ssh
 
-# Copy root's authorized_keys if they exist
 if [[ -f /root/.ssh/authorized_keys ]]; then
   cp /root/.ssh/authorized_keys /home/deploy/.ssh/authorized_keys
   chmod 600 /home/deploy/.ssh/authorized_keys
   chown -R deploy:deploy /home/deploy/.ssh
-  echo "  Copied SSH keys from root to deploy"
+  echo "  SSH keys synced from root to deploy"
 else
   echo "  WARNING: No /root/.ssh/authorized_keys found."
   echo "  Add your SSH public key to /home/deploy/.ssh/authorized_keys manually!"
@@ -68,79 +90,57 @@ fi
 # --- 2. SSH hardening ---
 echo ">>> SSH hardening (port $SSH_PORT)..."
 
-# Remove cloud-init SSH override (Ubuntu 22.04/24.04 sets PasswordAuthentication there)
 rm -f /etc/ssh/sshd_config.d/50-cloud-init.conf 2>/dev/null || true
 
-# Some VPS images lack "Include /etc/ssh/sshd_config.d/*.conf" in sshd_config,
-# so drop-in files get silently ignored. Apply settings to main config as well.
-SSHD_CFG="/etc/ssh/sshd_config"
+sshd_set Port "$SSH_PORT"
+sshd_set PermitRootLogin no
+sshd_set PasswordAuthentication no
+sshd_set PubkeyAuthentication yes
 
-# Port
-if grep -q "^Port " "$SSHD_CFG"; then
-  sed -i "s/^Port .*/Port $SSH_PORT/" "$SSHD_CFG"
-elif grep -q "^#Port " "$SSHD_CFG"; then
-  sed -i "s/^#Port .*/Port $SSH_PORT/" "$SSHD_CFG"
+# Ubuntu 22.10+ uses socket activation for SSH.
+# When ssh.socket is active, the Port directive in sshd_config is IGNORED —
+# the listening port is controlled by the systemd socket unit.
+# We must override ssh.socket to change the port.
+if systemctl is-active ssh.socket &>/dev/null; then
+  echo "  Socket activation detected — overriding ssh.socket"
+  mkdir -p /etc/systemd/system/ssh.socket.d
+  cat > /etc/systemd/system/ssh.socket.d/listen.conf <<EOF
+[Socket]
+ListenStream=
+ListenStream=$SSH_PORT
+EOF
+  systemctl daemon-reload
+  systemctl restart ssh.socket
 else
-  echo "Port $SSH_PORT" >> "$SSHD_CFG"
+  # Traditional SSH (Ubuntu < 22.10, other distros)
+  if systemctl restart ssh 2>/dev/null; then
+    true
+  elif systemctl restart sshd 2>/dev/null; then
+    true
+  else
+    echo "  WARNING: Could not restart SSH service. Restart manually!"
+  fi
 fi
 
-# PermitRootLogin
-if grep -q "^PermitRootLogin " "$SSHD_CFG"; then
-  sed -i "s/^PermitRootLogin .*/PermitRootLogin no/" "$SSHD_CFG"
-elif grep -q "^#PermitRootLogin " "$SSHD_CFG"; then
-  sed -i "s/^#PermitRootLogin .*/PermitRootLogin no/" "$SSHD_CFG"
-else
-  echo "PermitRootLogin no" >> "$SSHD_CFG"
-fi
-
-# PasswordAuthentication
-if grep -q "^PasswordAuthentication " "$SSHD_CFG"; then
-  sed -i "s/^PasswordAuthentication .*/PasswordAuthentication no/" "$SSHD_CFG"
-elif grep -q "^#PasswordAuthentication " "$SSHD_CFG"; then
-  sed -i "s/^#PasswordAuthentication .*/PasswordAuthentication no/" "$SSHD_CFG"
-else
-  echo "PasswordAuthentication no" >> "$SSHD_CFG"
-fi
-
-# PubkeyAuthentication
-if grep -q "^PubkeyAuthentication " "$SSHD_CFG"; then
-  sed -i "s/^PubkeyAuthentication .*/PubkeyAuthentication yes/" "$SSHD_CFG"
-elif grep -q "^#PubkeyAuthentication " "$SSHD_CFG"; then
-  sed -i "s/^#PubkeyAuthentication .*/PubkeyAuthentication yes/" "$SSHD_CFG"
-else
-  echo "PubkeyAuthentication yes" >> "$SSHD_CFG"
-fi
-
-# Restart SSH — Ubuntu 24.04 uses socket-activated "ssh", older uses "sshd".
-# systemctl list-units may not show socket-activated services, so just try directly.
-if systemctl restart ssh 2>/dev/null; then
-  echo "  Restarted ssh (Ubuntu 24.04+)"
-elif systemctl restart sshd 2>/dev/null; then
-  echo "  Restarted sshd"
-else
-  echo "  WARNING: Could not restart SSH service. Restart manually!"
-fi
-
-# Verify SSH is listening on the correct port
 sleep 1
-if ss -tlnp | grep -q ":$SSH_PORT"; then
+if ss -tlnp | grep -q ":${SSH_PORT}\b"; then
   echo "  SSH confirmed on port $SSH_PORT"
 else
-  echo "  WARNING: SSH not detected on port $SSH_PORT. Check sshd_config manually."
+  echo "  ERROR: SSH not listening on port $SSH_PORT!"
+  echo "  Debug: $(ss -tlnp | grep ssh)"
+  exit 1
 fi
 
 # --- 3. UFW firewall ---
 echo ">>> Configuring UFW..."
-apt-get update -qq && apt-get install -y -qq ufw > /dev/null
+apt-get install -y -qq ufw > /dev/null
 
 ufw --force reset > /dev/null
 ufw default deny incoming
 ufw default allow outgoing
 
-# SSH
 ufw allow "$SSH_PORT/tcp" comment "SSH"
 
-# Cloudflare IP ranges (HTTP/HTTPS only from Cloudflare)
 CF_IPV4=(
   173.245.48.0/20 103.21.244.0/22 103.22.200.0/22 103.31.4.0/22
   141.101.64.0/18 108.162.192.0/18 190.93.240.0/20 188.114.96.0/20
@@ -156,7 +156,7 @@ ufw --force enable
 echo "  UFW enabled: SSH($SSH_PORT) + HTTP/HTTPS from Cloudflare only"
 
 # --- 4. fail2ban ---
-echo ">>> Installing fail2ban..."
+echo ">>> Configuring fail2ban..."
 apt-get install -y -qq fail2ban > /dev/null
 
 cat > /etc/fail2ban/jail.local <<JAIL
@@ -176,15 +176,16 @@ echo "  fail2ban configured"
 echo ">>> Installing Docker..."
 if ! command -v docker &>/dev/null; then
   curl -fsSL https://get.docker.com | sh
-  usermod -aG docker deploy
   echo "  Docker installed"
 else
   echo "  Docker already installed"
 fi
 
+usermod -aG docker deploy
+
 # --- 6. Dokploy ---
 echo ">>> Installing Dokploy..."
-if ! docker ps --format '{{.Names}}' | grep -q dokploy; then
+if ! docker ps --format '{{.Names}}' 2>/dev/null | grep -q dokploy; then
   curl -sSL https://dokploy.com/install.sh | sh
   echo "  Dokploy installed"
 else
@@ -196,7 +197,6 @@ fi
 # on Docker-published ports. Use DOCKER-USER chain instead.
 echo ">>> Closing Dokploy UI port 3000 (use SSH tunnel)..."
 
-# Wait for Docker to create DOCKER-USER chain (Dokploy starts containers)
 for i in $(seq 1 30); do
   if iptables -L DOCKER-USER -n &>/dev/null; then
     break
@@ -206,11 +206,14 @@ for i in $(seq 1 30); do
 done
 
 if iptables -L DOCKER-USER -n &>/dev/null; then
-  # Allow localhost (SSH tunnel), drop everything else to port 3000
-  iptables -I DOCKER-USER -s 127.0.0.1 -p tcp --dport 3000 -j ACCEPT
-  iptables -I DOCKER-USER 2 -p tcp --dport 3000 -j DROP
+  # Idempotent: check before adding
+  if ! iptables -C DOCKER-USER -s 127.0.0.1 -p tcp --dport 3000 -j ACCEPT 2>/dev/null; then
+    iptables -I DOCKER-USER -s 127.0.0.1 -p tcp --dport 3000 -j ACCEPT
+  fi
+  if ! iptables -C DOCKER-USER -p tcp --dport 3000 -j DROP 2>/dev/null; then
+    iptables -A DOCKER-USER -p tcp --dport 3000 -j DROP
+  fi
 
-  # Persist iptables rules across reboots
   echo iptables-persistent iptables-persistent/autosave_v4 boolean true | debconf-set-selections
   echo iptables-persistent iptables-persistent/autosave_v6 boolean true | debconf-set-selections
   apt-get install -y -qq iptables-persistent > /dev/null
@@ -220,13 +223,53 @@ if iptables -L DOCKER-USER -n &>/dev/null; then
 else
   echo "  WARNING: DOCKER-USER chain not found. Block port 3000 manually:"
   echo "    iptables -I DOCKER-USER -s 127.0.0.1 -p tcp --dport 3000 -j ACCEPT"
-  echo "    iptables -I DOCKER-USER 2 -p tcp --dport 3000 -j DROP"
+  echo "    iptables -A DOCKER-USER -p tcp --dport 3000 -j DROP"
 fi
-echo "  Access via: ssh -L 3000:localhost:3000 deploy@<vps-ip> -p $SSH_PORT"
 
-# --- Done ---
+# --- 8. Final verification ---
 echo ""
-echo "=== Bootstrap complete ==="
+echo ">>> Verifying..."
+
+ERRORS=0
+
+if ss -tlnp | grep -q ":${SSH_PORT}\b"; then
+  echo "  [OK] SSH on port $SSH_PORT"
+else
+  echo "  [FAIL] SSH not on port $SSH_PORT"
+  ERRORS=$((ERRORS + 1))
+fi
+
+if command -v docker &>/dev/null; then
+  echo "  [OK] Docker installed"
+else
+  echo "  [FAIL] Docker not found"
+  ERRORS=$((ERRORS + 1))
+fi
+
+if docker ps --format '{{.Names}}' 2>/dev/null | grep -q dokploy; then
+  echo "  [OK] Dokploy running"
+else
+  echo "  [FAIL] Dokploy not running"
+  ERRORS=$((ERRORS + 1))
+fi
+
+if curl -sf --max-time 3 http://localhost:3000 > /dev/null 2>&1; then
+  if curl -sf --max-time 3 http://$(hostname -I | awk '{print $1}'):3000 > /dev/null 2>&1; then
+    echo "  [FAIL] Port 3000 accessible from external IP"
+    ERRORS=$((ERRORS + 1))
+  else
+    echo "  [OK] Port 3000 blocked externally, accessible locally"
+  fi
+else
+  echo "  [WARN] Dokploy UI not responding on localhost:3000 yet (may need a minute)"
+fi
+
+echo ""
+if [[ $ERRORS -gt 0 ]]; then
+  echo "=== Bootstrap completed with $ERRORS error(s) ==="
+else
+  echo "=== Bootstrap complete ==="
+fi
 echo ""
 echo "Next steps:"
 echo "  1. Test SSH: ssh deploy@<vps-ip> -p $SSH_PORT"
