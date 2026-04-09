@@ -109,6 +109,8 @@ jobs:
           context: ${{ matrix.context }}
           file: ${{ matrix.file }}
           push: true
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,scope=${{ matrix.image }},mode=max
           tags: |
             ${{ env.IMAGE_PREFIX }}/${{ matrix.image }}:staging
             ${{ env.IMAGE_PREFIX }}/${{ matrix.image }}:${{ steps.tags.outputs.sha }}
