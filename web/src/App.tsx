@@ -7,6 +7,7 @@ import DashboardPage from "@/features/dashboard/DashboardPage";
 import BrandsPage from "@/features/brands/BrandsPage";
 import BrandDetailPage from "@/features/brands/BrandDetailPage";
 import AuditLogPage from "@/features/audit/AuditLogPage";
+import { ROUTES } from "@/shared/constants/routes";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -22,14 +23,14 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <Routes>
-          <Route path="/login" element={<LoginPage />} />
+          <Route path={ROUTES.LOGIN} element={<LoginPage />} />
 
           <Route element={<AuthGuard />}>
             <Route element={<DashboardLayout />}>
               <Route index element={<DashboardPage />} />
-              <Route path="brands" element={<BrandsPage />} />
-              <Route path="brands/:brandId" element={<BrandDetailPage />} />
-              <Route path="audit" element={<AuditLogPage />} />
+              <Route path={ROUTES.BRANDS} element={<BrandsPage />} />
+              <Route path={ROUTES.BRANDS + "/:brandId"} element={<BrandDetailPage />} />
+              <Route path={ROUTES.AUDIT} element={<AuditLogPage />} />
             </Route>
           </Route>
         </Routes>

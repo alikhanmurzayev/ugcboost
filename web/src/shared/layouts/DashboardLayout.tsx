@@ -1,21 +1,18 @@
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useAuthStore } from "@/stores/auth";
 import { logout } from "@/api/auth";
+import { ROUTES } from "@/shared/constants/routes";
+import { Roles } from "@/shared/constants/roles";
 
 const adminNav = [
-  { to: "/", label: "Дашборд" },
-  { to: "/brands", label: "Бренды" },
-  { to: "/creators", label: "Креаторы" },
-  { to: "/campaigns", label: "Кампании" },
-  { to: "/moderation", label: "Модерация" },
-  { to: "/audit", label: "Журнал действий" },
+  { to: ROUTES.DASHBOARD, label: "Дашборд" },
+  { to: ROUTES.BRANDS, label: "Бренды" },
+  { to: ROUTES.AUDIT, label: "Журнал действий" },
 ];
 
 const brandNav = [
-  { to: "/", label: "Дашборд" },
-  { to: "/brands", label: "Мои бренды" },
-  { to: "/campaigns", label: "Кампании" },
-  { to: "/creators", label: "Каталог креаторов" },
+  { to: ROUTES.DASHBOARD, label: "Дашборд" },
+  { to: ROUTES.BRANDS, label: "Мои бренды" },
 ];
 
 export default function DashboardLayout() {
@@ -23,7 +20,7 @@ export default function DashboardLayout() {
   const clearAuth = useAuthStore((s) => s.clearAuth);
   const navigate = useNavigate();
 
-  const nav = user?.role === "admin" ? adminNav : brandNav;
+  const nav = user?.role === Roles.ADMIN ? adminNav : brandNav;
 
   async function handleLogout() {
     try {
@@ -32,7 +29,7 @@ export default function DashboardLayout() {
       // ignore — clear local state anyway
     }
     clearAuth();
-    navigate("/login", { replace: true });
+    navigate("/" + ROUTES.LOGIN, { replace: true });
   }
 
   return (
@@ -49,7 +46,7 @@ export default function DashboardLayout() {
               <li key={item.to}>
                 <NavLink
                   to={item.to}
-                  end={item.to === "/"}
+                  end={item.to === ROUTES.DASHBOARD}
                   className={({ isActive }) =>
                     `block rounded-button px-3 py-2 text-sm font-medium transition ${
                       isActive
@@ -71,7 +68,7 @@ export default function DashboardLayout() {
               {user?.email}
             </p>
             <p className="text-xs text-gray-500">
-              {user?.role === "admin" ? "Админ" : "Бренд-менеджер"}
+              {user?.role === Roles.ADMIN ? "Админ" : "Бренд-менеджер"}
             </p>
           </div>
           <button

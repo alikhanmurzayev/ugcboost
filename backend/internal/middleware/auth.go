@@ -27,7 +27,7 @@ func Auth(validator TokenValidator) func(http.Handler) http.Handler {
 			header := r.Header.Get("Authorization")
 			if header == "" {
 				writeJSON(w, http.StatusUnauthorized, domain.APIResponse{
-					Error: &domain.APIError{Code: "UNAUTHORIZED", Message: "Missing authorization header"},
+					Error: &domain.APIError{Code: domain.CodeUnauthorized, Message: "Missing authorization header"},
 				})
 				return
 			}
@@ -35,7 +35,7 @@ func Auth(validator TokenValidator) func(http.Handler) http.Handler {
 			parts := strings.SplitN(header, " ", 2)
 			if len(parts) != 2 || !strings.EqualFold(parts[0], "bearer") {
 				writeJSON(w, http.StatusUnauthorized, domain.APIResponse{
-					Error: &domain.APIError{Code: "UNAUTHORIZED", Message: "Invalid authorization header format"},
+					Error: &domain.APIError{Code: domain.CodeUnauthorized, Message: "Invalid authorization header format"},
 				})
 				return
 			}
@@ -43,7 +43,7 @@ func Auth(validator TokenValidator) func(http.Handler) http.Handler {
 			userID, role, err := validator.ValidateAccessToken(parts[1])
 			if err != nil {
 				writeJSON(w, http.StatusUnauthorized, domain.APIResponse{
-					Error: &domain.APIError{Code: "UNAUTHORIZED", Message: "Invalid or expired token"},
+					Error: &domain.APIError{Code: domain.CodeUnauthorized, Message: "Invalid or expired token"},
 				})
 				return
 			}
@@ -67,7 +67,7 @@ func RequireRole(allowed ...string) func(http.Handler) http.Handler {
 			role := RoleFromContext(r.Context())
 			if !allowedSet[role] {
 				writeJSON(w, http.StatusForbidden, domain.APIResponse{
-					Error: &domain.APIError{Code: "FORBIDDEN", Message: "Insufficient permissions"},
+					Error: &domain.APIError{Code: domain.CodeForbidden, Message: "Insufficient permissions"},
 				})
 				return
 			}

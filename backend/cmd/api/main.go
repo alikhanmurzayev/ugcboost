@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 	"time"
 
@@ -85,8 +84,15 @@ func run() error {
 	userRepo := repository.NewUserRepository(pool)
 	brandRepo := repository.NewBrandRepository(pool)
 	auditRepo := repository.NewAuditRepository(pool)
-	tokenSvc := service.NewTokenService(cfg.JWTSecret, cfg.JWTExpiry)
-	authSvc := service.NewAuthService(userRepo, tokenSvc)
+	tokenSvc := service.NewTokenService(cfg.JWTSecret, cfg.JWTExpiry, cfg.RefreshExpiry, cfg.ResetExpiry)
+
+	// Reset token store is only needed for test endpoints.
+	var resetTokenStore *service.InMemoryResetTokenStore
+	if cfg.EnableTestEndpoints {
+		resetTokenStore = service.NewInMemoryResetTokenStore()
+	}
+
+	authSvc := service.NewAuthService(userRepo, tokenSvc, resetTokenStore, cfg.BcryptCost)
 	brandSvc := service.NewBrandService(brandRepo, userRepo)
 	auditSvc := service.NewAuditService(auditRepo)
 
@@ -96,14 +102,8 @@ func run() error {
 	}
 
 	// Handlers
-	isSecure := true
-	if len(cfg.CORSOrigins) > 0 {
-		isSecure = !strings.HasPrefix(cfg.CORSOrigins[0], "http://localhost")
-	}
-	authHandler := handler.NewAuthHandler(authSvc, isSecure)
-	authHandler.SetAuditor(auditSvc)
-	brandHandler := handler.NewBrandHandler(brandSvc)
-	brandHandler.SetAuditor(auditSvc)
+	authHandler := handler.NewAuthHandler(authSvc, auditSvc, cfg.CookieSecure)
+	brandHandler := handler.NewBrandHandler(brandSvc, auditSvc)
 	auditHandler := handler.NewAuditHandler(auditSvc)
 
 	// Router
@@ -147,9 +147,6 @@ func run() error {
 
 	// Test endpoints (only when ENABLE_TEST_ENDPOINTS=true)
 	if cfg.EnableTestEndpoints {
-		resetTokenStore := service.NewInMemoryResetTokenStore()
-		authSvc.SetResetTokenNotifier(resetTokenStore)
-
 		testHandler := handler.NewTestHandler(authSvc, brandSvc, resetTokenStore)
 		r.Route("/test", func(r chi.Router) {
 			r.Post("/seed-user", testHandler.SeedUser)
@@ -164,9 +161,9 @@ func run() error {
 	srv := &http.Server{
 		Addr:         fmt.Sprintf(":%d", cfg.Port),
 		Handler:      r,
-		ReadTimeout:  10 * time.Second,
-		WriteTimeout: 30 * time.Second,
-		IdleTimeout:  60 * time.Second,
+		ReadTimeout:  cfg.ReadTimeout,
+		WriteTimeout: cfg.WriteTimeout,
+		IdleTimeout:  cfg.IdleTimeout,
 	}
 
 	// Register HTTP server in closer (will be shut down first due to LIFO)

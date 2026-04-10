@@ -1,26 +1,8 @@
+import type { components } from "./generated/schema";
 import { api } from "./client";
 
-export interface AuditLogEntry {
-  id: string;
-  actorId: string;
-  actorRole: string;
-  action: string;
-  entityType: string;
-  entityId?: string;
-  oldValue?: unknown;
-  newValue?: unknown;
-  ipAddress: string;
-  createdAt: string;
-}
-
-interface AuditLogsResponse {
-  data: {
-    logs: AuditLogEntry[];
-    total: number;
-    page: number;
-    perPage: number;
-  };
-}
+export type AuditLogEntry = components["schemas"]["AuditLogEntry"];
+type AuditLogsResult = components["schemas"]["AuditLogsResult"];
 
 export interface AuditLogsParams {
   actor_id?: string;
@@ -40,5 +22,5 @@ export function listAuditLogs(params: AuditLogsParams = {}) {
     }
   }
   const qs = searchParams.toString();
-  return api<AuditLogsResponse>(`/audit-logs${qs ? `?${qs}` : ""}`);
+  return api<AuditLogsResult>(`/audit-logs${qs ? `?${qs}` : ""}`);
 }

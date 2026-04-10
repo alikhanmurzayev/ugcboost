@@ -1,74 +1,33 @@
+import type { components } from "./generated/schema";
 import { api } from "./client";
 
-export interface Brand {
-  id: string;
-  name: string;
-  logoUrl?: string;
-  createdAt: string;
-  updatedAt: string;
-}
+export type Brand = components["schemas"]["Brand"];
+export type BrandListItem = components["schemas"]["BrandListItem"];
+export type ManagerInfo = components["schemas"]["ManagerInfo"];
 
-export interface BrandListItem {
-  id: string;
-  name: string;
-  logoUrl?: string;
-  managerCount: number;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export interface ManagerInfo {
-  userId: string;
-  email: string;
-  assignedAt: string;
-}
-
-export interface BrandWithManagers extends Brand {
-  managers: ManagerInfo[];
-}
-
-interface ListBrandsResponse {
-  data: { brands: BrandListItem[] };
-}
-
-interface BrandResponse {
-  data: Brand;
-}
-
-interface BrandDetailResponse {
-  data: BrandWithManagers;
-}
-
-interface AssignManagerResponse {
-  data: {
-    userId: string;
-    email: string;
-    role: string;
-    tempPassword?: string;
-  };
-}
-
-interface MessageResponse {
-  data: { message: string };
-}
+type ListBrandsResult = components["schemas"]["ListBrandsResult"];
+type BrandResult = components["schemas"]["BrandResult"];
+type GetBrandResult = components["schemas"]["GetBrandResult"];
+type AssignManagerResult = components["schemas"]["AssignManagerResult"];
+type MessageResponse = components["schemas"]["MessageResponse"];
 
 export function listBrands() {
-  return api<ListBrandsResponse>("/brands");
+  return api<ListBrandsResult>("/brands");
 }
 
 export function getBrand(id: string) {
-  return api<BrandDetailResponse>(`/brands/${id}`);
+  return api<GetBrandResult>(`/brands/${id}`);
 }
 
 export function createBrand(name: string) {
-  return api<BrandResponse>("/brands", {
+  return api<BrandResult>("/brands", {
     method: "POST",
     body: JSON.stringify({ name }),
   });
 }
 
 export function updateBrand(id: string, name: string) {
-  return api<BrandResponse>(`/brands/${id}`, {
+  return api<BrandResult>(`/brands/${id}`, {
     method: "PUT",
     body: JSON.stringify({ name }),
   });
@@ -81,7 +40,7 @@ export function deleteBrand(id: string) {
 }
 
 export function assignManager(brandId: string, email: string) {
-  return api<AssignManagerResponse>(`/brands/${brandId}/managers`, {
+  return api<AssignManagerResult>(`/brands/${brandId}/managers`, {
     method: "POST",
     body: JSON.stringify({ email }),
   });

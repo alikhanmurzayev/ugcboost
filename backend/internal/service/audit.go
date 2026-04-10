@@ -3,7 +3,7 @@ package service
 import (
 	"context"
 	"encoding/json"
-	"log/slog"
+	"fmt"
 
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/repository"
 )
@@ -36,8 +36,8 @@ type AuditEntry struct {
 	IPAddress  string
 }
 
-// Log writes an audit log entry. Never fails visibly — errors are logged.
-func (s *AuditService) Log(ctx context.Context, e AuditEntry) {
+// Log writes an audit log entry. Returns error so the caller can decide how to handle it.
+func (s *AuditService) Log(ctx context.Context, e AuditEntry) error {
 	var entityID *string
 	if e.EntityID != "" {
 		entityID = &e.EntityID
@@ -53,32 +53,25 @@ func (s *AuditService) Log(ctx context.Context, e AuditEntry) {
 	}
 
 	if e.OldValue != nil {
-		if data, err := json.Marshal(e.OldValue); err != nil {
-			slog.Warn("audit: marshal old_value failed", "error", err, "action", e.Action)
-		} else {
-			row.OldValue = data
+		data, err := json.Marshal(e.OldValue)
+		if err != nil {
+			return fmt.Errorf("marshal old_value: %w", err)
 		}
+		row.OldValue = data
 	}
 	if e.NewValue != nil {
-		if data, err := json.Marshal(e.NewValue); err != nil {
-			slog.Warn("audit: marshal new_value failed", "error", err, "action", e.Action)
-		} else {
-			row.NewValue = data
+		data, err := json.Marshal(e.NewValue)
+		if err != nil {
+			return fmt.Errorf("marshal new_value: %w", err)
 		}
+		row.NewValue = data
 	}
 
-	if err := s.repo.Create(ctx, row); err != nil {
-		slog.Error("audit log failed", "error", err, "action", e.Action)
-	}
+	return s.repo.Create(ctx, row)
 }
 
 // List returns audit logs matching the filter with pagination.
+// Validation is the handler's responsibility (CS-18).
 func (s *AuditService) List(ctx context.Context, f repository.AuditFilter, page, perPage int) ([]repository.AuditLogRow, int64, error) {
-	if page < 1 {
-		page = 1
-	}
-	if perPage < 1 || perPage > 100 {
-		perPage = 20
-	}
 	return s.repo.List(ctx, f, page, perPage)
 }

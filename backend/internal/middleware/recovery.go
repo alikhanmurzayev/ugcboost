@@ -23,7 +23,7 @@ func Recovery(next http.Handler) http.Handler {
 				w.WriteHeader(http.StatusInternalServerError)
 				_ = json.NewEncoder(w).Encode(domain.APIResponse{
 					Error: &domain.APIError{
-						Code:    "INTERNAL_ERROR",
+						Code:    domain.CodeInternal,
 						Message: "Internal server error",
 					},
 				})

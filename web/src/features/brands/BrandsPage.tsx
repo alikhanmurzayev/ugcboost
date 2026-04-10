@@ -2,6 +2,9 @@ import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { listBrands, createBrand, deleteBrand } from "@/api/brands";
+import { ROUTES } from "@/shared/constants/routes";
+import { getErrorMessage } from "@/shared/i18n/errors";
+import { ApiError } from "@/api/client";
 
 export default function BrandsPage() {
   const navigate = useNavigate();
@@ -9,6 +12,7 @@ export default function BrandsPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [newName, setNewName] = useState("");
   const [error, setError] = useState("");
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
 
   const { data, isLoading } = useQuery({
     queryKey: ["brands"],
@@ -23,13 +27,20 @@ export default function BrandsPage() {
       setNewName("");
       setError("");
     },
-    onError: () => setError("Не удалось создать бренд"),
+    onError: (err) => {
+      setError(err instanceof ApiError ? getErrorMessage(err.code) : "Не удалось создать бренд");
+    },
   });
 
   const deleteMut = useMutation({
     mutationFn: (id: string) => deleteBrand(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["brands"] });
+      setDeleteConfirm(null);
+    },
+    onError: (err) => {
+      setError(err instanceof ApiError ? getErrorMessage(err.code) : "Не удалось удалить бренд");
+      setDeleteConfirm(null);
     },
   });
 
@@ -85,7 +96,7 @@ export default function BrandsPage() {
           >
             Отмена
           </button>
-          {error && <p className="text-sm text-red-600">{error}</p>}
+          {error && <p className="text-sm text-red-600" role="alert">{error}</p>}
         </form>
       )}
 
@@ -97,10 +108,10 @@ export default function BrandsPage() {
         <table className="mt-6 w-full text-left text-sm">
           <thead>
             <tr className="border-b border-surface-300 text-gray-500">
-              <th className="pb-2 font-medium">Название</th>
-              <th className="pb-2 font-medium">Менеджеры</th>
-              <th className="pb-2 font-medium">Создан</th>
-              <th className="pb-2 font-medium" />
+              <th scope="col" className="pb-2 font-medium">Название</th>
+              <th scope="col" className="pb-2 font-medium">Менеджеры</th>
+              <th scope="col" className="pb-2 font-medium">Создан</th>
+              <th scope="col" className="pb-2 font-medium" />
             </tr>
           </thead>
           <tbody>
@@ -108,7 +119,7 @@ export default function BrandsPage() {
               <tr
                 key={b.id}
                 className="cursor-pointer border-b border-surface-200 hover:bg-surface-100"
-                onClick={() => navigate(`/brands/${b.id}`)}
+                onClick={() => navigate("/" + ROUTES.BRAND_DETAIL(b.id))}
               >
                 <td className="py-3 font-medium text-gray-900">{b.name}</td>
                 <td className="py-3 text-gray-600">{b.managerCount}</td>
@@ -116,21 +127,47 @@ export default function BrandsPage() {
                   {new Date(b.createdAt).toLocaleDateString("ru")}
                 </td>
                 <td className="py-3 text-right">
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (confirm("Удалить бренд?")) deleteMut.mutate(b.id);
-                    }}
-                    className="text-red-500 hover:text-red-700"
-                  >
-                    Удалить
-                  </button>
+                  {deleteConfirm === b.id ? (
+                    <span className="space-x-2">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          deleteMut.mutate(b.id);
+                        }}
+                        disabled={deleteMut.isPending}
+                        className="text-red-600 font-medium hover:text-red-800 disabled:opacity-50"
+                      >
+                        {deleteMut.isPending ? "Удаление..." : "Да, удалить"}
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setDeleteConfirm(null);
+                        }}
+                        className="text-gray-500 hover:text-gray-700"
+                      >
+                        Отмена
+                      </button>
+                    </span>
+                  ) : (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setDeleteConfirm(b.id);
+                      }}
+                      className="text-red-500 hover:text-red-700"
+                    >
+                      Удалить
+                    </button>
+                  )}
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
       )}
+
+      {error && !showCreate && <p className="mt-4 text-sm text-red-600" role="alert">{error}</p>}
     </div>
   );
 }
