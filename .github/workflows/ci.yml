@@ -190,7 +190,7 @@ jobs:
   migrate-staging:
     name: Migrate Staging DB
     runs-on: ubuntu-latest
-    needs: [test-e2e-backend, test-e2e-browser]
+    needs: [push-images, lint-backend, test-unit, lint-web, lint-tma]
     steps:
       - name: Run migrations via SSH
         uses: appleboy/ssh-action@v1
@@ -211,7 +211,7 @@ jobs:
   deploy-staging:
     name: Deploy to Staging
     runs-on: ubuntu-latest
-    needs: [test-e2e-backend, test-e2e-browser]
+    needs: [push-images, lint-backend, test-unit, lint-web, lint-tma]
     steps:
       - name: Deploy services via Dokploy
         uses: appleboy/ssh-action@v1
