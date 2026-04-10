@@ -19,10 +19,7 @@ backend/api
 backend/coverage.out
 backend/coverage.html
 
-# Generated code (regenerated via make codegen)
-backend/internal/api/server.gen.go
-web/src/api/generated/
-tma/src/api/generated/
+# Generated code — committed to git, regenerated via make codegen
 
 # Environment
 .env
