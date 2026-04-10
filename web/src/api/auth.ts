@@ -1,31 +1,19 @@
+import type { components } from "./generated/schema";
 import { api, apiBase } from "./client";
 
-interface User {
-  id: string;
-  email: string;
-  role: "admin" | "brand_manager";
-}
-
-interface LoginResponse {
-  data: {
-    accessToken: string;
-    user: User;
-  };
-}
-
-interface UserResponse {
-  data: User;
-}
+export type User = components["schemas"]["User"];
+type LoginResult = components["schemas"]["LoginResult"];
+type UserResponse = components["schemas"]["UserResponse"];
 
 export function login(email: string, password: string) {
-  return api<LoginResponse>("/auth/login", {
+  return api<LoginResult>("/auth/login", {
     method: "POST",
     body: JSON.stringify({ email, password }),
   });
 }
 
 export function logout() {
-  return api<{ data: { message: string } }>("/auth/logout", {
+  return api<components["schemas"]["MessageResponse"]>("/auth/logout", {
     method: "POST",
   });
 }
@@ -54,7 +42,7 @@ export function restoreSession(): Promise<{
 
     if (!res.ok) return null;
 
-    const body = (await res.json()) as LoginResponse;
+    const body = (await res.json()) as LoginResult;
     return {
       user: body.data.user,
       token: body.data.accessToken,

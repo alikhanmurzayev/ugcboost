@@ -10,6 +10,7 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 
+	"github.com/alikhanmurzayev/ugcboost/backend/internal/api"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/domain"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/repository"
 )
@@ -50,7 +51,7 @@ func NewBrandService(brands BrandRepo, users BrandUserRepo) *BrandService {
 func (s *BrandService) CreateBrand(ctx context.Context, name string, logoURL *string) (repository.BrandRow, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
-		return repository.BrandRow{}, domain.NewValidationError("VALIDATION_ERROR", "Brand name is required")
+		return repository.BrandRow{}, domain.NewValidationError(domain.CodeValidation, "Brand name is required")
 	}
 	return s.brands.Create(ctx, name, logoURL)
 }
@@ -62,7 +63,7 @@ func (s *BrandService) GetBrand(ctx context.Context, id string) (repository.Bran
 
 // ListBrands returns all brands (admin) or user's brands (brand_manager).
 func (s *BrandService) ListBrands(ctx context.Context, userID, role string) ([]repository.BrandWithManagerCount, error) {
-	if role == "admin" {
+	if role == string(api.Admin) {
 		return s.brands.List(ctx)
 	}
 	return s.brands.ListByUser(ctx, userID)
@@ -72,7 +73,7 @@ func (s *BrandService) ListBrands(ctx context.Context, userID, role string) ([]r
 func (s *BrandService) UpdateBrand(ctx context.Context, id, name string, logoURL *string) (repository.BrandRow, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
-		return repository.BrandRow{}, domain.NewValidationError("VALIDATION_ERROR", "Brand name is required")
+		return repository.BrandRow{}, domain.NewValidationError(domain.CodeValidation, "Brand name is required")
 	}
 	return s.brands.Update(ctx, id, name, logoURL)
 }
@@ -92,7 +93,7 @@ func (s *BrandService) ListManagers(ctx context.Context, brandID string) ([]repo
 func (s *BrandService) AssignManager(ctx context.Context, brandID, email string) (repository.UserRow, string, error) {
 	email = strings.TrimSpace(strings.ToLower(email))
 	if email == "" {
-		return repository.UserRow{}, "", domain.NewValidationError("VALIDATION_ERROR", "Email is required")
+		return repository.UserRow{}, "", domain.NewValidationError(domain.CodeValidation, "Email is required")
 	}
 
 	// Check brand exists
@@ -122,7 +123,7 @@ func (s *BrandService) AssignManager(ctx context.Context, brandID, email string)
 		if err != nil {
 			return repository.UserRow{}, "", fmt.Errorf("hash password: %w", err)
 		}
-		user, err = s.users.Create(ctx, email, string(hash), "brand_manager")
+		user, err = s.users.Create(ctx, email, string(hash), string(api.BrandManager))
 		if err != nil {
 			return repository.UserRow{}, "", fmt.Errorf("create user: %w", err)
 		}
@@ -143,7 +144,7 @@ func (s *BrandService) RemoveManager(ctx context.Context, brandID, userID string
 
 // CanViewBrand checks if a user can view a specific brand.
 func (s *BrandService) CanViewBrand(ctx context.Context, userID, role, brandID string) error {
-	if role == "admin" {
+	if role == string(api.Admin) {
 		return nil
 	}
 	ok, err := s.brands.IsManager(ctx, userID, brandID)

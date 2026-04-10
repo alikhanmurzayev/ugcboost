@@ -46,12 +46,12 @@ func (h *TestHandler) SeedUser(w http.ResponseWriter, r *http.Request) {
 		Role     string `json:"role"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		respondError(w, r, domain.NewValidationError("VALIDATION_ERROR", "Invalid request body"))
+		respondError(w, r, domain.NewValidationError(domain.CodeValidation, "Invalid request body"))
 		return
 	}
 
 	if req.Email == "" || req.Password == "" || req.Role == "" {
-		respondError(w, r, domain.NewValidationError("VALIDATION_ERROR", "email, password, and role are required"))
+		respondError(w, r, domain.NewValidationError(domain.CodeValidation, "email, password, and role are required"))
 		return
 	}
 
@@ -75,12 +75,12 @@ func (h *TestHandler) SeedBrand(w http.ResponseWriter, r *http.Request) {
 		ManagerEmail string `json:"managerEmail,omitempty"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		respondError(w, r, domain.NewValidationError("VALIDATION_ERROR", "Invalid request body"))
+		respondError(w, r, domain.NewValidationError(domain.CodeValidation, "Invalid request body"))
 		return
 	}
 
 	if req.Name == "" {
-		respondError(w, r, domain.NewValidationError("VALIDATION_ERROR", "name is required"))
+		respondError(w, r, domain.NewValidationError(domain.CodeValidation, "name is required"))
 		return
 	}
 
@@ -107,7 +107,7 @@ func (h *TestHandler) SeedBrand(w http.ResponseWriter, r *http.Request) {
 func (h *TestHandler) GetResetToken(w http.ResponseWriter, r *http.Request) {
 	email := r.URL.Query().Get("email")
 	if email == "" {
-		respondError(w, r, domain.NewValidationError("VALIDATION_ERROR", "email query parameter is required"))
+		respondError(w, r, domain.NewValidationError(domain.CodeValidation, "email query parameter is required"))
 		return
 	}
 

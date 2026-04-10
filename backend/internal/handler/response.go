@@ -35,16 +35,16 @@ func respondError(w http.ResponseWriter, r *http.Request, err error) {
 
 	switch {
 	case errors.Is(err, domain.ErrNotFound), errors.Is(err, pgx.ErrNoRows):
-		writeError(w, http.StatusNotFound, "NOT_FOUND", "Resource not found")
+		writeError(w, http.StatusNotFound, domain.CodeNotFound, "Resource not found")
 	case errors.Is(err, domain.ErrForbidden):
-		writeError(w, http.StatusForbidden, "FORBIDDEN", "Access denied")
+		writeError(w, http.StatusForbidden, domain.CodeForbidden, "Access denied")
 	case errors.Is(err, domain.ErrUnauthorized):
-		writeError(w, http.StatusUnauthorized, "UNAUTHORIZED", "Authentication required")
+		writeError(w, http.StatusUnauthorized, domain.CodeUnauthorized, "Authentication required")
 	case errors.Is(err, domain.ErrConflict), errors.Is(err, domain.ErrAlreadyExists):
-		writeError(w, http.StatusConflict, "CONFLICT", "Resource already exists")
+		writeError(w, http.StatusConflict, domain.CodeConflict, "Resource already exists")
 	default:
 		slog.Error("unexpected error", "error", err, "path", r.URL.Path)
-		writeError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Internal server error")
+		writeError(w, http.StatusInternalServerError, domain.CodeInternal, "Internal server error")
 	}
 }
 

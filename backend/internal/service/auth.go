@@ -8,10 +8,12 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 
+	"github.com/alikhanmurzayev/ugcboost/backend/internal/api"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/domain"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/repository"
 )
 
+// bcryptCost is set via NewAuthService. Package-level var so BrandService can reuse it.
 var bcryptCost = 12
 
 // UserRepo is the interface AuthService needs from the user repository.
@@ -42,15 +44,12 @@ type AuthService struct {
 	resetNotifier  ResetTokenNotifier
 }
 
-// NewAuthService creates a new AuthService.
-func NewAuthService(users UserRepo, tokens TokenGenerator) *AuthService {
-	return &AuthService{users: users, tokens: tokens}
-}
-
-// SetResetTokenNotifier sets an optional notifier that captures raw reset tokens.
-// Used only when ENABLE_TEST_ENDPOINTS=true.
-func (s *AuthService) SetResetTokenNotifier(n ResetTokenNotifier) {
-	s.resetNotifier = n
+// NewAuthService creates a new AuthService. resetNotifier may be nil.
+func NewAuthService(users UserRepo, tokens TokenGenerator, resetNotifier ResetTokenNotifier, cost int) *AuthService {
+	if cost > 0 {
+		bcryptCost = cost
+	}
+	return &AuthService{users: users, tokens: tokens, resetNotifier: resetNotifier}
 }
 
 // LoginResult contains the result of a successful login.
@@ -236,7 +235,7 @@ func (s *AuthService) SeedAdmin(ctx context.Context, email, password string) err
 		return fmt.Errorf("hash admin password: %w", err)
 	}
 
-	_, err = s.users.Create(ctx, email, string(hash), "admin")
+	_, err = s.users.Create(ctx, email, string(hash), string(api.Admin))
 	if err != nil {
 		return fmt.Errorf("create admin: %w", err)
 	}

@@ -7,6 +7,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/alikhanmurzayev/ugcboost/backend/internal/api"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/domain"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/middleware"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/repository"
@@ -32,18 +33,15 @@ type BrandHandler struct {
 	auditor Auditor
 }
 
-// NewBrandHandler creates a new BrandHandler.
-func NewBrandHandler(brands Brands) *BrandHandler {
-	return &BrandHandler{brands: brands}
+// NewBrandHandler creates a new BrandHandler. auditor may be nil.
+func NewBrandHandler(brands Brands, auditor Auditor) *BrandHandler {
+	return &BrandHandler{brands: brands, auditor: auditor}
 }
-
-// SetAuditor sets the optional audit logger.
-func (h *BrandHandler) SetAuditor(a Auditor) { h.auditor = a }
 
 // CreateBrand handles POST /api/brands
 func (h *BrandHandler) CreateBrand(w http.ResponseWriter, r *http.Request) {
 	role := middleware.RoleFromContext(r.Context())
-	if role != "admin" {
+	if role != string(api.Admin) {
 		respondError(w, r, domain.ErrForbidden)
 		return
 	}
@@ -53,7 +51,7 @@ func (h *BrandHandler) CreateBrand(w http.ResponseWriter, r *http.Request) {
 		LogoURL *string `json:"logoUrl,omitempty"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		respondError(w, r, domain.NewValidationError("VALIDATION_ERROR", "Invalid request body"))
+		respondError(w, r, domain.NewValidationError(domain.CodeValidation, "Invalid request body"))
 		return
 	}
 
@@ -63,13 +61,11 @@ func (h *BrandHandler) CreateBrand(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if h.auditor != nil {
-		h.auditor.Log(r.Context(), service.AuditEntry{
-			ActorID: middleware.UserIDFromContext(r.Context()), ActorRole: role,
-			Action: "brand_create", EntityType: "brand", EntityID: brand.ID,
-			NewValue: map[string]string{"name": brand.Name}, IPAddress: clientIP(r),
-		})
-	}
+	logAudit(r.Context(), h.auditor, service.AuditEntry{
+		ActorID: middleware.UserIDFromContext(r.Context()), ActorRole: role,
+		Action: "brand_create", EntityType: "brand", EntityID: brand.ID,
+		NewValue: map[string]string{"name": brand.Name}, IPAddress: clientIP(r),
+	})
 
 	respondJSON(w, http.StatusCreated, brandToJSON(brand))
 }
@@ -143,7 +139,7 @@ func (h *BrandHandler) GetBrand(w http.ResponseWriter, r *http.Request) {
 // UpdateBrand handles PUT /api/brands/{brandID}
 func (h *BrandHandler) UpdateBrand(w http.ResponseWriter, r *http.Request) {
 	role := middleware.RoleFromContext(r.Context())
-	if role != "admin" {
+	if role != string(api.Admin) {
 		respondError(w, r, domain.ErrForbidden)
 		return
 	}
@@ -155,7 +151,7 @@ func (h *BrandHandler) UpdateBrand(w http.ResponseWriter, r *http.Request) {
 		LogoURL *string `json:"logoUrl,omitempty"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		respondError(w, r, domain.NewValidationError("VALIDATION_ERROR", "Invalid request body"))
+		respondError(w, r, domain.NewValidationError(domain.CodeValidation, "Invalid request body"))
 		return
 	}
 
@@ -165,13 +161,11 @@ func (h *BrandHandler) UpdateBrand(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if h.auditor != nil {
-		h.auditor.Log(r.Context(), service.AuditEntry{
-			ActorID: middleware.UserIDFromContext(r.Context()), ActorRole: role,
-			Action: "brand_update", EntityType: "brand", EntityID: brandID,
-			NewValue: map[string]string{"name": brand.Name}, IPAddress: clientIP(r),
-		})
-	}
+	logAudit(r.Context(), h.auditor, service.AuditEntry{
+		ActorID: middleware.UserIDFromContext(r.Context()), ActorRole: role,
+		Action: "brand_update", EntityType: "brand", EntityID: brandID,
+		NewValue: map[string]string{"name": brand.Name}, IPAddress: clientIP(r),
+	})
 
 	respondJSON(w, http.StatusOK, brandToJSON(brand))
 }
@@ -179,7 +173,7 @@ func (h *BrandHandler) UpdateBrand(w http.ResponseWriter, r *http.Request) {
 // DeleteBrand handles DELETE /api/brands/{brandID}
 func (h *BrandHandler) DeleteBrand(w http.ResponseWriter, r *http.Request) {
 	role := middleware.RoleFromContext(r.Context())
-	if role != "admin" {
+	if role != string(api.Admin) {
 		respondError(w, r, domain.ErrForbidden)
 		return
 	}
@@ -191,13 +185,11 @@ func (h *BrandHandler) DeleteBrand(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if h.auditor != nil {
-		h.auditor.Log(r.Context(), service.AuditEntry{
-			ActorID: middleware.UserIDFromContext(r.Context()), ActorRole: role,
-			Action: "brand_delete", EntityType: "brand", EntityID: brandID,
-			IPAddress: clientIP(r),
-		})
-	}
+	logAudit(r.Context(), h.auditor, service.AuditEntry{
+		ActorID: middleware.UserIDFromContext(r.Context()), ActorRole: role,
+		Action: "brand_delete", EntityType: "brand", EntityID: brandID,
+		IPAddress: clientIP(r),
+	})
 
 	respondJSON(w, http.StatusOK, map[string]any{
 		"message": "Brand deleted",
@@ -207,7 +199,7 @@ func (h *BrandHandler) DeleteBrand(w http.ResponseWriter, r *http.Request) {
 // AssignManager handles POST /api/brands/{brandID}/managers
 func (h *BrandHandler) AssignManager(w http.ResponseWriter, r *http.Request) {
 	role := middleware.RoleFromContext(r.Context())
-	if role != "admin" {
+	if role != string(api.Admin) {
 		respondError(w, r, domain.ErrForbidden)
 		return
 	}
@@ -218,7 +210,7 @@ func (h *BrandHandler) AssignManager(w http.ResponseWriter, r *http.Request) {
 		Email string `json:"email"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		respondError(w, r, domain.NewValidationError("VALIDATION_ERROR", "Invalid request body"))
+		respondError(w, r, domain.NewValidationError(domain.CodeValidation, "Invalid request body"))
 		return
 	}
 
@@ -228,13 +220,11 @@ func (h *BrandHandler) AssignManager(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if h.auditor != nil {
-		h.auditor.Log(r.Context(), service.AuditEntry{
-			ActorID: middleware.UserIDFromContext(r.Context()), ActorRole: role,
-			Action: "manager_assign", EntityType: "brand", EntityID: brandID,
-			NewValue: map[string]string{"email": user.Email}, IPAddress: clientIP(r),
-		})
-	}
+	logAudit(r.Context(), h.auditor, service.AuditEntry{
+		ActorID: middleware.UserIDFromContext(r.Context()), ActorRole: role,
+		Action: "manager_assign", EntityType: "brand", EntityID: brandID,
+		NewValue: map[string]string{"email": user.Email}, IPAddress: clientIP(r),
+	})
 
 	resp := map[string]any{
 		"userId": user.ID,
@@ -251,7 +241,7 @@ func (h *BrandHandler) AssignManager(w http.ResponseWriter, r *http.Request) {
 // RemoveManager handles DELETE /api/brands/{brandID}/managers/{userID}
 func (h *BrandHandler) RemoveManager(w http.ResponseWriter, r *http.Request) {
 	role := middleware.RoleFromContext(r.Context())
-	if role != "admin" {
+	if role != string(api.Admin) {
 		respondError(w, r, domain.ErrForbidden)
 		return
 	}
@@ -264,13 +254,11 @@ func (h *BrandHandler) RemoveManager(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if h.auditor != nil {
-		h.auditor.Log(r.Context(), service.AuditEntry{
-			ActorID: middleware.UserIDFromContext(r.Context()), ActorRole: role,
-			Action: "manager_remove", EntityType: "brand", EntityID: brandID,
-			OldValue: map[string]string{"userId": userID}, IPAddress: clientIP(r),
-		})
-	}
+	logAudit(r.Context(), h.auditor, service.AuditEntry{
+		ActorID: middleware.UserIDFromContext(r.Context()), ActorRole: role,
+		Action: "manager_remove", EntityType: "brand", EntityID: brandID,
+		OldValue: map[string]string{"userId": userID}, IPAddress: clientIP(r),
+	})
 
 	respondJSON(w, http.StatusOK, map[string]any{
 		"message": "Manager removed",

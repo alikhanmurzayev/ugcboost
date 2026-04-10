@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -22,6 +23,17 @@ type Config struct {
 
 	// Test endpoints (never enable in production)
 	EnableTestEndpoints bool
+
+	// Security
+	BcryptCost     int
+	RefreshExpiry  time.Duration
+	ResetExpiry    time.Duration
+	CookieSecure   bool
+
+	// HTTP server
+	ReadTimeout  time.Duration
+	WriteTimeout time.Duration
+	IdleTimeout  time.Duration
 
 	// Feature flags for mock integrations
 	LiveDuneMock  bool
@@ -53,16 +65,38 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("JWT_SECRET is required")
 	}
 
+	bcryptCost := getIntEnv("BCRYPT_COST", 12)
+	refreshExpiry, err := time.ParseDuration(getEnv("REFRESH_EXPIRY", "168h")) // 7 days
+	if err != nil {
+		return nil, fmt.Errorf("invalid REFRESH_EXPIRY: %w", err)
+	}
+	resetExpiry, err := time.ParseDuration(getEnv("RESET_EXPIRY", "1h"))
+	if err != nil {
+		return nil, fmt.Errorf("invalid RESET_EXPIRY: %w", err)
+	}
+
+	corsOrigins := splitComma(getEnv("CORS_ORIGINS", "http://localhost:5173,http://localhost:5174"))
+	cookieSecure := getBoolEnv("COOKIE_SECURE", !hasLocalhostOrigin(corsOrigins))
+
 	return &Config{
 		Port:        port,
 		DatabaseURL: dbURL,
 		JWTSecret:   jwtSecret,
 		JWTExpiry:   jwtExpiry,
-		CORSOrigins: splitComma(getEnv("CORS_ORIGINS", "http://localhost:5173,http://localhost:5174")),
+		CORSOrigins: corsOrigins,
 		LogLevel:    getEnv("LOG_LEVEL", "info"),
 
 		AdminEmail:    getEnv("ADMIN_EMAIL", "admin@ugcboost.kz"),
 		AdminPassword: getEnv("ADMIN_PASSWORD", ""),
+
+		BcryptCost:    bcryptCost,
+		RefreshExpiry: refreshExpiry,
+		ResetExpiry:   resetExpiry,
+		CookieSecure:  cookieSecure,
+
+		ReadTimeout:  getDurationEnv("READ_TIMEOUT", 10*time.Second),
+		WriteTimeout: getDurationEnv("WRITE_TIMEOUT", 30*time.Second),
+		IdleTimeout:  getDurationEnv("IDLE_TIMEOUT", 60*time.Second),
 
 		EnableTestEndpoints: getBoolEnv("ENABLE_TEST_ENDPOINTS", false),
 
@@ -91,6 +125,39 @@ func getBoolEnv(key string, fallback bool) bool {
 		return fallback
 	}
 	return b
+}
+
+func getIntEnv(key string, fallback int) int {
+	v := os.Getenv(key)
+	if v == "" {
+		return fallback
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil {
+		return fallback
+	}
+	return n
+}
+
+func getDurationEnv(key string, fallback time.Duration) time.Duration {
+	v := os.Getenv(key)
+	if v == "" {
+		return fallback
+	}
+	d, err := time.ParseDuration(v)
+	if err != nil {
+		return fallback
+	}
+	return d
+}
+
+func hasLocalhostOrigin(origins []string) bool {
+	for _, o := range origins {
+		if strings.HasPrefix(o, "http://localhost") {
+			return true
+		}
+	}
+	return false
 }
 
 func splitComma(s string) []string {

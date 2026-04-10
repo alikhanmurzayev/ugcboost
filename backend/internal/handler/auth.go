@@ -31,13 +31,10 @@ type AuthHandler struct {
 	secure  bool // true = Secure cookie flag (production)
 }
 
-// NewAuthHandler creates a new AuthHandler.
-func NewAuthHandler(auth Auth, secure bool) *AuthHandler {
-	return &AuthHandler{auth: auth, secure: secure}
+// NewAuthHandler creates a new AuthHandler. auditor may be nil.
+func NewAuthHandler(auth Auth, auditor Auditor, secure bool) *AuthHandler {
+	return &AuthHandler{auth: auth, auditor: auditor, secure: secure}
 }
-
-// SetAuditor sets the optional audit logger.
-func (h *AuthHandler) SetAuditor(a Auditor) { h.auditor = a }
 
 // Login handles POST /auth/login
 func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
@@ -46,14 +43,14 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		Password string `json:"password"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		respondError(w, r, domain.NewValidationError("VALIDATION_ERROR", "Invalid request body"))
+		respondError(w, r, domain.NewValidationError(domain.CodeValidation, "Invalid request body"))
 		return
 	}
 
 	req.Email = strings.TrimSpace(strings.ToLower(req.Email))
 
 	if req.Email == "" || req.Password == "" {
-		respondError(w, r, domain.NewValidationError("VALIDATION_ERROR", "Email and password are required"))
+		respondError(w, r, domain.NewValidationError(domain.CodeValidation, "Email and password are required"))
 		return
 	}
 
@@ -65,13 +62,11 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 
 	h.setRefreshCookie(w, result.RefreshTokenRaw, result.RefreshExpiresAt)
 
-	if h.auditor != nil {
-		h.auditor.Log(r.Context(), service.AuditEntry{
-			ActorID: result.User.ID, ActorRole: result.User.Role,
-			Action: "login", EntityType: "user", EntityID: result.User.ID,
-			IPAddress: clientIP(r),
-		})
-	}
+	logAudit(r.Context(), h.auditor, service.AuditEntry{
+		ActorID: result.User.ID, ActorRole: result.User.Role,
+		Action: "login", EntityType: "user", EntityID: result.User.ID,
+		IPAddress: clientIP(r),
+	})
 
 	respondJSON(w, http.StatusOK, map[string]any{
 		"accessToken": result.AccessToken,
@@ -85,7 +80,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 
 // Refresh handles POST /auth/refresh
 func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
-	cookie, err := r.Cookie("refresh_token")
+	cookie, err := r.Cookie(CookieRefreshToken)
 	if err != nil || cookie.Value == "" {
 		respondError(w, r, domain.ErrUnauthorized)
 		return
@@ -117,19 +112,19 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_ = h.auth.Logout(r.Context(), userID)
-
-	if h.auditor != nil {
-		h.auditor.Log(r.Context(), service.AuditEntry{
-			ActorID: userID, ActorRole: middleware.RoleFromContext(r.Context()),
-			Action: "logout", EntityType: "user", EntityID: userID,
-			IPAddress: clientIP(r),
-		})
+	if err := h.auth.Logout(r.Context(), userID); err != nil {
+		slog.Error("failed to revoke refresh tokens on logout", "error", err, "userID", userID)
 	}
+
+	logAudit(r.Context(), h.auditor, service.AuditEntry{
+		ActorID: userID, ActorRole: middleware.RoleFromContext(r.Context()),
+		Action: "logout", EntityType: "user", EntityID: userID,
+		IPAddress: clientIP(r),
+	})
 
 	// Clear cookie
 	http.SetCookie(w, &http.Cookie{
-		Name:     "refresh_token",
+		Name:     CookieRefreshToken,
 		Value:    "",
 		Path:     "/",
 		MaxAge:   -1,
@@ -149,13 +144,13 @@ func (h *AuthHandler) RequestPasswordReset(w http.ResponseWriter, r *http.Reques
 		Email string `json:"email"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		respondError(w, r, domain.NewValidationError("VALIDATION_ERROR", "Invalid request body"))
+		respondError(w, r, domain.NewValidationError(domain.CodeValidation, "Invalid request body"))
 		return
 	}
 
 	req.Email = strings.TrimSpace(strings.ToLower(req.Email))
 	if req.Email == "" {
-		respondError(w, r, domain.NewValidationError("VALIDATION_ERROR", "Email is required"))
+		respondError(w, r, domain.NewValidationError(domain.CodeValidation, "Email is required"))
 		return
 	}
 
@@ -176,16 +171,16 @@ func (h *AuthHandler) ResetPassword(w http.ResponseWriter, r *http.Request) {
 		NewPassword string `json:"newPassword"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		respondError(w, r, domain.NewValidationError("VALIDATION_ERROR", "Invalid request body"))
+		respondError(w, r, domain.NewValidationError(domain.CodeValidation, "Invalid request body"))
 		return
 	}
 
 	if req.Token == "" {
-		respondError(w, r, domain.NewValidationError("VALIDATION_ERROR", "Token is required"))
+		respondError(w, r, domain.NewValidationError(domain.CodeValidation, "Token is required"))
 		return
 	}
 	if len(req.NewPassword) < 6 {
-		respondError(w, r, domain.NewValidationError("VALIDATION_ERROR", "Password must be at least 6 characters"))
+		respondError(w, r, domain.NewValidationError(domain.CodeValidation, "Password must be at least 6 characters"))
 		return
 	}
 
@@ -195,12 +190,10 @@ func (h *AuthHandler) ResetPassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if h.auditor != nil {
-		h.auditor.Log(r.Context(), service.AuditEntry{
-			ActorID: resetUserID, EntityType: "user", EntityID: resetUserID,
-			Action: "password_reset", IPAddress: clientIP(r),
-		})
-	}
+	logAudit(r.Context(), h.auditor, service.AuditEntry{
+		ActorID: resetUserID, EntityType: "user", EntityID: resetUserID,
+		Action: "password_reset", IPAddress: clientIP(r),
+	})
 
 	respondJSON(w, http.StatusOK, map[string]any{
 		"message": "Password updated successfully",
@@ -230,7 +223,7 @@ func (h *AuthHandler) GetMe(w http.ResponseWriter, r *http.Request) {
 
 func (h *AuthHandler) setRefreshCookie(w http.ResponseWriter, token string, expiresUnix int64) {
 	http.SetCookie(w, &http.Cookie{
-		Name:     "refresh_token",
+		Name:     CookieRefreshToken,
 		Value:    token,
 		Path:     "/",
 		Expires:  time.Unix(expiresUnix, 0),

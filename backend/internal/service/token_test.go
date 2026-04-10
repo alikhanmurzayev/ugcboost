@@ -9,7 +9,7 @@ import (
 )
 
 func newTestTokenService() *TokenService {
-	return NewTokenService("test-secret-key", 15*time.Minute)
+	return NewTokenService("test-secret-key", 15*time.Minute, 168*time.Hour, 1*time.Hour)
 }
 
 // --- GenerateAccessToken + ValidateAccessToken ---
@@ -43,7 +43,7 @@ func TestAccessToken_DifferentRoles(t *testing.T) {
 
 func TestAccessToken_ExpiredToken(t *testing.T) {
 	t.Parallel()
-	svc := NewTokenService("secret", -1*time.Second) // negative expiry = already expired
+	svc := NewTokenService("secret", -1*time.Second, 168*time.Hour, 1*time.Hour) // negative expiry = already expired
 	token, err := svc.GenerateAccessToken("u-1", "admin")
 	require.NoError(t, err)
 
@@ -53,8 +53,8 @@ func TestAccessToken_ExpiredToken(t *testing.T) {
 
 func TestAccessToken_WrongSecret(t *testing.T) {
 	t.Parallel()
-	svc1 := NewTokenService("secret-A", 15*time.Minute)
-	svc2 := NewTokenService("secret-B", 15*time.Minute)
+	svc1 := NewTokenService("secret-A", 15*time.Minute, 168*time.Hour, 1*time.Hour)
+	svc2 := NewTokenService("secret-B", 15*time.Minute, 168*time.Hour, 1*time.Hour)
 
 	token, err := svc1.GenerateAccessToken("u-1", "admin")
 	require.NoError(t, err)

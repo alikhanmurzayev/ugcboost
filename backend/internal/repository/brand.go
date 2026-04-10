@@ -13,6 +13,23 @@ import (
 )
 
 
+// brands table and column names.
+const (
+	tableBrands       = "brands"
+	colBrandID        = "id"
+	colBrandName      = "name"
+	colBrandLogoURL   = "logo_url"
+	colBrandCreatedAt = "created_at"
+	colBrandUpdatedAt = "updated_at"
+)
+
+// brand_managers table and column names.
+const (
+	tableBrandManagers   = "brand_managers"
+	colBMBrandID         = "brand_id"
+	colBMUserID          = "user_id"
+)
+
 // BrandRow maps to the brands table.
 type BrandRow struct {
 	ID        string    `db:"id"`
@@ -51,30 +68,30 @@ func NewBrandRepository(db dbutil.DB) *BrandRepository {
 
 // Create inserts a new brand and returns it.
 func (r *BrandRepository) Create(ctx context.Context, name string, logoURL *string) (BrandRow, error) {
-	q := dbutil.Psql.Insert("brands").
-		Columns("name", "logo_url").
+	q := dbutil.Psql.Insert(tableBrands).
+		Columns(colBrandName, colBrandLogoURL).
 		Values(name, logoURL).
-		Suffix("RETURNING id, name, logo_url, created_at, updated_at")
+		Suffix("RETURNING " + colBrandID + ", " + colBrandName + ", " + colBrandLogoURL + ", " + colBrandCreatedAt + ", " + colBrandUpdatedAt)
 	return dbutil.One[BrandRow](ctx, r.db, q)
 }
 
 // GetByID finds a brand by ID.
 func (r *BrandRepository) GetByID(ctx context.Context, id string) (BrandRow, error) {
-	q := dbutil.Psql.Select("id", "name", "logo_url", "created_at", "updated_at").
-		From("brands").
-		Where("id = ?", id)
+	q := dbutil.Psql.Select(colBrandID, colBrandName, colBrandLogoURL, colBrandCreatedAt, colBrandUpdatedAt).
+		From(tableBrands).
+		Where(colBrandID+" = ?", id)
 	return dbutil.One[BrandRow](ctx, r.db, q)
 }
 
 // List returns all brands with manager count.
 func (r *BrandRepository) List(ctx context.Context) ([]BrandWithManagerCount, error) {
 	q := dbutil.Psql.Select(
-		"b.id", "b.name", "b.logo_url",
+		"b."+colBrandID, "b."+colBrandName, "b."+colBrandLogoURL,
 		"COUNT(bm.id) AS manager_count",
-		"b.created_at", "b.updated_at",
+		"b."+colBrandCreatedAt, "b."+colBrandUpdatedAt,
 	).
-		From("brands b").
-		LeftJoin("brand_managers bm ON bm.brand_id = b.id").
+		From(tableBrands+" b").
+		LeftJoin(tableBrandManagers+" bm ON bm."+colBMBrandID+" = b."+colBrandID).
 		GroupBy("b.id").
 		OrderBy("b.created_at DESC")
 	return dbutil.Many[BrandWithManagerCount](ctx, r.db, q)
@@ -83,30 +100,30 @@ func (r *BrandRepository) List(ctx context.Context) ([]BrandWithManagerCount, er
 // ListByUser returns brands for a specific user (brand_manager).
 func (r *BrandRepository) ListByUser(ctx context.Context, userID string) ([]BrandWithManagerCount, error) {
 	q := dbutil.Psql.Select(
-		"b.id", "b.name", "b.logo_url",
-		"(SELECT COUNT(*) FROM brand_managers bm2 WHERE bm2.brand_id = b.id) AS manager_count",
-		"b.created_at", "b.updated_at",
+		"b."+colBrandID, "b."+colBrandName, "b."+colBrandLogoURL,
+		"(SELECT COUNT(*) FROM "+tableBrandManagers+" bm2 WHERE bm2."+colBMBrandID+" = b."+colBrandID+") AS manager_count",
+		"b."+colBrandCreatedAt, "b."+colBrandUpdatedAt,
 	).
-		From("brands b").
-		Join("brand_managers bm ON bm.brand_id = b.id AND bm.user_id = ?", userID).
+		From(tableBrands+" b").
+		Join(tableBrandManagers+" bm ON bm."+colBMBrandID+" = b."+colBrandID+" AND bm."+colBMUserID+" = ?", userID).
 		OrderBy("b.created_at DESC")
 	return dbutil.Many[BrandWithManagerCount](ctx, r.db, q)
 }
 
 // Update updates a brand's name and logo_url.
 func (r *BrandRepository) Update(ctx context.Context, id, name string, logoURL *string) (BrandRow, error) {
-	q := dbutil.Psql.Update("brands").
-		Set("name", name).
-		Set("logo_url", logoURL).
-		Set("updated_at", sq.Expr("now()")).
-		Where("id = ?", id).
-		Suffix("RETURNING id, name, logo_url, created_at, updated_at")
+	q := dbutil.Psql.Update(tableBrands).
+		Set(colBrandName, name).
+		Set(colBrandLogoURL, logoURL).
+		Set(colBrandUpdatedAt, sq.Expr("now()")).
+		Where(colBrandID+" = ?", id).
+		Suffix("RETURNING " + colBrandID + ", " + colBrandName + ", " + colBrandLogoURL + ", " + colBrandCreatedAt + ", " + colBrandUpdatedAt)
 	return dbutil.One[BrandRow](ctx, r.db, q)
 }
 
 // Delete removes a brand by ID.
 func (r *BrandRepository) Delete(ctx context.Context, id string) error {
-	q := dbutil.Psql.Delete("brands").Where("id = ?", id)
+	q := dbutil.Psql.Delete(tableBrands).Where(colBrandID+" = ?", id)
 	n, err := dbutil.Exec(ctx, r.db, q)
 	if err != nil {
 		return err
@@ -119,8 +136,8 @@ func (r *BrandRepository) Delete(ctx context.Context, id string) error {
 
 // AssignManager creates a brand_managers record.
 func (r *BrandRepository) AssignManager(ctx context.Context, brandID, userID string) error {
-	q := dbutil.Psql.Insert("brand_managers").
-		Columns("brand_id", "user_id").
+	q := dbutil.Psql.Insert(tableBrandManagers).
+		Columns(colBMBrandID, colBMUserID).
 		Values(brandID, userID)
 	_, err := dbutil.Exec(ctx, r.db, q)
 	return err
@@ -128,8 +145,8 @@ func (r *BrandRepository) AssignManager(ctx context.Context, brandID, userID str
 
 // RemoveManager deletes a brand_managers record.
 func (r *BrandRepository) RemoveManager(ctx context.Context, brandID, userID string) error {
-	q := dbutil.Psql.Delete("brand_managers").
-		Where("brand_id = ? AND user_id = ?", brandID, userID)
+	q := dbutil.Psql.Delete(tableBrandManagers).
+		Where(colBMBrandID+" = ? AND "+colBMUserID+" = ?", brandID, userID)
 	n, err := dbutil.Exec(ctx, r.db, q)
 	if err != nil {
 		return err
@@ -142,27 +159,27 @@ func (r *BrandRepository) RemoveManager(ctx context.Context, brandID, userID str
 
 // ListManagers returns all managers for a brand.
 func (r *BrandRepository) ListManagers(ctx context.Context, brandID string) ([]BrandManagerRow, error) {
-	q := dbutil.Psql.Select("bm.user_id", "u.email", "bm.created_at").
-		From("brand_managers bm").
-		Join("users u ON u.id = bm.user_id").
-		Where("bm.brand_id = ?", brandID).
+	q := dbutil.Psql.Select("bm."+colBMUserID, "u."+colUserEmail, "bm."+colBrandCreatedAt).
+		From(tableBrandManagers+" bm").
+		Join(tableUsers+" u ON u."+colUserID+" = bm."+colBMUserID).
+		Where("bm."+colBMBrandID+" = ?", brandID).
 		OrderBy("bm.created_at ASC")
 	return dbutil.Many[BrandManagerRow](ctx, r.db, q)
 }
 
 // GetBrandIDsForUser returns all brand IDs a user manages.
 func (r *BrandRepository) GetBrandIDsForUser(ctx context.Context, userID string) ([]string, error) {
-	q := dbutil.Psql.Select("brand_id").
-		From("brand_managers").
-		Where("user_id = ?", userID)
+	q := dbutil.Psql.Select(colBMBrandID).
+		From(tableBrandManagers).
+		Where(colBMUserID+" = ?", userID)
 	return dbutil.Vals[string](ctx, r.db, q)
 }
 
 // IsManager checks if a user manages a specific brand.
 func (r *BrandRepository) IsManager(ctx context.Context, userID, brandID string) (bool, error) {
 	q := dbutil.Psql.Select("1").
-		From("brand_managers").
-		Where("user_id = ? AND brand_id = ?", userID, brandID).
+		From(tableBrandManagers).
+		Where(colBMUserID+" = ? AND "+colBMBrandID+" = ?", userID, brandID).
 		Limit(1)
 	_, err := dbutil.Val[int](ctx, r.db, q)
 	if err != nil {

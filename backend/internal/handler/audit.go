@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/alikhanmurzayev/ugcboost/backend/internal/api"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/domain"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/middleware"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/repository"
@@ -29,7 +30,7 @@ func NewAuditHandler(audit AuditLogs) *AuditHandler {
 // ListAuditLogs handles GET /api/audit-logs
 func (h *AuditHandler) ListAuditLogs(w http.ResponseWriter, r *http.Request) {
 	role := middleware.RoleFromContext(r.Context())
-	if role != "admin" {
+	if role != string(api.Admin) {
 		respondError(w, r, domain.ErrForbidden)
 		return
 	}
@@ -56,13 +57,23 @@ func (h *AuditHandler) ListAuditLogs(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	page, _ := strconv.Atoi(q.Get("page"))
-	perPage, _ := strconv.Atoi(q.Get("per_page"))
-	if page < 1 {
-		page = 1
+	page := 1
+	if v := q.Get("page"); v != "" {
+		var err error
+		page, err = strconv.Atoi(v)
+		if err != nil || page < 1 {
+			respondError(w, r, domain.NewValidationError(domain.CodeValidation, "page must be a positive integer"))
+			return
+		}
 	}
-	if perPage < 1 || perPage > 100 {
-		perPage = 20
+	perPage := 20
+	if v := q.Get("per_page"); v != "" {
+		var err error
+		perPage, err = strconv.Atoi(v)
+		if err != nil || perPage < 1 || perPage > 100 {
+			respondError(w, r, domain.NewValidationError(domain.CodeValidation, "per_page must be between 1 and 100"))
+			return
+		}
 	}
 
 	logs, total, err := h.audit.List(r.Context(), f, page, perPage)

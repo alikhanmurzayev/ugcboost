@@ -15,14 +15,16 @@ type TokenService struct {
 	secret        []byte
 	accessExpiry  time.Duration
 	refreshExpiry time.Duration
+	resetExpiry   time.Duration
 }
 
 // NewTokenService creates a new token service.
-func NewTokenService(secret string, accessExpiry time.Duration) *TokenService {
+func NewTokenService(secret string, accessExpiry, refreshExpiry, resetExpiry time.Duration) *TokenService {
 	return &TokenService{
 		secret:        []byte(secret),
 		accessExpiry:  accessExpiry,
-		refreshExpiry: 7 * 24 * time.Hour, // 7 days
+		refreshExpiry: refreshExpiry,
+		resetExpiry:   resetExpiry,
 	}
 }
 
@@ -72,7 +74,7 @@ func (s *TokenService) GenerateRefreshToken() (raw string, hash string, expiresA
 
 // GenerateResetToken creates a random opaque token for password reset.
 func (s *TokenService) GenerateResetToken() (raw string, hash string, expiresAt time.Time, err error) {
-	return generateOpaqueToken(1 * time.Hour)
+	return generateOpaqueToken(s.resetExpiry)
 }
 
 // HashToken returns the SHA-256 hash of a raw token.

@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { login } from "@/api/auth";
+import { ROUTES } from "@/shared/constants/routes";
 import { useAuthStore } from "@/stores/auth";
 import { ApiError } from "@/api/client";
 import { getErrorMessage } from "@/shared/i18n/errors";
@@ -22,7 +23,7 @@ export default function LoginPage() {
     try {
       const res = await login(email, password);
       setAuth(res.data.user, res.data.accessToken);
-      navigate("/", { replace: true });
+      navigate(ROUTES.DASHBOARD, { replace: true });
     } catch (err) {
       if (err instanceof ApiError) {
         setError(

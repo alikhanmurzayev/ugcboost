@@ -58,7 +58,7 @@ func TestLoginHandler_Success(t *testing.T) {
 			User:             repository.UserRow{ID: "u-1", Email: "test@example.com", Role: "admin"},
 		}, nil)
 
-	h := NewAuthHandler(auth, false)
+	h := NewAuthHandler(auth, nil, false)
 	w := doRequest(h.Login, "POST", `{"email":"test@example.com","password":"password123"}`)
 
 	require.Equal(t, http.StatusOK, w.Code)
@@ -77,7 +77,7 @@ func TestLoginHandler_Success(t *testing.T) {
 func TestLoginHandler_InvalidJSON(t *testing.T) {
 	t.Parallel()
 	auth := mocks.NewMockAuth(t)
-	h := NewAuthHandler(auth, false)
+	h := NewAuthHandler(auth, nil, false)
 	w := doRequest(h.Login, "POST", `not json`)
 	assert.Equal(t, http.StatusUnprocessableEntity, w.Code)
 }
@@ -85,7 +85,7 @@ func TestLoginHandler_InvalidJSON(t *testing.T) {
 func TestLoginHandler_MissingFields(t *testing.T) {
 	t.Parallel()
 	auth := mocks.NewMockAuth(t)
-	h := NewAuthHandler(auth, false)
+	h := NewAuthHandler(auth, nil, false)
 	w := doRequest(h.Login, "POST", `{"email":"","password":""}`)
 	assert.Equal(t, http.StatusUnprocessableEntity, w.Code)
 }
@@ -96,7 +96,7 @@ func TestLoginHandler_ShortPassword(t *testing.T) {
 	auth.EXPECT().Login(mock.Anything, "a@b.com", "12345").
 		Return(nil, domain.ErrUnauthorized)
 
-	h := NewAuthHandler(auth, false)
+	h := NewAuthHandler(auth, nil, false)
 	w := doRequest(h.Login, "POST", `{"email":"a@b.com","password":"12345"}`)
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
 }
@@ -107,7 +107,7 @@ func TestLoginHandler_WrongCredentials(t *testing.T) {
 	auth.EXPECT().Login(mock.Anything, "a@b.com", "wrongpass").
 		Return(nil, domain.ErrUnauthorized)
 
-	h := NewAuthHandler(auth, false)
+	h := NewAuthHandler(auth, nil, false)
 	w := doRequest(h.Login, "POST", `{"email":"a@b.com","password":"wrongpass"}`)
 
 	assert.Equal(t, http.StatusUnauthorized, w.Code)
@@ -123,7 +123,7 @@ func TestLoginHandler_EmailNormalization(t *testing.T) {
 	auth.EXPECT().Login(mock.Anything, "admin@example.com", "password123").
 		Return(nil, domain.ErrUnauthorized)
 
-	h := NewAuthHandler(auth, false)
+	h := NewAuthHandler(auth, nil, false)
 	doRequest(h.Login, "POST", `{"email":"  Admin@Example.COM  ","password":"password123"}`)
 }
 
@@ -132,7 +132,7 @@ func TestLoginHandler_EmailNormalization(t *testing.T) {
 func TestRefreshHandler_NoCookie(t *testing.T) {
 	t.Parallel()
 	auth := mocks.NewMockAuth(t)
-	h := NewAuthHandler(auth, false)
+	h := NewAuthHandler(auth, nil, false)
 
 	r := httptest.NewRequest("POST", "/", nil)
 	w := httptest.NewRecorder()
@@ -148,7 +148,7 @@ func TestPasswordResetRequest_AlwaysReturns200(t *testing.T) {
 	auth := mocks.NewMockAuth(t)
 	auth.EXPECT().RequestPasswordReset(mock.Anything, "anyone@test.com").Return(nil)
 
-	h := NewAuthHandler(auth, false)
+	h := NewAuthHandler(auth, nil, false)
 	w := doRequest(h.RequestPasswordReset, "POST", `{"email":"anyone@test.com"}`)
 
 	assert.Equal(t, http.StatusOK, w.Code)
@@ -157,7 +157,7 @@ func TestPasswordResetRequest_AlwaysReturns200(t *testing.T) {
 func TestPasswordResetRequest_EmptyEmail(t *testing.T) {
 	t.Parallel()
 	auth := mocks.NewMockAuth(t)
-	h := NewAuthHandler(auth, false)
+	h := NewAuthHandler(auth, nil, false)
 	w := doRequest(h.RequestPasswordReset, "POST", `{"email":""}`)
 	assert.Equal(t, http.StatusUnprocessableEntity, w.Code)
 }
@@ -169,7 +169,7 @@ func TestResetPassword_Success(t *testing.T) {
 	auth := mocks.NewMockAuth(t)
 	auth.EXPECT().ResetPassword(mock.Anything, "abc", "newpass123").Return("user-1", nil)
 
-	h := NewAuthHandler(auth, false)
+	h := NewAuthHandler(auth, nil, false)
 	w := doRequest(h.ResetPassword, "POST", `{"token":"abc","newPassword":"newpass123"}`)
 
 	assert.Equal(t, http.StatusOK, w.Code)
@@ -178,7 +178,7 @@ func TestResetPassword_Success(t *testing.T) {
 func TestResetPassword_MissingToken(t *testing.T) {
 	t.Parallel()
 	auth := mocks.NewMockAuth(t)
-	h := NewAuthHandler(auth, false)
+	h := NewAuthHandler(auth, nil, false)
 	w := doRequest(h.ResetPassword, "POST", `{"token":"","newPassword":"newpass123"}`)
 	assert.Equal(t, http.StatusUnprocessableEntity, w.Code)
 }
@@ -186,7 +186,7 @@ func TestResetPassword_MissingToken(t *testing.T) {
 func TestResetPassword_ShortPassword(t *testing.T) {
 	t.Parallel()
 	auth := mocks.NewMockAuth(t)
-	h := NewAuthHandler(auth, false)
+	h := NewAuthHandler(auth, nil, false)
 	w := doRequest(h.ResetPassword, "POST", `{"token":"abc","newPassword":"12345"}`)
 	assert.Equal(t, http.StatusUnprocessableEntity, w.Code)
 }

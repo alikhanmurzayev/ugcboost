@@ -2,12 +2,12 @@ package dbutil
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	sq "github.com/Masterminds/squirrel"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // DB is the common interface implemented by both pgxpool.Pool and pgx.Tx.
@@ -105,17 +105,25 @@ func Exec(ctx context.Context, db DB, query sq.Sqlizer) (int64, error) {
 	return tag.RowsAffected(), nil
 }
 
+// TxStarter abstracts the ability to begin a transaction.
+type TxStarter interface {
+	Begin(ctx context.Context) (pgx.Tx, error)
+}
+
 // WithTx runs fn inside a database transaction. If fn returns an error the
 // transaction is rolled back; otherwise it is committed.
-func WithTx(ctx context.Context, pool *pgxpool.Pool, fn func(tx DB) error) error {
-	tx, err := pool.Begin(ctx)
+// Both fn error and rollback error are joined if both occur.
+func WithTx(ctx context.Context, starter TxStarter, fn func(tx DB) error) error {
+	tx, err := starter.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("dbutil.WithTx begin: %w", err)
 	}
-	defer tx.Rollback(ctx) //nolint:errcheck
 
-	if err := fn(tx); err != nil {
-		return err
+	if fnErr := fn(tx); fnErr != nil {
+		if rbErr := tx.Rollback(ctx); rbErr != nil {
+			return errors.Join(fnErr, fmt.Errorf("rollback: %w", rbErr))
+		}
+		return fnErr
 	}
 	return tx.Commit(ctx)
 }

@@ -5,6 +5,16 @@ import (
 	"fmt"
 )
 
+// Error response codes — machine-readable codes in API responses.
+const (
+	CodeValidation   = "VALIDATION_ERROR"
+	CodeNotFound     = "NOT_FOUND"
+	CodeForbidden    = "FORBIDDEN"
+	CodeUnauthorized = "UNAUTHORIZED"
+	CodeConflict     = "CONFLICT"
+	CodeInternal     = "INTERNAL_ERROR"
+)
+
 // Sentinel domain errors — handlers map these to HTTP status codes.
 var (
 	ErrNotFound      = errors.New("not found")

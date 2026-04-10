@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Navigate, Outlet } from "react-router-dom";
 import { useAuthStore } from "@/stores/auth";
 import { restoreSession } from "@/api/auth";
+import { ROUTES } from "@/shared/constants/routes";
 
 export default function AuthGuard() {
   const user = useAuthStore((s) => s.user);
@@ -38,7 +39,7 @@ export default function AuthGuard() {
   }
 
   if (!user) {
-    return <Navigate to="/login" replace />;
+    return <Navigate to={"/" + ROUTES.LOGIN} replace />;
   }
 
   return <Outlet />;
