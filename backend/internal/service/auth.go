@@ -8,7 +8,6 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 
-	"github.com/alikhanmurzayev/ugcboost/backend/internal/api"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/domain"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/repository"
 )
@@ -235,7 +234,7 @@ func (s *AuthService) SeedAdmin(ctx context.Context, email, password string) err
 		return fmt.Errorf("hash admin password: %w", err)
 	}
 
-	_, err = s.users.Create(ctx, email, string(hash), string(api.Admin))
+	_, err = s.users.Create(ctx, email, string(hash), string(domain.RoleAdmin))
 	if err != nil {
 		return fmt.Errorf("create admin: %w", err)
 	}

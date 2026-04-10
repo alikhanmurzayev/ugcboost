@@ -3,14 +3,13 @@ package authz
 import (
 	"context"
 
-	"github.com/alikhanmurzayev/ugcboost/backend/internal/api"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/dbutil"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/domain"
 )
 
 // CanApproveCreator checks that the user is an admin.
 func CanApproveCreator(_ context.Context, _ dbutil.DB, role string) error {
-	if role != string(api.Admin) {
+	if role != string(domain.RoleAdmin) {
 		return domain.ErrForbidden
 	}
 	return nil
@@ -25,7 +24,7 @@ func CanManageCampaign(_ context.Context, _ dbutil.DB, _ string, _ string) error
 
 // CanManageBrand checks that the user is an admin or a manager of the specified brand.
 func CanManageBrand(ctx context.Context, db dbutil.DB, userID string, role string, brandID string) error {
-	if role == string(api.Admin) {
+	if role == string(domain.RoleAdmin) {
 		return nil
 	}
 

@@ -10,7 +10,6 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 
-	"github.com/alikhanmurzayev/ugcboost/backend/internal/api"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/domain"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/repository"
 )
@@ -63,7 +62,7 @@ func (s *BrandService) GetBrand(ctx context.Context, id string) (repository.Bran
 
 // ListBrands returns all brands (admin) or user's brands (brand_manager).
 func (s *BrandService) ListBrands(ctx context.Context, userID, role string) ([]repository.BrandWithManagerCount, error) {
-	if role == string(api.Admin) {
+	if role == string(domain.RoleAdmin) {
 		return s.brands.List(ctx)
 	}
 	return s.brands.ListByUser(ctx, userID)
@@ -123,7 +122,7 @@ func (s *BrandService) AssignManager(ctx context.Context, brandID, email string)
 		if err != nil {
 			return repository.UserRow{}, "", fmt.Errorf("hash password: %w", err)
 		}
-		user, err = s.users.Create(ctx, email, string(hash), string(api.BrandManager))
+		user, err = s.users.Create(ctx, email, string(hash), string(domain.RoleBrandManager))
 		if err != nil {
 			return repository.UserRow{}, "", fmt.Errorf("create user: %w", err)
 		}
@@ -144,7 +143,7 @@ func (s *BrandService) RemoveManager(ctx context.Context, brandID, userID string
 
 // CanViewBrand checks if a user can view a specific brand.
 func (s *BrandService) CanViewBrand(ctx context.Context, userID, role, brandID string) error {
-	if role == string(api.Admin) {
+	if role == string(domain.RoleAdmin) {
 		return nil
 	}
 	ok, err := s.brands.IsManager(ctx, userID, brandID)

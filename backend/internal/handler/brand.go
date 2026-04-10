@@ -7,7 +7,6 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/alikhanmurzayev/ugcboost/backend/internal/api"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/domain"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/middleware"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/repository"
@@ -41,7 +40,7 @@ func NewBrandHandler(brands Brands, auditor Auditor) *BrandHandler {
 // CreateBrand handles POST /api/brands
 func (h *BrandHandler) CreateBrand(w http.ResponseWriter, r *http.Request) {
 	role := middleware.RoleFromContext(r.Context())
-	if role != string(api.Admin) {
+	if role != string(domain.RoleAdmin) {
 		respondError(w, r, domain.ErrForbidden)
 		return
 	}
@@ -139,7 +138,7 @@ func (h *BrandHandler) GetBrand(w http.ResponseWriter, r *http.Request) {
 // UpdateBrand handles PUT /api/brands/{brandID}
 func (h *BrandHandler) UpdateBrand(w http.ResponseWriter, r *http.Request) {
 	role := middleware.RoleFromContext(r.Context())
-	if role != string(api.Admin) {
+	if role != string(domain.RoleAdmin) {
 		respondError(w, r, domain.ErrForbidden)
 		return
 	}
@@ -173,7 +172,7 @@ func (h *BrandHandler) UpdateBrand(w http.ResponseWriter, r *http.Request) {
 // DeleteBrand handles DELETE /api/brands/{brandID}
 func (h *BrandHandler) DeleteBrand(w http.ResponseWriter, r *http.Request) {
 	role := middleware.RoleFromContext(r.Context())
-	if role != string(api.Admin) {
+	if role != string(domain.RoleAdmin) {
 		respondError(w, r, domain.ErrForbidden)
 		return
 	}
@@ -199,7 +198,7 @@ func (h *BrandHandler) DeleteBrand(w http.ResponseWriter, r *http.Request) {
 // AssignManager handles POST /api/brands/{brandID}/managers
 func (h *BrandHandler) AssignManager(w http.ResponseWriter, r *http.Request) {
 	role := middleware.RoleFromContext(r.Context())
-	if role != string(api.Admin) {
+	if role != string(domain.RoleAdmin) {
 		respondError(w, r, domain.ErrForbidden)
 		return
 	}
@@ -241,7 +240,7 @@ func (h *BrandHandler) AssignManager(w http.ResponseWriter, r *http.Request) {
 // RemoveManager handles DELETE /api/brands/{brandID}/managers/{userID}
 func (h *BrandHandler) RemoveManager(w http.ResponseWriter, r *http.Request) {
 	role := middleware.RoleFromContext(r.Context())
-	if role != string(api.Admin) {
+	if role != string(domain.RoleAdmin) {
 		respondError(w, r, domain.ErrForbidden)
 		return
 	}
