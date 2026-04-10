@@ -1,7 +1,7 @@
 import { test, expect } from "@playwright/test";
 
 // API URL for test setup (seed users). Falls back to docker-compose.test.yml backend.
-const API_URL = process.env.API_URL || "http://localhost:8082";
+const API_URL = process.env.API_URL || "http://localhost:8080";
 const TEST_EMAIL = `test-web-${Date.now()}@e2e.test`;
 const TEST_PASSWORD = "testpass123";
 
@@ -33,8 +33,8 @@ test.describe("Auth flow", () => {
 
     // Sidebar navigation present (admin role)
     await expect(page.getByRole("link", { name: "Дашборд" })).toBeVisible();
-    await expect(page.getByRole("link", { name: "Кампании" })).toBeVisible();
-    await expect(page.getByRole("link", { name: "Модерация" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Бренды" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Журнал действий" })).toBeVisible();
   });
 
   test("2. Wrong password — error shown, stay on login", async ({ page }) => {
