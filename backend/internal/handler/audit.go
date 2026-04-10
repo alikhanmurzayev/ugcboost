@@ -6,7 +6,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/alikhanmurzayev/ugcboost/backend/internal/api"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/domain"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/middleware"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/repository"
@@ -30,7 +29,7 @@ func NewAuditHandler(audit AuditLogs) *AuditHandler {
 // ListAuditLogs handles GET /api/audit-logs
 func (h *AuditHandler) ListAuditLogs(w http.ResponseWriter, r *http.Request) {
 	role := middleware.RoleFromContext(r.Context())
-	if role != string(api.Admin) {
+	if role != string(domain.RoleAdmin) {
 		respondError(w, r, domain.ErrForbidden)
 		return
 	}
