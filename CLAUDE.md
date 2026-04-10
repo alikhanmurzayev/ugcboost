@@ -134,6 +134,30 @@ Three levels:
 - No manual testing via Playwright MCP. All tests via `make` targets only.
 - E2E tests target Docker containers, not `go run` on host.
 
+## Coding Standards
+
+**MANDATORY: Before writing ANY code, read ALL files in `docs/standards/`. Every rule applies to all new code and refactoring.**
+
+Полный список правил — в `docs/standards/` (62 правила, 15 категорий). Ключевые:
+
+**Backend:**
+1. **Строковые литералы запрещены для enum-значений** — роли, коды ошибок, HTTP-заголовки, названия таблиц/колонок → только константы (CS-01—CS-05)
+2. **Кодогенерация обязательна** — типы запросов/ответов, роутинг, query/path params → из generated code, не вручную (CS-06—CS-10)
+3. **Библиотеки > велосипеды** — для инфраструктурного кода (config, lifecycle, etc.) использовать проверенные библиотеки (CS-12—CS-14)
+4. **Слои не нарушаются** — handler → service → repository. Авторизация — отдельный сервис. Никакого прямого SQL вне repository (CS-15—CS-18)
+5. **Ошибки не игнорируются** — каждая ошибка возвращается или логируется. Невалидный ввод = 422, не тихий fallback (CS-19—CS-23)
+6. **Зависимости через конструктор** — никаких Set*, все зависимости в New*() (CS-24)
+7. **Тесты репозиториев — строковые литералы в SQL** — двойная проверка, что константы в коде корректны (CS-33)
+
+**Frontend:**
+8. **API-типы только из generated/schema.ts** — ручные interface/type для API запрещены (CS-41—CS-42)
+9. **API paths, query keys, route paths — константы** — строковые литералы запрещены (CS-46—CS-47, CS-49—CS-50)
+10. **Каждая мутация — onError обязателен** — молчаливые мутации запрещены (CS-48)
+11. **Loading/Error/Empty states обязательны** — голый "Загрузка..." запрещён (CS-53)
+12. **strict: true в tsconfig** — non-null assertions запрещены (CS-43—CS-44)
+13. **i18n для всех пользовательских строк** — хардкод русского текста в JSX запрещён (CS-54)
+14. **Role-based route guards** — фронтенд проверяет доступ по роли, не только наличие auth (CS-55)
+
 ### Безопасность
 
 - Секреты — через Dokploy env vars, не в коде и не в git
