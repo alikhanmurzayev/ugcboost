@@ -1,0 +1,5 @@
+FROM alpine:3.20
+RUN wget -O /usr/local/bin/goose https://github.com/pressly/goose/releases/download/v3.27.0/goose_linux_x86_64 \
+    && chmod +x /usr/local/bin/goose
+COPY migrations/ /migrations/
+ENTRYPOINT ["sh", "-c", "goose -dir /migrations postgres \"$DATABASE_URL\" up"]

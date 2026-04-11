@@ -13,7 +13,7 @@
    ```
    Then run `/bmad-init` inside Claude session. Use these settings:
    - **communication_language**: Russian
-   - **document_output_language**: English
+   - **document_output_language**: Russian
    - **output_folder**: `_bmad-output`
    - **project_name**: ugcboost
 
