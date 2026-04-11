@@ -82,7 +82,7 @@ func run() error {
 	}
 
 	authSvc := service.NewAuthService(userRepo, tokenSvc, resetTokenStore, cfg.BcryptCost)
-	brandSvc := service.NewBrandService(brandRepo, userRepo)
+	brandSvc := service.NewBrandService(brandRepo, userRepo, cfg.BcryptCost)
 	auditSvc := service.NewAuditService(auditRepo)
 
 	// Seed admin

@@ -37,13 +37,14 @@ type BrandUserRepo interface {
 
 // BrandService handles brand business logic.
 type BrandService struct {
-	brands BrandRepo
-	users  BrandUserRepo
+	brands     BrandRepo
+	users      BrandUserRepo
+	bcryptCost int
 }
 
 // NewBrandService creates a new BrandService.
-func NewBrandService(brands BrandRepo, users BrandUserRepo) *BrandService {
-	return &BrandService{brands: brands, users: users}
+func NewBrandService(brands BrandRepo, users BrandUserRepo, bcryptCost int) *BrandService {
+	return &BrandService{brands: brands, users: users, bcryptCost: bcryptCost}
 }
 
 // CreateBrand creates a new brand.
@@ -118,7 +119,7 @@ func (s *BrandService) AssignManager(ctx context.Context, brandID, email string)
 		if err != nil {
 			return repository.UserRow{}, "", fmt.Errorf("generate password: %w", err)
 		}
-		hash, err := bcrypt.GenerateFromPassword([]byte(tempPassword), bcryptCost)
+		hash, err := bcrypt.GenerateFromPassword([]byte(tempPassword), s.bcryptCost)
 		if err != nil {
 			return repository.UserRow{}, "", fmt.Errorf("hash password: %w", err)
 		}

@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"errors"
-	"os"
 	"testing"
 	"time"
 
@@ -17,10 +16,8 @@ import (
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/service/mocks"
 )
 
-func TestMain(m *testing.M) {
-	bcryptCost = bcrypt.MinCost
-	os.Exit(m.Run())
-}
+// testBcryptCost is used in all service tests to keep hashing fast.
+const testBcryptCost = bcrypt.MinCost
 
 var errNotFound = errors.New("not found")
 
@@ -54,7 +51,7 @@ func TestLogin_Success(t *testing.T) {
 	tokens.EXPECT().GenerateAccessToken(user.ID, user.Role).Return("mock-access-token", nil)
 	tokens.EXPECT().GenerateRefreshToken().Return("raw-refresh", "hash-refresh", futureTime, nil)
 
-	svc := NewAuthService(repo, tokens, nil, 0)
+	svc := NewAuthService(repo, tokens, nil, testBcryptCost)
 	result, err := svc.Login(context.Background(), user.Email, "password123")
 
 	require.NoError(t, err)
@@ -73,7 +70,7 @@ func TestLogin_WrongPassword(t *testing.T) {
 
 	tokens := mocks.NewMockTokenGenerator(t)
 
-	svc := NewAuthService(repo, tokens, nil, 0)
+	svc := NewAuthService(repo, tokens, nil, testBcryptCost)
 	_, err := svc.Login(context.Background(), user.Email, "wrongpass")
 
 	assert.ErrorIs(t, err, domain.ErrUnauthorized)
@@ -87,7 +84,7 @@ func TestLogin_UserNotFound(t *testing.T) {
 
 	tokens := mocks.NewMockTokenGenerator(t)
 
-	svc := NewAuthService(repo, tokens, nil, 0)
+	svc := NewAuthService(repo, tokens, nil, testBcryptCost)
 	_, err := svc.Login(context.Background(), "nobody@example.com", "password")
 
 	assert.ErrorIs(t, err, domain.ErrUnauthorized)
@@ -110,7 +107,7 @@ func TestRefresh_Success(t *testing.T) {
 	tokens.EXPECT().GenerateAccessToken(user.ID, user.Role).Return("new-access", nil)
 	tokens.EXPECT().GenerateRefreshToken().Return("new-raw", "new-hash", futureTime, nil)
 
-	svc := NewAuthService(repo, tokens, nil, 0)
+	svc := NewAuthService(repo, tokens, nil, testBcryptCost)
 	result, err := svc.Refresh(context.Background(), "some-raw-token")
 
 	require.NoError(t, err)
@@ -128,7 +125,7 @@ func TestRefresh_InvalidToken(t *testing.T) {
 
 	tokens := mocks.NewMockTokenGenerator(t)
 
-	svc := NewAuthService(repo, tokens, nil, 0)
+	svc := NewAuthService(repo, tokens, nil, testBcryptCost)
 	_, err := svc.Refresh(context.Background(), "invalid-token")
 
 	assert.ErrorIs(t, err, domain.ErrUnauthorized)
@@ -143,7 +140,7 @@ func TestLogout_Success(t *testing.T) {
 
 	tokens := mocks.NewMockTokenGenerator(t)
 
-	svc := NewAuthService(repo, tokens, nil, 0)
+	svc := NewAuthService(repo, tokens, nil, testBcryptCost)
 	err := svc.Logout(context.Background(), "user-1")
 
 	assert.NoError(t, err)
@@ -163,7 +160,7 @@ func TestResetPassword_Success(t *testing.T) {
 
 	tokens := mocks.NewMockTokenGenerator(t)
 
-	svc := NewAuthService(repo, tokens, nil, 0)
+	svc := NewAuthService(repo, tokens, nil, testBcryptCost)
 	userID, err := svc.ResetPassword(context.Background(), "raw-reset-token", "newpass123")
 
 	assert.NoError(t, err)
@@ -180,7 +177,7 @@ func TestResetPassword_InvalidToken(t *testing.T) {
 
 	tokens := mocks.NewMockTokenGenerator(t)
 
-	svc := NewAuthService(repo, tokens, nil, 0)
+	svc := NewAuthService(repo, tokens, nil, testBcryptCost)
 	userID, err := svc.ResetPassword(context.Background(), "bad-token", "newpass123")
 
 	assert.ErrorIs(t, err, domain.ErrUnauthorized)
@@ -198,7 +195,7 @@ func TestSeedAdmin_CreatesWhenMissing(t *testing.T) {
 
 	tokens := mocks.NewMockTokenGenerator(t)
 
-	svc := NewAuthService(repo, tokens, nil, 0)
+	svc := NewAuthService(repo, tokens, nil, testBcryptCost)
 	err := svc.SeedAdmin(context.Background(), "admin@test.com", "secret")
 
 	assert.NoError(t, err)
@@ -211,7 +208,7 @@ func TestSeedAdmin_SkipsWhenExists(t *testing.T) {
 
 	tokens := mocks.NewMockTokenGenerator(t)
 
-	svc := NewAuthService(repo, tokens, nil, 0)
+	svc := NewAuthService(repo, tokens, nil, testBcryptCost)
 	err := svc.SeedAdmin(context.Background(), "admin@test.com", "secret")
 
 	assert.NoError(t, err)
@@ -222,7 +219,7 @@ func TestSeedAdmin_SkipsWhenEmpty(t *testing.T) {
 	repo := mocks.NewMockUserRepo(t)
 	tokens := mocks.NewMockTokenGenerator(t)
 
-	svc := NewAuthService(repo, tokens, nil, 0)
+	svc := NewAuthService(repo, tokens, nil, testBcryptCost)
 	err := svc.SeedAdmin(context.Background(), "", "")
 
 	assert.NoError(t, err)

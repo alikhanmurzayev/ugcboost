@@ -25,7 +25,7 @@ func TestCreateBrand_Success(t *testing.T) {
 	brands.EXPECT().Create(mock.Anything, "My Brand", (*string)(nil)).
 		Return(repository.BrandRow{ID: "b-1", Name: "My Brand"}, nil)
 
-	svc := NewBrandService(brands, nil)
+	svc := NewBrandService(brands, nil, testBcryptCost)
 	b, err := svc.CreateBrand(context.Background(), "My Brand", nil)
 
 	require.NoError(t, err)
@@ -35,7 +35,7 @@ func TestCreateBrand_Success(t *testing.T) {
 
 func TestCreateBrand_EmptyName(t *testing.T) {
 	t.Parallel()
-	svc := NewBrandService(nil, nil)
+	svc := NewBrandService(nil, nil, testBcryptCost)
 	_, err := svc.CreateBrand(context.Background(), "  ", nil)
 
 	var ve *domain.ValidationError
@@ -48,7 +48,7 @@ func TestCreateBrand_TrimsWhitespace(t *testing.T) {
 	brands.EXPECT().Create(mock.Anything, "Trimmed", (*string)(nil)).
 		Return(repository.BrandRow{ID: "b-1", Name: "Trimmed"}, nil)
 
-	svc := NewBrandService(brands, nil)
+	svc := NewBrandService(brands, nil, testBcryptCost)
 	_, err := svc.CreateBrand(context.Background(), "  Trimmed  ", nil)
 
 	require.NoError(t, err)
@@ -62,7 +62,7 @@ func TestListBrands_Admin(t *testing.T) {
 	brands.EXPECT().List(mock.Anything).
 		Return([]repository.BrandWithManagerCount{{ID: "b-1"}}, nil)
 
-	svc := NewBrandService(brands, nil)
+	svc := NewBrandService(brands, nil, testBcryptCost)
 	list, err := svc.ListBrands(context.Background(), "u-1", "admin")
 
 	require.NoError(t, err)
@@ -75,7 +75,7 @@ func TestListBrands_Manager(t *testing.T) {
 	brands.EXPECT().ListByUser(mock.Anything, "u-1").
 		Return([]repository.BrandWithManagerCount{{ID: "b-1"}}, nil)
 
-	svc := NewBrandService(brands, nil)
+	svc := NewBrandService(brands, nil, testBcryptCost)
 	list, err := svc.ListBrands(context.Background(), "u-1", "brand_manager")
 
 	require.NoError(t, err)
@@ -90,7 +90,7 @@ func TestUpdateBrand_Success(t *testing.T) {
 	brands.EXPECT().Update(mock.Anything, "b-1", "New Name", (*string)(nil)).
 		Return(repository.BrandRow{ID: "b-1", Name: "New Name"}, nil)
 
-	svc := NewBrandService(brands, nil)
+	svc := NewBrandService(brands, nil, testBcryptCost)
 	b, err := svc.UpdateBrand(context.Background(), "b-1", "New Name", nil)
 
 	require.NoError(t, err)
@@ -99,7 +99,7 @@ func TestUpdateBrand_Success(t *testing.T) {
 
 func TestUpdateBrand_EmptyName(t *testing.T) {
 	t.Parallel()
-	svc := NewBrandService(nil, nil)
+	svc := NewBrandService(nil, nil, testBcryptCost)
 	_, err := svc.UpdateBrand(context.Background(), "b-1", "", nil)
 
 	var ve *domain.ValidationError
@@ -122,7 +122,7 @@ func TestAssignManager_NewUser(t *testing.T) {
 	brands.EXPECT().AssignManager(mock.Anything, "b-1", "u-new").
 		Return(nil)
 
-	svc := NewBrandService(brands, users)
+	svc := NewBrandService(brands, users, testBcryptCost)
 	user, tempPass, err := svc.AssignManager(context.Background(), "b-1", "new@example.com")
 
 	require.NoError(t, err)
@@ -144,7 +144,7 @@ func TestAssignManager_ExistingUser(t *testing.T) {
 	brands.EXPECT().AssignManager(mock.Anything, "b-1", "u-exist").
 		Return(nil)
 
-	svc := NewBrandService(brands, users)
+	svc := NewBrandService(brands, users, testBcryptCost)
 	user, tempPass, err := svc.AssignManager(context.Background(), "b-1", "existing@example.com")
 
 	require.NoError(t, err)
@@ -154,7 +154,7 @@ func TestAssignManager_ExistingUser(t *testing.T) {
 
 func TestAssignManager_EmptyEmail(t *testing.T) {
 	t.Parallel()
-	svc := NewBrandService(nil, nil)
+	svc := NewBrandService(nil, nil, testBcryptCost)
 	_, _, err := svc.AssignManager(context.Background(), "b-1", "")
 
 	var ve *domain.ValidationError
@@ -175,7 +175,7 @@ func TestAssignManager_NormalizesEmail(t *testing.T) {
 	brands.EXPECT().AssignManager(mock.Anything, "b-1", "u-1").
 		Return(nil)
 
-	svc := NewBrandService(brands, users)
+	svc := NewBrandService(brands, users, testBcryptCost)
 	_, _, err := svc.AssignManager(context.Background(), "b-1", "  Upper@Example.com  ")
 	require.NoError(t, err)
 }
@@ -184,7 +184,7 @@ func TestAssignManager_NormalizesEmail(t *testing.T) {
 
 func TestCanViewBrand_Admin(t *testing.T) {
 	t.Parallel()
-	svc := NewBrandService(nil, nil)
+	svc := NewBrandService(nil, nil, testBcryptCost)
 	err := svc.CanViewBrand(context.Background(), "u-1", "admin", "b-1")
 	assert.NoError(t, err)
 }
@@ -194,7 +194,7 @@ func TestCanViewBrand_Manager_IsManager(t *testing.T) {
 	brands := mocks.NewMockBrandRepo(t)
 	brands.EXPECT().IsManager(mock.Anything, "u-1", "b-1").Return(true, nil)
 
-	svc := NewBrandService(brands, nil)
+	svc := NewBrandService(brands, nil, testBcryptCost)
 	err := svc.CanViewBrand(context.Background(), "u-1", "brand_manager", "b-1")
 	assert.NoError(t, err)
 }
@@ -204,7 +204,7 @@ func TestCanViewBrand_Manager_NotManager(t *testing.T) {
 	brands := mocks.NewMockBrandRepo(t)
 	brands.EXPECT().IsManager(mock.Anything, "u-1", "b-1").Return(false, nil)
 
-	svc := NewBrandService(brands, nil)
+	svc := NewBrandService(brands, nil, testBcryptCost)
 	err := svc.CanViewBrand(context.Background(), "u-1", "brand_manager", "b-1")
 	assert.ErrorIs(t, err, domain.ErrForbidden)
 }

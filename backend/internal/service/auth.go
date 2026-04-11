@@ -12,9 +12,6 @@ import (
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/repository"
 )
 
-// bcryptCost is set via NewAuthService. Package-level var so BrandService can reuse it.
-var bcryptCost = 12
-
 // UserRepo is the interface AuthService needs from the user repository.
 type UserRepo interface {
 	GetByEmail(ctx context.Context, email string) (repository.UserRow, error)
@@ -38,17 +35,15 @@ type TokenGenerator interface {
 
 // AuthService handles authentication business logic.
 type AuthService struct {
-	users          UserRepo
-	tokens         TokenGenerator
-	resetNotifier  ResetTokenNotifier
+	users         UserRepo
+	tokens        TokenGenerator
+	resetNotifier ResetTokenNotifier
+	bcryptCost    int
 }
 
 // NewAuthService creates a new AuthService. resetNotifier may be nil.
-func NewAuthService(users UserRepo, tokens TokenGenerator, resetNotifier ResetTokenNotifier, cost int) *AuthService {
-	if cost > 0 {
-		bcryptCost = cost
-	}
-	return &AuthService{users: users, tokens: tokens, resetNotifier: resetNotifier}
+func NewAuthService(users UserRepo, tokens TokenGenerator, resetNotifier ResetTokenNotifier, bcryptCost int) *AuthService {
+	return &AuthService{users: users, tokens: tokens, resetNotifier: resetNotifier, bcryptCost: bcryptCost}
 }
 
 // LoginResult contains the result of a successful login.
@@ -182,7 +177,7 @@ func (s *AuthService) ResetPassword(ctx context.Context, rawToken, newPassword s
 		return "", domain.ErrUnauthorized
 	}
 
-	passwordHash, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcryptCost)
+	passwordHash, err := bcrypt.GenerateFromPassword([]byte(newPassword), s.bcryptCost)
 	if err != nil {
 		return "", fmt.Errorf("hash password: %w", err)
 	}
@@ -206,7 +201,7 @@ func (s *AuthService) GetUser(ctx context.Context, userID string) (repository.Us
 
 // SeedUser creates a user with the given role. Used by test endpoints.
 func (s *AuthService) SeedUser(ctx context.Context, email, password, role string) (repository.UserRow, error) {
-	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcryptCost)
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), s.bcryptCost)
 	if err != nil {
 		return repository.UserRow{}, fmt.Errorf("hash password: %w", err)
 	}
@@ -229,7 +224,7 @@ func (s *AuthService) SeedAdmin(ctx context.Context, email, password string) err
 		return nil
 	}
 
-	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcryptCost)
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), s.bcryptCost)
 	if err != nil {
 		return fmt.Errorf("hash admin password: %w", err)
 	}
