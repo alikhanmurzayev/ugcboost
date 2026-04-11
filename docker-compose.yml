@@ -22,6 +22,7 @@ services:
     ports:
       - "8080:8080"
     environment:
+      ENVIRONMENT: ${ENVIRONMENT:-local}
       DATABASE_URL: postgres://${POSTGRES_USER:-ugcboost}:${POSTGRES_PASSWORD:-ugcboost_dev}@postgres:5432/${POSTGRES_DB:-ugcboost}?sslmode=disable
       PORT: "8080"
       JWT_SECRET: ${JWT_SECRET:-dev-secret-change-me-in-production}

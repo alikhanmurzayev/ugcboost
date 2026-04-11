@@ -26,7 +26,7 @@ type TokenStore interface {
 }
 
 // TestHandler provides test-only endpoints.
-// Only registered when ENABLE_TEST_ENDPOINTS=true.
+// Only registered when ENVIRONMENT=local.
 type TestHandler struct {
 	seeder      TestSeeder
 	brandSeeder TestBrandSeeder

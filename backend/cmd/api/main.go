@@ -38,18 +38,7 @@ func run() error {
 	}
 
 	// Logger
-	var logLevel slog.Level
-	switch cfg.LogLevel {
-	case "debug":
-		logLevel = slog.LevelDebug
-	case "warn":
-		logLevel = slog.LevelWarn
-	case "error":
-		logLevel = slog.LevelError
-	default:
-		logLevel = slog.LevelInfo
-	}
-	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: logLevel})))
+	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: cfg.LogLevel})))
 
 	// Closer (LIFO: last added = first closed)
 	cl := closer.New()
@@ -145,7 +134,7 @@ func run() error {
 		r.Get("/audit-logs", auditHandler.ListAuditLogs)
 	})
 
-	// Test endpoints (only when ENABLE_TEST_ENDPOINTS=true)
+	// Test endpoints (only when ENVIRONMENT=local)
 	if cfg.EnableTestEndpoints {
 		testHandler := handler.NewTestHandler(authSvc, brandSvc, resetTokenStore)
 		r.Route("/test", func(r chi.Router) {

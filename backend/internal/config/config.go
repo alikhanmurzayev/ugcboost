@@ -2,181 +2,73 @@ package config
 
 import (
 	"fmt"
-	"os"
-	"strconv"
-	"strings"
+	"log/slog"
 	"time"
+
+	"github.com/caarlos0/env/v11"
+)
+
+// Environment values.
+const (
+	EnvLocal      = "local"
+	EnvStaging    = "staging"
+	EnvProduction = "production"
 )
 
 // Config holds all application configuration, loaded from environment variables.
 type Config struct {
-	Port        int
-	DatabaseURL string
-	JWTSecret   string
-	JWTExpiry   time.Duration
-	CORSOrigins []string
-	LogLevel    string
+	Environment string `env:"ENVIRONMENT" envDefault:"local"`
+	Port        int    `env:"PORT" envDefault:"8080"`
+	DatabaseURL string `env:"DATABASE_URL,required"`
+	JWTSecret   string `env:"JWT_SECRET,required"`
+	JWTExpiry   time.Duration `env:"JWT_EXPIRY" envDefault:"15m"`
+	CORSOrigins []string      `env:"CORS_ORIGINS" envDefault:"http://localhost:5173,http://localhost:5174" envSeparator:","`
+	LogLevel    slog.Level    `env:"LOG_LEVEL" envDefault:"INFO"`
 
 	// Admin seed
-	AdminEmail    string
-	AdminPassword string
-
-	// Test endpoints (never enable in production)
-	EnableTestEndpoints bool
+	AdminEmail    string `env:"ADMIN_EMAIL" envDefault:"admin@ugcboost.kz"`
+	AdminPassword string `env:"ADMIN_PASSWORD"`
 
 	// Security
-	BcryptCost     int
-	RefreshExpiry  time.Duration
-	ResetExpiry    time.Duration
-	CookieSecure   bool
+	BcryptCost    int           `env:"BCRYPT_COST" envDefault:"12"`
+	RefreshExpiry time.Duration `env:"REFRESH_EXPIRY" envDefault:"168h"`
+	ResetExpiry   time.Duration `env:"RESET_EXPIRY" envDefault:"1h"`
 
 	// HTTP server
-	ReadTimeout  time.Duration
-	WriteTimeout time.Duration
-	IdleTimeout  time.Duration
+	ReadTimeout  time.Duration `env:"READ_TIMEOUT" envDefault:"10s"`
+	WriteTimeout time.Duration `env:"WRITE_TIMEOUT" envDefault:"30s"`
+	IdleTimeout  time.Duration `env:"IDLE_TIMEOUT" envDefault:"60s"`
 
 	// Feature flags for mock integrations
-	LiveDuneMock  bool
-	TrustMeMock   bool
-	TelegramMock  bool
-	EmailMock     bool
-	StorageMock   bool
+	LiveDuneMock bool `env:"LIVEDUNE_MOCK" envDefault:"false"`
+	TrustMeMock  bool `env:"TRUSTME_MOCK" envDefault:"false"`
+	TelegramMock bool `env:"TELEGRAM_MOCK" envDefault:"false"`
+	EmailMock    bool `env:"EMAIL_MOCK" envDefault:"false"`
+	StorageMock  bool `env:"STORAGE_MOCK" envDefault:"false"`
+
+	// Derived (not from env vars)
+	CookieSecure        bool `env:"-"`
+	EnableTestEndpoints bool `env:"-"`
 }
 
 // Load reads configuration from environment variables.
+// Returns an error if a required variable is missing or a value cannot be parsed.
 func Load() (*Config, error) {
-	port, err := strconv.Atoi(getEnv("PORT", "8080"))
-	if err != nil {
-		return nil, fmt.Errorf("invalid PORT: %w", err)
+	cfg := &Config{}
+	if err := env.Parse(cfg); err != nil {
+		return nil, fmt.Errorf("parse config: %w", err)
 	}
 
-	dbURL := getEnv("DATABASE_URL", "")
-	if dbURL == "" {
-		return nil, fmt.Errorf("DATABASE_URL is required")
+	switch cfg.Environment {
+	case EnvLocal, EnvStaging, EnvProduction:
+		// valid
+	default:
+		return nil, fmt.Errorf("invalid ENVIRONMENT %q: must be one of local, staging, production", cfg.Environment)
 	}
 
-	jwtExpiry, err := time.ParseDuration(getEnv("JWT_EXPIRY", "15m"))
-	if err != nil {
-		return nil, fmt.Errorf("invalid JWT_EXPIRY: %w", err)
-	}
+	// Derive values from Environment
+	cfg.CookieSecure = cfg.Environment != EnvLocal
+	cfg.EnableTestEndpoints = cfg.Environment == EnvLocal
 
-	jwtSecret := getEnv("JWT_SECRET", "")
-	if jwtSecret == "" {
-		return nil, fmt.Errorf("JWT_SECRET is required")
-	}
-
-	bcryptCost := getIntEnv("BCRYPT_COST", 12)
-	refreshExpiry, err := time.ParseDuration(getEnv("REFRESH_EXPIRY", "168h")) // 7 days
-	if err != nil {
-		return nil, fmt.Errorf("invalid REFRESH_EXPIRY: %w", err)
-	}
-	resetExpiry, err := time.ParseDuration(getEnv("RESET_EXPIRY", "1h"))
-	if err != nil {
-		return nil, fmt.Errorf("invalid RESET_EXPIRY: %w", err)
-	}
-
-	corsOrigins := splitComma(getEnv("CORS_ORIGINS", "http://localhost:5173,http://localhost:5174"))
-	cookieSecure := getBoolEnv("COOKIE_SECURE", !hasLocalhostOrigin(corsOrigins))
-
-	return &Config{
-		Port:        port,
-		DatabaseURL: dbURL,
-		JWTSecret:   jwtSecret,
-		JWTExpiry:   jwtExpiry,
-		CORSOrigins: corsOrigins,
-		LogLevel:    getEnv("LOG_LEVEL", "info"),
-
-		AdminEmail:    getEnv("ADMIN_EMAIL", "admin@ugcboost.kz"),
-		AdminPassword: getEnv("ADMIN_PASSWORD", ""),
-
-		BcryptCost:    bcryptCost,
-		RefreshExpiry: refreshExpiry,
-		ResetExpiry:   resetExpiry,
-		CookieSecure:  cookieSecure,
-
-		ReadTimeout:  getDurationEnv("READ_TIMEOUT", 10*time.Second),
-		WriteTimeout: getDurationEnv("WRITE_TIMEOUT", 30*time.Second),
-		IdleTimeout:  getDurationEnv("IDLE_TIMEOUT", 60*time.Second),
-
-		EnableTestEndpoints: getBoolEnv("ENABLE_TEST_ENDPOINTS", false),
-
-		LiveDuneMock: getBoolEnv("LIVEDUNE_MOCK", false),
-		TrustMeMock:  getBoolEnv("TRUSTME_MOCK", false),
-		TelegramMock: getBoolEnv("TELEGRAM_MOCK", false),
-		EmailMock:    getBoolEnv("EMAIL_MOCK", false),
-		StorageMock:  getBoolEnv("STORAGE_MOCK", false),
-	}, nil
-}
-
-func getEnv(key, fallback string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
-	}
-	return fallback
-}
-
-func getBoolEnv(key string, fallback bool) bool {
-	v := os.Getenv(key)
-	if v == "" {
-		return fallback
-	}
-	b, err := strconv.ParseBool(v)
-	if err != nil {
-		return fallback
-	}
-	return b
-}
-
-func getIntEnv(key string, fallback int) int {
-	v := os.Getenv(key)
-	if v == "" {
-		return fallback
-	}
-	n, err := strconv.Atoi(v)
-	if err != nil {
-		return fallback
-	}
-	return n
-}
-
-func getDurationEnv(key string, fallback time.Duration) time.Duration {
-	v := os.Getenv(key)
-	if v == "" {
-		return fallback
-	}
-	d, err := time.ParseDuration(v)
-	if err != nil {
-		return fallback
-	}
-	return d
-}
-
-func hasLocalhostOrigin(origins []string) bool {
-	for _, o := range origins {
-		if strings.HasPrefix(o, "http://localhost") {
-			return true
-		}
-	}
-	return false
-}
-
-func splitComma(s string) []string {
-	if s == "" {
-		return nil
-	}
-	parts := make([]string, 0)
-	start := 0
-	for i := 0; i < len(s); i++ {
-		if s[i] == ',' {
-			part := s[start:i]
-			if part != "" {
-				parts = append(parts, part)
-			}
-			start = i + 1
-		}
-	}
-	if start < len(s) {
-		parts = append(parts, s[start:])
-	}
-	return parts
+	return cfg, nil
 }

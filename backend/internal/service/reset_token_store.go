@@ -9,7 +9,7 @@ type ResetTokenNotifier interface {
 }
 
 // InMemoryResetTokenStore stores the most recent raw reset token per email.
-// Used only when ENABLE_TEST_ENDPOINTS=true.
+// Used only when ENVIRONMENT=local.
 type InMemoryResetTokenStore struct {
 	mu     sync.RWMutex
 	tokens map[string]string // email -> raw token

@@ -31,7 +31,7 @@ export default defineConfig({
     : [
         {
           command:
-            "cd ../backend && DATABASE_URL='postgres://ugcboost:ugcboost_dev@localhost:5433/ugcboost?sslmode=disable' JWT_SECRET='test-secret' ADMIN_PASSWORD='admin123' JWT_EXPIRY='15m' ENABLE_TEST_ENDPOINTS=true CORS_ORIGINS='http://localhost:5173' PORT=8080 go run ./cmd/api/",
+            "cd ../backend && ENVIRONMENT=local DATABASE_URL='postgres://ugcboost:ugcboost_dev@localhost:5433/ugcboost?sslmode=disable' JWT_SECRET='test-secret' ADMIN_PASSWORD='admin123' JWT_EXPIRY='15m' CORS_ORIGINS='http://localhost:5173' PORT=8080 go run ./cmd/api/",
           port: 8080,
           reuseExistingServer: true,
           timeout: 30_000,
