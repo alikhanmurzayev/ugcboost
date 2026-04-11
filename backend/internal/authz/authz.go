@@ -5,6 +5,7 @@ import (
 
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/dbutil"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/domain"
+	"github.com/alikhanmurzayev/ugcboost/backend/internal/repository"
 )
 
 // CanApproveCreator checks that the user is an admin.
@@ -28,10 +29,9 @@ func CanManageBrand(ctx context.Context, db dbutil.DB, userID string, role strin
 		return nil
 	}
 
-	// Check brand_managers table — will be used after Story 1.3
 	q := dbutil.Psql.Select("1").
-		From("brand_managers").
-		Where("user_id = ? AND brand_id = ?", userID, brandID).
+		From(repository.TableBrandManagers).
+		Where(repository.BrandManagerColumnUserID+" = ? AND "+repository.BrandManagerColumnBrandID+" = ?", userID, brandID).
 		Limit(1)
 
 	_, err := dbutil.Val[int](ctx, db, q)

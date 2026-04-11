@@ -10,19 +10,19 @@ import (
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/dbutil"
 )
 
-// audit_logs table and column names.
+// AuditLogs table and column names.
 const (
-	tableAuditLogs       = "audit_logs"
-	colAuditID           = "id"
-	colAuditActorID      = "actor_id"
-	colAuditActorRole    = "actor_role"
-	colAuditAction       = "action"
-	colAuditEntityType   = "entity_type"
-	colAuditEntityID     = "entity_id"
-	colAuditOldValue     = "old_value"
-	colAuditNewValue     = "new_value"
-	colAuditIPAddress    = "ip_address"
-	colAuditCreatedAt    = "created_at"
+	TableAuditLogs              = "audit_logs"
+	AuditLogColumnID            = "id"
+	AuditLogColumnActorID       = "actor_id"
+	AuditLogColumnActorRole     = "actor_role"
+	AuditLogColumnAction        = "action"
+	AuditLogColumnEntityType    = "entity_type"
+	AuditLogColumnEntityID      = "entity_id"
+	AuditLogColumnOldValue      = "old_value"
+	AuditLogColumnNewValue      = "new_value"
+	AuditLogColumnIPAddress     = "ip_address"
+	AuditLogColumnCreatedAt     = "created_at"
 )
 
 // AuditLogRow maps to the audit_logs table.
@@ -62,8 +62,8 @@ func NewAuditRepository(db dbutil.DB) *AuditRepository {
 // Create inserts a new audit log entry.
 func (r *AuditRepository) Create(ctx context.Context, entry AuditLogRow) error {
 	q := dbutil.Psql.
-		Insert(tableAuditLogs).
-		Columns(colAuditActorID, colAuditActorRole, colAuditAction, colAuditEntityType, colAuditEntityID, colAuditOldValue, colAuditNewValue, colAuditIPAddress).
+		Insert(TableAuditLogs).
+		Columns(AuditLogColumnActorID, AuditLogColumnActorRole, AuditLogColumnAction, AuditLogColumnEntityType, AuditLogColumnEntityID, AuditLogColumnOldValue, AuditLogColumnNewValue, AuditLogColumnIPAddress).
 		Values(entry.ActorID, entry.ActorRole, entry.Action, entry.EntityType, entry.EntityID, entry.OldValue, entry.NewValue, entry.IPAddress)
 
 	_, err := dbutil.Exec(ctx, r.db, q)
@@ -73,7 +73,7 @@ func (r *AuditRepository) Create(ctx context.Context, entry AuditLogRow) error {
 // List returns audit logs matching the given filter with pagination.
 func (r *AuditRepository) List(ctx context.Context, f AuditFilter, page, perPage int) ([]AuditLogRow, int64, error) {
 	// Count
-	countQ := dbutil.Psql.Select("COUNT(*)").From(tableAuditLogs)
+	countQ := dbutil.Psql.Select("COUNT(*)").From(TableAuditLogs)
 	countQ = applyAuditFilters(countQ, f)
 	total, err := dbutil.Val[int64](ctx, r.db, countQ)
 	if err != nil {
@@ -86,11 +86,11 @@ func (r *AuditRepository) List(ctx context.Context, f AuditFilter, page, perPage
 
 	// Data
 	q := dbutil.Psql.
-		Select(colAuditID, colAuditActorID, colAuditActorRole, colAuditAction, colAuditEntityType, colAuditEntityID, colAuditOldValue, colAuditNewValue, colAuditIPAddress, colAuditCreatedAt).
-		From(tableAuditLogs)
+		Select(AuditLogColumnID, AuditLogColumnActorID, AuditLogColumnActorRole, AuditLogColumnAction, AuditLogColumnEntityType, AuditLogColumnEntityID, AuditLogColumnOldValue, AuditLogColumnNewValue, AuditLogColumnIPAddress, AuditLogColumnCreatedAt).
+		From(TableAuditLogs)
 
 	q = applyAuditFilters(q, f)
-	q = q.OrderBy(colAuditCreatedAt + " DESC")
+	q = q.OrderBy(AuditLogColumnCreatedAt + " DESC")
 
 	offset := (page - 1) * perPage
 	q = q.Limit(uint64(perPage)).Offset(uint64(offset))
@@ -105,22 +105,22 @@ func (r *AuditRepository) List(ctx context.Context, f AuditFilter, page, perPage
 
 func applyAuditFilters(q sq.SelectBuilder, f AuditFilter) sq.SelectBuilder {
 	if f.ActorID != "" {
-		q = q.Where(sq.Eq{colAuditActorID: f.ActorID})
+		q = q.Where(sq.Eq{AuditLogColumnActorID: f.ActorID})
 	}
 	if f.EntityType != "" {
-		q = q.Where(sq.Eq{colAuditEntityType: f.EntityType})
+		q = q.Where(sq.Eq{AuditLogColumnEntityType: f.EntityType})
 	}
 	if f.EntityID != "" {
-		q = q.Where(sq.Eq{colAuditEntityID: f.EntityID})
+		q = q.Where(sq.Eq{AuditLogColumnEntityID: f.EntityID})
 	}
 	if f.Action != "" {
-		q = q.Where(sq.Eq{colAuditAction: f.Action})
+		q = q.Where(sq.Eq{AuditLogColumnAction: f.Action})
 	}
 	if f.DateFrom != nil {
-		q = q.Where(sq.GtOrEq{colAuditCreatedAt: *f.DateFrom})
+		q = q.Where(sq.GtOrEq{AuditLogColumnCreatedAt: *f.DateFrom})
 	}
 	if f.DateTo != nil {
-		q = q.Where(sq.LtOrEq{colAuditCreatedAt: *f.DateTo})
+		q = q.Where(sq.LtOrEq{AuditLogColumnCreatedAt: *f.DateTo})
 	}
 	return q
 }
