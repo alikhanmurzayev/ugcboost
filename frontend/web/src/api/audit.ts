@@ -1,9 +1,10 @@
 import type { components } from "./generated/schema";
-import client, { ApiError } from "./client";
+import { api } from "./client";
 
 export type AuditLogEntry = components["schemas"]["AuditLogEntry"];
+type AuditLogsResult = components["schemas"]["AuditLogsResult"];
 
-export async function listAuditLogs(params: {
+export function listAuditLogs(params: {
   actor_id?: string;
   entity_type?: string;
   action?: string;
@@ -12,9 +13,12 @@ export async function listAuditLogs(params: {
   page?: number;
   per_page?: number;
 } = {}) {
-  const { data, error, response } = await client.GET("/audit-logs", {
-    params: { query: params },
-  });
-  if (error) throw new ApiError(response.status, error.error?.code ?? "INTERNAL_ERROR");
-  return data;
+  const searchParams = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined && value !== "") {
+      searchParams.set(key, String(value));
+    }
+  }
+  const qs = searchParams.toString();
+  return api<AuditLogsResult>(`/audit-logs${qs ? `?${qs}` : ""}`);
 }

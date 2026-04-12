@@ -7,7 +7,7 @@ import { Roles } from "@/shared/constants/roles";
 
 function renderWithRole(role: string) {
   useAuthStore.setState({
-    user: { id: "1", email: "a@b.com", role, createdAt: "2024-01-01" },
+    user: { id: "1", email: "a@b.com", role: role as "admin" | "brand_manager" },
     token: "tok",
   });
 

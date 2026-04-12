@@ -13,7 +13,7 @@ describe("useAuthStore", () => {
   });
 
   it("setAuth sets user and token", () => {
-    const user = { id: "1", email: "a@b.com", role: "admin" as const, createdAt: "2024-01-01" };
+    const user = { id: "1", email: "a@b.com", role: "admin" as const };
     useAuthStore.getState().setAuth(user, "tok123");
 
     const state = useAuthStore.getState();
@@ -22,7 +22,7 @@ describe("useAuthStore", () => {
   });
 
   it("clearAuth resets to null", () => {
-    const user = { id: "1", email: "a@b.com", role: "admin" as const, createdAt: "2024-01-01" };
+    const user = { id: "1", email: "a@b.com", role: "admin" as const };
     useAuthStore.getState().setAuth(user, "tok123");
     useAuthStore.getState().clearAuth();
 

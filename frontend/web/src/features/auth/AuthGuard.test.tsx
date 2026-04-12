@@ -30,7 +30,7 @@ describe("AuthGuard", () => {
   });
 
   it("renders outlet when user exists", () => {
-    renderWithRouter({ id: "1", email: "a@b.com", role: "admin", createdAt: "2024-01-01" });
+    renderWithRouter({ id: "1", email: "a@b.com", role: "admin" as const });
     expect(screen.getByText("Dashboard")).toBeInTheDocument();
   });
 });
