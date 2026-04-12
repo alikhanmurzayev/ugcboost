@@ -22,7 +22,7 @@ compose-down:
 
 # ── Migrations ────────────────────────────────────────────────────
 
-migrate-up:
+migrate-up: compose-up
 	cd backend/migrations && goose -dir . postgres "$(DATABASE_URL)" up
 
 migrate-reset:
@@ -34,28 +34,28 @@ migrate-create:
 
 # ── Run in Docker (for E2E tests) ────────────────────────────
 
-start-backend:
+start-backend: compose-up migrate-up
 	docker compose --profile backend up -d --build --wait backend
 	@echo "Backend ready on http://localhost:8082"
 
 stop-backend:
 	docker compose --profile backend stop backend
 
-start-web:
+start-web: start-backend
 	docker compose --profile web up -d --build --wait web
 	@echo "Web ready on http://localhost:3001"
 
 stop-web:
 	docker compose --profile web stop web
 
-start-tma:
+start-tma: start-backend
 	docker compose --profile tma up -d --build --wait tma
 	@echo "TMA ready on http://localhost:3002"
 
 stop-tma:
 	docker compose --profile tma stop tma
 
-start-landing:
+start-landing: start-backend
 	docker compose --profile landing up -d --build --wait landing
 	@echo "Landing ready on http://localhost:3003"
 
@@ -104,10 +104,10 @@ test-unit-tma:
 test-unit-landing:
 	cd frontend/landing && npm test -- --run
 
-test-e2e-backend:
+test-e2e-backend: start-backend
 	cd backend/e2e && go test ./... -count=1 -v -race -timeout 5m
 
-test-e2e-frontend:
+test-e2e-frontend: start-web
 	cd frontend/web && CI=true BASE_URL=http://localhost:3001 API_URL=http://localhost:8082 npx playwright test
 
 # ── Lint ──────────────────────────────────────────────────────────
