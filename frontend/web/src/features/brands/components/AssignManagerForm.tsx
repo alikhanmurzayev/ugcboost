@@ -47,8 +47,9 @@ export default function AssignManagerForm({ brandId }: AssignManagerFormProps) {
     <div className="mt-4 border-t border-surface-200 pt-4">
       <form onSubmit={handleSubmit} className="flex items-end gap-3">
         <div className="flex-1">
-          <label className="mb-1 block text-sm font-medium text-gray-700">{t("brands:managerEmail")}</label>
+          <label htmlFor="assign-manager-email" className="mb-1 block text-sm font-medium text-gray-700">{t("brands:managerEmail")}</label>
           <input
+            id="assign-manager-email"
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}

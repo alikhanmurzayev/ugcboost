@@ -42,10 +42,11 @@ export default function BrandEditForm({ brandId, currentName, onClose }: BrandEd
 
   return (
     <>
-      <form onSubmit={handleSubmit} className="flex items-end gap-3">
+      <form onSubmit={handleSubmit} className="flex items-end gap-3" data-testid="edit-brand-form">
         <div className="flex-1">
-          <label className="mb-1 block text-sm font-medium text-gray-700">{t("brands:name")}</label>
+          <label htmlFor="edit-brand-name" className="mb-1 block text-sm font-medium text-gray-700">{t("brands:name")}</label>
           <input
+            id="edit-brand-name"
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}

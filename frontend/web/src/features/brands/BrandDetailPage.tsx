@@ -18,8 +18,8 @@ export default function BrandDetailPage() {
   const [editing, setEditing] = useState(false);
 
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: brandKeys.detail(brandId as string),
-    queryFn: () => getBrand(brandId as string),
+    queryKey: brandKeys.detail(brandId ?? ""),
+    queryFn: () => getBrand(brandId ?? ""),
     enabled: !!brandId,
   });
 
@@ -34,6 +34,7 @@ export default function BrandDetailPage() {
       <button
         onClick={() => navigate("/" + ROUTES.BRANDS)}
         className="mb-4 text-sm text-primary hover:underline"
+        data-testid="back-to-brands"
       >
         &larr; {t("backToList")}
       </button>

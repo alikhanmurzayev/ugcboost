@@ -118,6 +118,7 @@ export default function AuditLogPage() {
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
                 disabled={page <= 1}
                 className="rounded-button border border-surface-300 px-3 py-1 text-sm disabled:opacity-50"
+                data-testid="audit-prev-page"
               >
                 {t("common:prev")}
               </button>
@@ -128,6 +129,7 @@ export default function AuditLogPage() {
                 onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                 disabled={page >= totalPages}
                 className="rounded-button border border-surface-300 px-3 py-1 text-sm disabled:opacity-50"
+                data-testid="audit-next-page"
               >
                 {t("common:next")}
               </button>

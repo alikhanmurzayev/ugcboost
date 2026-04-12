@@ -11,7 +11,7 @@ export default function RoleGuard({ allowedRoles }: RoleGuardProps) {
   const { t } = useTranslation("common");
   const user = useAuthStore((s) => s.user);
 
-  if (!user || !allowedRoles.includes(user.role as UserRole)) {
+  if (!user || !allowedRoles.includes(user.role)) {
     return (
       <div className="flex flex-col items-center justify-center py-24 text-center">
         <p className="text-lg font-medium text-gray-900">{t("noAccess")}</p>

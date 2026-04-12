@@ -40,8 +40,9 @@ export default function CreateBrandForm({ onClose }: CreateBrandFormProps) {
   return (
     <form onSubmit={handleSubmit} className="mt-4 flex items-end gap-3" data-testid="create-brand-form">
       <div className="flex-1">
-        <label className="mb-1 block text-sm font-medium text-gray-700">{t("brands:name")}</label>
+        <label htmlFor="create-brand-name" className="mb-1 block text-sm font-medium text-gray-700">{t("brands:name")}</label>
         <input
+          id="create-brand-name"
           type="text"
           value={name}
           onChange={(e) => setName(e.target.value)}
