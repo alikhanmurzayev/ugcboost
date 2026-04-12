@@ -1,50 +1,55 @@
 package middleware
 
 import (
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
-func TestRecovery_NoPanic(t *testing.T) {
+func TestRecovery_Panic(t *testing.T) {
 	t.Parallel()
-	handler := Recovery(okHandler())
 
-	r := httptest.NewRequest("GET", "/", nil)
-	w := httptest.NewRecorder()
-	handler.ServeHTTP(w, r)
+	t.Run("no panic", func(t *testing.T) {
+		t.Parallel()
+		handler := Recovery(okHandler())
 
-	assert.Equal(t, http.StatusOK, w.Code)
-}
+		r := httptest.NewRequest("GET", "/", nil)
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, r)
 
-func TestRecovery_PanicReturns500(t *testing.T) {
-	t.Parallel()
-	handler := Recovery(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
-		panic("something broke")
-	}))
+		require.Equal(t, http.StatusOK, w.Code)
+	})
 
-	r := httptest.NewRequest("GET", "/", nil)
-	w := httptest.NewRecorder()
-	handler.ServeHTTP(w, r)
+	t.Run("panic returns 500", func(t *testing.T) {
+		t.Parallel()
+		handler := Recovery(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
+			panic("something broke")
+		}))
 
-	assert.Equal(t, http.StatusInternalServerError, w.Code)
-	assert.Equal(t, "application/json", w.Header().Get("Content-Type"))
+		r := httptest.NewRequest("GET", "/", nil)
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, r)
 
-	resp := parseError(t, w)
-	assert.Equal(t, "INTERNAL_ERROR", resp.Error.Code)
-}
+		require.Equal(t, http.StatusInternalServerError, w.Code)
+		require.Equal(t, "application/json", w.Header().Get("Content-Type"))
 
-func TestRecovery_PanicWithError(t *testing.T) {
-	t.Parallel()
-	handler := Recovery(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
-		panic(assert.AnError)
-	}))
+		resp := parseError(t, w)
+		require.Equal(t, "INTERNAL_ERROR", resp.Error.Code)
+	})
 
-	r := httptest.NewRequest("GET", "/", nil)
-	w := httptest.NewRecorder()
-	handler.ServeHTTP(w, r)
+	t.Run("panic with error", func(t *testing.T) {
+		t.Parallel()
+		handler := Recovery(http.HandlerFunc(func(_ http.ResponseWriter, _ *http.Request) {
+			panic(errors.New("assert.AnError general error for testing"))
+		}))
 
-	assert.Equal(t, http.StatusInternalServerError, w.Code)
+		r := httptest.NewRequest("GET", "/", nil)
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, r)
+
+		require.Equal(t, http.StatusInternalServerError, w.Code)
+	})
 }

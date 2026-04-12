@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/crypto/bcrypt"
@@ -37,190 +36,200 @@ func testUser() repository.UserRow {
 
 var futureTime = time.Date(2026, 5, 1, 0, 0, 0, 0, time.UTC)
 
-// --- Login tests ---
-
-func TestLogin_Success(t *testing.T) {
+func TestAuthService_Login(t *testing.T) {
 	t.Parallel()
-	user := testUser()
 
-	repo := mocks.NewMockUserRepo(t)
-	repo.EXPECT().GetByEmail(mock.Anything, user.Email).Return(&user, nil)
-	repo.EXPECT().SaveRefreshToken(mock.Anything, user.ID, "hash-refresh", futureTime).Return(nil)
+	t.Run("success", func(t *testing.T) {
+		t.Parallel()
+		user := testUser()
 
-	tokens := mocks.NewMockTokenGenerator(t)
-	tokens.EXPECT().GenerateAccessToken(user.ID, user.Role).Return("mock-access-token", nil)
-	tokens.EXPECT().GenerateRefreshToken().Return("raw-refresh", "hash-refresh", futureTime, nil)
+		repo := mocks.NewMockUserRepo(t)
+		repo.EXPECT().GetByEmail(mock.Anything, user.Email).Return(&user, nil)
+		repo.EXPECT().SaveRefreshToken(mock.Anything, user.ID, "hash-refresh", futureTime).Return(nil)
 
-	svc := NewAuthService(repo, tokens, nil, testBcryptCost)
-	result, err := svc.Login(context.Background(), user.Email, "password123")
+		tokens := mocks.NewMockTokenGenerator(t)
+		tokens.EXPECT().GenerateAccessToken(user.ID, user.Role).Return("mock-access-token", nil)
+		tokens.EXPECT().GenerateRefreshToken().Return("raw-refresh", "hash-refresh", futureTime, nil)
 
-	require.NoError(t, err)
-	assert.Equal(t, "mock-access-token", result.AccessToken)
-	assert.Equal(t, "raw-refresh", result.RefreshTokenRaw)
-	assert.Equal(t, futureTime.Unix(), result.RefreshExpiresAt)
-	assert.Equal(t, user.ID, result.User.ID)
+		svc := NewAuthService(repo, tokens, nil, testBcryptCost)
+		result, err := svc.Login(context.Background(), user.Email, "password123")
+
+		require.NoError(t, err)
+		require.Equal(t, "mock-access-token", result.AccessToken)
+		require.Equal(t, "raw-refresh", result.RefreshTokenRaw)
+		require.Equal(t, futureTime.Unix(), result.RefreshExpiresAt)
+		require.Equal(t, user.ID, result.User.ID)
+	})
+
+	t.Run("wrong password", func(t *testing.T) {
+		t.Parallel()
+		user := testUser()
+
+		repo := mocks.NewMockUserRepo(t)
+		repo.EXPECT().GetByEmail(mock.Anything, user.Email).Return(&user, nil)
+
+		tokens := mocks.NewMockTokenGenerator(t)
+
+		svc := NewAuthService(repo, tokens, nil, testBcryptCost)
+		_, err := svc.Login(context.Background(), user.Email, "wrongpass")
+
+		require.ErrorIs(t, err, domain.ErrUnauthorized)
+	})
+
+	t.Run("user not found", func(t *testing.T) {
+		t.Parallel()
+		repo := mocks.NewMockUserRepo(t)
+		repo.EXPECT().GetByEmail(mock.Anything, "nobody@example.com").
+			Return((*repository.UserRow)(nil), errNotFound)
+
+		tokens := mocks.NewMockTokenGenerator(t)
+
+		svc := NewAuthService(repo, tokens, nil, testBcryptCost)
+		_, err := svc.Login(context.Background(), "nobody@example.com", "password")
+
+		require.ErrorIs(t, err, domain.ErrUnauthorized)
+	})
 }
 
-func TestLogin_WrongPassword(t *testing.T) {
+func TestAuthService_Refresh(t *testing.T) {
 	t.Parallel()
-	user := testUser()
 
-	repo := mocks.NewMockUserRepo(t)
-	repo.EXPECT().GetByEmail(mock.Anything, user.Email).Return(&user, nil)
+	t.Run("success", func(t *testing.T) {
+		t.Parallel()
+		user := testUser()
+		tokenHash := HashToken("some-raw-token")
 
-	tokens := mocks.NewMockTokenGenerator(t)
+		repo := mocks.NewMockUserRepo(t)
+		repo.EXPECT().ClaimRefreshToken(mock.Anything, tokenHash).
+			Return(&repository.RefreshTokenRow{UserID: user.ID}, nil)
+		repo.EXPECT().GetByID(mock.Anything, user.ID).Return(&user, nil)
+		repo.EXPECT().SaveRefreshToken(mock.Anything, user.ID, "new-hash", futureTime).Return(nil)
 
-	svc := NewAuthService(repo, tokens, nil, testBcryptCost)
-	_, err := svc.Login(context.Background(), user.Email, "wrongpass")
+		tokens := mocks.NewMockTokenGenerator(t)
+		tokens.EXPECT().GenerateAccessToken(user.ID, user.Role).Return("new-access", nil)
+		tokens.EXPECT().GenerateRefreshToken().Return("new-raw", "new-hash", futureTime, nil)
 
-	assert.ErrorIs(t, err, domain.ErrUnauthorized)
+		svc := NewAuthService(repo, tokens, nil, testBcryptCost)
+		result, err := svc.Refresh(context.Background(), "some-raw-token")
+
+		require.NoError(t, err)
+		require.Equal(t, "new-access", result.AccessToken)
+		require.Equal(t, "new-raw", result.RefreshTokenRaw)
+	})
+
+	t.Run("invalid token", func(t *testing.T) {
+		t.Parallel()
+		tokenHash := HashToken("invalid-token")
+
+		repo := mocks.NewMockUserRepo(t)
+		repo.EXPECT().ClaimRefreshToken(mock.Anything, tokenHash).
+			Return((*repository.RefreshTokenRow)(nil), errNotFound)
+
+		tokens := mocks.NewMockTokenGenerator(t)
+
+		svc := NewAuthService(repo, tokens, nil, testBcryptCost)
+		_, err := svc.Refresh(context.Background(), "invalid-token")
+
+		require.ErrorIs(t, err, domain.ErrUnauthorized)
+	})
 }
 
-func TestLogin_UserNotFound(t *testing.T) {
+func TestAuthService_Logout(t *testing.T) {
 	t.Parallel()
-	repo := mocks.NewMockUserRepo(t)
-	repo.EXPECT().GetByEmail(mock.Anything, "nobody@example.com").
-		Return((*repository.UserRow)(nil), errNotFound)
 
-	tokens := mocks.NewMockTokenGenerator(t)
+	t.Run("success", func(t *testing.T) {
+		t.Parallel()
+		repo := mocks.NewMockUserRepo(t)
+		repo.EXPECT().DeleteUserRefreshTokens(mock.Anything, "user-1").Return(nil)
 
-	svc := NewAuthService(repo, tokens, nil, testBcryptCost)
-	_, err := svc.Login(context.Background(), "nobody@example.com", "password")
+		tokens := mocks.NewMockTokenGenerator(t)
 
-	assert.ErrorIs(t, err, domain.ErrUnauthorized)
+		svc := NewAuthService(repo, tokens, nil, testBcryptCost)
+		err := svc.Logout(context.Background(), "user-1")
+
+		require.NoError(t, err)
+	})
 }
 
-// --- Refresh tests ---
-
-func TestRefresh_Success(t *testing.T) {
+func TestAuthService_ResetPassword(t *testing.T) {
 	t.Parallel()
-	user := testUser()
-	tokenHash := HashToken("some-raw-token")
 
-	repo := mocks.NewMockUserRepo(t)
-	repo.EXPECT().ClaimRefreshToken(mock.Anything, tokenHash).
-		Return(&repository.RefreshTokenRow{UserID: user.ID}, nil)
-	repo.EXPECT().GetByID(mock.Anything, user.ID).Return(&user, nil)
-	repo.EXPECT().SaveRefreshToken(mock.Anything, user.ID, "new-hash", futureTime).Return(nil)
+	t.Run("success", func(t *testing.T) {
+		t.Parallel()
+		tokenHash := HashToken("raw-reset-token")
 
-	tokens := mocks.NewMockTokenGenerator(t)
-	tokens.EXPECT().GenerateAccessToken(user.ID, user.Role).Return("new-access", nil)
-	tokens.EXPECT().GenerateRefreshToken().Return("new-raw", "new-hash", futureTime, nil)
+		repo := mocks.NewMockUserRepo(t)
+		repo.EXPECT().ClaimResetToken(mock.Anything, tokenHash).
+			Return(&repository.PasswordResetTokenRow{ID: "rt-1", UserID: "user-1"}, nil)
+		repo.EXPECT().UpdatePassword(mock.Anything, "user-1", mock.AnythingOfType("string")).Return(nil)
+		repo.EXPECT().DeleteUserRefreshTokens(mock.Anything, "user-1").Return(nil)
 
-	svc := NewAuthService(repo, tokens, nil, testBcryptCost)
-	result, err := svc.Refresh(context.Background(), "some-raw-token")
+		tokens := mocks.NewMockTokenGenerator(t)
 
-	require.NoError(t, err)
-	assert.Equal(t, "new-access", result.AccessToken)
-	assert.Equal(t, "new-raw", result.RefreshTokenRaw)
+		svc := NewAuthService(repo, tokens, nil, testBcryptCost)
+		userID, err := svc.ResetPassword(context.Background(), "raw-reset-token", "newpass123")
+
+		require.NoError(t, err)
+		require.Equal(t, "user-1", userID)
+	})
+
+	t.Run("invalid token", func(t *testing.T) {
+		t.Parallel()
+		tokenHash := HashToken("bad-token")
+
+		repo := mocks.NewMockUserRepo(t)
+		repo.EXPECT().ClaimResetToken(mock.Anything, tokenHash).
+			Return((*repository.PasswordResetTokenRow)(nil), errNotFound)
+
+		tokens := mocks.NewMockTokenGenerator(t)
+
+		svc := NewAuthService(repo, tokens, nil, testBcryptCost)
+		userID, err := svc.ResetPassword(context.Background(), "bad-token", "newpass123")
+
+		require.ErrorIs(t, err, domain.ErrUnauthorized)
+		require.Empty(t, userID)
+	})
 }
 
-func TestRefresh_InvalidToken(t *testing.T) {
+func TestAuthService_SeedAdmin(t *testing.T) {
 	t.Parallel()
-	tokenHash := HashToken("invalid-token")
 
-	repo := mocks.NewMockUserRepo(t)
-	repo.EXPECT().ClaimRefreshToken(mock.Anything, tokenHash).
-		Return((*repository.RefreshTokenRow)(nil), errNotFound)
+	t.Run("creates when missing", func(t *testing.T) {
+		t.Parallel()
+		repo := mocks.NewMockUserRepo(t)
+		repo.EXPECT().ExistsByEmail(mock.Anything, "admin@test.com").Return(false, nil)
+		repo.EXPECT().Create(mock.Anything, "admin@test.com", mock.AnythingOfType("string"), "admin").
+			Return(&repository.UserRow{ID: "new-admin"}, nil)
 
-	tokens := mocks.NewMockTokenGenerator(t)
+		tokens := mocks.NewMockTokenGenerator(t)
 
-	svc := NewAuthService(repo, tokens, nil, testBcryptCost)
-	_, err := svc.Refresh(context.Background(), "invalid-token")
+		svc := NewAuthService(repo, tokens, nil, testBcryptCost)
+		err := svc.SeedAdmin(context.Background(), "admin@test.com", "secret")
 
-	assert.ErrorIs(t, err, domain.ErrUnauthorized)
-}
+		require.NoError(t, err)
+	})
 
-// --- Logout tests ---
+	t.Run("skips when exists", func(t *testing.T) {
+		t.Parallel()
+		repo := mocks.NewMockUserRepo(t)
+		repo.EXPECT().ExistsByEmail(mock.Anything, "admin@test.com").Return(true, nil)
 
-func TestLogout_Success(t *testing.T) {
-	t.Parallel()
-	repo := mocks.NewMockUserRepo(t)
-	repo.EXPECT().DeleteUserRefreshTokens(mock.Anything, "user-1").Return(nil)
+		tokens := mocks.NewMockTokenGenerator(t)
 
-	tokens := mocks.NewMockTokenGenerator(t)
+		svc := NewAuthService(repo, tokens, nil, testBcryptCost)
+		err := svc.SeedAdmin(context.Background(), "admin@test.com", "secret")
 
-	svc := NewAuthService(repo, tokens, nil, testBcryptCost)
-	err := svc.Logout(context.Background(), "user-1")
+		require.NoError(t, err)
+	})
 
-	assert.NoError(t, err)
-}
+	t.Run("skips when empty", func(t *testing.T) {
+		t.Parallel()
+		repo := mocks.NewMockUserRepo(t)
+		tokens := mocks.NewMockTokenGenerator(t)
 
-// --- ResetPassword tests ---
+		svc := NewAuthService(repo, tokens, nil, testBcryptCost)
+		err := svc.SeedAdmin(context.Background(), "", "")
 
-func TestResetPassword_Success(t *testing.T) {
-	t.Parallel()
-	tokenHash := HashToken("raw-reset-token")
-
-	repo := mocks.NewMockUserRepo(t)
-	repo.EXPECT().ClaimResetToken(mock.Anything, tokenHash).
-		Return(&repository.PasswordResetTokenRow{ID: "rt-1", UserID: "user-1"}, nil)
-	repo.EXPECT().UpdatePassword(mock.Anything, "user-1", mock.AnythingOfType("string")).Return(nil)
-	repo.EXPECT().DeleteUserRefreshTokens(mock.Anything, "user-1").Return(nil)
-
-	tokens := mocks.NewMockTokenGenerator(t)
-
-	svc := NewAuthService(repo, tokens, nil, testBcryptCost)
-	userID, err := svc.ResetPassword(context.Background(), "raw-reset-token", "newpass123")
-
-	assert.NoError(t, err)
-	assert.Equal(t, "user-1", userID)
-}
-
-func TestResetPassword_InvalidToken(t *testing.T) {
-	t.Parallel()
-	tokenHash := HashToken("bad-token")
-
-	repo := mocks.NewMockUserRepo(t)
-	repo.EXPECT().ClaimResetToken(mock.Anything, tokenHash).
-		Return((*repository.PasswordResetTokenRow)(nil), errNotFound)
-
-	tokens := mocks.NewMockTokenGenerator(t)
-
-	svc := NewAuthService(repo, tokens, nil, testBcryptCost)
-	userID, err := svc.ResetPassword(context.Background(), "bad-token", "newpass123")
-
-	assert.ErrorIs(t, err, domain.ErrUnauthorized)
-	assert.Empty(t, userID)
-}
-
-// --- SeedAdmin tests ---
-
-func TestSeedAdmin_CreatesWhenMissing(t *testing.T) {
-	t.Parallel()
-	repo := mocks.NewMockUserRepo(t)
-	repo.EXPECT().ExistsByEmail(mock.Anything, "admin@test.com").Return(false, nil)
-	repo.EXPECT().Create(mock.Anything, "admin@test.com", mock.AnythingOfType("string"), "admin").
-		Return(&repository.UserRow{ID: "new-admin"}, nil)
-
-	tokens := mocks.NewMockTokenGenerator(t)
-
-	svc := NewAuthService(repo, tokens, nil, testBcryptCost)
-	err := svc.SeedAdmin(context.Background(), "admin@test.com", "secret")
-
-	assert.NoError(t, err)
-}
-
-func TestSeedAdmin_SkipsWhenExists(t *testing.T) {
-	t.Parallel()
-	repo := mocks.NewMockUserRepo(t)
-	repo.EXPECT().ExistsByEmail(mock.Anything, "admin@test.com").Return(true, nil)
-
-	tokens := mocks.NewMockTokenGenerator(t)
-
-	svc := NewAuthService(repo, tokens, nil, testBcryptCost)
-	err := svc.SeedAdmin(context.Background(), "admin@test.com", "secret")
-
-	assert.NoError(t, err)
-}
-
-func TestSeedAdmin_SkipsWhenEmpty(t *testing.T) {
-	t.Parallel()
-	repo := mocks.NewMockUserRepo(t)
-	tokens := mocks.NewMockTokenGenerator(t)
-
-	svc := NewAuthService(repo, tokens, nil, testBcryptCost)
-	err := svc.SeedAdmin(context.Background(), "", "")
-
-	assert.NoError(t, err)
+		require.NoError(t, err)
+	})
 }

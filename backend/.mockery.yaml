@@ -10,8 +10,9 @@ packages:
       DB: {}
   github.com/alikhanmurzayev/ugcboost/backend/internal/handler:
     interfaces:
-      Auth: {}
-      Brands: {}
+      AuthService: {}
+      BrandService: {}
+      AuditLogService: {}
   github.com/alikhanmurzayev/ugcboost/backend/internal/service:
     interfaces:
       UserRepo: {}

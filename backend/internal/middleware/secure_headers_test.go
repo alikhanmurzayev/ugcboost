@@ -5,40 +5,44 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
-func TestSecureHeaders_Present(t *testing.T) {
+func TestSecureHeaders_Headers(t *testing.T) {
 	t.Parallel()
-	handler := SecureHeaders(okHandler())
 
-	r := httptest.NewRequest("GET", "/", nil)
-	w := httptest.NewRecorder()
-	handler.ServeHTTP(w, r)
+	t.Run("present", func(t *testing.T) {
+		t.Parallel()
+		handler := SecureHeaders(okHandler())
 
-	assert.Equal(t, "nosniff", w.Header().Get("X-Content-Type-Options"))
-	assert.Equal(t, "DENY", w.Header().Get("X-Frame-Options"))
-	assert.Equal(t, "strict-origin-when-cross-origin", w.Header().Get("Referrer-Policy"))
-}
+		r := httptest.NewRequest("GET", "/", nil)
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, r)
 
-func TestSecureHeaders_DeletesBeforeNext(t *testing.T) {
-	t.Parallel()
-	var serverInNext, poweredInNext string
-	inner := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		// SecureHeaders calls Del() before next, so these should be empty
-		serverInNext = w.Header().Get("Server")
-		poweredInNext = w.Header().Get("X-Powered-By")
-		w.WriteHeader(http.StatusOK)
+		require.Equal(t, "nosniff", w.Header().Get("X-Content-Type-Options"))
+		require.Equal(t, "DENY", w.Header().Get("X-Frame-Options"))
+		require.Equal(t, "strict-origin-when-cross-origin", w.Header().Get("Referrer-Policy"))
 	})
 
-	// Pre-set headers on recorder to simulate a reverse proxy
-	handler := SecureHeaders(inner)
-	r := httptest.NewRequest("GET", "/", nil)
-	w := httptest.NewRecorder()
-	w.Header().Set("Server", "Go")
-	w.Header().Set("X-Powered-By", "Go")
-	handler.ServeHTTP(w, r)
+	t.Run("deletes before next", func(t *testing.T) {
+		t.Parallel()
+		var serverInNext, poweredInNext string
+		inner := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			// SecureHeaders calls Del() before next, so these should be empty
+			serverInNext = w.Header().Get("Server")
+			poweredInNext = w.Header().Get("X-Powered-By")
+			w.WriteHeader(http.StatusOK)
+		})
 
-	assert.Empty(t, serverInNext)
-	assert.Empty(t, poweredInNext)
+		// Pre-set headers on recorder to simulate a reverse proxy
+		handler := SecureHeaders(inner)
+		r := httptest.NewRequest("GET", "/", nil)
+		w := httptest.NewRecorder()
+		w.Header().Set("Server", "Go")
+		w.Header().Set("X-Powered-By", "Go")
+		handler.ServeHTTP(w, r)
+
+		require.Empty(t, serverInNext)
+		require.Empty(t, poweredInNext)
+	})
 }

@@ -7,34 +7,37 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func TestBodyLimit_UnderLimit(t *testing.T) {
+func TestBodyLimit_Limit(t *testing.T) {
 	t.Parallel()
-	handler := BodyLimit(1024)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		body, err := io.ReadAll(r.Body)
-		require.NoError(t, err)
-		assert.Equal(t, "hello", string(body))
-		w.WriteHeader(http.StatusOK)
-	}))
 
-	r := httptest.NewRequest("POST", "/", strings.NewReader("hello"))
-	w := httptest.NewRecorder()
-	handler.ServeHTTP(w, r)
+	t.Run("under limit", func(t *testing.T) {
+		t.Parallel()
+		handler := BodyLimit(1024)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			body, err := io.ReadAll(r.Body)
+			require.NoError(t, err)
+			require.Equal(t, "hello", string(body))
+			w.WriteHeader(http.StatusOK)
+		}))
 
-	assert.Equal(t, http.StatusOK, w.Code)
-}
+		r := httptest.NewRequest("POST", "/", strings.NewReader("hello"))
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, r)
 
-func TestBodyLimit_OverLimit(t *testing.T) {
-	t.Parallel()
-	handler := BodyLimit(10)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, err := io.ReadAll(r.Body)
-		assert.Error(t, err)
-	}))
+		require.Equal(t, http.StatusOK, w.Code)
+	})
 
-	r := httptest.NewRequest("POST", "/", strings.NewReader(strings.Repeat("x", 100)))
-	w := httptest.NewRecorder()
-	handler.ServeHTTP(w, r)
+	t.Run("over limit", func(t *testing.T) {
+		t.Parallel()
+		handler := BodyLimit(10)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			_, err := io.ReadAll(r.Body)
+			require.Error(t, err)
+		}))
+
+		r := httptest.NewRequest("POST", "/", strings.NewReader(strings.Repeat("x", 100)))
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, r)
+	})
 }
