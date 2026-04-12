@@ -21,27 +21,26 @@ type DB interface {
 // Psql is the PostgreSQL-flavoured squirrel statement builder ($1, $2, ...).
 var Psql = sq.StatementBuilder.PlaceholderFormat(sq.Dollar)
 
-// One executes a squirrel query and scans a single row into T.
+// One executes a squirrel query and scans a single row into *T.
 // Returns pgx.ErrNoRows (wrapped) when no row matches.
-func One[T any](ctx context.Context, db DB, query sq.Sqlizer) (T, error) {
-	var zero T
+func One[T any](ctx context.Context, db DB, query sq.Sqlizer) (*T, error) {
 	sql, args, err := query.ToSql()
 	if err != nil {
-		return zero, fmt.Errorf("dbutil.One build sql: %w", err)
+		return nil, fmt.Errorf("dbutil.One build sql: %w", err)
 	}
 	rows, err := db.Query(ctx, sql, args...)
 	if err != nil {
-		return zero, fmt.Errorf("dbutil.One query: %w", err)
+		return nil, fmt.Errorf("dbutil.One query: %w", err)
 	}
 	result, err := pgx.CollectOneRow(rows, pgx.RowToStructByName[T])
 	if err != nil {
-		return zero, fmt.Errorf("dbutil.One scan: %w", err)
+		return nil, fmt.Errorf("dbutil.One scan: %w", err)
 	}
-	return result, nil
+	return &result, nil
 }
 
-// Many executes a squirrel query and scans all rows into []T.
-func Many[T any](ctx context.Context, db DB, query sq.Sqlizer) ([]T, error) {
+// Many executes a squirrel query and scans all rows into []*T.
+func Many[T any](ctx context.Context, db DB, query sq.Sqlizer) ([]*T, error) {
 	sql, args, err := query.ToSql()
 	if err != nil {
 		return nil, fmt.Errorf("dbutil.Many build sql: %w", err)
@@ -50,11 +49,15 @@ func Many[T any](ctx context.Context, db DB, query sq.Sqlizer) ([]T, error) {
 	if err != nil {
 		return nil, fmt.Errorf("dbutil.Many query: %w", err)
 	}
-	result, err := pgx.CollectRows(rows, pgx.RowToStructByName[T])
+	results, err := pgx.CollectRows(rows, pgx.RowToStructByName[T])
 	if err != nil {
 		return nil, fmt.Errorf("dbutil.Many scan: %w", err)
 	}
-	return result, nil
+	ptrs := make([]*T, len(results))
+	for i := range results {
+		ptrs[i] = &results[i]
+	}
+	return ptrs, nil
 }
 
 // Val executes a squirrel query and returns a single scalar value.

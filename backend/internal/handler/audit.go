@@ -13,7 +13,7 @@ import (
 
 // AuditLogs is the interface AuditHandler needs from the audit service.
 type AuditLogs interface {
-	List(ctx context.Context, f repository.AuditFilter, page, perPage int) ([]repository.AuditLogRow, int64, error)
+	List(ctx context.Context, f repository.AuditFilter, page, perPage int) ([]*repository.AuditLogRow, int64, error)
 }
 
 // AuditHandler handles audit log endpoints.

@@ -11,13 +11,13 @@ import (
 
 // TestSeeder creates users for testing.
 type TestSeeder interface {
-	SeedUser(ctx context.Context, email, password, role string) (repository.UserRow, error)
+	SeedUser(ctx context.Context, email, password, role string) (*repository.UserRow, error)
 }
 
 // TestBrandSeeder creates brands for testing.
 type TestBrandSeeder interface {
-	CreateBrand(ctx context.Context, name string, logoURL *string) (repository.BrandRow, error)
-	AssignManager(ctx context.Context, brandID, email string) (repository.UserRow, string, error)
+	CreateBrand(ctx context.Context, name string, logoURL *string) (*repository.BrandRow, error)
+	AssignManager(ctx context.Context, brandID, email string) (*repository.UserRow, string, error)
 }
 
 // TokenStore retrieves raw reset tokens captured in memory.

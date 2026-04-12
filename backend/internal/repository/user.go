@@ -96,7 +96,7 @@ func NewUserRepository(db dbutil.DB) *UserRepository {
 }
 
 // GetByEmail finds a user by email.
-func (r *UserRepository) GetByEmail(ctx context.Context, email string) (UserRow, error) {
+func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*UserRow, error) {
 	q := dbutil.Psql.Select(userSelectColumns...).
 		From(TableUsers).
 		Where(UserColumnEmail+" = ?", email)
@@ -104,7 +104,7 @@ func (r *UserRepository) GetByEmail(ctx context.Context, email string) (UserRow,
 }
 
 // GetByID finds a user by ID.
-func (r *UserRepository) GetByID(ctx context.Context, id string) (UserRow, error) {
+func (r *UserRepository) GetByID(ctx context.Context, id string) (*UserRow, error) {
 	q := dbutil.Psql.Select(userSelectColumns...).
 		From(TableUsers).
 		Where(UserColumnID+" = ?", id)
@@ -112,7 +112,7 @@ func (r *UserRepository) GetByID(ctx context.Context, id string) (UserRow, error
 }
 
 // Create inserts a new user and returns it.
-func (r *UserRepository) Create(ctx context.Context, email, passwordHash, role string) (UserRow, error) {
+func (r *UserRepository) Create(ctx context.Context, email, passwordHash, role string) (*UserRow, error) {
 	q := dbutil.Psql.Insert(TableUsers).
 		Columns(userInsertColumns...).
 		Values(email, passwordHash, role).
@@ -159,7 +159,7 @@ func (r *UserRepository) SaveRefreshToken(ctx context.Context, userID, tokenHash
 
 // ClaimRefreshToken atomically deletes a valid refresh token and returns it.
 // Returns pgx.ErrNoRows (wrapped) if token not found or expired.
-func (r *UserRepository) ClaimRefreshToken(ctx context.Context, tokenHash string) (RefreshTokenRow, error) {
+func (r *UserRepository) ClaimRefreshToken(ctx context.Context, tokenHash string) (*RefreshTokenRow, error) {
 	q := dbutil.Psql.Delete(TableRefreshTokens).
 		Where(RefreshTokenColumnTokenHash+" = ? AND "+RefreshTokenColumnExpiresAt+" > now()", tokenHash).
 		Suffix(returningClause(refreshTokenSelectColumns))
@@ -183,7 +183,7 @@ func (r *UserRepository) SaveResetToken(ctx context.Context, userID, tokenHash s
 
 // ClaimResetToken atomically marks a valid reset token as used and returns it.
 // Returns pgx.ErrNoRows (wrapped) if token not found, already used, or expired.
-func (r *UserRepository) ClaimResetToken(ctx context.Context, tokenHash string) (PasswordResetTokenRow, error) {
+func (r *UserRepository) ClaimResetToken(ctx context.Context, tokenHash string) (*PasswordResetTokenRow, error) {
 	q := dbutil.Psql.Update(TablePasswordResetTokens).
 		Set(ResetTokenColumnUsed, true).
 		Where(ResetTokenColumnTokenHash+" = ? AND "+ResetTokenColumnUsed+" = false AND "+ResetTokenColumnExpiresAt+" > now()", tokenHash).

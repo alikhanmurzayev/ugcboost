@@ -14,16 +14,16 @@ import (
 
 // UserRepo is the interface AuthService needs from the user repository.
 type UserRepo interface {
-	GetByEmail(ctx context.Context, email string) (repository.UserRow, error)
-	GetByID(ctx context.Context, id string) (repository.UserRow, error)
-	Create(ctx context.Context, email, passwordHash, role string) (repository.UserRow, error)
+	GetByEmail(ctx context.Context, email string) (*repository.UserRow, error)
+	GetByID(ctx context.Context, id string) (*repository.UserRow, error)
+	Create(ctx context.Context, email, passwordHash, role string) (*repository.UserRow, error)
 	ExistsByEmail(ctx context.Context, email string) (bool, error)
 	UpdatePassword(ctx context.Context, userID, passwordHash string) error
 	SaveRefreshToken(ctx context.Context, userID, tokenHash string, expiresAt time.Time) error
-	ClaimRefreshToken(ctx context.Context, tokenHash string) (repository.RefreshTokenRow, error)
+	ClaimRefreshToken(ctx context.Context, tokenHash string) (*repository.RefreshTokenRow, error)
 	DeleteUserRefreshTokens(ctx context.Context, userID string) error
 	SaveResetToken(ctx context.Context, userID, tokenHash string, expiresAt time.Time) error
-	ClaimResetToken(ctx context.Context, tokenHash string) (repository.PasswordResetTokenRow, error)
+	ClaimResetToken(ctx context.Context, tokenHash string) (*repository.PasswordResetTokenRow, error)
 }
 
 // TokenGenerator is the interface AuthService needs from the token service.
@@ -83,7 +83,7 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (*Login
 		AccessToken:      accessToken,
 		RefreshTokenRaw:  refreshRaw,
 		RefreshExpiresAt: refreshExpires.Unix(),
-		User:             user,
+		User:             *user,
 	}, nil
 }
 
@@ -128,7 +128,7 @@ func (s *AuthService) Refresh(ctx context.Context, rawRefreshToken string) (*Ref
 		AccessToken:      accessToken,
 		RefreshTokenRaw:  newRaw,
 		RefreshExpiresAt: newExpires.Unix(),
-		User:             user,
+		User:             *user,
 	}, nil
 }
 
@@ -195,15 +195,15 @@ func (s *AuthService) ResetPassword(ctx context.Context, rawToken, newPassword s
 }
 
 // GetUser returns a user by ID.
-func (s *AuthService) GetUser(ctx context.Context, userID string) (repository.UserRow, error) {
+func (s *AuthService) GetUser(ctx context.Context, userID string) (*repository.UserRow, error) {
 	return s.users.GetByID(ctx, userID)
 }
 
 // SeedUser creates a user with the given role. Used by test endpoints.
-func (s *AuthService) SeedUser(ctx context.Context, email, password, role string) (repository.UserRow, error) {
+func (s *AuthService) SeedUser(ctx context.Context, email, password, role string) (*repository.UserRow, error) {
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), s.bcryptCost)
 	if err != nil {
-		return repository.UserRow{}, fmt.Errorf("hash password: %w", err)
+		return nil, fmt.Errorf("hash password: %w", err)
 	}
 	return s.users.Create(ctx, email, string(hash), role)
 }

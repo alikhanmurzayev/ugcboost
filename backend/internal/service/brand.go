@@ -16,22 +16,22 @@ import (
 
 // BrandRepo is the interface BrandService needs from the brand repository.
 type BrandRepo interface {
-	Create(ctx context.Context, name string, logoURL *string) (repository.BrandRow, error)
-	GetByID(ctx context.Context, id string) (repository.BrandRow, error)
-	List(ctx context.Context) ([]repository.BrandWithManagerCount, error)
-	ListByUser(ctx context.Context, userID string) ([]repository.BrandWithManagerCount, error)
-	Update(ctx context.Context, id, name string, logoURL *string) (repository.BrandRow, error)
+	Create(ctx context.Context, name string, logoURL *string) (*repository.BrandRow, error)
+	GetByID(ctx context.Context, id string) (*repository.BrandRow, error)
+	List(ctx context.Context) ([]*repository.BrandWithManagerCount, error)
+	ListByUser(ctx context.Context, userID string) ([]*repository.BrandWithManagerCount, error)
+	Update(ctx context.Context, id, name string, logoURL *string) (*repository.BrandRow, error)
 	Delete(ctx context.Context, id string) error
 	AssignManager(ctx context.Context, brandID, userID string) error
 	RemoveManager(ctx context.Context, brandID, userID string) error
-	ListManagers(ctx context.Context, brandID string) ([]repository.BrandManagerRow, error)
+	ListManagers(ctx context.Context, brandID string) ([]*repository.BrandManagerRow, error)
 	IsManager(ctx context.Context, userID, brandID string) (bool, error)
 }
 
 // BrandUserRepo is the subset of user repo needed by BrandService.
 type BrandUserRepo interface {
-	GetByEmail(ctx context.Context, email string) (repository.UserRow, error)
-	Create(ctx context.Context, email, passwordHash, role string) (repository.UserRow, error)
+	GetByEmail(ctx context.Context, email string) (*repository.UserRow, error)
+	Create(ctx context.Context, email, passwordHash, role string) (*repository.UserRow, error)
 	ExistsByEmail(ctx context.Context, email string) (bool, error)
 }
 
@@ -48,21 +48,21 @@ func NewBrandService(brands BrandRepo, users BrandUserRepo, bcryptCost int) *Bra
 }
 
 // CreateBrand creates a new brand.
-func (s *BrandService) CreateBrand(ctx context.Context, name string, logoURL *string) (repository.BrandRow, error) {
+func (s *BrandService) CreateBrand(ctx context.Context, name string, logoURL *string) (*repository.BrandRow, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
-		return repository.BrandRow{}, domain.NewValidationError(domain.CodeValidation, "Brand name is required")
+		return nil, domain.NewValidationError(domain.CodeValidation, "Brand name is required")
 	}
 	return s.brands.Create(ctx, name, logoURL)
 }
 
 // GetBrand returns a brand by ID.
-func (s *BrandService) GetBrand(ctx context.Context, id string) (repository.BrandRow, error) {
+func (s *BrandService) GetBrand(ctx context.Context, id string) (*repository.BrandRow, error) {
 	return s.brands.GetByID(ctx, id)
 }
 
 // ListBrands returns all brands (admin) or user's brands (brand_manager).
-func (s *BrandService) ListBrands(ctx context.Context, userID, role string) ([]repository.BrandWithManagerCount, error) {
+func (s *BrandService) ListBrands(ctx context.Context, userID, role string) ([]*repository.BrandWithManagerCount, error) {
 	if role == string(domain.RoleAdmin) {
 		return s.brands.List(ctx)
 	}
@@ -70,10 +70,10 @@ func (s *BrandService) ListBrands(ctx context.Context, userID, role string) ([]r
 }
 
 // UpdateBrand updates a brand's name and logo.
-func (s *BrandService) UpdateBrand(ctx context.Context, id, name string, logoURL *string) (repository.BrandRow, error) {
+func (s *BrandService) UpdateBrand(ctx context.Context, id, name string, logoURL *string) (*repository.BrandRow, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
-		return repository.BrandRow{}, domain.NewValidationError(domain.CodeValidation, "Brand name is required")
+		return nil, domain.NewValidationError(domain.CodeValidation, "Brand name is required")
 	}
 	return s.brands.Update(ctx, id, name, logoURL)
 }
@@ -84,54 +84,54 @@ func (s *BrandService) DeleteBrand(ctx context.Context, id string) error {
 }
 
 // ListManagers returns all managers for a brand.
-func (s *BrandService) ListManagers(ctx context.Context, brandID string) ([]repository.BrandManagerRow, error) {
+func (s *BrandService) ListManagers(ctx context.Context, brandID string) ([]*repository.BrandManagerRow, error) {
 	return s.brands.ListManagers(ctx, brandID)
 }
 
 // AssignManager assigns a user as brand manager. Creates user if not exists.
 // Returns the user and temporary password (if newly created).
-func (s *BrandService) AssignManager(ctx context.Context, brandID, email string) (repository.UserRow, string, error) {
+func (s *BrandService) AssignManager(ctx context.Context, brandID, email string) (*repository.UserRow, string, error) {
 	email = strings.TrimSpace(strings.ToLower(email))
 	if email == "" {
-		return repository.UserRow{}, "", domain.NewValidationError(domain.CodeValidation, "Email is required")
+		return nil, "", domain.NewValidationError(domain.CodeValidation, "Email is required")
 	}
 
 	// Check brand exists
 	if _, err := s.brands.GetByID(ctx, brandID); err != nil {
-		return repository.UserRow{}, "", fmt.Errorf("get brand: %w", err)
+		return nil, "", fmt.Errorf("get brand: %w", err)
 	}
 
-	var user repository.UserRow
+	var user *repository.UserRow
 	var tempPassword string
 
 	exists, err := s.users.ExistsByEmail(ctx, email)
 	if err != nil {
-		return repository.UserRow{}, "", fmt.Errorf("check user: %w", err)
+		return nil, "", fmt.Errorf("check user: %w", err)
 	}
 
 	if exists {
 		user, err = s.users.GetByEmail(ctx, email)
 		if err != nil {
-			return repository.UserRow{}, "", fmt.Errorf("get user: %w", err)
+			return nil, "", fmt.Errorf("get user: %w", err)
 		}
 	} else {
 		tempPassword, err = generateTempPassword()
 		if err != nil {
-			return repository.UserRow{}, "", fmt.Errorf("generate password: %w", err)
+			return nil, "", fmt.Errorf("generate password: %w", err)
 		}
 		hash, err := bcrypt.GenerateFromPassword([]byte(tempPassword), s.bcryptCost)
 		if err != nil {
-			return repository.UserRow{}, "", fmt.Errorf("hash password: %w", err)
+			return nil, "", fmt.Errorf("hash password: %w", err)
 		}
 		user, err = s.users.Create(ctx, email, string(hash), string(domain.RoleBrandManager))
 		if err != nil {
-			return repository.UserRow{}, "", fmt.Errorf("create user: %w", err)
+			return nil, "", fmt.Errorf("create user: %w", err)
 		}
 		slog.Info("temporary password generated for new manager", "email", email)
 	}
 
 	if err := s.brands.AssignManager(ctx, brandID, user.ID); err != nil {
-		return repository.UserRow{}, "", fmt.Errorf("assign manager: %w", err)
+		return nil, "", fmt.Errorf("assign manager: %w", err)
 	}
 
 	return user, tempPassword, nil

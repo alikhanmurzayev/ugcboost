@@ -73,7 +73,7 @@ func NewBrandRepository(db dbutil.DB) *BrandRepository {
 }
 
 // Create inserts a new brand and returns it.
-func (r *BrandRepository) Create(ctx context.Context, name string, logoURL *string) (BrandRow, error) {
+func (r *BrandRepository) Create(ctx context.Context, name string, logoURL *string) (*BrandRow, error) {
 	q := dbutil.Psql.Insert(TableBrands).
 		SetMap(toMap(BrandRow{Name: name, LogoURL: logoURL}, brandInsertMapper)).
 		Suffix(returningClause(brandSelectColumns))
@@ -81,7 +81,7 @@ func (r *BrandRepository) Create(ctx context.Context, name string, logoURL *stri
 }
 
 // GetByID finds a brand by ID.
-func (r *BrandRepository) GetByID(ctx context.Context, id string) (BrandRow, error) {
+func (r *BrandRepository) GetByID(ctx context.Context, id string) (*BrandRow, error) {
 	q := dbutil.Psql.Select(brandSelectColumns...).
 		From(TableBrands).
 		Where(BrandColumnID+" = ?", id)
@@ -89,7 +89,7 @@ func (r *BrandRepository) GetByID(ctx context.Context, id string) (BrandRow, err
 }
 
 // List returns all brands with manager count.
-func (r *BrandRepository) List(ctx context.Context) ([]BrandWithManagerCount, error) {
+func (r *BrandRepository) List(ctx context.Context) ([]*BrandWithManagerCount, error) {
 	q := dbutil.Psql.Select(
 		"b."+BrandColumnID, "b."+BrandColumnName, "b."+BrandColumnLogoURL,
 		"COUNT(bm.id) AS manager_count",
@@ -103,7 +103,7 @@ func (r *BrandRepository) List(ctx context.Context) ([]BrandWithManagerCount, er
 }
 
 // ListByUser returns brands for a specific user (brand_manager).
-func (r *BrandRepository) ListByUser(ctx context.Context, userID string) ([]BrandWithManagerCount, error) {
+func (r *BrandRepository) ListByUser(ctx context.Context, userID string) ([]*BrandWithManagerCount, error) {
 	q := dbutil.Psql.Select(
 		"b."+BrandColumnID, "b."+BrandColumnName, "b."+BrandColumnLogoURL,
 		"(SELECT COUNT(*) FROM "+TableBrandManagers+" bm2 WHERE bm2."+BrandManagerColumnBrandID+" = b."+BrandColumnID+") AS manager_count",
@@ -116,7 +116,7 @@ func (r *BrandRepository) ListByUser(ctx context.Context, userID string) ([]Bran
 }
 
 // Update updates a brand's name and logo_url.
-func (r *BrandRepository) Update(ctx context.Context, id, name string, logoURL *string) (BrandRow, error) {
+func (r *BrandRepository) Update(ctx context.Context, id, name string, logoURL *string) (*BrandRow, error) {
 	q := dbutil.Psql.Update(TableBrands).
 		Set(BrandColumnName, name).
 		Set(BrandColumnLogoURL, logoURL).
@@ -163,7 +163,7 @@ func (r *BrandRepository) RemoveManager(ctx context.Context, brandID, userID str
 }
 
 // ListManagers returns all managers for a brand.
-func (r *BrandRepository) ListManagers(ctx context.Context, brandID string) ([]BrandManagerRow, error) {
+func (r *BrandRepository) ListManagers(ctx context.Context, brandID string) ([]*BrandManagerRow, error) {
 	q := dbutil.Psql.Select("bm."+BrandManagerColumnUserID, "u."+UserColumnEmail, "bm."+BrandColumnCreatedAt).
 		From(TableBrandManagers+" bm").
 		Join(TableUsers+" u ON u."+UserColumnID+" = bm."+BrandManagerColumnUserID).

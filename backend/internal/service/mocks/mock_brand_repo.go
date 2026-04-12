@@ -102,22 +102,24 @@ func (_c *MockBrandRepo_AssignManager_Call) RunAndReturn(run func(ctx context.Co
 }
 
 // Create provides a mock function for the type MockBrandRepo
-func (_mock *MockBrandRepo) Create(ctx context.Context, name string, logoURL *string) (repository.BrandRow, error) {
+func (_mock *MockBrandRepo) Create(ctx context.Context, name string, logoURL *string) (*repository.BrandRow, error) {
 	ret := _mock.Called(ctx, name, logoURL)
 
 	if len(ret) == 0 {
 		panic("no return value specified for Create")
 	}
 
-	var r0 repository.BrandRow
+	var r0 *repository.BrandRow
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, *string) (repository.BrandRow, error)); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, *string) (*repository.BrandRow, error)); ok {
 		return returnFunc(ctx, name, logoURL)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, *string) repository.BrandRow); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, *string) *repository.BrandRow); ok {
 		r0 = returnFunc(ctx, name, logoURL)
 	} else {
-		r0 = ret.Get(0).(repository.BrandRow)
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*repository.BrandRow)
+		}
 	}
 	if returnFunc, ok := ret.Get(1).(func(context.Context, string, *string) error); ok {
 		r1 = returnFunc(ctx, name, logoURL)
@@ -163,12 +165,12 @@ func (_c *MockBrandRepo_Create_Call) Run(run func(ctx context.Context, name stri
 	return _c
 }
 
-func (_c *MockBrandRepo_Create_Call) Return(brandRow repository.BrandRow, err error) *MockBrandRepo_Create_Call {
+func (_c *MockBrandRepo_Create_Call) Return(brandRow *repository.BrandRow, err error) *MockBrandRepo_Create_Call {
 	_c.Call.Return(brandRow, err)
 	return _c
 }
 
-func (_c *MockBrandRepo_Create_Call) RunAndReturn(run func(ctx context.Context, name string, logoURL *string) (repository.BrandRow, error)) *MockBrandRepo_Create_Call {
+func (_c *MockBrandRepo_Create_Call) RunAndReturn(run func(ctx context.Context, name string, logoURL *string) (*repository.BrandRow, error)) *MockBrandRepo_Create_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -231,22 +233,24 @@ func (_c *MockBrandRepo_Delete_Call) RunAndReturn(run func(ctx context.Context, 
 }
 
 // GetByID provides a mock function for the type MockBrandRepo
-func (_mock *MockBrandRepo) GetByID(ctx context.Context, id string) (repository.BrandRow, error) {
+func (_mock *MockBrandRepo) GetByID(ctx context.Context, id string) (*repository.BrandRow, error) {
 	ret := _mock.Called(ctx, id)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetByID")
 	}
 
-	var r0 repository.BrandRow
+	var r0 *repository.BrandRow
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string) (repository.BrandRow, error)); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) (*repository.BrandRow, error)); ok {
 		return returnFunc(ctx, id)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string) repository.BrandRow); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) *repository.BrandRow); ok {
 		r0 = returnFunc(ctx, id)
 	} else {
-		r0 = ret.Get(0).(repository.BrandRow)
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*repository.BrandRow)
+		}
 	}
 	if returnFunc, ok := ret.Get(1).(func(context.Context, string) error); ok {
 		r1 = returnFunc(ctx, id)
@@ -286,12 +290,12 @@ func (_c *MockBrandRepo_GetByID_Call) Run(run func(ctx context.Context, id strin
 	return _c
 }
 
-func (_c *MockBrandRepo_GetByID_Call) Return(brandRow repository.BrandRow, err error) *MockBrandRepo_GetByID_Call {
+func (_c *MockBrandRepo_GetByID_Call) Return(brandRow *repository.BrandRow, err error) *MockBrandRepo_GetByID_Call {
 	_c.Call.Return(brandRow, err)
 	return _c
 }
 
-func (_c *MockBrandRepo_GetByID_Call) RunAndReturn(run func(ctx context.Context, id string) (repository.BrandRow, error)) *MockBrandRepo_GetByID_Call {
+func (_c *MockBrandRepo_GetByID_Call) RunAndReturn(run func(ctx context.Context, id string) (*repository.BrandRow, error)) *MockBrandRepo_GetByID_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -369,23 +373,23 @@ func (_c *MockBrandRepo_IsManager_Call) RunAndReturn(run func(ctx context.Contex
 }
 
 // List provides a mock function for the type MockBrandRepo
-func (_mock *MockBrandRepo) List(ctx context.Context) ([]repository.BrandWithManagerCount, error) {
+func (_mock *MockBrandRepo) List(ctx context.Context) ([]*repository.BrandWithManagerCount, error) {
 	ret := _mock.Called(ctx)
 
 	if len(ret) == 0 {
 		panic("no return value specified for List")
 	}
 
-	var r0 []repository.BrandWithManagerCount
+	var r0 []*repository.BrandWithManagerCount
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context) ([]repository.BrandWithManagerCount, error)); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context) ([]*repository.BrandWithManagerCount, error)); ok {
 		return returnFunc(ctx)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context) []repository.BrandWithManagerCount); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context) []*repository.BrandWithManagerCount); ok {
 		r0 = returnFunc(ctx)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).([]repository.BrandWithManagerCount)
+			r0 = ret.Get(0).([]*repository.BrandWithManagerCount)
 		}
 	}
 	if returnFunc, ok := ret.Get(1).(func(context.Context) error); ok {
@@ -420,34 +424,34 @@ func (_c *MockBrandRepo_List_Call) Run(run func(ctx context.Context)) *MockBrand
 	return _c
 }
 
-func (_c *MockBrandRepo_List_Call) Return(brandWithManagerCounts []repository.BrandWithManagerCount, err error) *MockBrandRepo_List_Call {
+func (_c *MockBrandRepo_List_Call) Return(brandWithManagerCounts []*repository.BrandWithManagerCount, err error) *MockBrandRepo_List_Call {
 	_c.Call.Return(brandWithManagerCounts, err)
 	return _c
 }
 
-func (_c *MockBrandRepo_List_Call) RunAndReturn(run func(ctx context.Context) ([]repository.BrandWithManagerCount, error)) *MockBrandRepo_List_Call {
+func (_c *MockBrandRepo_List_Call) RunAndReturn(run func(ctx context.Context) ([]*repository.BrandWithManagerCount, error)) *MockBrandRepo_List_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // ListByUser provides a mock function for the type MockBrandRepo
-func (_mock *MockBrandRepo) ListByUser(ctx context.Context, userID string) ([]repository.BrandWithManagerCount, error) {
+func (_mock *MockBrandRepo) ListByUser(ctx context.Context, userID string) ([]*repository.BrandWithManagerCount, error) {
 	ret := _mock.Called(ctx, userID)
 
 	if len(ret) == 0 {
 		panic("no return value specified for ListByUser")
 	}
 
-	var r0 []repository.BrandWithManagerCount
+	var r0 []*repository.BrandWithManagerCount
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string) ([]repository.BrandWithManagerCount, error)); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) ([]*repository.BrandWithManagerCount, error)); ok {
 		return returnFunc(ctx, userID)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string) []repository.BrandWithManagerCount); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) []*repository.BrandWithManagerCount); ok {
 		r0 = returnFunc(ctx, userID)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).([]repository.BrandWithManagerCount)
+			r0 = ret.Get(0).([]*repository.BrandWithManagerCount)
 		}
 	}
 	if returnFunc, ok := ret.Get(1).(func(context.Context, string) error); ok {
@@ -488,34 +492,34 @@ func (_c *MockBrandRepo_ListByUser_Call) Run(run func(ctx context.Context, userI
 	return _c
 }
 
-func (_c *MockBrandRepo_ListByUser_Call) Return(brandWithManagerCounts []repository.BrandWithManagerCount, err error) *MockBrandRepo_ListByUser_Call {
+func (_c *MockBrandRepo_ListByUser_Call) Return(brandWithManagerCounts []*repository.BrandWithManagerCount, err error) *MockBrandRepo_ListByUser_Call {
 	_c.Call.Return(brandWithManagerCounts, err)
 	return _c
 }
 
-func (_c *MockBrandRepo_ListByUser_Call) RunAndReturn(run func(ctx context.Context, userID string) ([]repository.BrandWithManagerCount, error)) *MockBrandRepo_ListByUser_Call {
+func (_c *MockBrandRepo_ListByUser_Call) RunAndReturn(run func(ctx context.Context, userID string) ([]*repository.BrandWithManagerCount, error)) *MockBrandRepo_ListByUser_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // ListManagers provides a mock function for the type MockBrandRepo
-func (_mock *MockBrandRepo) ListManagers(ctx context.Context, brandID string) ([]repository.BrandManagerRow, error) {
+func (_mock *MockBrandRepo) ListManagers(ctx context.Context, brandID string) ([]*repository.BrandManagerRow, error) {
 	ret := _mock.Called(ctx, brandID)
 
 	if len(ret) == 0 {
 		panic("no return value specified for ListManagers")
 	}
 
-	var r0 []repository.BrandManagerRow
+	var r0 []*repository.BrandManagerRow
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string) ([]repository.BrandManagerRow, error)); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) ([]*repository.BrandManagerRow, error)); ok {
 		return returnFunc(ctx, brandID)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string) []repository.BrandManagerRow); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) []*repository.BrandManagerRow); ok {
 		r0 = returnFunc(ctx, brandID)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).([]repository.BrandManagerRow)
+			r0 = ret.Get(0).([]*repository.BrandManagerRow)
 		}
 	}
 	if returnFunc, ok := ret.Get(1).(func(context.Context, string) error); ok {
@@ -556,12 +560,12 @@ func (_c *MockBrandRepo_ListManagers_Call) Run(run func(ctx context.Context, bra
 	return _c
 }
 
-func (_c *MockBrandRepo_ListManagers_Call) Return(brandManagerRows []repository.BrandManagerRow, err error) *MockBrandRepo_ListManagers_Call {
+func (_c *MockBrandRepo_ListManagers_Call) Return(brandManagerRows []*repository.BrandManagerRow, err error) *MockBrandRepo_ListManagers_Call {
 	_c.Call.Return(brandManagerRows, err)
 	return _c
 }
 
-func (_c *MockBrandRepo_ListManagers_Call) RunAndReturn(run func(ctx context.Context, brandID string) ([]repository.BrandManagerRow, error)) *MockBrandRepo_ListManagers_Call {
+func (_c *MockBrandRepo_ListManagers_Call) RunAndReturn(run func(ctx context.Context, brandID string) ([]*repository.BrandManagerRow, error)) *MockBrandRepo_ListManagers_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -630,22 +634,24 @@ func (_c *MockBrandRepo_RemoveManager_Call) RunAndReturn(run func(ctx context.Co
 }
 
 // Update provides a mock function for the type MockBrandRepo
-func (_mock *MockBrandRepo) Update(ctx context.Context, id string, name string, logoURL *string) (repository.BrandRow, error) {
+func (_mock *MockBrandRepo) Update(ctx context.Context, id string, name string, logoURL *string) (*repository.BrandRow, error) {
 	ret := _mock.Called(ctx, id, name, logoURL)
 
 	if len(ret) == 0 {
 		panic("no return value specified for Update")
 	}
 
-	var r0 repository.BrandRow
+	var r0 *repository.BrandRow
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, *string) (repository.BrandRow, error)); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, *string) (*repository.BrandRow, error)); ok {
 		return returnFunc(ctx, id, name, logoURL)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, *string) repository.BrandRow); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, *string) *repository.BrandRow); ok {
 		r0 = returnFunc(ctx, id, name, logoURL)
 	} else {
-		r0 = ret.Get(0).(repository.BrandRow)
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*repository.BrandRow)
+		}
 	}
 	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string, *string) error); ok {
 		r1 = returnFunc(ctx, id, name, logoURL)
@@ -697,12 +703,12 @@ func (_c *MockBrandRepo_Update_Call) Run(run func(ctx context.Context, id string
 	return _c
 }
 
-func (_c *MockBrandRepo_Update_Call) Return(brandRow repository.BrandRow, err error) *MockBrandRepo_Update_Call {
+func (_c *MockBrandRepo_Update_Call) Return(brandRow *repository.BrandRow, err error) *MockBrandRepo_Update_Call {
 	_c.Call.Return(brandRow, err)
 	return _c
 }
 
-func (_c *MockBrandRepo_Update_Call) RunAndReturn(run func(ctx context.Context, id string, name string, logoURL *string) (repository.BrandRow, error)) *MockBrandRepo_Update_Call {
+func (_c *MockBrandRepo_Update_Call) RunAndReturn(run func(ctx context.Context, id string, name string, logoURL *string) (*repository.BrandRow, error)) *MockBrandRepo_Update_Call {
 	_c.Call.Return(run)
 	return _c
 }

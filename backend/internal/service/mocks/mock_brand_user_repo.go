@@ -39,22 +39,24 @@ func (_m *MockBrandUserRepo) EXPECT() *MockBrandUserRepo_Expecter {
 }
 
 // Create provides a mock function for the type MockBrandUserRepo
-func (_mock *MockBrandUserRepo) Create(ctx context.Context, email string, passwordHash string, role string) (repository.UserRow, error) {
+func (_mock *MockBrandUserRepo) Create(ctx context.Context, email string, passwordHash string, role string) (*repository.UserRow, error) {
 	ret := _mock.Called(ctx, email, passwordHash, role)
 
 	if len(ret) == 0 {
 		panic("no return value specified for Create")
 	}
 
-	var r0 repository.UserRow
+	var r0 *repository.UserRow
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, string) (repository.UserRow, error)); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, string) (*repository.UserRow, error)); ok {
 		return returnFunc(ctx, email, passwordHash, role)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, string) repository.UserRow); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, string) *repository.UserRow); ok {
 		r0 = returnFunc(ctx, email, passwordHash, role)
 	} else {
-		r0 = ret.Get(0).(repository.UserRow)
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*repository.UserRow)
+		}
 	}
 	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string, string) error); ok {
 		r1 = returnFunc(ctx, email, passwordHash, role)
@@ -106,12 +108,12 @@ func (_c *MockBrandUserRepo_Create_Call) Run(run func(ctx context.Context, email
 	return _c
 }
 
-func (_c *MockBrandUserRepo_Create_Call) Return(userRow repository.UserRow, err error) *MockBrandUserRepo_Create_Call {
+func (_c *MockBrandUserRepo_Create_Call) Return(userRow *repository.UserRow, err error) *MockBrandUserRepo_Create_Call {
 	_c.Call.Return(userRow, err)
 	return _c
 }
 
-func (_c *MockBrandUserRepo_Create_Call) RunAndReturn(run func(ctx context.Context, email string, passwordHash string, role string) (repository.UserRow, error)) *MockBrandUserRepo_Create_Call {
+func (_c *MockBrandUserRepo_Create_Call) RunAndReturn(run func(ctx context.Context, email string, passwordHash string, role string) (*repository.UserRow, error)) *MockBrandUserRepo_Create_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -183,22 +185,24 @@ func (_c *MockBrandUserRepo_ExistsByEmail_Call) RunAndReturn(run func(ctx contex
 }
 
 // GetByEmail provides a mock function for the type MockBrandUserRepo
-func (_mock *MockBrandUserRepo) GetByEmail(ctx context.Context, email string) (repository.UserRow, error) {
+func (_mock *MockBrandUserRepo) GetByEmail(ctx context.Context, email string) (*repository.UserRow, error) {
 	ret := _mock.Called(ctx, email)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetByEmail")
 	}
 
-	var r0 repository.UserRow
+	var r0 *repository.UserRow
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string) (repository.UserRow, error)); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) (*repository.UserRow, error)); ok {
 		return returnFunc(ctx, email)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string) repository.UserRow); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) *repository.UserRow); ok {
 		r0 = returnFunc(ctx, email)
 	} else {
-		r0 = ret.Get(0).(repository.UserRow)
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*repository.UserRow)
+		}
 	}
 	if returnFunc, ok := ret.Get(1).(func(context.Context, string) error); ok {
 		r1 = returnFunc(ctx, email)
@@ -238,12 +242,12 @@ func (_c *MockBrandUserRepo_GetByEmail_Call) Run(run func(ctx context.Context, e
 	return _c
 }
 
-func (_c *MockBrandUserRepo_GetByEmail_Call) Return(userRow repository.UserRow, err error) *MockBrandUserRepo_GetByEmail_Call {
+func (_c *MockBrandUserRepo_GetByEmail_Call) Return(userRow *repository.UserRow, err error) *MockBrandUserRepo_GetByEmail_Call {
 	_c.Call.Return(userRow, err)
 	return _c
 }
 
-func (_c *MockBrandUserRepo_GetByEmail_Call) RunAndReturn(run func(ctx context.Context, email string) (repository.UserRow, error)) *MockBrandUserRepo_GetByEmail_Call {
+func (_c *MockBrandUserRepo_GetByEmail_Call) RunAndReturn(run func(ctx context.Context, email string) (*repository.UserRow, error)) *MockBrandUserRepo_GetByEmail_Call {
 	_c.Call.Return(run)
 	return _c
 }

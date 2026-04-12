@@ -49,7 +49,7 @@ func TestCreateBrandHandler_Success(t *testing.T) {
 	t.Parallel()
 	brands := mocks.NewMockBrands(t)
 	brands.EXPECT().CreateBrand(mock.Anything, "Test Brand", (*string)(nil)).
-		Return(repository.BrandRow{ID: "b-1", Name: "Test Brand"}, nil)
+		Return(&repository.BrandRow{ID: "b-1", Name: "Test Brand"}, nil)
 
 	h := NewBrandHandler(brands, nil)
 	w := httptest.NewRecorder()
@@ -87,7 +87,7 @@ func TestCreateBrandHandler_ValidationError(t *testing.T) {
 	t.Parallel()
 	brands := mocks.NewMockBrands(t)
 	brands.EXPECT().CreateBrand(mock.Anything, "", (*string)(nil)).
-		Return(repository.BrandRow{}, domain.NewValidationError("VALIDATION_ERROR", "Brand name is required"))
+		Return((*repository.BrandRow)(nil), domain.NewValidationError("VALIDATION_ERROR", "Brand name is required"))
 
 	h := NewBrandHandler(brands, nil)
 	w := httptest.NewRecorder()
@@ -103,7 +103,7 @@ func TestListBrandsHandler_Success(t *testing.T) {
 	t.Parallel()
 	brands := mocks.NewMockBrands(t)
 	brands.EXPECT().ListBrands(mock.Anything, "u-1", "admin").
-		Return([]repository.BrandWithManagerCount{
+		Return([]*repository.BrandWithManagerCount{
 			{ID: "b-1", Name: "Brand 1", ManagerCount: 2},
 		}, nil)
 
@@ -122,9 +122,9 @@ func TestGetBrandHandler_Success(t *testing.T) {
 	brands := mocks.NewMockBrands(t)
 	brands.EXPECT().CanViewBrand(mock.Anything, "u-1", "admin", "b-1").Return(nil)
 	brands.EXPECT().GetBrand(mock.Anything, "b-1").
-		Return(repository.BrandRow{ID: "b-1", Name: "Test"}, nil)
+		Return(&repository.BrandRow{ID: "b-1", Name: "Test"}, nil)
 	brands.EXPECT().ListManagers(mock.Anything, "b-1").
-		Return([]repository.BrandManagerRow{}, nil)
+		Return([]*repository.BrandManagerRow{}, nil)
 
 	h := NewBrandHandler(brands, nil)
 	w := httptest.NewRecorder()
@@ -159,7 +159,7 @@ func TestUpdateBrandHandler_Success(t *testing.T) {
 	t.Parallel()
 	brands := mocks.NewMockBrands(t)
 	brands.EXPECT().UpdateBrand(mock.Anything, "b-1", "New Name", (*string)(nil)).
-		Return(repository.BrandRow{ID: "b-1", Name: "New Name"}, nil)
+		Return(&repository.BrandRow{ID: "b-1", Name: "New Name"}, nil)
 
 	h := NewBrandHandler(brands, nil)
 	w := httptest.NewRecorder()
@@ -210,7 +210,7 @@ func TestAssignManagerHandler_Success(t *testing.T) {
 	t.Parallel()
 	brands := mocks.NewMockBrands(t)
 	brands.EXPECT().AssignManager(mock.Anything, "b-1", "mgr@example.com").
-		Return(repository.UserRow{ID: "u-2", Email: "mgr@example.com", Role: "brand_manager"}, "temp123", nil)
+		Return(&repository.UserRow{ID: "u-2", Email: "mgr@example.com", Role: "brand_manager"}, "temp123", nil)
 
 	h := NewBrandHandler(brands, nil)
 	w := httptest.NewRecorder()
@@ -229,7 +229,7 @@ func TestAssignManagerHandler_ExistingUser(t *testing.T) {
 	t.Parallel()
 	brands := mocks.NewMockBrands(t)
 	brands.EXPECT().AssignManager(mock.Anything, "b-1", "existing@example.com").
-		Return(repository.UserRow{ID: "u-2", Email: "existing@example.com", Role: "brand_manager"}, "", nil)
+		Return(&repository.UserRow{ID: "u-2", Email: "existing@example.com", Role: "brand_manager"}, "", nil)
 
 	h := NewBrandHandler(brands, nil)
 	w := httptest.NewRecorder()

@@ -15,13 +15,13 @@ import (
 
 // Brands is the interface BrandHandler needs from the brand service.
 type Brands interface {
-	CreateBrand(ctx context.Context, name string, logoURL *string) (repository.BrandRow, error)
-	GetBrand(ctx context.Context, id string) (repository.BrandRow, error)
-	ListBrands(ctx context.Context, userID, role string) ([]repository.BrandWithManagerCount, error)
-	UpdateBrand(ctx context.Context, id, name string, logoURL *string) (repository.BrandRow, error)
+	CreateBrand(ctx context.Context, name string, logoURL *string) (*repository.BrandRow, error)
+	GetBrand(ctx context.Context, id string) (*repository.BrandRow, error)
+	ListBrands(ctx context.Context, userID, role string) ([]*repository.BrandWithManagerCount, error)
+	UpdateBrand(ctx context.Context, id, name string, logoURL *string) (*repository.BrandRow, error)
 	DeleteBrand(ctx context.Context, id string) error
-	ListManagers(ctx context.Context, brandID string) ([]repository.BrandManagerRow, error)
-	AssignManager(ctx context.Context, brandID, email string) (repository.UserRow, string, error)
+	ListManagers(ctx context.Context, brandID string) ([]*repository.BrandManagerRow, error)
+	AssignManager(ctx context.Context, brandID, email string) (*repository.UserRow, string, error)
 	RemoveManager(ctx context.Context, brandID, userID string) error
 	CanViewBrand(ctx context.Context, userID, role, brandID string) error
 }
@@ -66,7 +66,7 @@ func (h *BrandHandler) CreateBrand(w http.ResponseWriter, r *http.Request) {
 		NewValue: map[string]string{"name": brand.Name}, IPAddress: clientIP(r),
 	})
 
-	respondJSON(w, http.StatusCreated, brandToJSON(brand))
+	respondJSON(w, http.StatusCreated, brandToJSON(*brand))
 }
 
 // ListBrands handles GET /api/brands
@@ -129,7 +129,7 @@ func (h *BrandHandler) GetBrand(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	resp := brandToJSON(brand)
+	resp := brandToJSON(*brand)
 	resp["managers"] = managerList
 
 	respondJSON(w, http.StatusOK, resp)
@@ -166,7 +166,7 @@ func (h *BrandHandler) UpdateBrand(w http.ResponseWriter, r *http.Request) {
 		NewValue: map[string]string{"name": brand.Name}, IPAddress: clientIP(r),
 	})
 
-	respondJSON(w, http.StatusOK, brandToJSON(brand))
+	respondJSON(w, http.StatusOK, brandToJSON(*brand))
 }
 
 // DeleteBrand handles DELETE /api/brands/{brandID}

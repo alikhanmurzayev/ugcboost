@@ -77,7 +77,7 @@ func (r *AuditRepository) Create(ctx context.Context, entry AuditLogRow) error {
 }
 
 // List returns audit logs matching the given filter with pagination.
-func (r *AuditRepository) List(ctx context.Context, f AuditFilter, page, perPage int) ([]AuditLogRow, int64, error) {
+func (r *AuditRepository) List(ctx context.Context, f AuditFilter, page, perPage int) ([]*AuditLogRow, int64, error) {
 	// Count
 	countQ := dbutil.Psql.Select("COUNT(*)").From(TableAuditLogs)
 	countQ = applyAuditFilters(countQ, f)

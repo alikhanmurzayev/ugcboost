@@ -44,7 +44,7 @@ func TestLogin_Success(t *testing.T) {
 	user := testUser()
 
 	repo := mocks.NewMockUserRepo(t)
-	repo.EXPECT().GetByEmail(mock.Anything, user.Email).Return(user, nil)
+	repo.EXPECT().GetByEmail(mock.Anything, user.Email).Return(&user, nil)
 	repo.EXPECT().SaveRefreshToken(mock.Anything, user.ID, "hash-refresh", futureTime).Return(nil)
 
 	tokens := mocks.NewMockTokenGenerator(t)
@@ -66,7 +66,7 @@ func TestLogin_WrongPassword(t *testing.T) {
 	user := testUser()
 
 	repo := mocks.NewMockUserRepo(t)
-	repo.EXPECT().GetByEmail(mock.Anything, user.Email).Return(user, nil)
+	repo.EXPECT().GetByEmail(mock.Anything, user.Email).Return(&user, nil)
 
 	tokens := mocks.NewMockTokenGenerator(t)
 
@@ -80,7 +80,7 @@ func TestLogin_UserNotFound(t *testing.T) {
 	t.Parallel()
 	repo := mocks.NewMockUserRepo(t)
 	repo.EXPECT().GetByEmail(mock.Anything, "nobody@example.com").
-		Return(repository.UserRow{}, errNotFound)
+		Return((*repository.UserRow)(nil), errNotFound)
 
 	tokens := mocks.NewMockTokenGenerator(t)
 
@@ -99,8 +99,8 @@ func TestRefresh_Success(t *testing.T) {
 
 	repo := mocks.NewMockUserRepo(t)
 	repo.EXPECT().ClaimRefreshToken(mock.Anything, tokenHash).
-		Return(repository.RefreshTokenRow{UserID: user.ID}, nil)
-	repo.EXPECT().GetByID(mock.Anything, user.ID).Return(user, nil)
+		Return(&repository.RefreshTokenRow{UserID: user.ID}, nil)
+	repo.EXPECT().GetByID(mock.Anything, user.ID).Return(&user, nil)
 	repo.EXPECT().SaveRefreshToken(mock.Anything, user.ID, "new-hash", futureTime).Return(nil)
 
 	tokens := mocks.NewMockTokenGenerator(t)
@@ -121,7 +121,7 @@ func TestRefresh_InvalidToken(t *testing.T) {
 
 	repo := mocks.NewMockUserRepo(t)
 	repo.EXPECT().ClaimRefreshToken(mock.Anything, tokenHash).
-		Return(repository.RefreshTokenRow{}, errNotFound)
+		Return((*repository.RefreshTokenRow)(nil), errNotFound)
 
 	tokens := mocks.NewMockTokenGenerator(t)
 
@@ -154,7 +154,7 @@ func TestResetPassword_Success(t *testing.T) {
 
 	repo := mocks.NewMockUserRepo(t)
 	repo.EXPECT().ClaimResetToken(mock.Anything, tokenHash).
-		Return(repository.PasswordResetTokenRow{ID: "rt-1", UserID: "user-1"}, nil)
+		Return(&repository.PasswordResetTokenRow{ID: "rt-1", UserID: "user-1"}, nil)
 	repo.EXPECT().UpdatePassword(mock.Anything, "user-1", mock.AnythingOfType("string")).Return(nil)
 	repo.EXPECT().DeleteUserRefreshTokens(mock.Anything, "user-1").Return(nil)
 
@@ -173,7 +173,7 @@ func TestResetPassword_InvalidToken(t *testing.T) {
 
 	repo := mocks.NewMockUserRepo(t)
 	repo.EXPECT().ClaimResetToken(mock.Anything, tokenHash).
-		Return(repository.PasswordResetTokenRow{}, errNotFound)
+		Return((*repository.PasswordResetTokenRow)(nil), errNotFound)
 
 	tokens := mocks.NewMockTokenGenerator(t)
 
@@ -191,7 +191,7 @@ func TestSeedAdmin_CreatesWhenMissing(t *testing.T) {
 	repo := mocks.NewMockUserRepo(t)
 	repo.EXPECT().ExistsByEmail(mock.Anything, "admin@test.com").Return(false, nil)
 	repo.EXPECT().Create(mock.Anything, "admin@test.com", mock.AnythingOfType("string"), "admin").
-		Return(repository.UserRow{ID: "new-admin"}, nil)
+		Return(&repository.UserRow{ID: "new-admin"}, nil)
 
 	tokens := mocks.NewMockTokenGenerator(t)
 

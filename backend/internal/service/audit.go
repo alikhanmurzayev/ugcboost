@@ -11,7 +11,7 @@ import (
 // AuditRepo is the interface AuditService needs from the audit repository.
 type AuditRepo interface {
 	Create(ctx context.Context, entry repository.AuditLogRow) error
-	List(ctx context.Context, f repository.AuditFilter, page, perPage int) ([]repository.AuditLogRow, int64, error)
+	List(ctx context.Context, f repository.AuditFilter, page, perPage int) ([]*repository.AuditLogRow, int64, error)
 }
 
 // AuditService handles audit logging.
@@ -72,6 +72,6 @@ func (s *AuditService) Log(ctx context.Context, e AuditEntry) error {
 
 // List returns audit logs matching the filter with pagination.
 // Validation is the handler's responsibility (CS-18).
-func (s *AuditService) List(ctx context.Context, f repository.AuditFilter, page, perPage int) ([]repository.AuditLogRow, int64, error) {
+func (s *AuditService) List(ctx context.Context, f repository.AuditFilter, page, perPage int) ([]*repository.AuditLogRow, int64, error) {
 	return s.repo.List(ctx, f, page, perPage)
 }

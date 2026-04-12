@@ -21,7 +21,7 @@ type Auth interface {
 	Logout(ctx context.Context, userID string) error
 	RequestPasswordReset(ctx context.Context, email string) error
 	ResetPassword(ctx context.Context, rawToken, newPassword string) (string, error)
-	GetUser(ctx context.Context, userID string) (repository.UserRow, error)
+	GetUser(ctx context.Context, userID string) (*repository.UserRow, error)
 }
 
 // AuthHandler handles authentication endpoints.

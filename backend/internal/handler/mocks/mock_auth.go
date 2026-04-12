@@ -40,22 +40,24 @@ func (_m *MockAuth) EXPECT() *MockAuth_Expecter {
 }
 
 // GetUser provides a mock function for the type MockAuth
-func (_mock *MockAuth) GetUser(ctx context.Context, userID string) (repository.UserRow, error) {
+func (_mock *MockAuth) GetUser(ctx context.Context, userID string) (*repository.UserRow, error) {
 	ret := _mock.Called(ctx, userID)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetUser")
 	}
 
-	var r0 repository.UserRow
+	var r0 *repository.UserRow
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string) (repository.UserRow, error)); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) (*repository.UserRow, error)); ok {
 		return returnFunc(ctx, userID)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string) repository.UserRow); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) *repository.UserRow); ok {
 		r0 = returnFunc(ctx, userID)
 	} else {
-		r0 = ret.Get(0).(repository.UserRow)
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*repository.UserRow)
+		}
 	}
 	if returnFunc, ok := ret.Get(1).(func(context.Context, string) error); ok {
 		r1 = returnFunc(ctx, userID)
@@ -95,12 +97,12 @@ func (_c *MockAuth_GetUser_Call) Run(run func(ctx context.Context, userID string
 	return _c
 }
 
-func (_c *MockAuth_GetUser_Call) Return(userRow repository.UserRow, err error) *MockAuth_GetUser_Call {
+func (_c *MockAuth_GetUser_Call) Return(userRow *repository.UserRow, err error) *MockAuth_GetUser_Call {
 	_c.Call.Return(userRow, err)
 	return _c
 }
 
-func (_c *MockAuth_GetUser_Call) RunAndReturn(run func(ctx context.Context, userID string) (repository.UserRow, error)) *MockAuth_GetUser_Call {
+func (_c *MockAuth_GetUser_Call) RunAndReturn(run func(ctx context.Context, userID string) (*repository.UserRow, error)) *MockAuth_GetUser_Call {
 	_c.Call.Return(run)
 	return _c
 }

@@ -13,8 +13,8 @@ import (
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/service/mocks"
 )
 
-func testBrand() repository.BrandRow {
-	return repository.BrandRow{ID: "brand-1", Name: "Test Brand"}
+func testBrand() *repository.BrandRow {
+	return &repository.BrandRow{ID: "brand-1", Name: "Test Brand"}
 }
 
 // --- CreateBrand ---
@@ -23,7 +23,7 @@ func TestCreateBrand_Success(t *testing.T) {
 	t.Parallel()
 	brands := mocks.NewMockBrandRepo(t)
 	brands.EXPECT().Create(mock.Anything, "My Brand", (*string)(nil)).
-		Return(repository.BrandRow{ID: "b-1", Name: "My Brand"}, nil)
+		Return(&repository.BrandRow{ID: "b-1", Name: "My Brand"}, nil)
 
 	svc := NewBrandService(brands, nil, testBcryptCost)
 	b, err := svc.CreateBrand(context.Background(), "My Brand", nil)
@@ -46,7 +46,7 @@ func TestCreateBrand_TrimsWhitespace(t *testing.T) {
 	t.Parallel()
 	brands := mocks.NewMockBrandRepo(t)
 	brands.EXPECT().Create(mock.Anything, "Trimmed", (*string)(nil)).
-		Return(repository.BrandRow{ID: "b-1", Name: "Trimmed"}, nil)
+		Return(&repository.BrandRow{ID: "b-1", Name: "Trimmed"}, nil)
 
 	svc := NewBrandService(brands, nil, testBcryptCost)
 	_, err := svc.CreateBrand(context.Background(), "  Trimmed  ", nil)
@@ -60,7 +60,7 @@ func TestListBrands_Admin(t *testing.T) {
 	t.Parallel()
 	brands := mocks.NewMockBrandRepo(t)
 	brands.EXPECT().List(mock.Anything).
-		Return([]repository.BrandWithManagerCount{{ID: "b-1"}}, nil)
+		Return([]*repository.BrandWithManagerCount{{ID: "b-1"}}, nil)
 
 	svc := NewBrandService(brands, nil, testBcryptCost)
 	list, err := svc.ListBrands(context.Background(), "u-1", "admin")
@@ -73,7 +73,7 @@ func TestListBrands_Manager(t *testing.T) {
 	t.Parallel()
 	brands := mocks.NewMockBrandRepo(t)
 	brands.EXPECT().ListByUser(mock.Anything, "u-1").
-		Return([]repository.BrandWithManagerCount{{ID: "b-1"}}, nil)
+		Return([]*repository.BrandWithManagerCount{{ID: "b-1"}}, nil)
 
 	svc := NewBrandService(brands, nil, testBcryptCost)
 	list, err := svc.ListBrands(context.Background(), "u-1", "brand_manager")
@@ -88,7 +88,7 @@ func TestUpdateBrand_Success(t *testing.T) {
 	t.Parallel()
 	brands := mocks.NewMockBrandRepo(t)
 	brands.EXPECT().Update(mock.Anything, "b-1", "New Name", (*string)(nil)).
-		Return(repository.BrandRow{ID: "b-1", Name: "New Name"}, nil)
+		Return(&repository.BrandRow{ID: "b-1", Name: "New Name"}, nil)
 
 	svc := NewBrandService(brands, nil, testBcryptCost)
 	b, err := svc.UpdateBrand(context.Background(), "b-1", "New Name", nil)
@@ -118,7 +118,7 @@ func TestAssignManager_NewUser(t *testing.T) {
 	users.EXPECT().ExistsByEmail(mock.Anything, "new@example.com").
 		Return(false, nil)
 	users.EXPECT().Create(mock.Anything, "new@example.com", mock.AnythingOfType("string"), "brand_manager").
-		Return(repository.UserRow{ID: "u-new", Email: "new@example.com", Role: "brand_manager"}, nil)
+		Return(&repository.UserRow{ID: "u-new", Email: "new@example.com", Role: "brand_manager"}, nil)
 	brands.EXPECT().AssignManager(mock.Anything, "b-1", "u-new").
 		Return(nil)
 
@@ -140,7 +140,7 @@ func TestAssignManager_ExistingUser(t *testing.T) {
 	users.EXPECT().ExistsByEmail(mock.Anything, "existing@example.com").
 		Return(true, nil)
 	users.EXPECT().GetByEmail(mock.Anything, "existing@example.com").
-		Return(repository.UserRow{ID: "u-exist", Email: "existing@example.com", Role: "brand_manager"}, nil)
+		Return(&repository.UserRow{ID: "u-exist", Email: "existing@example.com", Role: "brand_manager"}, nil)
 	brands.EXPECT().AssignManager(mock.Anything, "b-1", "u-exist").
 		Return(nil)
 
@@ -171,7 +171,7 @@ func TestAssignManager_NormalizesEmail(t *testing.T) {
 	users.EXPECT().ExistsByEmail(mock.Anything, "upper@example.com").
 		Return(true, nil)
 	users.EXPECT().GetByEmail(mock.Anything, "upper@example.com").
-		Return(repository.UserRow{ID: "u-1", Email: "upper@example.com"}, nil)
+		Return(&repository.UserRow{ID: "u-1", Email: "upper@example.com"}, nil)
 	brands.EXPECT().AssignManager(mock.Anything, "b-1", "u-1").
 		Return(nil)
 
