@@ -7,6 +7,7 @@ import DashboardPage from "@/features/dashboard/DashboardPage";
 import BrandsPage from "@/features/brands/BrandsPage";
 import BrandDetailPage from "@/features/brands/BrandDetailPage";
 import AuditLogPage from "@/features/audit/AuditLogPage";
+import ErrorBoundary from "@/shared/components/ErrorBoundary";
 import { ROUTES } from "@/shared/constants/routes";
 
 const queryClient = new QueryClient({
@@ -20,9 +21,10 @@ const queryClient = new QueryClient({
 
 function App() {
   return (
-    <QueryClientProvider client={queryClient}>
-      <BrowserRouter>
-        <Routes>
+    <ErrorBoundary>
+      <QueryClientProvider client={queryClient}>
+        <BrowserRouter>
+          <Routes>
           <Route path={ROUTES.LOGIN} element={<LoginPage />} />
 
           <Route element={<AuthGuard />}>
@@ -33,9 +35,10 @@ function App() {
               <Route path={ROUTES.AUDIT} element={<AuditLogPage />} />
             </Route>
           </Route>
-        </Routes>
-      </BrowserRouter>
-    </QueryClientProvider>
+          </Routes>
+        </BrowserRouter>
+      </QueryClientProvider>
+    </ErrorBoundary>
   );
 }
 

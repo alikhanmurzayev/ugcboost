@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { listAuditLogs } from "@/api/audit";
+import Spinner from "@/shared/components/Spinner";
+import ErrorState from "@/shared/components/ErrorState";
 
 const ACTION_LABELS: Record<string, string> = {
   login: "Вход",
@@ -18,7 +20,7 @@ export default function AuditLogPage() {
   const [page, setPage] = useState(1);
   const perPage = 20;
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["audit-logs", entityType, action, page],
     queryFn: () =>
       listAuditLogs({
@@ -71,7 +73,9 @@ export default function AuditLogPage() {
 
       {/* Table */}
       {isLoading ? (
-        <p className="mt-6 text-gray-500">Загрузка...</p>
+        <Spinner className="mt-6" />
+      ) : isError ? (
+        <ErrorState message="Не удалось загрузить журнал" onRetry={() => void refetch()} />
       ) : logs.length === 0 ? (
         <p className="mt-6 text-gray-500">Нет записей</p>
       ) : (

@@ -5,6 +5,8 @@ import { listBrands, createBrand, deleteBrand } from "@/api/brands";
 import { ROUTES } from "@/shared/constants/routes";
 import { getErrorMessage } from "@/shared/i18n/errors";
 import { ApiError } from "@/api/client";
+import Spinner from "@/shared/components/Spinner";
+import ErrorState from "@/shared/components/ErrorState";
 
 export default function BrandsPage() {
   const navigate = useNavigate();
@@ -14,7 +16,7 @@ export default function BrandsPage() {
   const [error, setError] = useState("");
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["brands"],
     queryFn: () => listBrands(),
   });
@@ -101,7 +103,9 @@ export default function BrandsPage() {
       )}
 
       {isLoading ? (
-        <p className="mt-6 text-gray-500">Загрузка...</p>
+        <Spinner className="mt-6" />
+      ) : isError ? (
+        <ErrorState message="Не удалось загрузить бренды" onRetry={() => void refetch()} />
       ) : brands.length === 0 ? (
         <p className="mt-6 text-gray-500">Нет брендов</p>
       ) : (

@@ -3,6 +3,7 @@ import { Navigate, Outlet } from "react-router-dom";
 import { useAuthStore } from "@/stores/auth";
 import { restoreSession } from "@/api/auth";
 import { ROUTES } from "@/shared/constants/routes";
+import Spinner from "@/shared/components/Spinner";
 
 export default function AuthGuard() {
   const user = useAuthStore((s) => s.user);
@@ -33,7 +34,7 @@ export default function AuthGuard() {
   if (checking) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-surface-100">
-        <div className="text-sm text-gray-400">Загрузка...</div>
+        <Spinner />
       </div>
     );
   }

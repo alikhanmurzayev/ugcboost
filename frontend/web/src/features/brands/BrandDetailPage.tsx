@@ -10,6 +10,8 @@ import {
 import { ROUTES } from "@/shared/constants/routes";
 import { getErrorMessage } from "@/shared/i18n/errors";
 import { ApiError } from "@/api/client";
+import Spinner from "@/shared/components/Spinner";
+import ErrorState from "@/shared/components/ErrorState";
 
 export default function BrandDetailPage() {
   const { brandId } = useParams<{ brandId: string }>();
@@ -23,7 +25,7 @@ export default function BrandDetailPage() {
   const [error, setError] = useState("");
   const [removeConfirm, setRemoveConfirm] = useState<string | null>(null);
 
-  const { data, isLoading, error: queryError } = useQuery({
+  const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["brand", brandId],
     queryFn: () => getBrand(brandId as string),
     enabled: !!brandId,
@@ -72,9 +74,9 @@ export default function BrandDetailPage() {
     },
   });
 
-  if (!brandId) return <p className="text-red-600">Бренд не найден</p>;
-  if (isLoading) return <p className="text-gray-500">Загрузка...</p>;
-  if (queryError || !data) return <p className="text-red-600">Ошибка загрузки</p>;
+  if (!brandId) return <ErrorState message="Бренд не найден" />;
+  if (isLoading) return <Spinner className="mt-12" />;
+  if (isError || !data) return <ErrorState message="Ошибка загрузки" onRetry={() => void refetch()} />;
 
   const brand = data.data;
 
