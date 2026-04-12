@@ -14,6 +14,9 @@ type contextKey string
 const (
 	ContextKeyUserID contextKey = "userID"
 	ContextKeyRole   contextKey = "role"
+
+	headerAuthorization = "Authorization"
+	authSchemeBearer    = "bearer"
 )
 
 // TokenValidator validates a JWT and returns claims.
@@ -25,7 +28,7 @@ type TokenValidator interface {
 func Auth(validator TokenValidator) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			header := r.Header.Get("Authorization")
+			header := r.Header.Get(headerAuthorization)
 			if header == "" {
 				writeJSON(w, http.StatusUnauthorized, api.ErrorResponse{
 					Error: api.APIError{Code: domain.CodeUnauthorized, Message: "Missing authorization header"},
@@ -34,7 +37,7 @@ func Auth(validator TokenValidator) func(http.Handler) http.Handler {
 			}
 
 			parts := strings.SplitN(header, " ", 2)
-			if len(parts) != 2 || !strings.EqualFold(parts[0], "bearer") {
+			if len(parts) != 2 || !strings.EqualFold(parts[0], authSchemeBearer) {
 				writeJSON(w, http.StatusUnauthorized, api.ErrorResponse{
 					Error: api.APIError{Code: domain.CodeUnauthorized, Message: "Invalid authorization header format"},
 				})
@@ -89,7 +92,7 @@ func AuthFromScopes(validator TokenValidator) func(http.Handler) http.Handler {
 			}
 
 			// Same auth logic as existing Auth middleware
-			header := r.Header.Get("Authorization")
+			header := r.Header.Get(headerAuthorization)
 			if header == "" {
 				writeJSON(w, http.StatusUnauthorized, api.ErrorResponse{
 					Error: api.APIError{Code: domain.CodeUnauthorized, Message: "Missing authorization header"},
@@ -98,7 +101,7 @@ func AuthFromScopes(validator TokenValidator) func(http.Handler) http.Handler {
 			}
 
 			parts := strings.SplitN(header, " ", 2)
-			if len(parts) != 2 || !strings.EqualFold(parts[0], "bearer") {
+			if len(parts) != 2 || !strings.EqualFold(parts[0], authSchemeBearer) {
 				writeJSON(w, http.StatusUnauthorized, api.ErrorResponse{
 					Error: api.APIError{Code: domain.CodeUnauthorized, Message: "Invalid authorization header format"},
 				})

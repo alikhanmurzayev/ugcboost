@@ -5,8 +5,14 @@ const (
 	CookieRefreshToken = "refresh_token"
 )
 
-// HTTP header names used for client IP extraction.
+// HTTP header names.
 const (
+	HeaderAuthorization = "Authorization"
 	HeaderXForwardedFor = "X-Forwarded-For"
 	HeaderXRealIP       = "X-Real-IP"
+)
+
+// Auth scheme constants.
+const (
+	AuthSchemeBearer = "bearer"
 )
