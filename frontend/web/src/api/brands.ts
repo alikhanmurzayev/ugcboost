@@ -1,53 +1,62 @@
 import type { components } from "./generated/schema";
-import { api } from "./client";
+import client, { ApiError } from "./client";
 
 export type Brand = components["schemas"]["Brand"];
 export type BrandListItem = components["schemas"]["BrandListItem"];
 export type ManagerInfo = components["schemas"]["ManagerInfo"];
 
-type ListBrandsResult = components["schemas"]["ListBrandsResult"];
-type BrandResult = components["schemas"]["BrandResult"];
-type GetBrandResult = components["schemas"]["GetBrandResult"];
-type AssignManagerResult = components["schemas"]["AssignManagerResult"];
-type MessageResponse = components["schemas"]["MessageResponse"];
-
-export function listBrands() {
-  return api<ListBrandsResult>("/brands");
+export async function listBrands() {
+  const { data, error, response } = await client.GET("/brands");
+  if (error) throw new ApiError(response.status, error.error?.code ?? "INTERNAL_ERROR");
+  return data;
 }
 
-export function getBrand(id: string) {
-  return api<GetBrandResult>(`/brands/${id}`);
-}
-
-export function createBrand(name: string) {
-  return api<BrandResult>("/brands", {
-    method: "POST",
-    body: JSON.stringify({ name }),
+export async function getBrand(id: string) {
+  const { data, error, response } = await client.GET("/brands/{brandId}", {
+    params: { path: { brandId: id } },
   });
+  if (error) throw new ApiError(response.status, error.error?.code ?? "INTERNAL_ERROR");
+  return data;
 }
 
-export function updateBrand(id: string, name: string) {
-  return api<BrandResult>(`/brands/${id}`, {
-    method: "PUT",
-    body: JSON.stringify({ name }),
+export async function createBrand(name: string) {
+  const { data, error, response } = await client.POST("/brands", {
+    body: { name },
   });
+  if (error) throw new ApiError(response.status, error.error?.code ?? "INTERNAL_ERROR");
+  return data;
 }
 
-export function deleteBrand(id: string) {
-  return api<MessageResponse>(`/brands/${id}`, {
-    method: "DELETE",
+export async function updateBrand(id: string, name: string) {
+  const { data, error, response } = await client.PUT("/brands/{brandId}", {
+    params: { path: { brandId: id } },
+    body: { name },
   });
+  if (error) throw new ApiError(response.status, error.error?.code ?? "INTERNAL_ERROR");
+  return data;
 }
 
-export function assignManager(brandId: string, email: string) {
-  return api<AssignManagerResult>(`/brands/${brandId}/managers`, {
-    method: "POST",
-    body: JSON.stringify({ email }),
+export async function deleteBrand(id: string) {
+  const { data, error, response } = await client.DELETE("/brands/{brandId}", {
+    params: { path: { brandId: id } },
   });
+  if (error) throw new ApiError(response.status, error.error?.code ?? "INTERNAL_ERROR");
+  return data;
 }
 
-export function removeManager(brandId: string, userId: string) {
-  return api<MessageResponse>(`/brands/${brandId}/managers/${userId}`, {
-    method: "DELETE",
+export async function assignManager(brandId: string, email: string) {
+  const { data, error, response } = await client.POST("/brands/{brandId}/managers", {
+    params: { path: { brandId } },
+    body: { email },
   });
+  if (error) throw new ApiError(response.status, error.error?.code ?? "INTERNAL_ERROR");
+  return data;
+}
+
+export async function removeManager(brandId: string, userId: string) {
+  const { data, error, response } = await client.DELETE("/brands/{brandId}/managers/{userId}", {
+    params: { path: { brandId, userId } },
+  });
+  if (error) throw new ApiError(response.status, error.error?.code ?? "INTERNAL_ERROR");
+  return data;
 }

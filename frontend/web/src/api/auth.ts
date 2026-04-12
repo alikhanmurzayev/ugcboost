@@ -1,37 +1,31 @@
 import type { components } from "./generated/schema";
-import { api, apiBase } from "./client";
+import client, { apiBase, ApiError } from "./client";
 
 export type User = components["schemas"]["User"];
-type LoginResult = components["schemas"]["LoginResult"];
-type UserResponse = components["schemas"]["UserResponse"];
 
-export function login(email: string, password: string) {
-  return api<LoginResult>("/auth/login", {
-    method: "POST",
-    body: JSON.stringify({ email, password }),
+export async function login(email: string, password: string) {
+  const { data, error, response } = await client.POST("/auth/login", {
+    body: { email, password },
   });
+  if (error) throw new ApiError(response.status, error.error?.code ?? "INTERNAL_ERROR");
+  return data;
 }
 
-export function logout() {
-  return api<components["schemas"]["MessageResponse"]>("/auth/logout", {
-    method: "POST",
-  });
+export async function logout() {
+  const { error, response } = await client.POST("/auth/logout");
+  if (error) throw new ApiError(response.status, error.error?.code ?? "INTERNAL_ERROR");
 }
 
-export function getMe() {
-  return api<UserResponse>("/auth/me");
+export async function getMe() {
+  const { data, error, response } = await client.GET("/auth/me");
+  if (error) throw new ApiError(response.status, error.error?.code ?? "INTERNAL_ERROR");
+  return data;
 }
 
 // Singleton promise prevents double-fire from React strict mode.
-let restorePromise: Promise<{ user: User; token: string } | null> | null =
-  null;
+let restorePromise: Promise<{ user: User; token: string } | null> | null = null;
 
-// restoreSession tries to get a new access token via the refresh cookie,
-// then fetches the current user. Used on page reload when token is lost.
-export function restoreSession(): Promise<{
-  user: User;
-  token: string;
-} | null> {
+export function restoreSession(): Promise<{ user: User; token: string } | null> {
   if (restorePromise) return restorePromise;
 
   restorePromise = (async () => {
@@ -42,10 +36,10 @@ export function restoreSession(): Promise<{
 
     if (!res.ok) return null;
 
-    const body = (await res.json()) as LoginResult;
+    const body = await res.json();
     return {
-      user: body.data.user,
-      token: body.data.accessToken,
+      user: body.data.user as User,
+      token: body.data.accessToken as string,
     };
   })();
 

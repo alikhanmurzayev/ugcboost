@@ -8,6 +8,7 @@ import {
   removeManager,
 } from "@/api/brands";
 import { ROUTES } from "@/shared/constants/routes";
+import { brandKeys } from "@/shared/constants/queryKeys";
 import { getErrorMessage } from "@/shared/i18n/errors";
 import { ApiError } from "@/api/client";
 import Spinner from "@/shared/components/Spinner";
@@ -26,7 +27,7 @@ export default function BrandDetailPage() {
   const [removeConfirm, setRemoveConfirm] = useState<string | null>(null);
 
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ["brand", brandId],
+    queryKey: brandKeys.detail(brandId as string),
     queryFn: () => getBrand(brandId as string),
     enabled: !!brandId,
   });
@@ -34,8 +35,8 @@ export default function BrandDetailPage() {
   const updateMut = useMutation({
     mutationFn: (name: string) => updateBrand(brandId as string, name),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["brand", brandId] });
-      queryClient.invalidateQueries({ queryKey: ["brands"] });
+      queryClient.invalidateQueries({ queryKey: brandKeys.detail(brandId as string) });
+      queryClient.invalidateQueries({ queryKey: brandKeys.all() });
       setEditing(false);
       setError("");
     },
@@ -47,8 +48,8 @@ export default function BrandDetailPage() {
   const assignMut = useMutation({
     mutationFn: (email: string) => assignManager(brandId as string, email),
     onSuccess: (res) => {
-      queryClient.invalidateQueries({ queryKey: ["brand", brandId] });
-      queryClient.invalidateQueries({ queryKey: ["brands"] });
+      queryClient.invalidateQueries({ queryKey: brandKeys.detail(brandId as string) });
+      queryClient.invalidateQueries({ queryKey: brandKeys.all() });
       setManagerEmail("");
       setError("");
       if (res.data.tempPassword) {
@@ -63,8 +64,8 @@ export default function BrandDetailPage() {
   const removeMut = useMutation({
     mutationFn: (userId: string) => removeManager(brandId as string, userId),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["brand", brandId] });
-      queryClient.invalidateQueries({ queryKey: ["brands"] });
+      queryClient.invalidateQueries({ queryKey: brandKeys.detail(brandId as string) });
+      queryClient.invalidateQueries({ queryKey: brandKeys.all() });
       setRemoveConfirm(null);
       setError("");
     },

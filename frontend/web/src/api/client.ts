@@ -1,3 +1,5 @@
+import createClient from "openapi-fetch";
+import type { paths } from "./generated/schema";
 import { useAuthStore } from "@/stores/auth";
 
 function getApiBase(): string {
@@ -9,11 +11,6 @@ function getApiBase(): string {
 
 const BASE = getApiBase();
 export { BASE as apiBase };
-
-interface APIError {
-  code: string;
-  message: string;
-}
 
 export class ApiError extends Error {
   status: number;
@@ -45,67 +42,45 @@ async function refreshToken(): Promise<void> {
   useAuthStore.getState().setAuth(user, accessToken);
 }
 
-export async function api<T>(
-  path: string,
-  options: RequestInit = {},
-): Promise<T> {
-  const token = useAuthStore.getState().token;
+const client = createClient<paths>({
+  baseUrl: BASE,
+});
 
-  const headers: Record<string, string> = {};
-
-  if (options.headers) {
-    const entries =
-      options.headers instanceof Headers
-        ? options.headers.entries()
-        : Object.entries(options.headers);
-    for (const [k, v] of entries) {
-      headers[k] = v;
+// Auth header middleware
+client.use({
+  async onRequest({ request }) {
+    request.credentials = "include";
+    const token = useAuthStore.getState().token;
+    if (token) {
+      request.headers.set("Authorization", `Bearer ${token}`);
     }
-  }
+    return request;
+  },
+  async onResponse({ response, request }) {
+    // 401 → refresh → retry
+    if (response.status === 401 && useAuthStore.getState().token) {
+      if (!refreshPromise) {
+        refreshPromise = refreshToken().finally(() => {
+          refreshPromise = null;
+        });
+      }
 
-  if (options.body) {
-    headers["Content-Type"] ??= "application/json";
-  }
+      try {
+        await refreshPromise;
+      } catch {
+        throw new ApiError(401, "UNAUTHORIZED");
+      }
 
-  if (token) {
-    headers["Authorization"] = `Bearer ${token}`;
-  }
-
-  let res = await fetch(`${BASE}${path}`, {
-    ...options,
-    headers,
-    credentials: "include",
-  });
-
-  // Try refresh on 401
-  if (res.status === 401 && token) {
-    if (!refreshPromise) {
-      refreshPromise = refreshToken().finally(() => {
-        refreshPromise = null;
-      });
+      // Retry with new token
+      const newToken = useAuthStore.getState().token;
+      if (newToken) {
+        request.headers.set("Authorization", `Bearer ${newToken}`);
+      }
+      return fetch(request);
     }
 
-    try {
-      await refreshPromise;
-    } catch {
-      throw new ApiError(401, "UNAUTHORIZED");
-    }
+    return response;
+  },
+});
 
-    // Retry with new token
-    const newToken = useAuthStore.getState().token;
-    headers["Authorization"] = `Bearer ${newToken}`;
-    res = await fetch(`${BASE}${path}`, {
-      ...options,
-      headers,
-      credentials: "include",
-    });
-  }
-
-  if (!res.ok) {
-    const body = await res.json().catch(() => null);
-    const err: APIError | undefined = body?.error;
-    throw new ApiError(res.status, err?.code ?? "INTERNAL_ERROR");
-  }
-
-  return res.json() as Promise<T>;
-}
+export default client;

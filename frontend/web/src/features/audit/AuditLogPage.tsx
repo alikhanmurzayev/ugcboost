@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { listAuditLogs } from "@/api/audit";
+import { auditKeys } from "@/shared/constants/queryKeys";
 import Spinner from "@/shared/components/Spinner";
 import ErrorState from "@/shared/components/ErrorState";
 
@@ -21,7 +22,7 @@ export default function AuditLogPage() {
   const perPage = 20;
 
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ["audit-logs", entityType, action, page],
+    queryKey: auditKeys.list({ entityType, action, page }),
     queryFn: () =>
       listAuditLogs({
         entity_type: entityType || undefined,

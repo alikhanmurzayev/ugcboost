@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { listBrands, createBrand, deleteBrand } from "@/api/brands";
 import { ROUTES } from "@/shared/constants/routes";
+import { brandKeys } from "@/shared/constants/queryKeys";
 import { getErrorMessage } from "@/shared/i18n/errors";
 import { ApiError } from "@/api/client";
 import Spinner from "@/shared/components/Spinner";
@@ -17,14 +18,14 @@ export default function BrandsPage() {
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
 
   const { data, isLoading, isError, refetch } = useQuery({
-    queryKey: ["brands"],
+    queryKey: brandKeys.all(),
     queryFn: () => listBrands(),
   });
 
   const createMut = useMutation({
     mutationFn: (name: string) => createBrand(name),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["brands"] });
+      queryClient.invalidateQueries({ queryKey: brandKeys.all() });
       setShowCreate(false);
       setNewName("");
       setError("");
@@ -37,7 +38,7 @@ export default function BrandsPage() {
   const deleteMut = useMutation({
     mutationFn: (id: string) => deleteBrand(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["brands"] });
+      queryClient.invalidateQueries({ queryKey: brandKeys.all() });
       setDeleteConfirm(null);
     },
     onError: (err) => {
