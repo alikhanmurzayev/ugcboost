@@ -3,9 +3,11 @@ package config
 import (
 	"fmt"
 	"log/slog"
+	"os"
 	"time"
 
 	"github.com/caarlos0/env/v11"
+	"github.com/joho/godotenv"
 )
 
 // Environment values.
@@ -57,8 +59,18 @@ type Config struct {
 }
 
 // Load reads configuration from environment variables.
+// If a .env file exists in the working directory, it is loaded first (env vars take precedence).
 // Returns an error if a required variable is missing or a value cannot be parsed.
 func Load() (*Config, error) {
+	// Load .env if present (ignore if missing — Docker/CI set env vars directly).
+	// Check current dir first, then parent (supports running from backend/).
+	for _, path := range []string{".env", "../.env"} {
+		if _, err := os.Stat(path); err == nil {
+			_ = godotenv.Load(path)
+			break
+		}
+	}
+
 	cfg := &Config{}
 	if err := env.Parse(cfg); err != nil {
 		return nil, fmt.Errorf("parse config: %w", err)

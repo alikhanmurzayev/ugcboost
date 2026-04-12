@@ -1,3 +1,5 @@
+# Local development infrastructure.
+# App services (backend, web, tma) run outside Docker — see Makefile targets.
 services:
   postgres:
     image: postgres:17-alpine
@@ -14,53 +16,6 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
-
-  backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    ports:
-      - "8080:8080"
-    environment:
-      ENVIRONMENT: ${ENVIRONMENT:-local}
-      DATABASE_URL: postgres://${POSTGRES_USER:-ugcboost}:${POSTGRES_PASSWORD:-ugcboost_dev}@postgres:5432/${POSTGRES_DB:-ugcboost}?sslmode=disable
-      PORT: "8080"
-      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-me-in-production}
-      JWT_EXPIRY: ${JWT_EXPIRY:-15m}
-      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173,http://localhost:5174}
-      LOG_LEVEL: ${LOG_LEVEL:-DEBUG}
-      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@ugcboost.kz}
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin123}
-      LIVEDUNE_MOCK: ${LIVEDUNE_MOCK:-true}
-      TRUSTME_MOCK: ${TRUSTME_MOCK:-true}
-      TELEGRAM_MOCK: ${TELEGRAM_MOCK:-true}
-      EMAIL_MOCK: ${EMAIL_MOCK:-true}
-      STORAGE_MOCK: ${STORAGE_MOCK:-true}
-    depends_on:
-      postgres:
-        condition: service_healthy
-
-  web:
-    build:
-      context: .
-      dockerfile: frontend/web/Dockerfile
-    ports:
-      - "5173:80"
-    environment:
-      API_URL: http://localhost:8080
-    depends_on:
-      - backend
-
-  tma:
-    build:
-      context: .
-      dockerfile: frontend/tma/Dockerfile
-    ports:
-      - "5174:80"
-    environment:
-      API_URL: http://localhost:8080
-    depends_on:
-      - backend
 
 volumes:
   pgdata:
