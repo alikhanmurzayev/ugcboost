@@ -1,25 +1,33 @@
 import type { components } from "./generated/schema";
-import { api, apiBase } from "./client";
+import client, { apiBase, ApiError } from "./client";
 
 export type User = components["schemas"]["User"];
-type LoginResult = components["schemas"]["LoginResult"];
-type UserResponse = components["schemas"]["UserResponse"];
 
-export function login(email: string, password: string) {
-  return api<LoginResult>("/auth/login", {
-    method: "POST",
-    body: JSON.stringify({ email, password }),
+export async function login(email: string, password: string) {
+  const { data, error, response } = await client.POST("/auth/login", {
+    body: { email, password },
   });
+  if (error) {
+    const e = error as unknown as components["schemas"]["ErrorResponse"];
+    throw new ApiError(response.status, e.error?.code ?? "INTERNAL_ERROR");
+  }
+  return data;
 }
 
-export function logout() {
-  return api<components["schemas"]["MessageResponse"]>("/auth/logout", {
-    method: "POST",
-  });
+export async function logout() {
+  const { response } = await client.POST("/auth/logout");
+  if (!response.ok) {
+    throw new ApiError(response.status, "INTERNAL_ERROR");
+  }
 }
 
-export function getMe() {
-  return api<UserResponse>("/auth/me");
+export async function getMe() {
+  const { data, error, response } = await client.GET("/auth/me");
+  if (error) {
+    const e = error as unknown as components["schemas"]["ErrorResponse"];
+    throw new ApiError(response.status, e.error?.code ?? "INTERNAL_ERROR");
+  }
+  return data;
 }
 
 // Singleton promise prevents double-fire from React strict mode.
@@ -36,10 +44,10 @@ export function restoreSession(): Promise<{ user: User; token: string } | null> 
 
     if (!res.ok) return null;
 
-    const body = (await res.json()) as LoginResult;
+    const body = await res.json();
     return {
-      user: body.data.user,
-      token: body.data.accessToken,
+      user: body.data.user as User,
+      token: body.data.accessToken as string,
     };
   })();
 
