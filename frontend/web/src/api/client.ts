@@ -51,9 +51,17 @@ export async function api<T>(
 ): Promise<T> {
   const token = useAuthStore.getState().token;
 
-  const headers: Record<string, string> = {
-    ...(options.headers as Record<string, string>),
-  };
+  const headers: Record<string, string> = {};
+
+  if (options.headers) {
+    const entries =
+      options.headers instanceof Headers
+        ? options.headers.entries()
+        : Object.entries(options.headers);
+    for (const [k, v] of entries) {
+      headers[k] = v;
+    }
+  }
 
   if (options.body) {
     headers["Content-Type"] ??= "application/json";
