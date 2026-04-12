@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"runtime/debug"
 
+	"github.com/alikhanmurzayev/ugcboost/backend/internal/api"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/domain"
 )
 
@@ -21,8 +22,8 @@ func Recovery(next http.Handler) http.Handler {
 				)
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusInternalServerError)
-				_ = json.NewEncoder(w).Encode(domain.APIResponse{
-					Error: &domain.APIError{
+				_ = json.NewEncoder(w).Encode(api.ErrorResponse{
+					Error: api.APIError{
 						Code:    domain.CodeInternal,
 						Message: "Internal server error",
 					},

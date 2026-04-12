@@ -10,7 +10,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/alikhanmurzayev/ugcboost/backend/internal/domain"
+	"github.com/alikhanmurzayev/ugcboost/backend/internal/api"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/middleware/mocks"
 )
 
@@ -24,9 +24,9 @@ func okHandler() http.Handler {
 	})
 }
 
-func parseError(t *testing.T, w *httptest.ResponseRecorder) domain.APIResponse {
+func parseError(t *testing.T, w *httptest.ResponseRecorder) api.ErrorResponse {
 	t.Helper()
-	var resp domain.APIResponse
+	var resp api.ErrorResponse
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
 	return resp
 }

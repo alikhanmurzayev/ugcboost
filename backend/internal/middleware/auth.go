@@ -27,24 +27,24 @@ func Auth(validator TokenValidator) func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			header := r.Header.Get("Authorization")
 			if header == "" {
-				writeJSON(w, http.StatusUnauthorized, domain.APIResponse{
-					Error: &domain.APIError{Code: domain.CodeUnauthorized, Message: "Missing authorization header"},
+				writeJSON(w, http.StatusUnauthorized, api.ErrorResponse{
+					Error: api.APIError{Code: domain.CodeUnauthorized, Message: "Missing authorization header"},
 				})
 				return
 			}
 
 			parts := strings.SplitN(header, " ", 2)
 			if len(parts) != 2 || !strings.EqualFold(parts[0], "bearer") {
-				writeJSON(w, http.StatusUnauthorized, domain.APIResponse{
-					Error: &domain.APIError{Code: domain.CodeUnauthorized, Message: "Invalid authorization header format"},
+				writeJSON(w, http.StatusUnauthorized, api.ErrorResponse{
+					Error: api.APIError{Code: domain.CodeUnauthorized, Message: "Invalid authorization header format"},
 				})
 				return
 			}
 
 			userID, role, err := validator.ValidateAccessToken(parts[1])
 			if err != nil {
-				writeJSON(w, http.StatusUnauthorized, domain.APIResponse{
-					Error: &domain.APIError{Code: domain.CodeUnauthorized, Message: "Invalid or expired token"},
+				writeJSON(w, http.StatusUnauthorized, api.ErrorResponse{
+					Error: api.APIError{Code: domain.CodeUnauthorized, Message: "Invalid or expired token"},
 				})
 				return
 			}
@@ -67,8 +67,8 @@ func RequireRole(allowed ...string) func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			role := RoleFromContext(r.Context())
 			if !allowedSet[role] {
-				writeJSON(w, http.StatusForbidden, domain.APIResponse{
-					Error: &domain.APIError{Code: domain.CodeForbidden, Message: "Insufficient permissions"},
+				writeJSON(w, http.StatusForbidden, api.ErrorResponse{
+					Error: api.APIError{Code: domain.CodeForbidden, Message: "Insufficient permissions"},
 				})
 				return
 			}
@@ -91,24 +91,24 @@ func AuthFromScopes(validator TokenValidator) func(http.Handler) http.Handler {
 			// Same auth logic as existing Auth middleware
 			header := r.Header.Get("Authorization")
 			if header == "" {
-				writeJSON(w, http.StatusUnauthorized, domain.APIResponse{
-					Error: &domain.APIError{Code: domain.CodeUnauthorized, Message: "Missing authorization header"},
+				writeJSON(w, http.StatusUnauthorized, api.ErrorResponse{
+					Error: api.APIError{Code: domain.CodeUnauthorized, Message: "Missing authorization header"},
 				})
 				return
 			}
 
 			parts := strings.SplitN(header, " ", 2)
 			if len(parts) != 2 || !strings.EqualFold(parts[0], "bearer") {
-				writeJSON(w, http.StatusUnauthorized, domain.APIResponse{
-					Error: &domain.APIError{Code: domain.CodeUnauthorized, Message: "Invalid authorization header format"},
+				writeJSON(w, http.StatusUnauthorized, api.ErrorResponse{
+					Error: api.APIError{Code: domain.CodeUnauthorized, Message: "Invalid authorization header format"},
 				})
 				return
 			}
 
 			userID, role, err := validator.ValidateAccessToken(parts[1])
 			if err != nil {
-				writeJSON(w, http.StatusUnauthorized, domain.APIResponse{
-					Error: &domain.APIError{Code: domain.CodeUnauthorized, Message: "Invalid or expired token"},
+				writeJSON(w, http.StatusUnauthorized, api.ErrorResponse{
+					Error: api.APIError{Code: domain.CodeUnauthorized, Message: "Invalid or expired token"},
 				})
 				return
 			}
