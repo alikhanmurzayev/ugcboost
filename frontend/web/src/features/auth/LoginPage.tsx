@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import { useMutation } from "@tanstack/react-query";
 import { login } from "@/api/auth";
 import { ROUTES } from "@/shared/constants/routes";
 import { useAuthStore } from "@/stores/auth";
@@ -15,26 +16,26 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
 
-  async function handleSubmit(e: FormEvent) {
-    e.preventDefault();
-    setError("");
-    setLoading(true);
-
-    try {
-      const res = await login(email, password);
+  const { mutate, isPending } = useMutation({
+    mutationFn: () => login(email, password),
+    onSuccess(res) {
       setAuth(res.data.user, res.data.accessToken);
       navigate(ROUTES.DASHBOARD, { replace: true });
-    } catch (err) {
+    },
+    onError(err) {
       if (err instanceof ApiError) {
         setError(err.status === 401 ? t("auth:wrongCredentials") : getErrorMessage(err.code));
       } else {
         setError(t("auth:networkError"));
       }
-    } finally {
-      setLoading(false);
-    }
+    },
+  });
+
+  function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    setError("");
+    mutate();
   }
 
   return (
@@ -88,11 +89,11 @@ export default function LoginPage() {
 
           <button
             type="submit"
-            disabled={loading}
+            disabled={isPending}
             className="w-full rounded-button bg-primary px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-primary-600 disabled:opacity-50"
             data-testid="login-button"
           >
-            {loading ? t("auth:loggingIn") : t("auth:login")}
+            {isPending ? t("auth:loggingIn") : t("auth:login")}
           </button>
         </form>
       </div>
