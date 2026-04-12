@@ -26,18 +26,22 @@ const (
 // RefreshTokens table and column names.
 const (
 	TableRefreshTokens          = "refresh_tokens"
+	RefreshTokenColumnID        = "id"
 	RefreshTokenColumnUserID    = "user_id"
 	RefreshTokenColumnTokenHash = "token_hash"
 	RefreshTokenColumnExpiresAt = "expires_at"
+	RefreshTokenColumnCreatedAt = "created_at"
 )
 
 // PasswordResetTokens table and column names.
 const (
 	TablePasswordResetTokens       = "password_reset_tokens"
+	ResetTokenColumnID             = "id"
 	ResetTokenColumnUserID         = "user_id"
 	ResetTokenColumnTokenHash      = "token_hash"
 	ResetTokenColumnExpiresAt      = "expires_at"
 	ResetTokenColumnUsed           = "used"
+	ResetTokenColumnCreatedAt      = "created_at"
 )
 
 // UserRow maps to the users table.
@@ -114,8 +118,7 @@ func (r *UserRepository) GetByID(ctx context.Context, id string) (*UserRow, erro
 // Create inserts a new user and returns it.
 func (r *UserRepository) Create(ctx context.Context, email, passwordHash, role string) (*UserRow, error) {
 	q := dbutil.Psql.Insert(TableUsers).
-		Columns(userInsertColumns...).
-		Values(email, passwordHash, role).
+		SetMap(toMap(UserRow{Email: email, PasswordHash: passwordHash, Role: role}, userInsertMapper)).
 		Suffix(returningClause(userSelectColumns))
 	return dbutil.One[UserRow](ctx, r.db, q)
 }

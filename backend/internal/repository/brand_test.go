@@ -172,6 +172,24 @@ func TestBrandRepository_ListManagers(t *testing.T) {
 	})
 }
 
+func TestBrandRepository_GetBrandIDsForUser(t *testing.T) {
+	t.Parallel()
+
+	t.Run("SQL", func(t *testing.T) {
+		t.Parallel()
+		db := mocks.NewMockDB(t)
+		repo := NewBrandRepository(db)
+		gotSQL, gotArgs := captureQuery(t, db, 1)
+
+		_, _ = repo.GetBrandIDsForUser(context.Background(), "user-1")
+
+		require.Equal(t,
+			"SELECT brand_id FROM brand_managers WHERE user_id = $1",
+			*gotSQL)
+		require.Equal(t, []any{"user-1"}, *gotArgs)
+	})
+}
+
 func TestBrandRepository_IsManager(t *testing.T) {
 	t.Parallel()
 

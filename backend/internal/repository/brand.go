@@ -27,8 +27,10 @@ const (
 // BrandManagers table and column names.
 const (
 	TableBrandManagers              = "brand_managers"
+	BrandManagerColumnID            = "id"
 	BrandManagerColumnBrandID       = "brand_id"
 	BrandManagerColumnUserID        = "user_id"
+	BrandManagerColumnCreatedAt     = "created_at"
 )
 
 // BrandRow maps to the brands table.
@@ -92,13 +94,13 @@ func (r *BrandRepository) GetByID(ctx context.Context, id string) (*BrandRow, er
 func (r *BrandRepository) List(ctx context.Context) ([]*BrandWithManagerCount, error) {
 	q := dbutil.Psql.Select(
 		"b."+BrandColumnID, "b."+BrandColumnName, "b."+BrandColumnLogoURL,
-		"COUNT(bm.id) AS manager_count",
+		"COUNT(bm."+BrandManagerColumnID+") AS manager_count",
 		"b."+BrandColumnCreatedAt, "b."+BrandColumnUpdatedAt,
 	).
 		From(TableBrands+" b").
 		LeftJoin(TableBrandManagers+" bm ON bm."+BrandManagerColumnBrandID+" = b."+BrandColumnID).
-		GroupBy("b.id").
-		OrderBy("b.created_at DESC")
+		GroupBy("b."+BrandColumnID).
+		OrderBy("b."+BrandColumnCreatedAt+" DESC")
 	return dbutil.Many[BrandWithManagerCount](ctx, r.db, q)
 }
 
@@ -111,7 +113,7 @@ func (r *BrandRepository) ListByUser(ctx context.Context, userID string) ([]*Bra
 	).
 		From(TableBrands+" b").
 		Join(TableBrandManagers+" bm ON bm."+BrandManagerColumnBrandID+" = b."+BrandColumnID+" AND bm."+BrandManagerColumnUserID+" = ?", userID).
-		OrderBy("b.created_at DESC")
+		OrderBy("b."+BrandColumnCreatedAt+" DESC")
 	return dbutil.Many[BrandWithManagerCount](ctx, r.db, q)
 }
 
@@ -164,11 +166,11 @@ func (r *BrandRepository) RemoveManager(ctx context.Context, brandID, userID str
 
 // ListManagers returns all managers for a brand.
 func (r *BrandRepository) ListManagers(ctx context.Context, brandID string) ([]*BrandManagerRow, error) {
-	q := dbutil.Psql.Select("bm."+BrandManagerColumnUserID, "u."+UserColumnEmail, "bm."+BrandColumnCreatedAt).
+	q := dbutil.Psql.Select("bm."+BrandManagerColumnUserID, "u."+UserColumnEmail, "bm."+BrandManagerColumnCreatedAt).
 		From(TableBrandManagers+" bm").
 		Join(TableUsers+" u ON u."+UserColumnID+" = bm."+BrandManagerColumnUserID).
 		Where("bm."+BrandManagerColumnBrandID+" = ?", brandID).
-		OrderBy("bm.created_at ASC")
+		OrderBy("bm."+BrandManagerColumnCreatedAt+" ASC")
 	return dbutil.Many[BrandManagerRow](ctx, r.db, q)
 }
 

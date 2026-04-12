@@ -2,66 +2,13 @@ package repository
 
 import (
 	"context"
-	"errors"
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/dbutil/mocks"
 )
-
-// captureQuery sets up a mock DB.Query expectation that captures SQL and args.
-// Returns an error to prevent pgx row scanning (success path is covered by E2E).
-func captureQuery(t *testing.T, db *mocks.MockDB, numQueryArgs int) (sql *string, args *[]any) {
-	t.Helper()
-	var capturedSQL string
-	var capturedArgs []any
-
-	matchers := []interface{}{mock.Anything, mock.Anything}
-	if numQueryArgs > 0 {
-		matchers = append(matchers, mock.Anything)
-	}
-
-	db.On("Query", matchers...).
-		Run(func(callArgs mock.Arguments) {
-			capturedSQL = callArgs.String(1)
-			if len(callArgs) > 2 {
-				capturedArgs = callArgs[2].([]any)
-			}
-		}).
-		Return(nil, errors.New("mock: query intercepted")).
-		Once()
-
-	return &capturedSQL, &capturedArgs
-}
-
-// captureExec sets up a mock DB.Exec expectation that captures SQL and args.
-// Returns a success CommandTag.
-func captureExec(t *testing.T, db *mocks.MockDB, numExecArgs int) (sql *string, args *[]any) {
-	t.Helper()
-	var capturedSQL string
-	var capturedArgs []any
-
-	matchers := []interface{}{mock.Anything, mock.Anything}
-	if numExecArgs > 0 {
-		matchers = append(matchers, mock.Anything)
-	}
-
-	db.On("Exec", matchers...).
-		Run(func(callArgs mock.Arguments) {
-			capturedSQL = callArgs.String(1)
-			if len(callArgs) > 2 {
-				capturedArgs = callArgs[2].([]any)
-			}
-		}).
-		Return(pgconn.NewCommandTag("OK"), nil).
-		Once()
-
-	return &capturedSQL, &capturedArgs
-}
 
 func TestUserRepository_GetByEmail(t *testing.T) {
 	t.Parallel()
