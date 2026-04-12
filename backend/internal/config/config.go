@@ -17,10 +17,10 @@ const (
 
 // Config holds all application configuration, loaded from environment variables.
 type Config struct {
-	Environment string `env:"ENVIRONMENT" envDefault:"local"`
-	Port        int    `env:"PORT" envDefault:"8080"`
-	DatabaseURL string `env:"DATABASE_URL,required"`
-	JWTSecret   string `env:"JWT_SECRET,required"`
+	Environment string        `env:"ENVIRONMENT" envDefault:"local"`
+	Port        int           `env:"PORT" envDefault:"8080"`
+	DatabaseURL string        `env:"DATABASE_URL,required"`
+	JWTSecret   string        `env:"JWT_SECRET,required"`
 	JWTExpiry   time.Duration `env:"JWT_EXPIRY" envDefault:"15m"`
 	CORSOrigins []string      `env:"CORS_ORIGINS" envDefault:"http://localhost:5173,http://localhost:5174" envSeparator:","`
 	LogLevel    slog.Level    `env:"LOG_LEVEL" envDefault:"INFO"`
@@ -29,7 +29,7 @@ type Config struct {
 	AdminEmail    string `env:"ADMIN_EMAIL" envDefault:"admin@ugcboost.kz"`
 	AdminPassword string `env:"ADMIN_PASSWORD"`
 
-	// Security
+	// Securityв
 	BcryptCost    int           `env:"BCRYPT_COST" envDefault:"12"`
 	RefreshExpiry time.Duration `env:"REFRESH_EXPIRY" envDefault:"168h"`
 	ResetExpiry   time.Duration `env:"RESET_EXPIRY" envDefault:"1h"`
@@ -73,7 +73,7 @@ func Load() (*Config, error) {
 
 	// Derive values from Environment
 	cfg.CookieSecure = cfg.Environment != EnvLocal
-	cfg.EnableTestEndpoints = cfg.Environment == EnvLocal
+	cfg.EnableTestEndpoints = cfg.Environment != EnvProduction
 
 	return cfg, nil
 }
