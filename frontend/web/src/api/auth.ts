@@ -1,15 +1,19 @@
 import type { components } from "./generated/schema";
-import client, { apiBase, ApiError } from "./client";
+import client, { ApiError, rawClient } from "./client";
 
 export type User = components["schemas"]["User"];
+
+function extractErrorCode(error: unknown): string {
+  const e = error as { error?: { code?: string } };
+  return e?.error?.code ?? "INTERNAL_ERROR";
+}
 
 export async function login(email: string, password: string) {
   const { data, error, response } = await client.POST("/auth/login", {
     body: { email, password },
   });
   if (error) {
-    const e = error as unknown as components["schemas"]["ErrorResponse"];
-    throw new ApiError(response.status, e.error?.code ?? "INTERNAL_ERROR");
+    throw new ApiError(response.status, extractErrorCode(error));
   }
   return data;
 }
@@ -24,8 +28,7 @@ export async function logout() {
 export async function getMe() {
   const { data, error, response } = await client.GET("/auth/me");
   if (error) {
-    const e = error as unknown as components["schemas"]["ErrorResponse"];
-    throw new ApiError(response.status, e.error?.code ?? "INTERNAL_ERROR");
+    throw new ApiError(response.status, extractErrorCode(error));
   }
   return data;
 }
@@ -37,17 +40,13 @@ export function restoreSession(): Promise<{ user: User; token: string } | null> 
   if (restorePromise) return restorePromise;
 
   restorePromise = (async () => {
-    const res = await fetch(`${apiBase}/auth/refresh`, {
-      method: "POST",
-      credentials: "include",
-    });
+    const { data, error } = await rawClient.POST("/auth/refresh");
 
-    if (!res.ok) return null;
+    if (error || !data) return null;
 
-    const body = await res.json();
     return {
-      user: body.data.user as User,
-      token: body.data.accessToken as string,
+      user: data.data.user,
+      token: data.data.accessToken,
     };
   })();
 

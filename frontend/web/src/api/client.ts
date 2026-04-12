@@ -24,22 +24,23 @@ export class ApiError extends Error {
   }
 }
 
+// Raw client without auth middleware — used for refresh/restore to avoid infinite loops.
+export const rawClient = createClient<paths>({
+  baseUrl: BASE,
+  credentials: "include",
+});
+
 let refreshPromise: Promise<void> | null = null;
 
 async function refreshToken(): Promise<void> {
-  const res = await fetch(`${BASE}/auth/refresh`, {
-    method: "POST",
-    credentials: "include",
-  });
+  const { data, error } = await rawClient.POST("/auth/refresh");
 
-  if (!res.ok) {
+  if (error || !data) {
     useAuthStore.getState().clearAuth();
     throw new ApiError(401, "UNAUTHORIZED");
   }
 
-  const body = await res.json();
-  const { accessToken, user } = body.data;
-  useAuthStore.getState().setAuth(user, accessToken);
+  useAuthStore.getState().setAuth(data.data.user, data.data.accessToken);
 }
 
 const client = createClient<paths>({
