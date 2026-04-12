@@ -7,8 +7,10 @@ import DashboardPage from "@/features/dashboard/DashboardPage";
 import BrandsPage from "@/features/brands/BrandsPage";
 import BrandDetailPage from "@/features/brands/BrandDetailPage";
 import AuditLogPage from "@/features/audit/AuditLogPage";
+import RoleGuard from "@/features/auth/RoleGuard";
 import ErrorBoundary from "@/shared/components/ErrorBoundary";
 import { ROUTES } from "@/shared/constants/routes";
+import { Roles } from "@/shared/constants/roles";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -31,8 +33,10 @@ function App() {
             <Route element={<DashboardLayout />}>
               <Route index element={<DashboardPage />} />
               <Route path={ROUTES.BRANDS} element={<BrandsPage />} />
-              <Route path={ROUTES.BRANDS + "/:brandId"} element={<BrandDetailPage />} />
-              <Route path={ROUTES.AUDIT} element={<AuditLogPage />} />
+              <Route path={ROUTES.BRAND_DETAIL_PATTERN} element={<BrandDetailPage />} />
+              <Route element={<RoleGuard allowedRoles={[Roles.ADMIN]} />}>
+                <Route path={ROUTES.AUDIT} element={<AuditLogPage />} />
+              </Route>
             </Route>
           </Route>
           </Routes>
