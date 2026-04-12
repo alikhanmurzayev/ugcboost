@@ -29,7 +29,7 @@ func CanApproveCreator(_ context.Context, _ dbutil.DB, role string) error {
 // CanManageCampaign checks that the user is a manager of the brand that owns the campaign.
 // Actual DB check will be implemented when campaigns exist.
 func CanManageCampaign(_ context.Context, _ dbutil.DB, _ string, _ string) error {
-	// TODO: implement when campaigns table exists
+	// TODO(#16): implement when campaigns table exists
 	return nil
 }
 
