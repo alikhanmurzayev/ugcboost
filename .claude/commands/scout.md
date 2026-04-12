@@ -1,51 +1,52 @@
 ---
-description: Scout and analyze codebase before implementing changes
+description: Разведка и анализ кодовой базы перед реализацией изменений
 ---
 
-# Scout Mission
+# Разведка
 
-Investigate the codebase to understand the implementation area for: $ARGUMENTS
+Исследуй кодовую базу, чтобы понять область реализации для: $ARGUMENTS
 
-## Task 1: Understand the Request
+## Задача 1: Понять запрос
 
-Parse the user's request and identify:
-- What feature/change/fix is being requested
-- What files/components are likely involved
-- What dependencies might be affected
+Разбери запрос пользователя и определи:
+- Какая фича/изменение/фикс запрашивается
+- Какие файлы/компоненты вероятно затронуты
+- Какие зависимости могут быть задеты
 
-## Task 2: Codebase Exploration
+## Задача 2: Исследование кодовой базы
 
-1. Run `git ls-files` to see project structure
-2. Use Glob and Grep to find relevant files
-3. Read key files to understand:
-   - Current implementation patterns
-   - Related functionality
-   - Test patterns used
+1. Выполни `git ls-files` для обзора структуры проекта
+2. Используй Glob и Grep для поиска релевантных файлов
+3. Прочитай стандарты проекта (`docs/standards/`) — найди релевантные для затронутой области
+4. Прочитай ключевые файлы, чтобы понять:
+   - Текущие паттерны реализации
+   - Связанную функциональность
+   - Используемые паттерны тестирования
 
-## Task 3: Report Findings
+## Задача 3: Отчёт
 
-Create a scout report with:
+Составь отчёт разведки:
 
-### Affected Areas
-- List files that will need changes
-- Note dependencies between files
+### Затронутые области
+- Список файлов, которые нужно изменить
+- Зависимости между файлами
 
-### Implementation Patterns
-- How similar features are implemented
-- Conventions to follow
-- Test patterns to use
+### Паттерны реализации
+- Как реализованы похожие фичи
+- Конвенции, которым нужно следовать
+- Паттерны тестирования
 
-### Risks & Considerations
-- Breaking changes to watch for
-- Edge cases to handle
-- Security considerations
+### Риски и соображения
+- Возможные breaking changes
+- Edge cases
+- Вопросы безопасности
 
-### Recommended Approach
-- Suggested order of changes
-- Key decisions to make
-- Alternative approaches (if applicable)
+### Рекомендуемый подход
+- Предлагаемый порядок изменений
+- Ключевые решения
+- Альтернативные подходы (если есть)
 
-## Task 4: Await Instructions
+## Задача 4: Ожидание инструкций
 
-Present the scout report and ask:
-"Ready to proceed with implementation, or would you like me to explore further?"
+Представь отчёт и спроси:
+"Готов приступить к реализации, или нужно исследовать что-то ещё?"

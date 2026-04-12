@@ -1,70 +1,70 @@
 ---
-description: Create a detailed implementation plan for a feature or change
+description: Создать детальный план реализации фичи или изменения
 ---
 
-# Implementation Planning
+# Планирование реализации
 
-Create a comprehensive implementation plan for: $ARGUMENTS
+Создай план реализации для: $ARGUMENTS
 
-## Task 1: Understand Requirements
+## Задача 1: Понять требования
 
-Parse the request and clarify:
-- Core requirements (must-have)
-- Nice-to-have features
-- Out of scope items
-- Success criteria
+Разбери запрос и определи:
+- Основные требования (must-have)
+- Желательные фичи (nice-to-have)
+- Вне скоупа
+- Критерии успеха
 
-## Task 2: Analyze Current State
+## Задача 2: Анализ текущего состояния
 
-1. Read relevant existing code
-2. Identify patterns to follow
-3. Note any technical debt to address
-4. Check for existing tests to maintain
+1. Прочитай стандарты проекта (`docs/standards/`) — найди релевантные для затронутой области
+2. Прочитай релевантный существующий код
+3. Определи паттерны, которым нужно следовать
+4. Отметь техдолг, который стоит закрыть
+5. Проверь существующие тесты
 
-## Task 3: Create Implementation Plan
+## Задача 3: Создать план реализации
 
-Write a plan to `specs/plans/[feature-name]-plan.md`:
+Запиши план в `specs/plans/[feature-name]-plan.md`:
 
 ```markdown
-# Implementation Plan: [Feature Name]
+# План реализации: [Название фичи]
 
-## Overview
-[1-2 sentence description]
+## Обзор
+[1-2 предложения]
 
-## Requirements
-- REQ-1: [requirement]
-- REQ-2: [requirement]
+## Требования
+- REQ-1: [требование]
+- REQ-2: [требование]
 
-## Files to Modify
-| File | Changes |
-|------|---------|
-| path/to/file.ts | [what to change] |
+## Файлы для изменения
+| Файл | Изменения |
+|------|-----------|
+| path/to/file.ts | [что менять] |
 
-## Files to Create
-| File | Purpose |
-|------|---------|
-| path/to/new-file.ts | [purpose] |
+## Файлы для создания
+| Файл | Назначение |
+|------|------------|
+| path/to/new-file.ts | [назначение] |
 
-## Implementation Steps
-1. [ ] Step 1: [description]
-2. [ ] Step 2: [description]
-3. [ ] Step 3: [description]
+## Шаги реализации
+1. [ ] Шаг 1: [описание]
+2. [ ] Шаг 2: [описание]
+3. [ ] Шаг 3: [описание]
 
-## Testing Strategy
-- Unit tests: [what to test]
-- Integration tests: [what to test]
-- Manual testing: [what to verify]
+## Стратегия тестирования
+- Unit-тесты: [что тестировать]
+- E2E-тесты: [что тестировать]
 
-## Risk Assessment
-| Risk | Likelihood | Mitigation |
-|------|------------|------------|
-| [risk] | Low/Med/High | [how to mitigate] |
+## Оценка рисков
+| Риск | Вероятность | Митигация |
+|------|-------------|-----------|
+| [риск] | Низкая/Средняя/Высокая | [как снизить] |
 
-## Rollback Plan
-[How to revert if something goes wrong]
+## План отката
+[Как откатить, если что-то пойдёт не так]
 ```
 
-## Task 4: Review Checkpoint
+## Задача 4: Чекпоинт
 
-Present the plan and ask:
-"Does this plan look good? Any adjustments before I start building?"
+Представь план и спроси:
+"План выглядит нормально? Нужны правки перед тем, как начать реализацию?"

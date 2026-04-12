@@ -1,75 +1,76 @@
 ---
-description: Execute an implementation plan step by step
+description: Выполнить план реализации шаг за шагом
 ---
 
-# Build Execution
+# Выполнение плана
 
-Execute the implementation plan for: $ARGUMENTS
+Выполни план реализации для: $ARGUMENTS
 
-## Pre-Build Checks
+## Предварительные проверки
 
-1. Read the plan from `specs/plans/[feature]-plan.md`
-2. Verify we're on the correct git branch
-3. Ensure working directory is clean (commit any WIP first)
+1. Прочитай план из `specs/plans/[feature]-plan.md`
+2. Прочитай стандарты проекта (`docs/standards/`) — найди релевантные для затронутой области
+3. Убедись, что мы на правильной git-ветке
+4. Убедись, что рабочая директория чистая (закоммить WIP если нужно)
 
-## Build Process
+## Процесс реализации
 
-For each step in the implementation plan:
+Для каждого шага в плане:
 
-### Step Execution Pattern
+### Паттерн выполнения шага
 
-1. **Read** the current state of files to modify
-2. **Implement** the change following project conventions
-3. **Verify** the change works (run tests if applicable)
-4. **Commit** with a descriptive message
+1. **Прочитай** текущее состояние файлов для изменения
+2. **Реализуй** изменение, следуя конвенциям проекта
+3. **Проверь** что изменение работает (запусти тесты если применимо)
+4. **Закоммить** с описательным сообщением
 
-### Commit Message Format
+### Формат коммит-сообщений
 ```
 [type]: [description]
 
-- [detail 1]
-- [detail 2]
+- [деталь 1]
+- [деталь 2]
 
 Part of: [feature-name]
 ```
 
 Types: feat, fix, refactor, test, docs, chore
 
-## Progress Tracking
+## Отслеживание прогресса
 
-After each step, update `specs/plans/[feature]-progress.md`:
+После каждого шага обнови `specs/plans/[feature]-progress.md`:
 
 ```markdown
-# Progress: [Feature Name]
+# Прогресс: [Название фичи]
 
-## Completed
-- [x] Step 1: [description] - [timestamp]
-- [x] Step 2: [description] - [timestamp]
+## Выполнено
+- [x] Шаг 1: [описание] - [timestamp]
+- [x] Шаг 2: [описание] - [timestamp]
 
-## In Progress
-- [ ] Step 3: [description]
+## В процессе
+- [ ] Шаг 3: [описание]
 
-## Remaining
-- [ ] Step 4: [description]
-- [ ] Step 5: [description]
+## Осталось
+- [ ] Шаг 4: [описание]
+- [ ] Шаг 5: [описание]
 
-## Blockers
-[Any issues encountered]
+## Блокеры
+[Обнаруженные проблемы]
 
-## Notes
-[Decisions made, deviations from plan]
+## Заметки
+[Принятые решения, отклонения от плана]
 ```
 
-## Post-Build
+## После реализации
 
-1. Run full test suite
-2. Update plan status
-3. Report completion summary
+1. Запусти полный набор тестов
+2. Обнови статус плана
+3. Отчитайся о результатах
 
-## Human Checkpoint
+## Чекпоинт
 
-After completing all steps, present:
-- Summary of changes made
-- Any deviations from the plan
-- Test results
-- "Ready for review, or any changes needed?"
+После завершения всех шагов представь:
+- Сводку внесённых изменений
+- Отклонения от плана (если были)
+- Результаты тестов
+- "Готово к ревью, или нужны правки?"
