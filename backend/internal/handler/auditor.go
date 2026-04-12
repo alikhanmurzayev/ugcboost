@@ -10,17 +10,12 @@ import (
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/service"
 )
 
-// Auditor logs audit events. Optional dependency — nil-safe.
-type Auditor interface {
-	Log(ctx context.Context, entry service.AuditEntry) error
-}
-
-// logAudit writes an audit entry if auditor is non-nil. Logs error but doesn't fail the request.
-func logAudit(ctx context.Context, auditor Auditor, entry service.AuditEntry) {
-	if auditor == nil {
+// logAudit writes an audit entry if svc is non-nil. Logs error but doesn't fail the request.
+func logAudit(ctx context.Context, svc AuditLogService, entry service.AuditEntry) {
+	if svc == nil {
 		return
 	}
-	if err := auditor.Log(ctx, entry); err != nil {
+	if err := svc.Log(ctx, entry); err != nil {
 		slog.Error("audit log failed", "error", err, "action", entry.Action)
 	}
 }

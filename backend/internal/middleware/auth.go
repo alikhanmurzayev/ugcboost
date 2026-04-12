@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/alikhanmurzayev/ugcboost/backend/internal/api"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/domain"
 )
 
@@ -72,6 +73,49 @@ func RequireRole(allowed ...string) func(http.Handler) http.Handler {
 				return
 			}
 			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+// AuthFromScopes returns middleware that validates JWT only when BearerAuthScopes is present in context.
+// The generated ServerInterfaceWrapper sets this context value for protected endpoints.
+func AuthFromScopes(validator TokenValidator) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Check if this route requires auth (set by generated wrapper)
+			if r.Context().Value(api.BearerAuthScopes) == nil {
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			// Same auth logic as existing Auth middleware
+			header := r.Header.Get("Authorization")
+			if header == "" {
+				writeJSON(w, http.StatusUnauthorized, domain.APIResponse{
+					Error: &domain.APIError{Code: domain.CodeUnauthorized, Message: "Missing authorization header"},
+				})
+				return
+			}
+
+			parts := strings.SplitN(header, " ", 2)
+			if len(parts) != 2 || !strings.EqualFold(parts[0], "bearer") {
+				writeJSON(w, http.StatusUnauthorized, domain.APIResponse{
+					Error: &domain.APIError{Code: domain.CodeUnauthorized, Message: "Invalid authorization header format"},
+				})
+				return
+			}
+
+			userID, role, err := validator.ValidateAccessToken(parts[1])
+			if err != nil {
+				writeJSON(w, http.StatusUnauthorized, domain.APIResponse{
+					Error: &domain.APIError{Code: domain.CodeUnauthorized, Message: "Invalid or expired token"},
+				})
+				return
+			}
+
+			ctx := context.WithValue(r.Context(), ContextKeyUserID, userID)
+			ctx = context.WithValue(ctx, ContextKeyRole, role)
+			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
 }

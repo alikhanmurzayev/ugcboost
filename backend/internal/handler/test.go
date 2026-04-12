@@ -1,24 +1,11 @@
 package handler
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/domain"
-	"github.com/alikhanmurzayev/ugcboost/backend/internal/repository"
 )
-
-// TestSeeder creates users for testing.
-type TestSeeder interface {
-	SeedUser(ctx context.Context, email, password, role string) (*repository.UserRow, error)
-}
-
-// TestBrandSeeder creates brands for testing.
-type TestBrandSeeder interface {
-	CreateBrand(ctx context.Context, name string, logoURL *string) (*repository.BrandRow, error)
-	AssignManager(ctx context.Context, brandID, email string) (*repository.UserRow, string, error)
-}
 
 // TokenStore retrieves raw reset tokens captured in memory.
 type TokenStore interface {
@@ -28,14 +15,14 @@ type TokenStore interface {
 // TestHandler provides test-only endpoints.
 // Only registered when ENVIRONMENT=local.
 type TestHandler struct {
-	seeder      TestSeeder
-	brandSeeder TestBrandSeeder
-	tokenStore  TokenStore
+	auth       AuthService
+	brands     BrandService
+	tokenStore TokenStore
 }
 
 // NewTestHandler creates a new TestHandler.
-func NewTestHandler(seeder TestSeeder, brandSeeder TestBrandSeeder, tokenStore TokenStore) *TestHandler {
-	return &TestHandler{seeder: seeder, brandSeeder: brandSeeder, tokenStore: tokenStore}
+func NewTestHandler(auth AuthService, brands BrandService, tokenStore TokenStore) *TestHandler {
+	return &TestHandler{auth: auth, brands: brands, tokenStore: tokenStore}
 }
 
 // SeedUser handles POST /test/seed-user
@@ -55,7 +42,7 @@ func (h *TestHandler) SeedUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, err := h.seeder.SeedUser(r.Context(), req.Email, req.Password, req.Role)
+	user, err := h.auth.SeedUser(r.Context(), req.Email, req.Password, req.Role)
 	if err != nil {
 		respondError(w, r, err)
 		return
@@ -84,14 +71,14 @@ func (h *TestHandler) SeedBrand(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	brand, err := h.brandSeeder.CreateBrand(r.Context(), req.Name, nil)
+	brand, err := h.brands.CreateBrand(r.Context(), req.Name, nil)
 	if err != nil {
 		respondError(w, r, err)
 		return
 	}
 
 	if req.ManagerEmail != "" {
-		if _, _, err := h.brandSeeder.AssignManager(r.Context(), brand.ID, req.ManagerEmail); err != nil {
+		if _, _, err := h.brands.AssignManager(r.Context(), brand.ID, req.ManagerEmail); err != nil {
 			respondError(w, r, err)
 			return
 		}

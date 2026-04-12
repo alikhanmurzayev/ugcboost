@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/robfig/cron/v3"
 
+	"github.com/alikhanmurzayev/ugcboost/backend/internal/api"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/closer"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/config"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/handler"
@@ -90,11 +91,6 @@ func run() error {
 		return fmt.Errorf("seed admin: %w", err)
 	}
 
-	// Handlers
-	authHandler := handler.NewAuthHandler(authSvc, auditSvc, cfg.CookieSecure)
-	brandHandler := handler.NewBrandHandler(brandSvc, auditSvc)
-	auditHandler := handler.NewAuditHandler(auditSvc)
-
 	// Router
 	r := chi.NewRouter()
 
@@ -105,33 +101,16 @@ func run() error {
 	r.Use(middleware.CORS(cfg.CORSOrigins))
 	r.Use(middleware.Logging)
 
-	// Public routes
-	r.Get("/healthz", handler.HandleHealthz())
-	r.Post("/auth/login", authHandler.Login)
-	r.Post("/auth/refresh", authHandler.Refresh)
-	r.Post("/auth/password-reset-request", authHandler.RequestPasswordReset)
-	r.Post("/auth/password-reset", authHandler.ResetPassword)
+	// Create server implementing ServerInterface
+	server := handler.NewServer(authSvc, brandSvc, auditSvc, cfg.CookieSecure)
 
-	// Protected routes
-	r.Group(func(r chi.Router) {
-		r.Use(middleware.Auth(tokenSvc))
-
-		r.Post("/auth/logout", authHandler.Logout)
-		r.Get("/auth/me", authHandler.GetMe)
-
-		// Brand management
-		r.Route("/brands", func(r chi.Router) {
-			r.Post("/", brandHandler.CreateBrand)
-			r.Get("/", brandHandler.ListBrands)
-			r.Get("/{brandID}", brandHandler.GetBrand)
-			r.Put("/{brandID}", brandHandler.UpdateBrand)
-			r.Delete("/{brandID}", brandHandler.DeleteBrand)
-			r.Post("/{brandID}/managers", brandHandler.AssignManager)
-			r.Delete("/{brandID}/managers/{userID}", brandHandler.RemoveManager)
-		})
-
-		// Audit logs
-		r.Get("/audit-logs", auditHandler.ListAuditLogs)
+	// Register API routes via generated handler
+	api.HandlerWithOptions(server, api.ChiServerOptions{
+		BaseRouter: r,
+		Middlewares: []api.MiddlewareFunc{
+			middleware.AuthFromScopes(tokenSvc),
+		},
+		ErrorHandlerFunc: handler.HandleParamError,
 	})
 
 	// Test endpoints (only when ENVIRONMENT=local)

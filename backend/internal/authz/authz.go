@@ -5,8 +5,18 @@ import (
 
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/dbutil"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/domain"
+	"github.com/alikhanmurzayev/ugcboost/backend/internal/middleware"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/repository"
 )
+
+// RequireAdmin checks that the authenticated user has admin role.
+func RequireAdmin(ctx context.Context) error {
+	role := middleware.RoleFromContext(ctx)
+	if role != string(domain.RoleAdmin) {
+		return domain.ErrForbidden
+	}
+	return nil
+}
 
 // CanApproveCreator checks that the user is an admin.
 func CanApproveCreator(_ context.Context, _ dbutil.DB, role string) error {

@@ -8,6 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
+	"github.com/alikhanmurzayev/ugcboost/backend/internal/api"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/domain"
 )
 
@@ -15,8 +16,7 @@ import (
 func respondJSON(w http.ResponseWriter, status int, data any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	resp := domain.APIResponse{Data: data}
-	json.NewEncoder(w).Encode(resp) //nolint:errcheck
+	json.NewEncoder(w).Encode(map[string]any{"data": data}) //nolint:errcheck
 }
 
 // respondError maps domain errors to HTTP responses.
@@ -51,8 +51,7 @@ func respondError(w http.ResponseWriter, r *http.Request, err error) {
 func writeError(w http.ResponseWriter, status int, code, message string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	resp := domain.APIResponse{
-		Error: &domain.APIError{Code: code, Message: message},
-	}
-	json.NewEncoder(w).Encode(resp) //nolint:errcheck
+	json.NewEncoder(w).Encode(api.ErrorResponse{ //nolint:errcheck
+		Error: api.APIError{Code: code, Message: message},
+	})
 }

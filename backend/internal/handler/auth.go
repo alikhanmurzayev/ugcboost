@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"context"
 	"encoding/json"
 	"log/slog"
 	"net/http"
@@ -10,34 +9,11 @@ import (
 
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/domain"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/middleware"
-	"github.com/alikhanmurzayev/ugcboost/backend/internal/repository"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/service"
 )
 
-// Auth is the interface AuthHandler needs from the auth service.
-type Auth interface {
-	Login(ctx context.Context, email, password string) (*service.LoginResult, error)
-	Refresh(ctx context.Context, rawRefreshToken string) (*service.RefreshResult, error)
-	Logout(ctx context.Context, userID string) error
-	RequestPasswordReset(ctx context.Context, email string) error
-	ResetPassword(ctx context.Context, rawToken, newPassword string) (string, error)
-	GetUser(ctx context.Context, userID string) (*repository.UserRow, error)
-}
-
-// AuthHandler handles authentication endpoints.
-type AuthHandler struct {
-	auth    Auth
-	auditor Auditor
-	secure  bool // true = Secure cookie flag (production)
-}
-
-// NewAuthHandler creates a new AuthHandler. auditor may be nil.
-func NewAuthHandler(auth Auth, auditor Auditor, secure bool) *AuthHandler {
-	return &AuthHandler{auth: auth, auditor: auditor, secure: secure}
-}
-
 // Login handles POST /auth/login
-func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
+func (s *Server) Login(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Email    string `json:"email"`
 		Password string `json:"password"`
@@ -54,15 +30,15 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result, err := h.auth.Login(r.Context(), req.Email, req.Password)
+	result, err := s.authService.Login(r.Context(), req.Email, req.Password)
 	if err != nil {
 		respondError(w, r, err)
 		return
 	}
 
-	h.setRefreshCookie(w, result.RefreshTokenRaw, result.RefreshExpiresAt)
+	s.setRefreshCookie(w, result.RefreshTokenRaw, result.RefreshExpiresAt)
 
-	logAudit(r.Context(), h.auditor, service.AuditEntry{
+	logAudit(r.Context(), s.auditService, service.AuditEntry{
 		ActorID: result.User.ID, ActorRole: result.User.Role,
 		Action: "login", EntityType: "user", EntityID: result.User.ID,
 		IPAddress: clientIP(r),
@@ -78,21 +54,21 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// Refresh handles POST /auth/refresh
-func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
+// RefreshToken handles POST /auth/refresh
+func (s *Server) RefreshToken(w http.ResponseWriter, r *http.Request) {
 	cookie, err := r.Cookie(CookieRefreshToken)
 	if err != nil || cookie.Value == "" {
 		respondError(w, r, domain.ErrUnauthorized)
 		return
 	}
 
-	result, err := h.auth.Refresh(r.Context(), cookie.Value)
+	result, err := s.authService.Refresh(r.Context(), cookie.Value)
 	if err != nil {
 		respondError(w, r, err)
 		return
 	}
 
-	h.setRefreshCookie(w, result.RefreshTokenRaw, result.RefreshExpiresAt)
+	s.setRefreshCookie(w, result.RefreshTokenRaw, result.RefreshExpiresAt)
 
 	respondJSON(w, http.StatusOK, map[string]any{
 		"accessToken": result.AccessToken,
@@ -105,18 +81,18 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 }
 
 // Logout handles POST /auth/logout
-func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
+func (s *Server) Logout(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.UserIDFromContext(r.Context())
 	if userID == "" {
 		respondError(w, r, domain.ErrUnauthorized)
 		return
 	}
 
-	if err := h.auth.Logout(r.Context(), userID); err != nil {
+	if err := s.authService.Logout(r.Context(), userID); err != nil {
 		slog.Error("failed to revoke refresh tokens on logout", "error", err, "userID", userID)
 	}
 
-	logAudit(r.Context(), h.auditor, service.AuditEntry{
+	logAudit(r.Context(), s.auditService, service.AuditEntry{
 		ActorID: userID, ActorRole: middleware.RoleFromContext(r.Context()),
 		Action: "logout", EntityType: "user", EntityID: userID,
 		IPAddress: clientIP(r),
@@ -129,7 +105,7 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 		Path:     "/",
 		MaxAge:   -1,
 		HttpOnly: true,
-		Secure:   h.secure,
+		Secure:   s.cookieSecure,
 		SameSite: http.SameSiteStrictMode,
 	})
 
@@ -139,7 +115,7 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 }
 
 // RequestPasswordReset handles POST /auth/password-reset-request
-func (h *AuthHandler) RequestPasswordReset(w http.ResponseWriter, r *http.Request) {
+func (s *Server) RequestPasswordReset(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Email string `json:"email"`
 	}
@@ -155,7 +131,7 @@ func (h *AuthHandler) RequestPasswordReset(w http.ResponseWriter, r *http.Reques
 	}
 
 	// Always return 200 to prevent email enumeration
-	if err := h.auth.RequestPasswordReset(r.Context(), req.Email); err != nil {
+	if err := s.authService.RequestPasswordReset(r.Context(), req.Email); err != nil {
 		slog.Error("password reset request failed", "error", err)
 	}
 
@@ -165,7 +141,7 @@ func (h *AuthHandler) RequestPasswordReset(w http.ResponseWriter, r *http.Reques
 }
 
 // ResetPassword handles POST /auth/password-reset
-func (h *AuthHandler) ResetPassword(w http.ResponseWriter, r *http.Request) {
+func (s *Server) ResetPassword(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Token       string `json:"token"`
 		NewPassword string `json:"newPassword"`
@@ -184,13 +160,13 @@ func (h *AuthHandler) ResetPassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resetUserID, err := h.auth.ResetPassword(r.Context(), req.Token, req.NewPassword)
+	resetUserID, err := s.authService.ResetPassword(r.Context(), req.Token, req.NewPassword)
 	if err != nil {
 		respondError(w, r, err)
 		return
 	}
 
-	logAudit(r.Context(), h.auditor, service.AuditEntry{
+	logAudit(r.Context(), s.auditService, service.AuditEntry{
 		ActorID: resetUserID, EntityType: "user", EntityID: resetUserID,
 		Action: "password_reset", IPAddress: clientIP(r),
 	})
@@ -201,14 +177,14 @@ func (h *AuthHandler) ResetPassword(w http.ResponseWriter, r *http.Request) {
 }
 
 // GetMe handles GET /auth/me
-func (h *AuthHandler) GetMe(w http.ResponseWriter, r *http.Request) {
+func (s *Server) GetMe(w http.ResponseWriter, r *http.Request) {
 	userID := middleware.UserIDFromContext(r.Context())
 	if userID == "" {
 		respondError(w, r, domain.ErrUnauthorized)
 		return
 	}
 
-	user, err := h.auth.GetUser(r.Context(), userID)
+	user, err := s.authService.GetUser(r.Context(), userID)
 	if err != nil {
 		respondError(w, r, err)
 		return
@@ -221,14 +197,14 @@ func (h *AuthHandler) GetMe(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (h *AuthHandler) setRefreshCookie(w http.ResponseWriter, token string, expiresUnix int64) {
+func (s *Server) setRefreshCookie(w http.ResponseWriter, token string, expiresUnix int64) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     CookieRefreshToken,
 		Value:    token,
 		Path:     "/",
 		Expires:  time.Unix(expiresUnix, 0),
 		HttpOnly: true,
-		Secure:   h.secure,
+		Secure:   s.cookieSecure,
 		SameSite: http.SameSiteStrictMode,
 	})
 }
