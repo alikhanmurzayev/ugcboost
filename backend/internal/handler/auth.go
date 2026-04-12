@@ -7,6 +7,9 @@ import (
 	"strings"
 	"time"
 
+	openapi_types "github.com/oapi-codegen/runtime/types"
+
+	"github.com/alikhanmurzayev/ugcboost/backend/internal/api"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/domain"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/middleware"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/service"
@@ -14,23 +17,20 @@ import (
 
 // Login handles POST /auth/login
 func (s *Server) Login(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Email    string `json:"email"`
-		Password string `json:"password"`
-	}
+	var req api.LoginRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondError(w, r, domain.NewValidationError(domain.CodeValidation, "Invalid request body"))
 		return
 	}
 
-	req.Email = strings.TrimSpace(strings.ToLower(req.Email))
+	email := strings.TrimSpace(strings.ToLower(string(req.Email)))
 
-	if req.Email == "" || req.Password == "" {
+	if email == "" || req.Password == "" {
 		respondError(w, r, domain.NewValidationError(domain.CodeValidation, "Email and password are required"))
 		return
 	}
 
-	result, err := s.authService.Login(r.Context(), req.Email, req.Password)
+	result, err := s.authService.Login(r.Context(), email, req.Password)
 	if err != nil {
 		respondError(w, r, err)
 		return
@@ -44,12 +44,13 @@ func (s *Server) Login(w http.ResponseWriter, r *http.Request) {
 		IPAddress: clientIP(r),
 	})
 
-	respondJSON(w, http.StatusOK, map[string]any{
-		"accessToken": result.AccessToken,
-		"user": map[string]any{
-			"id":    result.User.ID,
-			"email": result.User.Email,
-			"role":  result.User.Role,
+	respondJSON(w, http.StatusOK, api.LoginResult{
+		Data: struct {
+			AccessToken string   `json:"accessToken"`
+			User        api.User `json:"user"`
+		}{
+			AccessToken: result.AccessToken,
+			User:        domainUserToAPI(result.User),
 		},
 	})
 }
@@ -70,12 +71,13 @@ func (s *Server) RefreshToken(w http.ResponseWriter, r *http.Request) {
 
 	s.setRefreshCookie(w, result.RefreshTokenRaw, result.RefreshExpiresAt)
 
-	respondJSON(w, http.StatusOK, map[string]any{
-		"accessToken": result.AccessToken,
-		"user": map[string]any{
-			"id":    result.User.ID,
-			"email": result.User.Email,
-			"role":  result.User.Role,
+	respondJSON(w, http.StatusOK, api.LoginResult{
+		Data: struct {
+			AccessToken string   `json:"accessToken"`
+			User        api.User `json:"user"`
+		}{
+			AccessToken: result.AccessToken,
+			User:        domainUserToAPI(result.User),
 		},
 	})
 }
@@ -109,43 +111,42 @@ func (s *Server) Logout(w http.ResponseWriter, r *http.Request) {
 		SameSite: http.SameSiteStrictMode,
 	})
 
-	respondJSON(w, http.StatusOK, map[string]any{
-		"message": "Logged out",
+	respondJSON(w, http.StatusOK, api.MessageResponse{
+		Data: struct {
+			Message string `json:"message"`
+		}{Message: "Logged out"},
 	})
 }
 
 // RequestPasswordReset handles POST /auth/password-reset-request
 func (s *Server) RequestPasswordReset(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Email string `json:"email"`
-	}
+	var req api.PasswordResetRequestBody
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondError(w, r, domain.NewValidationError(domain.CodeValidation, "Invalid request body"))
 		return
 	}
 
-	req.Email = strings.TrimSpace(strings.ToLower(req.Email))
-	if req.Email == "" {
+	email := strings.TrimSpace(strings.ToLower(string(req.Email)))
+	if email == "" {
 		respondError(w, r, domain.NewValidationError(domain.CodeValidation, "Email is required"))
 		return
 	}
 
 	// Always return 200 to prevent email enumeration
-	if err := s.authService.RequestPasswordReset(r.Context(), req.Email); err != nil {
+	if err := s.authService.RequestPasswordReset(r.Context(), email); err != nil {
 		slog.Error("password reset request failed", "error", err)
 	}
 
-	respondJSON(w, http.StatusOK, map[string]any{
-		"message": "If the email exists, a reset link has been sent",
+	respondJSON(w, http.StatusOK, api.MessageResponse{
+		Data: struct {
+			Message string `json:"message"`
+		}{Message: "If the email exists, a reset link has been sent"},
 	})
 }
 
 // ResetPassword handles POST /auth/password-reset
 func (s *Server) ResetPassword(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Token       string `json:"token"`
-		NewPassword string `json:"newPassword"`
-	}
+	var req api.PasswordResetBody
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondError(w, r, domain.NewValidationError(domain.CodeValidation, "Invalid request body"))
 		return
@@ -171,8 +172,10 @@ func (s *Server) ResetPassword(w http.ResponseWriter, r *http.Request) {
 		Action: "password_reset", IPAddress: clientIP(r),
 	})
 
-	respondJSON(w, http.StatusOK, map[string]any{
-		"message": "Password updated successfully",
+	respondJSON(w, http.StatusOK, api.MessageResponse{
+		Data: struct {
+			Message string `json:"message"`
+		}{Message: "Password updated successfully"},
 	})
 }
 
@@ -190,10 +193,8 @@ func (s *Server) GetMe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	respondJSON(w, http.StatusOK, map[string]any{
-		"id":    user.ID,
-		"email": user.Email,
-		"role":  user.Role,
+	respondJSON(w, http.StatusOK, api.UserResponse{
+		Data: domainUserToAPI(*user),
 	})
 }
 
@@ -207,4 +208,12 @@ func (s *Server) setRefreshCookie(w http.ResponseWriter, token string, expiresUn
 		Secure:   s.cookieSecure,
 		SameSite: http.SameSiteStrictMode,
 	})
+}
+
+func domainUserToAPI(u domain.User) api.User {
+	return api.User{
+		Id:    u.ID,
+		Email: openapi_types.Email(u.Email),
+		Role:  api.UserRole(u.Role),
+	}
 }

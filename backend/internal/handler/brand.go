@@ -3,7 +3,9 @@ package handler
 import (
 	"encoding/json"
 	"net/http"
+	"time"
 
+	"github.com/alikhanmurzayev/ugcboost/backend/internal/api"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/authz"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/domain"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/middleware"
@@ -17,16 +19,13 @@ func (s *Server) CreateBrand(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req struct {
-		Name    string  `json:"name"`
-		LogoURL *string `json:"logoUrl,omitempty"`
-	}
+	var req api.CreateBrandRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondError(w, r, domain.NewValidationError(domain.CodeValidation, "Invalid request body"))
 		return
 	}
 
-	brand, err := s.brandService.CreateBrand(r.Context(), req.Name, req.LogoURL)
+	brand, err := s.brandService.CreateBrand(r.Context(), req.Name, req.LogoUrl)
 	if err != nil {
 		respondError(w, r, err)
 		return
@@ -38,7 +37,9 @@ func (s *Server) CreateBrand(w http.ResponseWriter, r *http.Request) {
 		NewValue: map[string]string{"name": brand.Name}, IPAddress: clientIP(r),
 	})
 
-	respondJSON(w, http.StatusCreated, brandToJSON(brand))
+	respondJSON(w, http.StatusCreated, api.BrandResult{
+		Data: domainBrandToAPI(brand),
+	})
 }
 
 // ListBrands handles GET /brands
@@ -52,20 +53,22 @@ func (s *Server) ListBrands(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	items := make([]map[string]any, len(brands))
+	items := make([]api.BrandListItem, len(brands))
 	for i, b := range brands {
-		items[i] = map[string]any{
-			"id":           b.ID,
-			"name":         b.Name,
-			"logoUrl":      b.LogoURL,
-			"managerCount": b.ManagerCount,
-			"createdAt":    b.CreatedAt,
-			"updatedAt":    b.UpdatedAt,
+		items[i] = api.BrandListItem{
+			Id:           b.ID,
+			Name:         b.Name,
+			LogoUrl:      b.LogoURL,
+			ManagerCount: b.ManagerCount,
+			CreatedAt:    b.CreatedAt,
+			UpdatedAt:    b.UpdatedAt,
 		}
 	}
 
-	respondJSON(w, http.StatusOK, map[string]any{
-		"brands": items,
+	respondJSON(w, http.StatusOK, api.ListBrandsResult{
+		Data: struct {
+			Brands []api.BrandListItem `json:"brands"`
+		}{Brands: items},
 	})
 }
 
@@ -91,19 +94,32 @@ func (s *Server) GetBrand(w http.ResponseWriter, r *http.Request, brandID string
 		return
 	}
 
-	managerList := make([]map[string]any, len(managers))
+	managerList := make([]api.ManagerInfo, len(managers))
 	for i, m := range managers {
-		managerList[i] = map[string]any{
-			"userId":     m.UserID,
-			"email":      m.Email,
-			"assignedAt": m.AssignedAt,
+		managerList[i] = api.ManagerInfo{
+			UserId:     m.UserID,
+			Email:      m.Email,
+			AssignedAt: m.AssignedAt,
 		}
 	}
 
-	resp := brandToJSON(brand)
-	resp["managers"] = managerList
-
-	respondJSON(w, http.StatusOK, resp)
+	respondJSON(w, http.StatusOK, api.GetBrandResult{
+		Data: struct {
+			CreatedAt time.Time        `json:"createdAt"`
+			Id        string           `json:"id"`
+			LogoUrl   *string          `json:"logoUrl,omitempty"`
+			Managers  []api.ManagerInfo `json:"managers"`
+			Name      string           `json:"name"`
+			UpdatedAt time.Time        `json:"updatedAt"`
+		}{
+			Id:        brand.ID,
+			Name:      brand.Name,
+			LogoUrl:   brand.LogoURL,
+			Managers:  managerList,
+			CreatedAt: brand.CreatedAt,
+			UpdatedAt: brand.UpdatedAt,
+		},
+	})
 }
 
 // UpdateBrand handles PUT /brands/{brandID}
@@ -113,16 +129,13 @@ func (s *Server) UpdateBrand(w http.ResponseWriter, r *http.Request, brandID str
 		return
 	}
 
-	var req struct {
-		Name    string  `json:"name"`
-		LogoURL *string `json:"logoUrl,omitempty"`
-	}
+	var req api.UpdateBrandRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondError(w, r, domain.NewValidationError(domain.CodeValidation, "Invalid request body"))
 		return
 	}
 
-	brand, err := s.brandService.UpdateBrand(r.Context(), brandID, req.Name, req.LogoURL)
+	brand, err := s.brandService.UpdateBrand(r.Context(), brandID, req.Name, req.LogoUrl)
 	if err != nil {
 		respondError(w, r, err)
 		return
@@ -134,7 +147,9 @@ func (s *Server) UpdateBrand(w http.ResponseWriter, r *http.Request, brandID str
 		NewValue: map[string]string{"name": brand.Name}, IPAddress: clientIP(r),
 	})
 
-	respondJSON(w, http.StatusOK, brandToJSON(brand))
+	respondJSON(w, http.StatusOK, api.BrandResult{
+		Data: domainBrandToAPI(brand),
+	})
 }
 
 // DeleteBrand handles DELETE /brands/{brandID}
@@ -155,8 +170,10 @@ func (s *Server) DeleteBrand(w http.ResponseWriter, r *http.Request, brandID str
 		IPAddress: clientIP(r),
 	})
 
-	respondJSON(w, http.StatusOK, map[string]any{
-		"message": "Brand deleted",
+	respondJSON(w, http.StatusOK, api.MessageResponse{
+		Data: struct {
+			Message string `json:"message"`
+		}{Message: "Brand deleted"},
 	})
 }
 
@@ -167,9 +184,7 @@ func (s *Server) AssignManager(w http.ResponseWriter, r *http.Request, brandID s
 		return
 	}
 
-	var req struct {
-		Email string `json:"email"`
-	}
+	var req api.AssignManagerRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondError(w, r, domain.NewValidationError(domain.CodeValidation, "Invalid request body"))
 		return
@@ -187,16 +202,24 @@ func (s *Server) AssignManager(w http.ResponseWriter, r *http.Request, brandID s
 		NewValue: map[string]string{"email": user.Email}, IPAddress: clientIP(r),
 	})
 
-	resp := map[string]any{
-		"userId": user.ID,
-		"email":  user.Email,
-		"role":   user.Role,
-	}
+	var tp *string
 	if tempPassword != "" {
-		resp["tempPassword"] = tempPassword
+		tp = &tempPassword
 	}
 
-	respondJSON(w, http.StatusCreated, resp)
+	respondJSON(w, http.StatusCreated, api.AssignManagerResult{
+		Data: struct {
+			Email        string  `json:"email"`
+			Role         string  `json:"role"`
+			TempPassword *string `json:"tempPassword,omitempty"`
+			UserId       string  `json:"userId"`
+		}{
+			UserId:       user.ID,
+			Email:        user.Email,
+			Role:         string(user.Role),
+			TempPassword: tp,
+		},
+	})
 }
 
 // RemoveManager handles DELETE /brands/{brandID}/managers/{userID}
@@ -217,17 +240,19 @@ func (s *Server) RemoveManager(w http.ResponseWriter, r *http.Request, brandID s
 		OldValue: map[string]string{"userId": userID}, IPAddress: clientIP(r),
 	})
 
-	respondJSON(w, http.StatusOK, map[string]any{
-		"message": "Manager removed",
+	respondJSON(w, http.StatusOK, api.MessageResponse{
+		Data: struct {
+			Message string `json:"message"`
+		}{Message: "Manager removed"},
 	})
 }
 
-func brandToJSON(b *domain.Brand) map[string]any {
-	return map[string]any{
-		"id":        b.ID,
-		"name":      b.Name,
-		"logoUrl":   b.LogoURL,
-		"createdAt": b.CreatedAt,
-		"updatedAt": b.UpdatedAt,
+func domainBrandToAPI(b *domain.Brand) api.Brand {
+	return api.Brand{
+		Id:        b.ID,
+		Name:      b.Name,
+		LogoUrl:   b.LogoURL,
+		CreatedAt: b.CreatedAt,
+		UpdatedAt: b.UpdatedAt,
 	}
 }

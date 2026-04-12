@@ -13,10 +13,11 @@ import (
 )
 
 // respondJSON writes a JSON response with the given status code.
-func respondJSON(w http.ResponseWriter, status int, data any) {
+// The payload should be a typed API response struct (already contains Data field).
+func respondJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(map[string]any{"data": data}) //nolint:errcheck
+	json.NewEncoder(w).Encode(v) //nolint:errcheck
 }
 
 // respondError maps domain errors to HTTP responses.

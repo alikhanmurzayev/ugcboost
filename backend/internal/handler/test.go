@@ -49,9 +49,11 @@ func (h *TestHandler) SeedUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	respondJSON(w, http.StatusCreated, map[string]any{
-		"id":    user.ID,
-		"email": user.Email,
-		"role":  user.Role,
+		"data": map[string]any{
+			"id":    user.ID,
+			"email": user.Email,
+			"role":  user.Role,
+		},
 	})
 }
 
@@ -85,8 +87,10 @@ func (h *TestHandler) SeedBrand(w http.ResponseWriter, r *http.Request) {
 	}
 
 	respondJSON(w, http.StatusCreated, map[string]any{
-		"id":   brand.ID,
-		"name": brand.Name,
+		"data": map[string]any{
+			"id":   brand.ID,
+			"name": brand.Name,
+		},
 	})
 }
 
@@ -105,6 +109,8 @@ func (h *TestHandler) GetResetToken(w http.ResponseWriter, r *http.Request) {
 	}
 
 	respondJSON(w, http.StatusOK, map[string]any{
-		"token": token,
+		"data": map[string]any{
+			"token": token,
+		},
 	})
 }

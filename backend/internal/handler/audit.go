@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"encoding/json"
 	"net/http"
 
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/api"
@@ -50,26 +51,45 @@ func (s *Server) ListAuditLogs(w http.ResponseWriter, r *http.Request, params ap
 		return
 	}
 
-	items := make([]map[string]any, len(logs))
+	items := make([]api.AuditLogEntry, len(logs))
 	for i, l := range logs {
-		items[i] = map[string]any{
-			"id":         l.ID,
-			"actorId":    l.ActorID,
-			"actorRole":  l.ActorRole,
-			"action":     l.Action,
-			"entityType": l.EntityType,
-			"entityId":   l.EntityID,
-			"oldValue":   l.OldValue,
-			"newValue":   l.NewValue,
-			"ipAddress":  l.IPAddress,
-			"createdAt":  l.CreatedAt,
+		items[i] = api.AuditLogEntry{
+			Id:         l.ID,
+			ActorId:    l.ActorID,
+			ActorRole:  l.ActorRole,
+			Action:     l.Action,
+			EntityType: l.EntityType,
+			EntityId:   l.EntityID,
+			OldValue:   rawJSONToAny(l.OldValue),
+			NewValue:   rawJSONToAny(l.NewValue),
+			IpAddress:  l.IPAddress,
+			CreatedAt:  l.CreatedAt,
 		}
 	}
 
-	respondJSON(w, http.StatusOK, map[string]any{
-		"logs":    items,
-		"total":   total,
-		"page":    page,
-		"perPage": perPage,
+	respondJSON(w, http.StatusOK, api.AuditLogsResult{
+		Data: struct {
+			Logs    []api.AuditLogEntry `json:"logs"`
+			Page    int                 `json:"page"`
+			PerPage int                 `json:"perPage"`
+			Total   int                 `json:"total"`
+		}{
+			Logs:    items,
+			Page:    page,
+			PerPage: perPage,
+			Total:   int(total),
+		},
 	})
+}
+
+// rawJSONToAny converts json.RawMessage to any for API serialization.
+func rawJSONToAny(raw []byte) interface{} {
+	if len(raw) == 0 {
+		return nil
+	}
+	var v interface{}
+	if err := json.Unmarshal(raw, &v); err != nil {
+		return nil
+	}
+	return v
 }
