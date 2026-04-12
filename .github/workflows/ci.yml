@@ -52,6 +52,8 @@ jobs:
         working-directory: frontend/web
       - run: npx tsc --noEmit
         working-directory: frontend/web
+      - run: npx eslint src/
+        working-directory: frontend/web
 
   lint-tma:
     name: Lint TMA
@@ -65,12 +67,15 @@ jobs:
         working-directory: frontend/tma
       - run: npx tsc --noEmit
         working-directory: frontend/tma
+      - run: npx eslint src/
+        working-directory: frontend/tma
 
   # ── Stage 2: Build & Push images ─────────────────────────────────
 
   push-images:
     name: Build & Push (${{ matrix.image }})
     runs-on: ubuntu-latest
+    needs: [lint-backend, test-unit, lint-web, lint-tma]
     permissions:
       packages: write
     strategy:
@@ -190,7 +195,7 @@ jobs:
   migrate-staging:
     name: Migrate Staging DB
     runs-on: ubuntu-latest
-    needs: [push-images, lint-backend, test-unit, lint-web, lint-tma]
+    needs: [test-e2e-backend, test-e2e-browser]
     steps:
       - name: Run migrations via SSH
         uses: appleboy/ssh-action@v1
@@ -211,7 +216,7 @@ jobs:
   deploy-staging:
     name: Deploy to Staging
     runs-on: ubuntu-latest
-    needs: [push-images, lint-backend, test-unit, lint-web, lint-tma]
+    needs: [test-e2e-backend, test-e2e-browser]
     steps:
       - name: Deploy services via Dokploy
         uses: appleboy/ssh-action@v1

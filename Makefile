@@ -87,8 +87,8 @@ _test-all: _test-cleanup test-unit _test-e2e-backend _test-e2e
 test-unit:
 	@echo "── Unit tests ──"
 	cd backend && go test ./... -count=1 -race
-	-cd frontend/web && npm test -- --run
-	-cd frontend/tma && npm test -- --run
+	cd frontend/web && npm test -- --run
+	cd frontend/tma && npm test -- --run
 
 test-coverage:
 	cd backend && go test ./internal/closer ./internal/handler ./internal/middleware ./internal/repository ./internal/service \
@@ -141,8 +141,8 @@ _test-cleanup:
 
 lint:
 	cd backend && golangci-lint run ./...
-	-cd frontend/web && npx eslint src/
-	-cd frontend/tma && npx eslint src/
+	cd frontend/web && npx eslint src/
+	cd frontend/tma && npx eslint src/
 
 build:
 	$(DOCKER_WRAP)

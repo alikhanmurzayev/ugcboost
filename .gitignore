@@ -43,8 +43,8 @@ Thumbs.db
 
 # Playwright
 .playwright-mcp/
-web/test-results/
-web/playwright-report/
+frontend/web/test-results/
+frontend/web/playwright-report/
 
 # BMad per-user config (each user runs /bmad-init after cloning)
 _bmad/*/config.yaml
