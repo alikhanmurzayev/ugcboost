@@ -37,7 +37,7 @@ services:
       JWT_EXPIRY: "15m"
       CORS_ORIGINS: "http://localhost:3001,http://localhost:3002"
       LOG_LEVEL: warn
-      ENVIRONMENT: staging
+      ENVIRONMENT: local
       ADMIN_EMAIL: admin@ugcboost.kz
       ADMIN_PASSWORD: admin123
       LIVEDUNE_MOCK: "true"
