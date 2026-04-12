@@ -1,3 +1,17 @@
+/**
+ * Auth flow E2E tests — web application.
+ *
+ * Steps:
+ * 1. Seed admin user via /test/seed-user
+ * 2. Happy login → dashboard with sidebar
+ * 3. Wrong password → error, stay on login
+ * 4. Session restore → F5 keeps user logged in
+ * 5. Logout → redirect to login, session destroyed
+ * 6. Protected route → unauthenticated user redirected
+ *
+ * Data: one test admin (TEST_EMAIL).
+ * Cleanup: delete via /test/users/${TEST_EMAIL} after all tests.
+ */
 import { test, expect } from "@playwright/test";
 
 // API URL for test setup (seed users). Falls back to docker-compose.test.yml backend.
@@ -13,15 +27,21 @@ test.beforeAll(async ({ request }) => {
   expect(resp.status()).toBe(201);
 });
 
+test.afterAll(async ({ request }) => {
+  if (process.env.E2E_CLEANUP !== "false") {
+    await request.delete(`${API_URL}/test/users/${TEST_EMAIL}`);
+  }
+});
+
 test.describe("Auth flow", () => {
   test("1. Happy login — email + password → dashboard with sidebar", async ({
     page,
   }) => {
     await page.goto("/login");
 
-    await page.getByRole("textbox", { name: "Email" }).fill(TEST_EMAIL);
-    await page.getByRole("textbox", { name: "Пароль" }).fill(TEST_PASSWORD);
-    await page.getByRole("button", { name: "Войти" }).click();
+    await page.getByTestId("email-input").fill(TEST_EMAIL);
+    await page.getByTestId("password-input").fill(TEST_PASSWORD);
+    await page.getByTestId("login-button").click();
 
     // Should redirect to dashboard
     await expect(page).toHaveURL("/");
@@ -32,21 +52,21 @@ test.describe("Auth flow", () => {
     await expect(page.getByText("Админ")).toBeVisible();
 
     // Sidebar navigation present (admin role)
-    await expect(page.getByRole("link", { name: "Дашборд" })).toBeVisible();
-    await expect(page.getByRole("link", { name: "Бренды" })).toBeVisible();
-    await expect(page.getByRole("link", { name: "Журнал действий" })).toBeVisible();
+    await expect(page.getByTestId("nav-link-/")).toBeVisible();
+    await expect(page.getByTestId("nav-link-brands")).toBeVisible();
+    await expect(page.getByTestId("nav-link-audit")).toBeVisible();
   });
 
   test("2. Wrong password — error shown, stay on login", async ({ page }) => {
     await page.goto("/login");
 
-    await page.getByRole("textbox", { name: "Email" }).fill(TEST_EMAIL);
-    await page.getByRole("textbox", { name: "Пароль" }).fill("wrongpassword");
-    await page.getByRole("button", { name: "Войти" }).click();
+    await page.getByTestId("email-input").fill(TEST_EMAIL);
+    await page.getByTestId("password-input").fill("wrongpassword");
+    await page.getByTestId("login-button").click();
 
     // Should stay on login page with error
     await expect(page).toHaveURL("/login");
-    await expect(page.getByRole("alert")).toContainText(
+    await expect(page.getByTestId("login-error")).toContainText(
       "Неверный email или пароль",
     );
   });
@@ -54,9 +74,9 @@ test.describe("Auth flow", () => {
   test("3. Session restore — F5 keeps user logged in", async ({ page }) => {
     // Login first
     await page.goto("/login");
-    await page.getByRole("textbox", { name: "Email" }).fill(TEST_EMAIL);
-    await page.getByRole("textbox", { name: "Пароль" }).fill(TEST_PASSWORD);
-    await page.getByRole("button", { name: "Войти" }).click();
+    await page.getByTestId("email-input").fill(TEST_EMAIL);
+    await page.getByTestId("password-input").fill(TEST_PASSWORD);
+    await page.getByTestId("login-button").click();
     await expect(page).toHaveURL("/");
 
     // Reload page (simulates F5 — token lost from memory)
@@ -73,13 +93,13 @@ test.describe("Auth flow", () => {
   }) => {
     // Login first
     await page.goto("/login");
-    await page.getByRole("textbox", { name: "Email" }).fill(TEST_EMAIL);
-    await page.getByRole("textbox", { name: "Пароль" }).fill(TEST_PASSWORD);
-    await page.getByRole("button", { name: "Войти" }).click();
+    await page.getByTestId("email-input").fill(TEST_EMAIL);
+    await page.getByTestId("password-input").fill(TEST_PASSWORD);
+    await page.getByTestId("login-button").click();
     await expect(page).toHaveURL("/");
 
     // Click logout
-    await page.getByRole("button", { name: "Выйти" }).click();
+    await page.getByTestId("logout-button").click();
     await expect(page).toHaveURL("/login");
 
     // Try accessing dashboard — should redirect to login
