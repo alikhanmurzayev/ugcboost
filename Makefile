@@ -93,7 +93,7 @@ build-landing:
 # ── Tests ────────────────────────────────────────────────────
 
 test-unit-backend:
-	cd backend && go test ./... -count=1 -race
+	cd backend && go test ./... -count=1 -race -timeout 5m
 
 test-unit-web:
 	cd frontend/web && npm test -- --run
