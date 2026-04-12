@@ -49,9 +49,9 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
       - run: npm ci
-        working-directory: web
+        working-directory: frontend/web
       - run: npx tsc --noEmit
-        working-directory: web
+        working-directory: frontend/web
 
   lint-tma:
     name: Lint TMA
@@ -62,9 +62,9 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
       - run: npm ci
-        working-directory: tma
+        working-directory: frontend/tma
       - run: npx tsc --noEmit
-        working-directory: tma
+        working-directory: frontend/tma
 
   # ── Stage 2: Build & Push images ─────────────────────────────────
 
@@ -81,13 +81,13 @@ jobs:
             file: ./backend/Dockerfile
           - image: web
             context: .
-            file: web/Dockerfile
+            file: frontend/web/Dockerfile
           - image: tma
             context: .
-            file: tma/Dockerfile
+            file: frontend/tma/Dockerfile
           - image: landing
             context: .
-            file: landing/Dockerfile
+            file: frontend/landing/Dockerfile
           - image: migrations
             context: .
             file: Dockerfile.migrations
@@ -159,15 +159,15 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - run: npm ci
-        working-directory: web
+        working-directory: frontend/web
       - run: npx playwright install chromium
-        working-directory: web
+        working-directory: frontend/web
       - name: Start services
         run: |
           IMAGE_PREFIX=${{ env.IMAGE_PREFIX }} IMAGE_TAG=staging \
             docker compose -f docker-compose.test.yml -f docker-compose.ci.yml up -d --wait
       - name: Run browser E2E
-        working-directory: web
+        working-directory: frontend/web
         run: npx playwright test
         env:
           BASE_URL: http://localhost:3001
@@ -177,7 +177,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report
-          path: web/playwright-report/
+          path: frontend/web/playwright-report/
       - name: Dump logs on failure
         if: failure()
         run: docker compose -f docker-compose.test.yml -f docker-compose.ci.yml logs
@@ -261,11 +261,11 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
       - run: npm ci
-        working-directory: web
+        working-directory: frontend/web
       - run: npx playwright install chromium
-        working-directory: web
+        working-directory: frontend/web
       - name: Run browser E2E against staging
-        working-directory: web
+        working-directory: frontend/web
         run: npx playwright test
         env:
           BASE_URL: https://staging-app.ugcboost.kz
@@ -277,4 +277,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report-staging
-          path: web/playwright-report/
+          path: frontend/web/playwright-report/

@@ -43,7 +43,7 @@ services:
   web:
     build:
       context: .
-      dockerfile: web/Dockerfile
+      dockerfile: frontend/web/Dockerfile
     ports:
       - "5173:80"
     environment:
@@ -54,7 +54,7 @@ services:
   tma:
     build:
       context: .
-      dockerfile: tma/Dockerfile
+      dockerfile: frontend/tma/Dockerfile
     ports:
       - "5174:80"
     environment:

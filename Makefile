@@ -32,8 +32,8 @@ dev:
 _dev: _ensure-db
 	@echo "Ready! Run these in separate terminals:"
 	@echo "  cd backend && go run ./cmd/api"
-	@echo "  cd web && npm run dev"
-	@echo "  cd tma && npm run dev"
+	@echo "  cd frontend/web && npm run dev"
+	@echo "  cd frontend/tma && npm run dev"
 
 # Database migrations
 migrate:
@@ -56,9 +56,9 @@ codegen:
 		-o backend/internal/api/server.gen.go \
 		api/openapi.yaml
 	@echo "Go types + Chi server generated"
-	cd web && npx openapi-typescript ../api/openapi.yaml -o src/api/generated/schema.ts
+	cd frontend/web && npx openapi-typescript ../../api/openapi.yaml -o src/api/generated/schema.ts
 	@echo "Web TS types generated"
-	cd tma && npx openapi-typescript ../api/openapi.yaml -o src/api/generated/schema.ts
+	cd frontend/tma && npx openapi-typescript ../../api/openapi.yaml -o src/api/generated/schema.ts
 	@echo "TMA TS types generated"
 	oapi-codegen -package apiclient -generate types \
 		-o e2etest/apiclient/types.gen.go api/openapi.yaml
@@ -87,8 +87,8 @@ _test-all: _test-cleanup test-unit _test-e2e-backend _test-e2e
 test-unit:
 	@echo "── Unit tests ──"
 	cd backend && go test ./... -count=1 -race
-	-cd web && npm test -- --run
-	-cd tma && npm test -- --run
+	-cd frontend/web && npm test -- --run
+	-cd frontend/tma && npm test -- --run
 
 test-coverage:
 	cd backend && go test ./internal/closer ./internal/handler ./internal/middleware ./internal/repository ./internal/service \
@@ -116,16 +116,16 @@ test-e2e:
 
 _test-e2e: _ensure-db
 	@echo "── Browser E2E tests ──"
-	cd web && npx playwright test
+	cd frontend/web && npx playwright test
 
 test-e2e-ui:
 	$(DOCKER_WRAP)
 
 _test-e2e-ui: _ensure-db
-	cd web && npx playwright test --ui --ui-host=0.0.0.0 --ui-port=3333
+	cd frontend/web && npx playwright test --ui --ui-host=0.0.0.0 --ui-port=3333
 
 test-e2e-report:
-	cd web && npx playwright show-report --host=0.0.0.0 --port=3333
+	cd frontend/web && npx playwright show-report --host=0.0.0.0 --port=3333
 
 # ── Internal helpers ───────────────────────────────────────────────
 
@@ -141,13 +141,13 @@ _test-cleanup:
 
 lint:
 	cd backend && golangci-lint run ./...
-	-cd web && npx eslint src/
-	-cd tma && npx eslint src/
+	-cd frontend/web && npx eslint src/
+	-cd frontend/tma && npx eslint src/
 
 build:
 	$(DOCKER_WRAP)
 
 _build:
 	docker build -t ugcboost/backend ./backend
-	docker build -t ugcboost/web -f web/Dockerfile .
-	docker build -t ugcboost/tma -f tma/Dockerfile .
+	docker build -t ugcboost/web -f frontend/web/Dockerfile .
+	docker build -t ugcboost/tma -f frontend/tma/Dockerfile .

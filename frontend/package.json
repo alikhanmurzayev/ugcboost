@@ -1,0 +1,5 @@
+{
+  "name": "ugcboost-frontend",
+  "private": true,
+  "workspaces": ["web", "tma", "landing", "packages/*"]
+}

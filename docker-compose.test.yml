@@ -59,7 +59,7 @@ services:
   web:
     build:
       context: .
-      dockerfile: web/Dockerfile
+      dockerfile: frontend/web/Dockerfile
     ports:
       - "3001:80"
     environment:
