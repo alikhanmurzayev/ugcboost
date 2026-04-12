@@ -12,8 +12,11 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 FROM alpine:3.20
 RUN apk --no-cache add ca-certificates tzdata && \
     adduser -D -u 1000 appuser
+RUN wget -O /usr/local/bin/goose https://github.com/pressly/goose/releases/download/v3.27.0/goose_linux_x86_64 \
+    && chmod +x /usr/local/bin/goose
 USER appuser
 WORKDIR /app
 COPY --from=builder /api .
+COPY migrations/ /migrations/
 EXPOSE 8080
 ENTRYPOINT ["./api"]

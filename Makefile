@@ -105,7 +105,7 @@ test-unit-landing:
 	cd frontend/landing && npm test -- --run
 
 test-e2e-backend:
-	cd backend/e2e && go test ./... -count=1 -v
+	cd backend/e2e && go test ./... -count=1 -v -race -timeout 5m
 
 test-e2e-frontend:
 	cd frontend/web && CI=true BASE_URL=http://localhost:3001 API_URL=http://localhost:8082 npx playwright test
