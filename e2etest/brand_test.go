@@ -1,12 +1,13 @@
 package e2etest
 
+// brand_test.go contains E2E tests for brand CRUD, manager assignment, and brand isolation.
+
 import (
 	"context"
 	"net/http"
 	"testing"
 
 	openapi_types "github.com/oapi-codegen/runtime/types"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/alikhanmurzayev/ugcboost/e2etest/apiclient"
@@ -59,6 +60,7 @@ func loginAsBrandManager(t *testing.T) (*apiclient.ClientWithResponses, string, 
 // --- Brand CRUD ---
 
 func TestCreateBrand_Success(t *testing.T) {
+	t.Parallel()
 	c, token := loginAsAdmin(t)
 	name := "Brand-" + uniqueEmail("create")
 
@@ -68,31 +70,34 @@ func TestCreateBrand_Success(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, http.StatusCreated, resp.StatusCode())
 	require.NotNil(t, resp.JSON201)
-	assert.Equal(t, name, resp.JSON201.Data.Name)
-	assert.NotEmpty(t, resp.JSON201.Data.Id)
+	require.Equal(t, name, resp.JSON201.Data.Name)
+	require.NotEmpty(t, resp.JSON201.Data.Id)
 }
 
 func TestCreateBrand_EmptyName(t *testing.T) {
+	t.Parallel()
 	c, token := loginAsAdmin(t)
 
 	resp, err := c.CreateBrandWithResponse(context.Background(), apiclient.CreateBrandJSONRequestBody{
 		Name: "",
 	}, withAuth(token))
 	require.NoError(t, err)
-	assert.Equal(t, http.StatusUnprocessableEntity, resp.StatusCode())
+	require.Equal(t, http.StatusUnprocessableEntity, resp.StatusCode())
 }
 
 func TestCreateBrand_ForbiddenForManager(t *testing.T) {
+	t.Parallel()
 	c, token, _, _ := loginAsBrandManager(t)
 
 	resp, err := c.CreateBrandWithResponse(context.Background(), apiclient.CreateBrandJSONRequestBody{
 		Name: "Some Brand",
 	}, withAuth(token))
 	require.NoError(t, err)
-	assert.Equal(t, http.StatusForbidden, resp.StatusCode())
+	require.Equal(t, http.StatusForbidden, resp.StatusCode())
 }
 
 func TestListBrands_Admin(t *testing.T) {
+	t.Parallel()
 	c, token := loginAsAdmin(t)
 	name := "ListBrand-" + uniqueEmail("list")
 	seedBrand(t, name)
@@ -109,10 +114,11 @@ func TestListBrands_Admin(t *testing.T) {
 			break
 		}
 	}
-	assert.True(t, found, "created brand should appear in admin list")
+	require.True(t, found, "created brand should appear in admin list")
 }
 
 func TestListBrands_ManagerSeesOwnOnly(t *testing.T) {
+	t.Parallel()
 	c, token, email, _ := loginAsBrandManager(t)
 	ownBrand := "Own-" + uniqueEmail("own")
 	otherBrand := "Other-" + uniqueEmail("other")
@@ -126,11 +132,12 @@ func TestListBrands_ManagerSeesOwnOnly(t *testing.T) {
 	require.NotNil(t, resp.JSON200)
 
 	for _, b := range resp.JSON200.Data.Brands {
-		assert.NotEqual(t, otherBrand, b.Name, "manager should NOT see other brand")
+		require.NotEqual(t, otherBrand, b.Name, "manager should NOT see other brand")
 	}
 }
 
 func TestGetBrand_Success(t *testing.T) {
+	t.Parallel()
 	c, token := loginAsAdmin(t)
 	name := "GetBrand-" + uniqueEmail("get")
 	brandID := seedBrand(t, name)
@@ -139,20 +146,22 @@ func TestGetBrand_Success(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, resp.StatusCode())
 	require.NotNil(t, resp.JSON200)
-	assert.Equal(t, name, resp.JSON200.Data.Name)
-	assert.NotNil(t, resp.JSON200.Data.Managers)
+	require.Equal(t, name, resp.JSON200.Data.Name)
+	require.NotNil(t, resp.JSON200.Data.Managers)
 }
 
 func TestGetBrand_ForbiddenForUnrelatedManager(t *testing.T) {
+	t.Parallel()
 	c, token, _, _ := loginAsBrandManager(t)
 	brandID := seedBrand(t, "Unrelated-"+uniqueEmail("unrelated"))
 
 	resp, err := c.GetBrandWithResponse(context.Background(), brandID, withAuth(token))
 	require.NoError(t, err)
-	assert.Equal(t, http.StatusForbidden, resp.StatusCode())
+	require.Equal(t, http.StatusForbidden, resp.StatusCode())
 }
 
 func TestUpdateBrand_Success(t *testing.T) {
+	t.Parallel()
 	c, token := loginAsAdmin(t)
 	brandID := seedBrand(t, "OldName-"+uniqueEmail("update"))
 	newName := "NewName-" + uniqueEmail("updated")
@@ -163,26 +172,28 @@ func TestUpdateBrand_Success(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, resp.StatusCode())
 	require.NotNil(t, resp.JSON200)
-	assert.Equal(t, newName, resp.JSON200.Data.Name)
+	require.Equal(t, newName, resp.JSON200.Data.Name)
 }
 
 func TestDeleteBrand_Success(t *testing.T) {
+	t.Parallel()
 	c, token := loginAsAdmin(t)
 	brandID := seedBrand(t, "ToDelete-"+uniqueEmail("delete"))
 
 	resp, err := c.DeleteBrandWithResponse(context.Background(), brandID, withAuth(token))
 	require.NoError(t, err)
-	assert.Equal(t, http.StatusOK, resp.StatusCode())
+	require.Equal(t, http.StatusOK, resp.StatusCode())
 
 	// Verify it's gone
 	getResp, err := c.GetBrandWithResponse(context.Background(), brandID, withAuth(token))
 	require.NoError(t, err)
-	assert.Equal(t, http.StatusNotFound, getResp.StatusCode())
+	require.Equal(t, http.StatusNotFound, getResp.StatusCode())
 }
 
 // --- Manager Assignment ---
 
 func TestAssignManager_Success(t *testing.T) {
+	t.Parallel()
 	c, token := loginAsAdmin(t)
 	brandID := seedBrand(t, "ForManager-"+uniqueEmail("assign"))
 	managerEmail := uniqueEmail("newmgr")
@@ -193,11 +204,12 @@ func TestAssignManager_Success(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, http.StatusCreated, resp.StatusCode())
 	require.NotNil(t, resp.JSON201)
-	assert.Equal(t, managerEmail, resp.JSON201.Data.Email)
-	assert.NotEmpty(t, resp.JSON201.Data.TempPassword, "new user should get temp password")
+	require.Equal(t, managerEmail, resp.JSON201.Data.Email)
+	require.NotEmpty(t, resp.JSON201.Data.TempPassword, "new user should get temp password")
 }
 
 func TestAssignManager_ExistingUser(t *testing.T) {
+	t.Parallel()
 	c, token := loginAsAdmin(t)
 	brandID := seedBrand(t, "ForExisting-"+uniqueEmail("existmgr"))
 	email, _ := seedUser(t, "brand_manager")
@@ -208,10 +220,11 @@ func TestAssignManager_ExistingUser(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, http.StatusCreated, resp.StatusCode())
 	require.NotNil(t, resp.JSON201)
-	assert.Empty(t, resp.JSON201.Data.TempPassword, "existing user should NOT get temp password")
+	require.Empty(t, resp.JSON201.Data.TempPassword, "existing user should NOT get temp password")
 }
 
 func TestRemoveManager_Success(t *testing.T) {
+	t.Parallel()
 	c, token := loginAsAdmin(t)
 	email, _ := seedUser(t, "brand_manager")
 	brandID := seedBrandWithManager(t, "RemMgr-"+uniqueEmail("remmgr"), email)
@@ -226,12 +239,13 @@ func TestRemoveManager_Success(t *testing.T) {
 
 	resp, err := c.RemoveManagerWithResponse(context.Background(), brandID, userID, withAuth(token))
 	require.NoError(t, err)
-	assert.Equal(t, http.StatusOK, resp.StatusCode())
+	require.Equal(t, http.StatusOK, resp.StatusCode())
 }
 
 // --- Brand Isolation ---
 
 func TestBrandIsolation_ManagerCanViewOwnBrand(t *testing.T) {
+	t.Parallel()
 	_, _, email, password := loginAsBrandManager(t)
 	brandID := seedBrandWithManager(t, "OwnBrand-"+uniqueEmail("isolation"), email)
 
@@ -240,14 +254,15 @@ func TestBrandIsolation_ManagerCanViewOwnBrand(t *testing.T) {
 
 	resp, err := c.GetBrandWithResponse(context.Background(), brandID, withAuth(token))
 	require.NoError(t, err)
-	assert.Equal(t, http.StatusOK, resp.StatusCode())
+	require.Equal(t, http.StatusOK, resp.StatusCode())
 }
 
 func TestBrandIsolation_ManagerCannotViewOtherBrand(t *testing.T) {
+	t.Parallel()
 	c, token, _, _ := loginAsBrandManager(t)
 	otherBrandID := seedBrand(t, "OtherBrand-"+uniqueEmail("iso2"))
 
 	resp, err := c.GetBrandWithResponse(context.Background(), otherBrandID, withAuth(token))
 	require.NoError(t, err)
-	assert.Equal(t, http.StatusForbidden, resp.StatusCode())
+	require.Equal(t, http.StatusForbidden, resp.StatusCode())
 }

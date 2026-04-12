@@ -1,11 +1,12 @@
 package e2etest
 
+// audit_test.go contains E2E tests for audit log recording, filtering, and access control.
+
 import (
 	"context"
 	"net/http"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/alikhanmurzayev/ugcboost/e2etest/apiclient"
@@ -14,6 +15,7 @@ import (
 // --- Audit Log E2E ---
 
 func TestAuditLogs_RecordedOnBrandCreate(t *testing.T) {
+	t.Parallel()
 	c, token := loginAsAdmin(t)
 	name := "AuditBrand-" + uniqueEmail("audit-create")
 
@@ -39,14 +41,15 @@ func TestAuditLogs_RecordedOnBrandCreate(t *testing.T) {
 	for _, log := range logsResp.JSON200.Data.Logs {
 		if log.Action == "brand_create" {
 			found = true
-			assert.Equal(t, "brand", log.EntityType)
+			require.Equal(t, "brand", log.EntityType)
 			break
 		}
 	}
-	assert.True(t, found, "brand_create audit log should exist")
+	require.True(t, found, "brand_create audit log should exist")
 }
 
 func TestAuditLogs_RecordedOnManagerAssign(t *testing.T) {
+	t.Parallel()
 	c, token := loginAsAdmin(t)
 	brandID := seedBrand(t, "AuditMgr-"+uniqueEmail("audit-mgr"))
 	email := uniqueEmail("audit-mgr-user")
@@ -66,18 +69,20 @@ func TestAuditLogs_RecordedOnManagerAssign(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, logsResp.StatusCode())
 	require.NotNil(t, logsResp.JSON200)
-	assert.Greater(t, len(logsResp.JSON200.Data.Logs), 0, "manager_assign audit log should exist")
+	require.Greater(t, len(logsResp.JSON200.Data.Logs), 0, "manager_assign audit log should exist")
 }
 
 func TestAuditLogs_ForbiddenForManager(t *testing.T) {
+	t.Parallel()
 	c, token, _, _ := loginAsBrandManager(t)
 
 	logsResp, err := c.ListAuditLogsWithResponse(context.Background(), &apiclient.ListAuditLogsParams{}, withAuth(token))
 	require.NoError(t, err)
-	assert.Equal(t, http.StatusForbidden, logsResp.StatusCode())
+	require.Equal(t, http.StatusForbidden, logsResp.StatusCode())
 }
 
 func TestAuditLogs_Pagination(t *testing.T) {
+	t.Parallel()
 	c, token := loginAsAdmin(t)
 
 	// Create multiple brands to generate audit entries
@@ -94,11 +99,12 @@ func TestAuditLogs_Pagination(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, logsResp.StatusCode())
 	require.NotNil(t, logsResp.JSON200)
-	assert.LessOrEqual(t, len(logsResp.JSON200.Data.Logs), 2)
-	assert.Greater(t, logsResp.JSON200.Data.Total, 0)
+	require.LessOrEqual(t, len(logsResp.JSON200.Data.Logs), 2)
+	require.Greater(t, logsResp.JSON200.Data.Total, 0)
 }
 
 func TestAuditLogs_FilterByAction(t *testing.T) {
+	t.Parallel()
 	c, token := loginAsAdmin(t)
 	seedBrand(t, "FilterBrand-"+uniqueEmail("filter"))
 
@@ -111,6 +117,6 @@ func TestAuditLogs_FilterByAction(t *testing.T) {
 	require.NotNil(t, logsResp.JSON200)
 
 	for _, log := range logsResp.JSON200.Data.Logs {
-		assert.Equal(t, "brand_create", log.Action)
+		require.Equal(t, "brand_create", log.Action)
 	}
 }

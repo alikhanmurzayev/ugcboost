@@ -1,5 +1,7 @@
 package e2etest
 
+// helpers_test.go contains shared test utilities, API client setup, and seed helpers for E2E tests.
+
 import (
 	"context"
 	"fmt"
