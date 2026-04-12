@@ -6,6 +6,7 @@ import (
 	"time"
 
 	sq "github.com/Masterminds/squirrel"
+	"github.com/elgris/stom"
 
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/dbutil"
 )
@@ -28,16 +29,22 @@ const (
 // AuditLogRow maps to the audit_logs table.
 type AuditLogRow struct {
 	ID         string          `db:"id"`
-	ActorID    string          `db:"actor_id"`
-	ActorRole  string          `db:"actor_role"`
-	Action     string          `db:"action"`
-	EntityType string          `db:"entity_type"`
-	EntityID   *string         `db:"entity_id"`
-	OldValue   json.RawMessage `db:"old_value"`
-	NewValue   json.RawMessage `db:"new_value"`
-	IPAddress  string          `db:"ip_address"`
+	ActorID    string          `db:"actor_id"     insert:"actor_id"`
+	ActorRole  string          `db:"actor_role"   insert:"actor_role"`
+	Action     string          `db:"action"       insert:"action"`
+	EntityType string          `db:"entity_type"  insert:"entity_type"`
+	EntityID   *string         `db:"entity_id"    insert:"entity_id"`
+	OldValue   json.RawMessage `db:"old_value"    insert:"old_value"`
+	NewValue   json.RawMessage `db:"new_value"    insert:"new_value"`
+	IPAddress  string          `db:"ip_address"   insert:"ip_address"`
 	CreatedAt  time.Time       `db:"created_at"`
 }
+
+var (
+	auditSelectColumns = sortColumns(stom.MustNewStom(AuditLogRow{}).SetTag(string(tagSelect)).TagValues())
+	auditInsertMapper  = stom.MustNewStom(AuditLogRow{}).SetTag(string(tagInsert))
+	auditInsertColumns = sortColumns(auditInsertMapper.TagValues())
+)
 
 // AuditFilter defines the filter parameters for listing audit logs.
 type AuditFilter struct {
@@ -63,8 +70,7 @@ func NewAuditRepository(db dbutil.DB) *AuditRepository {
 func (r *AuditRepository) Create(ctx context.Context, entry AuditLogRow) error {
 	q := dbutil.Psql.
 		Insert(TableAuditLogs).
-		Columns(AuditLogColumnActorID, AuditLogColumnActorRole, AuditLogColumnAction, AuditLogColumnEntityType, AuditLogColumnEntityID, AuditLogColumnOldValue, AuditLogColumnNewValue, AuditLogColumnIPAddress).
-		Values(entry.ActorID, entry.ActorRole, entry.Action, entry.EntityType, entry.EntityID, entry.OldValue, entry.NewValue, entry.IPAddress)
+		SetMap(toMap(entry, auditInsertMapper))
 
 	_, err := dbutil.Exec(ctx, r.db, q)
 	return err
@@ -86,7 +92,7 @@ func (r *AuditRepository) List(ctx context.Context, f AuditFilter, page, perPage
 
 	// Data
 	q := dbutil.Psql.
-		Select(AuditLogColumnID, AuditLogColumnActorID, AuditLogColumnActorRole, AuditLogColumnAction, AuditLogColumnEntityType, AuditLogColumnEntityID, AuditLogColumnOldValue, AuditLogColumnNewValue, AuditLogColumnIPAddress, AuditLogColumnCreatedAt).
+		Select(auditSelectColumns...).
 		From(TableAuditLogs)
 
 	q = applyAuditFilters(q, f)

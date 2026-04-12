@@ -76,7 +76,7 @@ func TestGetByEmail_SQL(t *testing.T) {
 	_, _ = repo.GetByEmail(context.Background(), "alice@example.com")
 
 	assert.Equal(t,
-		"SELECT id, email, password_hash, role, created_at, updated_at FROM users WHERE email = $1",
+		"SELECT created_at, email, id, password_hash, role, updated_at FROM users WHERE email = $1",
 		*gotSQL)
 	assert.Equal(t, []any{"alice@example.com"}, *gotArgs)
 }
@@ -92,7 +92,7 @@ func TestGetByID_SQL(t *testing.T) {
 	_, _ = repo.GetByID(context.Background(), "user-42")
 
 	assert.Equal(t,
-		"SELECT id, email, password_hash, role, created_at, updated_at FROM users WHERE id = $1",
+		"SELECT created_at, email, id, password_hash, role, updated_at FROM users WHERE id = $1",
 		*gotSQL)
 	assert.Equal(t, []any{"user-42"}, *gotArgs)
 }
@@ -108,7 +108,7 @@ func TestCreate_SQL(t *testing.T) {
 	_, _ = repo.Create(context.Background(), "bob@example.com", "hashed-pw", "brand_manager")
 
 	assert.Equal(t,
-		"INSERT INTO users (email,password_hash,role) VALUES ($1,$2,$3) RETURNING id, email, password_hash, role, created_at, updated_at",
+		"INSERT INTO users (email,password_hash,role) VALUES ($1,$2,$3) RETURNING created_at, email, id, password_hash, role, updated_at",
 		*gotSQL)
 	assert.Equal(t, []any{"bob@example.com", "hashed-pw", "brand_manager"}, *gotArgs)
 }
@@ -165,9 +165,9 @@ func TestSaveRefreshToken_SQL(t *testing.T) {
 	assert.NoError(t, err)
 
 	assert.Equal(t,
-		"INSERT INTO refresh_tokens (user_id,token_hash,expires_at) VALUES ($1,$2,$3)",
+		"INSERT INTO refresh_tokens (expires_at,token_hash,user_id) VALUES ($1,$2,$3)",
 		*gotSQL)
-	assert.Equal(t, []any{"user-1", "token-hash", expiresAt}, *gotArgs)
+	assert.Equal(t, []any{expiresAt, "token-hash", "user-1"}, *gotArgs)
 }
 
 // --- ClaimRefreshToken ---
@@ -181,7 +181,7 @@ func TestClaimRefreshToken_SQL(t *testing.T) {
 	_, _ = repo.ClaimRefreshToken(context.Background(), "token-hash")
 
 	assert.Equal(t,
-		"DELETE FROM refresh_tokens WHERE token_hash = $1 AND expires_at > now() RETURNING id, user_id, token_hash, expires_at, created_at",
+		"DELETE FROM refresh_tokens WHERE token_hash = $1 AND expires_at > now() RETURNING created_at, expires_at, id, token_hash, user_id",
 		*gotSQL)
 	assert.Equal(t, []any{"token-hash"}, *gotArgs)
 }
@@ -216,9 +216,9 @@ func TestSaveResetToken_SQL(t *testing.T) {
 	assert.NoError(t, err)
 
 	assert.Equal(t,
-		"INSERT INTO password_reset_tokens (user_id,token_hash,expires_at) VALUES ($1,$2,$3)",
+		"INSERT INTO password_reset_tokens (expires_at,token_hash,user_id) VALUES ($1,$2,$3)",
 		*gotSQL)
-	assert.Equal(t, []any{"user-1", "reset-hash", expiresAt}, *gotArgs)
+	assert.Equal(t, []any{expiresAt, "reset-hash", "user-1"}, *gotArgs)
 }
 
 // --- ClaimResetToken ---
@@ -232,7 +232,7 @@ func TestClaimResetToken_SQL(t *testing.T) {
 	_, _ = repo.ClaimResetToken(context.Background(), "reset-hash")
 
 	assert.Equal(t,
-		"UPDATE password_reset_tokens SET used = $1 WHERE token_hash = $2 AND used = false AND expires_at > now() RETURNING id, user_id, token_hash, expires_at, used, created_at",
+		"UPDATE password_reset_tokens SET used = $1 WHERE token_hash = $2 AND used = false AND expires_at > now() RETURNING created_at, expires_at, id, token_hash, used, user_id",
 		*gotSQL)
 	assert.Equal(t, []any{true, "reset-hash"}, *gotArgs)
 }

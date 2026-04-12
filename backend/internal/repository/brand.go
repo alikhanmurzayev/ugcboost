@@ -7,6 +7,7 @@ import (
 	"time"
 
 	sq "github.com/Masterminds/squirrel"
+	"github.com/elgris/stom"
 	"github.com/jackc/pgx/v5"
 
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/dbutil"
@@ -33,11 +34,16 @@ const (
 // BrandRow maps to the brands table.
 type BrandRow struct {
 	ID        string    `db:"id"`
-	Name      string    `db:"name"`
-	LogoURL   *string   `db:"logo_url"`
+	Name      string    `db:"name"     insert:"name"`
+	LogoURL   *string   `db:"logo_url" insert:"logo_url"`
 	CreatedAt time.Time `db:"created_at"`
 	UpdatedAt time.Time `db:"updated_at"`
 }
+
+var (
+	brandSelectColumns = sortColumns(stom.MustNewStom(BrandRow{}).SetTag(string(tagSelect)).TagValues())
+	brandInsertMapper  = stom.MustNewStom(BrandRow{}).SetTag(string(tagInsert))
+)
 
 // BrandWithManagerCount is a brand with manager count for list views.
 type BrandWithManagerCount struct {
@@ -69,15 +75,14 @@ func NewBrandRepository(db dbutil.DB) *BrandRepository {
 // Create inserts a new brand and returns it.
 func (r *BrandRepository) Create(ctx context.Context, name string, logoURL *string) (BrandRow, error) {
 	q := dbutil.Psql.Insert(TableBrands).
-		Columns(BrandColumnName, BrandColumnLogoURL).
-		Values(name, logoURL).
-		Suffix("RETURNING " + BrandColumnID + ", " + BrandColumnName + ", " + BrandColumnLogoURL + ", " + BrandColumnCreatedAt + ", " + BrandColumnUpdatedAt)
+		SetMap(toMap(BrandRow{Name: name, LogoURL: logoURL}, brandInsertMapper)).
+		Suffix(returningClause(brandSelectColumns))
 	return dbutil.One[BrandRow](ctx, r.db, q)
 }
 
 // GetByID finds a brand by ID.
 func (r *BrandRepository) GetByID(ctx context.Context, id string) (BrandRow, error) {
-	q := dbutil.Psql.Select(BrandColumnID, BrandColumnName, BrandColumnLogoURL, BrandColumnCreatedAt, BrandColumnUpdatedAt).
+	q := dbutil.Psql.Select(brandSelectColumns...).
 		From(TableBrands).
 		Where(BrandColumnID+" = ?", id)
 	return dbutil.One[BrandRow](ctx, r.db, q)
@@ -117,7 +122,7 @@ func (r *BrandRepository) Update(ctx context.Context, id, name string, logoURL *
 		Set(BrandColumnLogoURL, logoURL).
 		Set(BrandColumnUpdatedAt, sq.Expr("now()")).
 		Where(BrandColumnID+" = ?", id).
-		Suffix("RETURNING " + BrandColumnID + ", " + BrandColumnName + ", " + BrandColumnLogoURL + ", " + BrandColumnCreatedAt + ", " + BrandColumnUpdatedAt)
+		Suffix(returningClause(brandSelectColumns))
 	return dbutil.One[BrandRow](ctx, r.db, q)
 }
 

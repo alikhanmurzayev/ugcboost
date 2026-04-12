@@ -21,9 +21,9 @@ func TestBrandCreate_SQL(t *testing.T) {
 	_, _ = repo.Create(context.Background(), "Test Brand", &logoURL)
 
 	assert.Equal(t,
-		"INSERT INTO brands (name,logo_url) VALUES ($1,$2) RETURNING id, name, logo_url, created_at, updated_at",
+		"INSERT INTO brands (logo_url,name) VALUES ($1,$2) RETURNING created_at, id, logo_url, name, updated_at",
 		*gotSQL)
-	assert.Equal(t, []any{"Test Brand", &logoURL}, *gotArgs)
+	assert.Equal(t, []any{logoURL, "Test Brand"}, *gotArgs)
 }
 
 // --- Brand GetByID ---
@@ -37,7 +37,7 @@ func TestBrandGetByID_SQL(t *testing.T) {
 	_, _ = repo.GetByID(context.Background(), "brand-1")
 
 	assert.Equal(t,
-		"SELECT id, name, logo_url, created_at, updated_at FROM brands WHERE id = $1",
+		"SELECT created_at, id, logo_url, name, updated_at FROM brands WHERE id = $1",
 		*gotSQL)
 	assert.Equal(t, []any{"brand-1"}, *gotArgs)
 }
@@ -84,7 +84,7 @@ func TestBrandUpdate_SQL(t *testing.T) {
 	_, _ = repo.Update(context.Background(), "brand-1", "New Name", nil)
 
 	assert.Equal(t,
-		"UPDATE brands SET name = $1, logo_url = $2, updated_at = now() WHERE id = $3 RETURNING id, name, logo_url, created_at, updated_at",
+		"UPDATE brands SET name = $1, logo_url = $2, updated_at = now() WHERE id = $3 RETURNING created_at, id, logo_url, name, updated_at",
 		*gotSQL)
 	assert.Equal(t, []any{"New Name", (*string)(nil), "brand-1"}, *gotArgs)
 }
@@ -98,10 +98,6 @@ func TestBrandDelete_SQL(t *testing.T) {
 	gotSQL, gotArgs := captureExec(t, db, 1)
 
 	err := repo.Delete(context.Background(), "brand-1")
-	// captureExec returns RowsAffected=1 via "OK" tag,
-	// but pgconn.NewCommandTag("OK") returns 0 rows affected.
-	// So Delete will get 0 rows and return pgx.ErrNoRows wrapped error.
-	// That's fine for SQL assertion purposes.
 	_ = err
 
 	assert.Equal(t,

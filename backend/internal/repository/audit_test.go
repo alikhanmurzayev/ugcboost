@@ -29,7 +29,7 @@ func TestAuditCreate_SQL(t *testing.T) {
 	})
 
 	assert.Equal(t,
-		"INSERT INTO audit_logs (actor_id,actor_role,action,entity_type,entity_id,old_value,new_value,ip_address) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)",
+		"INSERT INTO audit_logs (action,actor_id,actor_role,entity_id,entity_type,ip_address,new_value,old_value) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)",
 		*gotSQL)
-	assert.Equal(t, []any{"u-1", "admin", "brand_create", "brand", &entityID, json.RawMessage(nil), newVal, "127.0.0.1"}, *gotArgs)
+	assert.Equal(t, []any{"brand_create", "u-1", "admin", entityID, "brand", "127.0.0.1", newVal, json.RawMessage(nil)}, *gotArgs)
 }

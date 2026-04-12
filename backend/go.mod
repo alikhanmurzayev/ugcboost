@@ -17,6 +17,7 @@ require (
 	github.com/apapsch/go-jsonmerge/v2 v2.0.0 // indirect
 	github.com/caarlos0/env/v11 v11.4.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
+	github.com/elgris/stom v0.0.0-20160204063428-05ccb51a70bb // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
