@@ -43,7 +43,7 @@ type AuditLogRow struct {
 var (
 	auditSelectColumns = sortColumns(stom.MustNewStom(AuditLogRow{}).SetTag(string(tagSelect)).TagValues())
 	auditInsertMapper  = stom.MustNewStom(AuditLogRow{}).SetTag(string(tagInsert))
-	auditInsertColumns = sortColumns(auditInsertMapper.TagValues())
+	auditInsertColumns = sortColumns(auditInsertMapper.TagValues()) //nolint:unused // will be used for audit log inserts
 )
 
 // AuditFilter defines the filter parameters for listing audit logs.

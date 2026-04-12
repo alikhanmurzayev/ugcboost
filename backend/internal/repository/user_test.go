@@ -21,16 +21,15 @@ func captureQuery(t *testing.T, db *mocks.MockDB, numQueryArgs int) (sql *string
 	var capturedArgs []any
 
 	matchers := []interface{}{mock.Anything, mock.Anything}
-	for i := 0; i < numQueryArgs; i++ {
+	if numQueryArgs > 0 {
 		matchers = append(matchers, mock.Anything)
 	}
 
 	db.On("Query", matchers...).
 		Run(func(callArgs mock.Arguments) {
 			capturedSQL = callArgs.String(1)
-			capturedArgs = make([]any, len(callArgs)-2)
-			for i := 2; i < len(callArgs); i++ {
-				capturedArgs[i-2] = callArgs[i]
+			if len(callArgs) > 2 {
+				capturedArgs = callArgs[2].([]any)
 			}
 		}).
 		Return(nil, errors.New("mock: query intercepted")).
@@ -47,16 +46,15 @@ func captureExec(t *testing.T, db *mocks.MockDB, numExecArgs int) (sql *string, 
 	var capturedArgs []any
 
 	matchers := []interface{}{mock.Anything, mock.Anything}
-	for i := 0; i < numExecArgs; i++ {
+	if numExecArgs > 0 {
 		matchers = append(matchers, mock.Anything)
 	}
 
 	db.On("Exec", matchers...).
 		Run(func(callArgs mock.Arguments) {
 			capturedSQL = callArgs.String(1)
-			capturedArgs = make([]any, len(callArgs)-2)
-			for i := 2; i < len(callArgs); i++ {
-				capturedArgs[i-2] = callArgs[i]
+			if len(callArgs) > 2 {
+				capturedArgs = callArgs[2].([]any)
 			}
 		}).
 		Return(pgconn.NewCommandTag("OK"), nil).

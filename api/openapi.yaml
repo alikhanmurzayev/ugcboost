@@ -23,6 +23,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthResponse"
+        default:
+          description: Unexpected error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /auth/login:
     post:
@@ -59,6 +65,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        default:
+          description: Unexpected error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /auth/refresh:
     post:
@@ -83,6 +95,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        default:
+          description: Unexpected error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /auth/logout:
     post:
@@ -98,6 +116,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/MessageResponse"
+        default:
+          description: Unexpected error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /auth/password-reset-request:
     post:
@@ -117,6 +141,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/MessageResponse"
+        default:
+          description: Unexpected error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /auth/password-reset:
     post:
@@ -148,6 +178,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        default:
+          description: Unexpected error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /auth/me:
     get:
@@ -165,6 +201,12 @@ paths:
                 $ref: "#/components/schemas/UserResponse"
         "401":
           description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          description: Unexpected error
           content:
             application/json:
               schema:
@@ -202,6 +244,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        default:
+          description: Unexpected error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
     get:
       operationId: listBrands
       summary: List brands (admin sees all, manager sees own)
@@ -215,6 +263,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ListBrandsResult"
+        default:
+          description: Unexpected error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /brands/{brandID}:
     parameters:
@@ -244,6 +298,12 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "404":
           description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          description: Unexpected error
           content:
             application/json:
               schema:
@@ -279,6 +339,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        default:
+          description: Unexpected error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
     delete:
       operationId: deleteBrand
       summary: Delete brand
@@ -300,6 +366,12 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "404":
           description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          description: Unexpected error
           content:
             application/json:
               schema:
@@ -333,6 +405,12 @@ paths:
                 $ref: "#/components/schemas/AssignManagerResult"
         "403":
           description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          description: Unexpected error
           content:
             application/json:
               schema:
@@ -393,6 +471,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        default:
+          description: Unexpected error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /brands/{brandID}/managers/{userID}:
     parameters:
@@ -421,6 +505,12 @@ paths:
                 $ref: "#/components/schemas/MessageResponse"
         "403":
           description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          description: Unexpected error
           content:
             application/json:
               schema:

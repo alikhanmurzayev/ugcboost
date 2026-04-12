@@ -1,5 +1,8 @@
 {
   "name": "ugcboost-frontend",
   "private": true,
-  "workspaces": ["web", "tma", "landing", "packages/*"]
+  "workspaces": ["web", "tma", "landing", "packages/*"],
+  "devDependencies": {
+    "@playwright/test": "^1.59.1"
+  }
 }

@@ -2,4 +2,7 @@ version: "2"
 
 linters:
   enable:
+    - errorlint
+    - gocritic
+    - nilerr
     - paralleltest

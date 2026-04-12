@@ -1,4 +1,4 @@
-package e2etest
+package auth
 
 // auth_test.go contains E2E tests for authentication, login, logout, token refresh, and password reset.
 
@@ -12,7 +12,8 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 	"github.com/stretchr/testify/require"
 
-	"github.com/alikhanmurzayev/ugcboost/e2etest/apiclient"
+	"github.com/alikhanmurzayev/ugcboost/backend/e2e/apiclient"
+	"github.com/alikhanmurzayev/ugcboost/backend/e2e/testutil"
 )
 
 // --- Health ---
@@ -20,7 +21,7 @@ import (
 func TestHealthCheck(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	c := newAPIClient(t)
+	c := testutil.NewAPIClient(t)
 	resp, err := c.HealthCheckWithResponse(ctx)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, resp.StatusCode())
@@ -33,8 +34,8 @@ func TestHealthCheck(t *testing.T) {
 func TestLogin_Success(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	email, password := seedUser(t, "admin")
-	c := newAPIClient(t)
+	email, password := testutil.SeedUser(t, "admin")
+	c := testutil.NewAPIClient(t)
 
 	resp, err := c.LoginWithResponse(ctx, apiclient.LoginJSONRequestBody{
 		Email: openapi_types.Email(email), Password: password,
@@ -61,8 +62,8 @@ func TestLogin_Success(t *testing.T) {
 func TestLogin_WrongPassword(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	email, _ := seedUser(t, "admin")
-	c := newAPIClient(t)
+	email, _ := testutil.SeedUser(t, "admin")
+	c := testutil.NewAPIClient(t)
 
 	resp, err := c.LoginWithResponse(ctx, apiclient.LoginJSONRequestBody{
 		Email: openapi_types.Email(email), Password: "wrongpassword",
@@ -76,7 +77,7 @@ func TestLogin_WrongPassword(t *testing.T) {
 func TestLogin_NonExistentEmail(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	c := newAPIClient(t)
+	c := testutil.NewAPIClient(t)
 	resp, err := c.LoginWithResponse(ctx, apiclient.LoginJSONRequestBody{
 		Email: openapi_types.Email("nobody@example.com"), Password: "password123",
 	})
@@ -88,10 +89,10 @@ func TestLogin_EmptyEmail(t *testing.T) {
 	t.Parallel()
 	// Use raw HTTP — the generated client validates Email format before sending
 	body, _ := json.Marshal(map[string]string{"email": "", "password": "password123"})
-	req, err := http.NewRequest("POST", baseURL+"/auth/login", bytes.NewReader(body))
+	req, err := http.NewRequest("POST", testutil.BaseURL+"/auth/login", bytes.NewReader(body))
 	require.NoError(t, err)
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := httpClient(nil).Do(req)
+	resp, err := testutil.HTTPClient(nil).Do(req)
 	require.NoError(t, err)
 	defer resp.Body.Close()
 	require.Equal(t, http.StatusUnprocessableEntity, resp.StatusCode)
@@ -100,8 +101,8 @@ func TestLogin_EmptyEmail(t *testing.T) {
 func TestLogin_ShortPassword(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	email, _ := seedUser(t, "admin")
-	c := newAPIClient(t)
+	email, _ := testutil.SeedUser(t, "admin")
+	c := testutil.NewAPIClient(t)
 	resp, err := c.LoginWithResponse(ctx, apiclient.LoginJSONRequestBody{
 		Email: openapi_types.Email(email), Password: "12345",
 	})
@@ -114,8 +115,8 @@ func TestLogin_ShortPassword(t *testing.T) {
 func TestLogin_EmailNormalization(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	email, password := seedUser(t, "admin")
-	c := newAPIClient(t)
+	email, password := testutil.SeedUser(t, "admin")
+	c := testutil.NewAPIClient(t)
 
 	// Login with uppercase + whitespace
 	resp, err := c.LoginWithResponse(ctx, apiclient.LoginJSONRequestBody{
@@ -133,9 +134,9 @@ func TestLogin_EmailNormalization(t *testing.T) {
 func TestRefresh_Success(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	email, password := seedUser(t, "admin")
-	c := newAPIClient(t)
-	loginAs(t, c, email, password)
+	email, password := testutil.SeedUser(t, "admin")
+	c := testutil.NewAPIClient(t)
+	testutil.LoginAs(t, c, email, password)
 
 	// Refresh — cookie jar sends the refresh_token automatically
 	resp, err := c.RefreshTokenWithResponse(ctx)
@@ -149,7 +150,7 @@ func TestRefresh_Success(t *testing.T) {
 func TestRefresh_NoCookie(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	c := newAPIClient(t) // fresh client, no cookies
+	c := testutil.NewAPIClient(t) // fresh client, no cookies
 	resp, err := c.RefreshTokenWithResponse(ctx)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusUnauthorized, resp.StatusCode())
@@ -158,9 +159,9 @@ func TestRefresh_NoCookie(t *testing.T) {
 func TestRefresh_SingleUse(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	email, password := seedUser(t, "admin")
-	c := newAPIClient(t)
-	loginAs(t, c, email, password)
+	email, password := testutil.SeedUser(t, "admin")
+	c := testutil.NewAPIClient(t)
+	testutil.LoginAs(t, c, email, password)
 
 	// First refresh succeeds
 	resp1, err := c.RefreshTokenWithResponse(ctx)
@@ -179,11 +180,11 @@ func TestRefresh_SingleUse(t *testing.T) {
 func TestGetMe_Success(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	email, password := seedUser(t, "admin")
-	c := newAPIClient(t)
-	token := loginAs(t, c, email, password)
+	email, password := testutil.SeedUser(t, "admin")
+	c := testutil.NewAPIClient(t)
+	token := testutil.LoginAs(t, c, email, password)
 
-	resp, err := c.GetMeWithResponse(ctx, withAuth(token))
+	resp, err := c.GetMeWithResponse(ctx, testutil.WithAuth(token))
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, resp.StatusCode())
 	require.NotNil(t, resp.JSON200)
@@ -194,7 +195,7 @@ func TestGetMe_Success(t *testing.T) {
 func TestGetMe_NoToken(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	c := newAPIClient(t)
+	c := testutil.NewAPIClient(t)
 	resp, err := c.GetMeWithResponse(ctx)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusUnauthorized, resp.StatusCode())
@@ -203,8 +204,8 @@ func TestGetMe_NoToken(t *testing.T) {
 func TestGetMe_InvalidToken(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	c := newAPIClient(t)
-	resp, err := c.GetMeWithResponse(ctx, withAuth("invalid-jwt-token"))
+	c := testutil.NewAPIClient(t)
+	resp, err := c.GetMeWithResponse(ctx, testutil.WithAuth("invalid-jwt-token"))
 	require.NoError(t, err)
 	require.Equal(t, http.StatusUnauthorized, resp.StatusCode())
 }
@@ -214,11 +215,11 @@ func TestGetMe_InvalidToken(t *testing.T) {
 func TestLogout_Success(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	email, password := seedUser(t, "admin")
-	c := newAPIClient(t)
-	token := loginAs(t, c, email, password)
+	email, password := testutil.SeedUser(t, "admin")
+	c := testutil.NewAPIClient(t)
+	token := testutil.LoginAs(t, c, email, password)
 
-	resp, err := c.LogoutWithResponse(ctx, withAuth(token))
+	resp, err := c.LogoutWithResponse(ctx, testutil.WithAuth(token))
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, resp.StatusCode())
 	require.NotNil(t, resp.JSON200)
@@ -227,12 +228,12 @@ func TestLogout_Success(t *testing.T) {
 func TestLogout_InvalidatesRefreshTokens(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	email, password := seedUser(t, "admin")
-	c := newAPIClient(t)
-	token := loginAs(t, c, email, password)
+	email, password := testutil.SeedUser(t, "admin")
+	c := testutil.NewAPIClient(t)
+	token := testutil.LoginAs(t, c, email, password)
 
 	// Logout
-	resp, err := c.LogoutWithResponse(ctx, withAuth(token))
+	resp, err := c.LogoutWithResponse(ctx, testutil.WithAuth(token))
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, resp.StatusCode())
 
@@ -245,7 +246,7 @@ func TestLogout_InvalidatesRefreshTokens(t *testing.T) {
 func TestLogout_NoAuth(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	c := newAPIClient(t)
+	c := testutil.NewAPIClient(t)
 	resp, err := c.LogoutWithResponse(ctx)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusUnauthorized, resp.StatusCode())
@@ -256,8 +257,8 @@ func TestLogout_NoAuth(t *testing.T) {
 func TestPasswordResetRequest_ExistingEmail(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	email, _ := seedUser(t, "admin")
-	c := newAPIClient(t)
+	email, _ := testutil.SeedUser(t, "admin")
+	c := testutil.NewAPIClient(t)
 
 	resp, err := c.RequestPasswordResetWithResponse(ctx, apiclient.RequestPasswordResetJSONRequestBody{
 		Email: openapi_types.Email(email),
@@ -269,7 +270,7 @@ func TestPasswordResetRequest_ExistingEmail(t *testing.T) {
 func TestPasswordResetRequest_NonExistentEmail(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	c := newAPIClient(t)
+	c := testutil.NewAPIClient(t)
 	resp, err := c.RequestPasswordResetWithResponse(ctx, apiclient.RequestPasswordResetJSONRequestBody{
 		Email: openapi_types.Email("nonexistent@example.com"),
 	})
@@ -282,10 +283,10 @@ func TestPasswordResetRequest_EmptyEmail(t *testing.T) {
 	t.Parallel()
 	// Use raw HTTP — the generated client validates Email format before sending
 	body, _ := json.Marshal(map[string]string{"email": ""})
-	req, err := http.NewRequest("POST", baseURL+"/auth/password-reset-request", bytes.NewReader(body))
+	req, err := http.NewRequest("POST", testutil.BaseURL+"/auth/password-reset-request", bytes.NewReader(body))
 	require.NoError(t, err)
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := httpClient(nil).Do(req)
+	resp, err := testutil.HTTPClient(nil).Do(req)
 	require.NoError(t, err)
 	defer resp.Body.Close()
 	require.Equal(t, http.StatusUnprocessableEntity, resp.StatusCode)
@@ -296,8 +297,8 @@ func TestPasswordResetRequest_EmptyEmail(t *testing.T) {
 func TestResetPassword_Success(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	email, password := seedUser(t, "admin")
-	c := newAPIClient(t)
+	email, password := testutil.SeedUser(t, "admin")
+	c := testutil.NewAPIClient(t)
 
 	// Request reset
 	_, err := c.RequestPasswordResetWithResponse(ctx, apiclient.RequestPasswordResetJSONRequestBody{
@@ -306,7 +307,7 @@ func TestResetPassword_Success(t *testing.T) {
 	require.NoError(t, err)
 
 	// Get raw token from test endpoint
-	rawToken := getResetToken(t, email)
+	rawToken := testutil.GetResetToken(t, email)
 	require.NotEmpty(t, rawToken)
 
 	// Reset password
@@ -335,7 +336,7 @@ func TestResetPassword_Success(t *testing.T) {
 func TestResetPassword_InvalidToken(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	c := newAPIClient(t)
+	c := testutil.NewAPIClient(t)
 	resp, err := c.ResetPasswordWithResponse(ctx, apiclient.ResetPasswordJSONRequestBody{
 		Token: "invalid-token", NewPassword: "newpassword123",
 	})
@@ -346,15 +347,15 @@ func TestResetPassword_InvalidToken(t *testing.T) {
 func TestResetPassword_UsedToken(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	email, _ := seedUser(t, "admin")
-	c := newAPIClient(t)
+	email, _ := testutil.SeedUser(t, "admin")
+	c := testutil.NewAPIClient(t)
 
 	// Request + get token
 	_, err := c.RequestPasswordResetWithResponse(ctx, apiclient.RequestPasswordResetJSONRequestBody{
 		Email: openapi_types.Email(email),
 	})
 	require.NoError(t, err)
-	rawToken := getResetToken(t, email)
+	rawToken := testutil.GetResetToken(t, email)
 
 	// Use token once
 	resp1, err := c.ResetPasswordWithResponse(ctx, apiclient.ResetPasswordJSONRequestBody{
@@ -374,14 +375,14 @@ func TestResetPassword_UsedToken(t *testing.T) {
 func TestResetPassword_ShortPassword(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	email, _ := seedUser(t, "admin")
-	c := newAPIClient(t)
+	email, _ := testutil.SeedUser(t, "admin")
+	c := testutil.NewAPIClient(t)
 
 	_, err := c.RequestPasswordResetWithResponse(ctx, apiclient.RequestPasswordResetJSONRequestBody{
 		Email: openapi_types.Email(email),
 	})
 	require.NoError(t, err)
-	rawToken := getResetToken(t, email)
+	rawToken := testutil.GetResetToken(t, email)
 
 	resp, err := c.ResetPasswordWithResponse(ctx, apiclient.ResetPasswordJSONRequestBody{
 		Token: rawToken, NewPassword: "short",
@@ -393,16 +394,16 @@ func TestResetPassword_ShortPassword(t *testing.T) {
 func TestResetPassword_InvalidatesRefreshTokens(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	email, _ := seedUser(t, "admin")
-	c := newAPIClient(t)
-	loginAs(t, c, email, "testpass123")
+	email, _ := testutil.SeedUser(t, "admin")
+	c := testutil.NewAPIClient(t)
+	testutil.LoginAs(t, c, email, "testpass123")
 
 	// Request + reset password
 	_, err := c.RequestPasswordResetWithResponse(ctx, apiclient.RequestPasswordResetJSONRequestBody{
 		Email: openapi_types.Email(email),
 	})
 	require.NoError(t, err)
-	rawToken := getResetToken(t, email)
+	rawToken := testutil.GetResetToken(t, email)
 
 	_, err = c.ResetPasswordWithResponse(ctx, apiclient.ResetPasswordJSONRequestBody{
 		Token: rawToken, NewPassword: "newpassword123",
@@ -420,8 +421,8 @@ func TestResetPassword_InvalidatesRefreshTokens(t *testing.T) {
 func TestSeedUser_AdminRole(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	email, password := seedUser(t, "admin")
-	c := newAPIClient(t)
+	email, password := testutil.SeedUser(t, "admin")
+	c := testutil.NewAPIClient(t)
 
 	resp, err := c.LoginWithResponse(ctx, apiclient.LoginJSONRequestBody{
 		Email: openapi_types.Email(email), Password: password,
@@ -434,8 +435,8 @@ func TestSeedUser_AdminRole(t *testing.T) {
 func TestSeedUser_BrandManagerRole(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	email, password := seedUser(t, "brand_manager")
-	c := newAPIClient(t)
+	email, password := testutil.SeedUser(t, "brand_manager")
+	c := testutil.NewAPIClient(t)
 
 	resp, err := c.LoginWithResponse(ctx, apiclient.LoginJSONRequestBody{
 		Email: openapi_types.Email(email), Password: password,
@@ -450,11 +451,11 @@ func TestSeedUser_BrandManagerRole(t *testing.T) {
 func TestFullFlow_LoginRefreshMeLogout(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	email, password := seedUser(t, "admin")
-	c := newAPIClient(t)
+	email, password := testutil.SeedUser(t, "admin")
+	c := testutil.NewAPIClient(t)
 
 	// Login
-	token := loginAs(t, c, email, password)
+	token := testutil.LoginAs(t, c, email, password)
 
 	// Refresh
 	refreshResp, err := c.RefreshTokenWithResponse(ctx)
@@ -463,13 +464,13 @@ func TestFullFlow_LoginRefreshMeLogout(t *testing.T) {
 	newToken := refreshResp.JSON200.Data.AccessToken
 
 	// Me (with refreshed token)
-	meResp, err := c.GetMeWithResponse(ctx, withAuth(newToken))
+	meResp, err := c.GetMeWithResponse(ctx, testutil.WithAuth(newToken))
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, meResp.StatusCode())
 	require.Equal(t, email, string(meResp.JSON200.Data.Email))
 
 	// Logout
-	logoutResp, err := c.LogoutWithResponse(ctx, withAuth(newToken))
+	logoutResp, err := c.LogoutWithResponse(ctx, testutil.WithAuth(newToken))
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, logoutResp.StatusCode())
 
@@ -486,11 +487,11 @@ func TestFullFlow_LoginRefreshMeLogout(t *testing.T) {
 func TestFullFlow_PasswordReset(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
-	email, oldPassword := seedUser(t, "admin")
-	c := newAPIClient(t)
+	email, oldPassword := testutil.SeedUser(t, "admin")
+	c := testutil.NewAPIClient(t)
 
 	// Login with original password
-	loginAs(t, c, email, oldPassword)
+	testutil.LoginAs(t, c, email, oldPassword)
 
 	// Request reset
 	_, err := c.RequestPasswordResetWithResponse(ctx, apiclient.RequestPasswordResetJSONRequestBody{
@@ -499,7 +500,7 @@ func TestFullFlow_PasswordReset(t *testing.T) {
 	require.NoError(t, err)
 
 	// Get reset token
-	rawToken := getResetToken(t, email)
+	rawToken := testutil.GetResetToken(t, email)
 
 	// Reset password
 	newPassword := "brandnewpassword"
@@ -510,7 +511,7 @@ func TestFullFlow_PasswordReset(t *testing.T) {
 	require.Equal(t, http.StatusOK, resetResp.StatusCode())
 
 	// Login with new password
-	c2 := newAPIClient(t)
+	c2 := testutil.NewAPIClient(t)
 	loginResp, err := c2.LoginWithResponse(ctx, apiclient.LoginJSONRequestBody{
 		Email: openapi_types.Email(email), Password: newPassword,
 	})

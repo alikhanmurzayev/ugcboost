@@ -1,9 +1,11 @@
 FROM node:20-alpine AS builder
-COPY frontend/tailwind.preset.ts /build/
+WORKDIR /build
+COPY frontend/package.json frontend/package-lock.json ./
+COPY frontend/tailwind.preset.ts ./
+COPY frontend/tma/package.json frontend/tma/.npmrc ./tma/
+RUN npm ci -w tma
+COPY frontend/tma/ ./tma/
 WORKDIR /build/tma
-COPY frontend/tma/package*.json frontend/tma/.npmrc ./
-RUN npm ci
-COPY frontend/tma/ .
 RUN npm run build
 
 FROM nginx:alpine

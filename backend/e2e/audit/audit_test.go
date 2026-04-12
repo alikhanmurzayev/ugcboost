@@ -1,4 +1,4 @@
-package e2etest
+package audit
 
 // audit_test.go contains E2E tests for audit log recording, filtering, and access control.
 
@@ -9,20 +9,21 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/alikhanmurzayev/ugcboost/e2etest/apiclient"
+	"github.com/alikhanmurzayev/ugcboost/backend/e2e/apiclient"
+	"github.com/alikhanmurzayev/ugcboost/backend/e2e/testutil"
 )
 
 // --- Audit Log E2E ---
 
 func TestAuditLogs_RecordedOnBrandCreate(t *testing.T) {
 	t.Parallel()
-	c, token := loginAsAdmin(t)
-	name := "AuditBrand-" + uniqueEmail("audit-create")
+	c, token := testutil.LoginAsAdmin(t)
+	name := "AuditBrand-" + testutil.UniqueEmail("audit-create")
 
 	// Create a brand to generate an audit log entry
 	resp, err := c.CreateBrandWithResponse(context.Background(), apiclient.CreateBrandJSONRequestBody{
 		Name: name,
-	}, withAuth(token))
+	}, testutil.WithAuth(token))
 	require.NoError(t, err)
 	require.Equal(t, http.StatusCreated, resp.StatusCode())
 	brandID := resp.JSON201.Data.Id
@@ -32,7 +33,7 @@ func TestAuditLogs_RecordedOnBrandCreate(t *testing.T) {
 	logsResp, err := c.ListAuditLogsWithResponse(context.Background(), &apiclient.ListAuditLogsParams{
 		EntityType: &entityType,
 		EntityId:   &brandID,
-	}, withAuth(token))
+	}, testutil.WithAuth(token))
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, logsResp.StatusCode())
 	require.NotNil(t, logsResp.JSON200)
@@ -50,13 +51,13 @@ func TestAuditLogs_RecordedOnBrandCreate(t *testing.T) {
 
 func TestAuditLogs_RecordedOnManagerAssign(t *testing.T) {
 	t.Parallel()
-	c, token := loginAsAdmin(t)
-	brandID := seedBrand(t, "AuditMgr-"+uniqueEmail("audit-mgr"))
-	email := uniqueEmail("audit-mgr-user")
+	c, token := testutil.LoginAsAdmin(t)
+	brandID := testutil.SeedBrand(t, "AuditMgr-"+testutil.UniqueEmail("audit-mgr"))
+	email := testutil.UniqueEmail("audit-mgr-user")
 
 	_, err := c.AssignManagerWithResponse(context.Background(), brandID, apiclient.AssignManagerJSONRequestBody{
 		Email: email,
-	}, withAuth(token))
+	}, testutil.WithAuth(token))
 	require.NoError(t, err)
 
 	entityType := "brand"
@@ -65,7 +66,7 @@ func TestAuditLogs_RecordedOnManagerAssign(t *testing.T) {
 		EntityType: &entityType,
 		EntityId:   &brandID,
 		Action:     &action,
-	}, withAuth(token))
+	}, testutil.WithAuth(token))
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, logsResp.StatusCode())
 	require.NotNil(t, logsResp.JSON200)
@@ -74,20 +75,20 @@ func TestAuditLogs_RecordedOnManagerAssign(t *testing.T) {
 
 func TestAuditLogs_ForbiddenForManager(t *testing.T) {
 	t.Parallel()
-	c, token, _, _ := loginAsBrandManager(t)
+	c, token, _, _ := testutil.LoginAsBrandManager(t)
 
-	logsResp, err := c.ListAuditLogsWithResponse(context.Background(), &apiclient.ListAuditLogsParams{}, withAuth(token))
+	logsResp, err := c.ListAuditLogsWithResponse(context.Background(), &apiclient.ListAuditLogsParams{}, testutil.WithAuth(token))
 	require.NoError(t, err)
 	require.Equal(t, http.StatusForbidden, logsResp.StatusCode())
 }
 
 func TestAuditLogs_Pagination(t *testing.T) {
 	t.Parallel()
-	c, token := loginAsAdmin(t)
+	c, token := testutil.LoginAsAdmin(t)
 
 	// Create multiple brands to generate audit entries
 	for i := 0; i < 3; i++ {
-		seedBrand(t, "PagBrand-"+uniqueEmail("pag"))
+		testutil.SeedBrand(t, "PagBrand-"+testutil.UniqueEmail("pag"))
 	}
 
 	perPage := 2
@@ -95,7 +96,7 @@ func TestAuditLogs_Pagination(t *testing.T) {
 	logsResp, err := c.ListAuditLogsWithResponse(context.Background(), &apiclient.ListAuditLogsParams{
 		Page:    &page,
 		PerPage: &perPage,
-	}, withAuth(token))
+	}, testutil.WithAuth(token))
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, logsResp.StatusCode())
 	require.NotNil(t, logsResp.JSON200)
@@ -105,13 +106,13 @@ func TestAuditLogs_Pagination(t *testing.T) {
 
 func TestAuditLogs_FilterByAction(t *testing.T) {
 	t.Parallel()
-	c, token := loginAsAdmin(t)
-	seedBrand(t, "FilterBrand-"+uniqueEmail("filter"))
+	c, token := testutil.LoginAsAdmin(t)
+	testutil.SeedBrand(t, "FilterBrand-"+testutil.UniqueEmail("filter"))
 
 	action := "brand_create"
 	logsResp, err := c.ListAuditLogsWithResponse(context.Background(), &apiclient.ListAuditLogsParams{
 		Action: &action,
-	}, withAuth(token))
+	}, testutil.WithAuth(token))
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, logsResp.StatusCode())
 	require.NotNil(t, logsResp.JSON200)

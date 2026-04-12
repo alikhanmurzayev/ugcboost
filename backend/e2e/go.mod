@@ -1,4 +1,4 @@
-module github.com/alikhanmurzayev/ugcboost/e2etest
+module github.com/alikhanmurzayev/ugcboost/backend/e2e
 
 go 1.24.3
 

@@ -41,10 +41,13 @@ func (_m *MockDB) EXPECT() *MockDB_Expecter {
 
 // Exec provides a mock function for the type MockDB
 func (_mock *MockDB) Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error) {
-	var _ca []interface{}
-	_ca = append(_ca, ctx, sql)
-	_ca = append(_ca, args...)
-	ret := _mock.Called(_ca...)
+	var tmpRet mock.Arguments
+	if len(args) > 0 {
+		tmpRet = _mock.Called(ctx, sql, args)
+	} else {
+		tmpRet = _mock.Called(ctx, sql)
+	}
+	ret := tmpRet
 
 	if len(ret) == 0 {
 		panic("no return value specified for Exec")
@@ -93,11 +96,9 @@ func (_c *MockDB_Exec_Call) Run(run func(ctx context.Context, sql string, args .
 			arg1 = args[1].(string)
 		}
 		var arg2 []any
-		variadicArgs := make([]any, len(args)-2)
-		for i, a := range args[2:] {
-			if a != nil {
-				variadicArgs[i] = a.(any)
-			}
+		var variadicArgs []any
+		if len(args) > 2 {
+			variadicArgs = args[2].([]any)
 		}
 		arg2 = variadicArgs
 		run(
@@ -121,10 +122,13 @@ func (_c *MockDB_Exec_Call) RunAndReturn(run func(ctx context.Context, sql strin
 
 // Query provides a mock function for the type MockDB
 func (_mock *MockDB) Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error) {
-	var _ca []interface{}
-	_ca = append(_ca, ctx, sql)
-	_ca = append(_ca, args...)
-	ret := _mock.Called(_ca...)
+	var tmpRet mock.Arguments
+	if len(args) > 0 {
+		tmpRet = _mock.Called(ctx, sql, args)
+	} else {
+		tmpRet = _mock.Called(ctx, sql)
+	}
+	ret := tmpRet
 
 	if len(ret) == 0 {
 		panic("no return value specified for Query")
@@ -175,11 +179,9 @@ func (_c *MockDB_Query_Call) Run(run func(ctx context.Context, sql string, args 
 			arg1 = args[1].(string)
 		}
 		var arg2 []any
-		variadicArgs := make([]any, len(args)-2)
-		for i, a := range args[2:] {
-			if a != nil {
-				variadicArgs[i] = a.(any)
-			}
+		var variadicArgs []any
+		if len(args) > 2 {
+			variadicArgs = args[2].([]any)
 		}
 		arg2 = variadicArgs
 		run(
@@ -203,10 +205,13 @@ func (_c *MockDB_Query_Call) RunAndReturn(run func(ctx context.Context, sql stri
 
 // QueryRow provides a mock function for the type MockDB
 func (_mock *MockDB) QueryRow(ctx context.Context, sql string, args ...any) pgx.Row {
-	var _ca []interface{}
-	_ca = append(_ca, ctx, sql)
-	_ca = append(_ca, args...)
-	ret := _mock.Called(_ca...)
+	var tmpRet mock.Arguments
+	if len(args) > 0 {
+		tmpRet = _mock.Called(ctx, sql, args)
+	} else {
+		tmpRet = _mock.Called(ctx, sql)
+	}
+	ret := tmpRet
 
 	if len(ret) == 0 {
 		panic("no return value specified for QueryRow")
@@ -248,11 +253,9 @@ func (_c *MockDB_QueryRow_Call) Run(run func(ctx context.Context, sql string, ar
 			arg1 = args[1].(string)
 		}
 		var arg2 []any
-		variadicArgs := make([]any, len(args)-2)
-		for i, a := range args[2:] {
-			if a != nil {
-				variadicArgs[i] = a.(any)
-			}
+		var variadicArgs []any
+		if len(args) > 2 {
+			variadicArgs = args[2].([]any)
 		}
 		arg2 = variadicArgs
 		run(

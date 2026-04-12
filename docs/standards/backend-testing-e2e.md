@@ -11,7 +11,7 @@
 По доменам в подпапках:
 
 ```
-e2e/
+backend/e2e/
 ├── testutil/          # экспортированные хелперы
 │   ├── seed.go        # setup хелперы
 │   ├── cleanup.go     # cleanup stack, env-managed

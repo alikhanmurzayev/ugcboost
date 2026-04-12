@@ -141,7 +141,7 @@ func (s *AuthService) Logout(ctx context.Context, userID string) error {
 func (s *AuthService) RequestPasswordReset(ctx context.Context, email string) error {
 	user, err := s.users.GetByEmail(ctx, email)
 	if err != nil {
-		return nil // don't reveal if email exists
+		return nil //nolint:nilerr // intentional: don't reveal if email exists (prevent enumeration)
 	}
 
 	raw, hash, expiresAt, err := s.tokens.GenerateResetToken()

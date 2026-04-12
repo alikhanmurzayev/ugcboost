@@ -1,80 +1,148 @@
-.PHONY: deps deps-down migrate migrate-reset migrate-create \
-       backend web tma landing \
-       test test-unit lint generate codegen
+.PHONY: compose-up compose-down \
+       migrate-up migrate-reset migrate-create \
+       start-backend stop-backend \
+       start-web stop-web start-tma stop-tma start-landing stop-landing \
+       run-backend run-web run-tma run-landing \
+       build-backend build-web build-tma build-landing \
+       test-unit-backend test-unit-web test-unit-tma test-unit-landing \
+       test-e2e-backend test-e2e-frontend \
+       lint-backend lint-web lint-tma lint-landing \
+       generate-api generate-mocks
 
 DATABASE_URL ?= postgres://ugcboost:ugcboost_dev@localhost:5433/ugcboost?sslmode=disable
 
 # ── Infrastructure ────────────────────────────────────────────────
 
-deps:
-	docker compose up -d postgres
-	@until docker compose exec postgres pg_isready -U ugcboost > /dev/null 2>&1; do sleep 1; done
+compose-up:
+	docker compose up -d --wait
 	@echo "Postgres ready on :5433"
 
-deps-down:
+compose-down:
 	docker compose down
 
 # ── Migrations ────────────────────────────────────────────────────
 
-migrate:
-	cd migrations && goose -dir . postgres "$(DATABASE_URL)" up
+migrate-up:
+	cd backend/migrations && goose -dir . postgres "$(DATABASE_URL)" up
 
 migrate-reset:
-	cd migrations && goose -dir . postgres "$(DATABASE_URL)" reset
+	cd backend/migrations && goose -dir . postgres "$(DATABASE_URL)" reset
 
 migrate-create:
 	@test -n "$(NAME)" || (echo "Usage: make migrate-create NAME=add_users_table" && exit 1)
-	cd migrations && goose -dir . create $(NAME) sql
+	cd backend/migrations && goose -dir . create $(NAME) sql
+
+# ── Run in Docker (for E2E tests) ────────────────────────────
+
+start-backend:
+	docker compose --profile backend up -d --build --wait backend
+	@echo "Backend ready on http://localhost:8082"
+
+stop-backend:
+	docker compose --profile backend stop backend
+
+start-web:
+	docker compose --profile web up -d --build --wait web
+	@echo "Web ready on http://localhost:3001"
+
+stop-web:
+	docker compose --profile web stop web
+
+start-tma:
+	docker compose --profile tma up -d --build --wait tma
+	@echo "TMA ready on http://localhost:3002"
+
+stop-tma:
+	docker compose --profile tma stop tma
+
+start-landing:
+	docker compose --profile landing up -d --build --wait landing
+	@echo "Landing ready on http://localhost:3003"
+
+stop-landing:
+	docker compose --profile landing stop landing
 
 # ── Run locally (dev mode) ────────────────────────────────────────
 
-backend:
-	cd backend && go run ./cmd/api
+run-backend:
+	cd backend && go run -race ./cmd/api
 
-web:
+run-web:
 	cd frontend/web && npm run dev
 
-tma:
+run-tma:
 	cd frontend/tma && npm run dev
 
-landing:
+run-landing:
 	cd frontend/landing && npm run dev
 
-# ── Tests ─────────────────────────────────────────────────────────
+# ── Build ─────────────────────────────────────────────────────────
 
-test: test-unit
+build-backend:
+	cd backend && go build ./...
 
-test-unit:
+build-web:
+	cd frontend/web && npm run build
+
+build-tma:
+	cd frontend/tma && npm run build
+
+build-landing:
+	cd frontend/landing && npm run build
+
+# ── Tests ────────────────────────────────────────────────────
+
+test-unit-backend:
 	cd backend && go test ./... -count=1 -race
+
+test-unit-web:
 	cd frontend/web && npm test -- --run
+
+test-unit-tma:
 	cd frontend/tma && npm test -- --run
+
+test-unit-landing:
+	cd frontend/landing && npm test -- --run
+
+test-e2e-backend:
+	cd backend/e2e && go test ./... -count=1 -v
+
+test-e2e-frontend:
+	cd frontend/web && CI=true BASE_URL=http://localhost:3001 API_URL=http://localhost:8082 npx playwright test
 
 # ── Lint ──────────────────────────────────────────────────────────
 
-lint:
+lint-backend:
 	cd backend && golangci-lint run ./...
+
+lint-web:
 	cd frontend/web && npx tsc --noEmit
 	cd frontend/web && npx eslint src/
+
+lint-tma:
 	cd frontend/tma && npx tsc --noEmit
 	cd frontend/tma && npx eslint src/
 
+lint-landing:
+	cd frontend/landing && npx tsc --noEmit
+	cd frontend/landing && npx eslint src/
+
 # ── Code generation ──────────────────────────────────────────────
 
-generate:
-	cd backend && mockery
-	$(MAKE) codegen
-
-codegen:
+generate-api:
 	oapi-codegen -package api -generate chi-server,models \
 		-o backend/internal/api/server.gen.go \
 		api/openapi.yaml
 	cd frontend/web && npx openapi-typescript ../../api/openapi.yaml -o src/api/generated/schema.ts
 	cd frontend/tma && npx openapi-typescript ../../api/openapi.yaml -o src/api/generated/schema.ts
 	oapi-codegen -package apiclient -generate types \
-		-o e2etest/apiclient/types.gen.go api/openapi.yaml
+		-o backend/e2e/apiclient/types.gen.go api/openapi.yaml
 	oapi-codegen -package apiclient -generate client \
-		-o e2etest/apiclient/client.gen.go api/openapi.yaml
+		-o backend/e2e/apiclient/client.gen.go api/openapi.yaml
 	oapi-codegen -package testclient -generate types \
-		-o e2etest/testclient/types.gen.go api/openapi-test.yaml
+		-o backend/e2e/testclient/types.gen.go api/openapi-test.yaml
 	oapi-codegen -package testclient -generate client \
-		-o e2etest/testclient/client.gen.go api/openapi-test.yaml
+		-o backend/e2e/testclient/client.gen.go api/openapi-test.yaml
+
+generate-mocks:
+	cd backend && mockery

@@ -1164,6 +1164,7 @@ type ListAuditLogsResponse struct {
 	HTTPResponse *http.Response
 	JSON200      *AuditLogsResult
 	JSON403      *ErrorResponse
+	JSONDefault  *ErrorResponse
 }
 
 // Status returns HTTPResponse.Status
@@ -1188,6 +1189,7 @@ type LoginResponse struct {
 	JSON200      *LoginResult
 	JSON401      *ErrorResponse
 	JSON422      *ErrorResponse
+	JSONDefault  *ErrorResponse
 }
 
 // Status returns HTTPResponse.Status
@@ -1210,6 +1212,7 @@ type LogoutResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *MessageResponse
+	JSONDefault  *ErrorResponse
 }
 
 // Status returns HTTPResponse.Status
@@ -1233,6 +1236,7 @@ type GetMeResponse struct {
 	HTTPResponse *http.Response
 	JSON200      *UserResponse
 	JSON401      *ErrorResponse
+	JSONDefault  *ErrorResponse
 }
 
 // Status returns HTTPResponse.Status
@@ -1257,6 +1261,7 @@ type ResetPasswordResponse struct {
 	JSON200      *MessageResponse
 	JSON401      *ErrorResponse
 	JSON422      *ErrorResponse
+	JSONDefault  *ErrorResponse
 }
 
 // Status returns HTTPResponse.Status
@@ -1279,6 +1284,7 @@ type RequestPasswordResetResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *MessageResponse
+	JSONDefault  *ErrorResponse
 }
 
 // Status returns HTTPResponse.Status
@@ -1302,6 +1308,7 @@ type RefreshTokenResponse struct {
 	HTTPResponse *http.Response
 	JSON200      *LoginResult
 	JSON401      *ErrorResponse
+	JSONDefault  *ErrorResponse
 }
 
 // Status returns HTTPResponse.Status
@@ -1324,6 +1331,7 @@ type ListBrandsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *ListBrandsResult
+	JSONDefault  *ErrorResponse
 }
 
 // Status returns HTTPResponse.Status
@@ -1348,6 +1356,7 @@ type CreateBrandResponse struct {
 	JSON201      *BrandResult
 	JSON403      *ErrorResponse
 	JSON422      *ErrorResponse
+	JSONDefault  *ErrorResponse
 }
 
 // Status returns HTTPResponse.Status
@@ -1372,6 +1381,7 @@ type DeleteBrandResponse struct {
 	JSON200      *MessageResponse
 	JSON403      *ErrorResponse
 	JSON404      *ErrorResponse
+	JSONDefault  *ErrorResponse
 }
 
 // Status returns HTTPResponse.Status
@@ -1396,6 +1406,7 @@ type GetBrandResponse struct {
 	JSON200      *GetBrandResult
 	JSON403      *ErrorResponse
 	JSON404      *ErrorResponse
+	JSONDefault  *ErrorResponse
 }
 
 // Status returns HTTPResponse.Status
@@ -1420,6 +1431,7 @@ type UpdateBrandResponse struct {
 	JSON200      *BrandResult
 	JSON403      *ErrorResponse
 	JSON422      *ErrorResponse
+	JSONDefault  *ErrorResponse
 }
 
 // Status returns HTTPResponse.Status
@@ -1443,6 +1455,7 @@ type AssignManagerResponse struct {
 	HTTPResponse *http.Response
 	JSON201      *AssignManagerResult
 	JSON403      *ErrorResponse
+	JSONDefault  *ErrorResponse
 }
 
 // Status returns HTTPResponse.Status
@@ -1466,6 +1479,7 @@ type RemoveManagerResponse struct {
 	HTTPResponse *http.Response
 	JSON200      *MessageResponse
 	JSON403      *ErrorResponse
+	JSONDefault  *ErrorResponse
 }
 
 // Status returns HTTPResponse.Status
@@ -1488,6 +1502,7 @@ type HealthCheckResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *HealthResponse
+	JSONDefault  *ErrorResponse
 }
 
 // Status returns HTTPResponse.Status
@@ -1717,6 +1732,13 @@ func ParseListAuditLogsResponse(rsp *http.Response) (*ListAuditLogsResponse, err
 		}
 		response.JSON403 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSONDefault = &dest
+
 	}
 
 	return response, nil
@@ -1757,6 +1779,13 @@ func ParseLoginResponse(rsp *http.Response) (*LoginResponse, error) {
 		}
 		response.JSON422 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSONDefault = &dest
+
 	}
 
 	return response, nil
@@ -1782,6 +1811,13 @@ func ParseLogoutResponse(rsp *http.Response) (*LogoutResponse, error) {
 			return nil, err
 		}
 		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSONDefault = &dest
 
 	}
 
@@ -1815,6 +1851,13 @@ func ParseGetMeResponse(rsp *http.Response) (*GetMeResponse, error) {
 			return nil, err
 		}
 		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSONDefault = &dest
 
 	}
 
@@ -1856,6 +1899,13 @@ func ParseResetPasswordResponse(rsp *http.Response) (*ResetPasswordResponse, err
 		}
 		response.JSON422 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSONDefault = &dest
+
 	}
 
 	return response, nil
@@ -1881,6 +1931,13 @@ func ParseRequestPasswordResetResponse(rsp *http.Response) (*RequestPasswordRese
 			return nil, err
 		}
 		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSONDefault = &dest
 
 	}
 
@@ -1915,6 +1972,13 @@ func ParseRefreshTokenResponse(rsp *http.Response) (*RefreshTokenResponse, error
 		}
 		response.JSON401 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSONDefault = &dest
+
 	}
 
 	return response, nil
@@ -1940,6 +2004,13 @@ func ParseListBrandsResponse(rsp *http.Response) (*ListBrandsResponse, error) {
 			return nil, err
 		}
 		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSONDefault = &dest
 
 	}
 
@@ -1981,6 +2052,13 @@ func ParseCreateBrandResponse(rsp *http.Response) (*CreateBrandResponse, error) 
 		}
 		response.JSON422 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSONDefault = &dest
+
 	}
 
 	return response, nil
@@ -2020,6 +2098,13 @@ func ParseDeleteBrandResponse(rsp *http.Response) (*DeleteBrandResponse, error) 
 			return nil, err
 		}
 		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSONDefault = &dest
 
 	}
 
@@ -2061,6 +2146,13 @@ func ParseGetBrandResponse(rsp *http.Response) (*GetBrandResponse, error) {
 		}
 		response.JSON404 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSONDefault = &dest
+
 	}
 
 	return response, nil
@@ -2101,6 +2193,13 @@ func ParseUpdateBrandResponse(rsp *http.Response) (*UpdateBrandResponse, error) 
 		}
 		response.JSON422 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSONDefault = &dest
+
 	}
 
 	return response, nil
@@ -2133,6 +2232,13 @@ func ParseAssignManagerResponse(rsp *http.Response) (*AssignManagerResponse, err
 			return nil, err
 		}
 		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSONDefault = &dest
 
 	}
 
@@ -2167,6 +2273,13 @@ func ParseRemoveManagerResponse(rsp *http.Response) (*RemoveManagerResponse, err
 		}
 		response.JSON403 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSONDefault = &dest
+
 	}
 
 	return response, nil
@@ -2192,6 +2305,13 @@ func ParseHealthCheckResponse(rsp *http.Response) (*HealthCheckResponse, error) 
 			return nil, err
 		}
 		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSONDefault = &dest
 
 	}
 
