@@ -18,12 +18,20 @@ services:
       timeout: 5s
       retries: 5
 
+  migrations:
+    build: ./backend
+    profiles: [backend]
+    entrypoint: ["goose", "-dir", "/migrations", "postgres", "postgres://${POSTGRES_USER:-ugcboost}:${POSTGRES_PASSWORD:-ugcboost_dev}@postgres:5432/${POSTGRES_DB:-ugcboost}?sslmode=disable", "up"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   backend:
     build: ./backend
     profiles: [backend]
     depends_on:
-      postgres:
-        condition: service_healthy
+      migrations:
+        condition: service_completed_successfully
     ports:
       - "8082:8082"
     env_file: ./backend/.env

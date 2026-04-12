@@ -9,7 +9,6 @@
        lint-backend lint-web lint-tma lint-landing \
        generate-api generate-mocks
 
-DATABASE_URL ?= postgres://ugcboost:ugcboost_dev@localhost:5433/ugcboost?sslmode=disable
 
 # ── Infrastructure ────────────────────────────────────────────────
 
@@ -23,10 +22,10 @@ compose-down:
 # ── Migrations ────────────────────────────────────────────────────
 
 migrate-up: compose-up
-	cd backend/migrations && goose -dir . postgres "$(DATABASE_URL)" up
+	docker compose --profile backend run --rm migrations
 
-migrate-reset:
-	cd backend/migrations && goose -dir . postgres "$(DATABASE_URL)" reset
+migrate-reset: compose-up
+	docker compose --profile backend run --rm migrations goose -dir /migrations postgres "postgres://$${POSTGRES_USER:-ugcboost}:$${POSTGRES_PASSWORD:-ugcboost_dev}@postgres:5432/$${POSTGRES_DB:-ugcboost}?sslmode=disable" reset
 
 migrate-create:
 	@test -n "$(NAME)" || (echo "Usage: make migrate-create NAME=add_users_table" && exit 1)
@@ -34,29 +33,29 @@ migrate-create:
 
 # ── Run in Docker (for E2E tests) ────────────────────────────
 
-start-backend: compose-up migrate-up
-	docker compose --profile backend up -d --build --wait backend
+start-backend: compose-up
+	docker compose --profile backend up -d --build --force-recreate --wait backend
 	@echo "Backend ready on http://localhost:8082"
 
 stop-backend:
 	docker compose --profile backend stop backend
 
 start-web: start-backend
-	docker compose --profile web up -d --build --wait web
+	docker compose --profile web up -d --build --force-recreate --wait web
 	@echo "Web ready on http://localhost:3001"
 
 stop-web:
 	docker compose --profile web stop web
 
 start-tma: start-backend
-	docker compose --profile tma up -d --build --wait tma
+	docker compose --profile tma up -d --build --force-recreate --wait tma
 	@echo "TMA ready on http://localhost:3002"
 
 stop-tma:
 	docker compose --profile tma stop tma
 
 start-landing: start-backend
-	docker compose --profile landing up -d --build --wait landing
+	docker compose --profile landing up -d --build --force-recreate --wait landing
 	@echo "Landing ready on http://localhost:3003"
 
 stop-landing:
