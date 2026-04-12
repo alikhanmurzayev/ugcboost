@@ -35,9 +35,14 @@ type Config struct {
 	ResetExpiry   time.Duration `env:"RESET_EXPIRY" envDefault:"1h"`
 
 	// HTTP server
-	ReadTimeout  time.Duration `env:"READ_TIMEOUT" envDefault:"10s"`
-	WriteTimeout time.Duration `env:"WRITE_TIMEOUT" envDefault:"30s"`
-	IdleTimeout  time.Duration `env:"IDLE_TIMEOUT" envDefault:"60s"`
+	ReadTimeout     time.Duration `env:"READ_TIMEOUT" envDefault:"10s"`
+	WriteTimeout    time.Duration `env:"WRITE_TIMEOUT" envDefault:"30s"`
+	IdleTimeout     time.Duration `env:"IDLE_TIMEOUT" envDefault:"60s"`
+	BodyLimitBytes  int           `env:"BODY_LIMIT_BYTES" envDefault:"1048576"` // 1 MB
+	ShutdownTimeout time.Duration `env:"SHUTDOWN_TIMEOUT" envDefault:"10s"`
+
+	// Pagination
+	DefaultPerPage int `env:"DEFAULT_PER_PAGE" envDefault:"20"`
 
 	// Feature flags for mock integrations
 	LiveDuneMock bool `env:"LIVEDUNE_MOCK" envDefault:"false"`

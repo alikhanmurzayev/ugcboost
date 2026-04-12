@@ -9,7 +9,6 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -96,7 +95,7 @@ func run() error {
 
 	// Global middleware
 	r.Use(middleware.Recovery)
-	r.Use(middleware.BodyLimit(1 << 20)) // 1 MB
+	r.Use(middleware.BodyLimit(int64(cfg.BodyLimitBytes)))
 	r.Use(middleware.SecureHeaders)
 	r.Use(middleware.CORS(cfg.CORSOrigins))
 	r.Use(middleware.Logging)
@@ -156,7 +155,7 @@ func run() error {
 		}
 	}
 
-	shutdownCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	shutdownCtx, cancel := context.WithTimeout(ctx, cfg.ShutdownTimeout)
 	defer cancel()
 
 	return cl.Close(shutdownCtx)

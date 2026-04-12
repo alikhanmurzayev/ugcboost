@@ -181,10 +181,13 @@ func (s *BrandService) CanViewBrand(ctx context.Context, userID, role, brandID s
 	return nil
 }
 
-const tempPasswordChars = "abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+const (
+	tempPasswordChars  = "abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+	tempPasswordLength = 12
+)
 
 func generateTempPassword() (string, error) {
-	b := make([]byte, 12)
+	b := make([]byte, tempPasswordLength)
 	for i := range b {
 		n, err := rand.Int(rand.Reader, big.NewInt(int64(len(tempPasswordChars))))
 		if err != nil {
