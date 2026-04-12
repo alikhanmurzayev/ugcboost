@@ -28,25 +28,43 @@ jobs:
           working-directory: backend
           version: v2.11.4
 
-  test-unit:
-    name: Unit Tests
+  test-unit-backend:
+    name: Unit Tests Backend
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
       - name: Backend unit tests
         working-directory: backend
         run: go test ./... -count=1 -race -timeout 5m
-      - name: Frontend unit tests (web)
+
+  test-unit-frontend-web:
+    name: Unit Tests Web
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - run: npm ci
         working-directory: frontend/web
-        run: |
-          npm ci
-          npm test -- --run
+      - run: npm test -- --run
+        working-directory: frontend/web
+
+  test-unit-frontend-tma:
+    name: Unit Tests TMA
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - run: npm ci
+        working-directory: frontend/tma
+      - run: npm test -- --run
+        working-directory: frontend/tma
 
   lint-web:
     name: Lint Web
@@ -82,9 +100,8 @@ jobs:
 
   push-images:
     name: Build & Push (${{ matrix.image }})
-    if: github.event_name == 'push'
     runs-on: ubuntu-latest
-    needs: [lint-backend, test-unit, lint-web, lint-tma]
+    needs: [lint-backend, test-unit-backend, test-unit-frontend-web, test-unit-frontend-tma, lint-web, lint-tma]
     permissions:
       packages: write
     strategy:
