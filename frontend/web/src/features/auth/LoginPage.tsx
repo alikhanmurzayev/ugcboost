@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { login } from "@/api/auth";
 import { ROUTES } from "@/shared/constants/routes";
 import { useAuthStore } from "@/stores/auth";
@@ -7,6 +8,7 @@ import { ApiError } from "@/api/client";
 import { getErrorMessage } from "@/shared/i18n/errors";
 
 export default function LoginPage() {
+  const { t } = useTranslation(["auth", "common"]);
   const navigate = useNavigate();
   const setAuth = useAuthStore((s) => s.setAuth);
 
@@ -26,13 +28,9 @@ export default function LoginPage() {
       navigate(ROUTES.DASHBOARD, { replace: true });
     } catch (err) {
       if (err instanceof ApiError) {
-        setError(
-          err.status === 401
-            ? "Неверный email или пароль"
-            : getErrorMessage(err.code),
-        );
+        setError(err.status === 401 ? t("auth:wrongCredentials") : getErrorMessage(err.code));
       } else {
-        setError("Ошибка сети. Попробуйте позже");
+        setError(t("auth:networkError"));
       }
     } finally {
       setLoading(false);
@@ -43,17 +41,14 @@ export default function LoginPage() {
     <div className="flex min-h-screen items-center justify-center bg-surface-100">
       <div className="w-full max-w-sm rounded-card bg-white p-8 shadow-lg">
         <div className="mb-8 text-center">
-          <h1 className="text-2xl font-bold text-gray-900">UGCBoost</h1>
-          <p className="mt-1 text-sm text-gray-500">Войдите в кабинет</p>
+          <h1 className="text-2xl font-bold text-gray-900">{t("auth:title")}</h1>
+          <p className="mt-1 text-sm text-gray-500">{t("auth:subtitle")}</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4" data-testid="login-form">
           <div>
-            <label
-              htmlFor="email"
-              className="mb-1 block text-sm font-medium text-gray-700"
-            >
-              Email
+            <label htmlFor="email" className="mb-1 block text-sm font-medium text-gray-700">
+              {t("auth:email")}
             </label>
             <input
               id="email"
@@ -69,11 +64,8 @@ export default function LoginPage() {
           </div>
 
           <div>
-            <label
-              htmlFor="password"
-              className="mb-1 block text-sm font-medium text-gray-700"
-            >
-              Пароль
+            <label htmlFor="password" className="mb-1 block text-sm font-medium text-gray-700">
+              {t("auth:password")}
             </label>
             <input
               id="password"
@@ -100,7 +92,7 @@ export default function LoginPage() {
             className="w-full rounded-button bg-primary px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-primary-600 disabled:opacity-50"
             data-testid="login-button"
           >
-            {loading ? "Вход..." : "Войти"}
+            {loading ? t("auth:loggingIn") : t("auth:login")}
           </button>
         </form>
       </div>

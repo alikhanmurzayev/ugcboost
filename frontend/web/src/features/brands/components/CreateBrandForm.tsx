@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import { createBrand } from "@/api/brands";
 import { brandKeys } from "@/shared/constants/queryKeys";
 import { getErrorMessage } from "@/shared/i18n/errors";
@@ -10,6 +11,7 @@ interface CreateBrandFormProps {
 }
 
 export default function CreateBrandForm({ onClose }: CreateBrandFormProps) {
+  const { t } = useTranslation(["brands", "common"]);
   const queryClient = useQueryClient();
   const [name, setName] = useState("");
   const [error, setError] = useState("");
@@ -21,14 +23,14 @@ export default function CreateBrandForm({ onClose }: CreateBrandFormProps) {
       onClose();
     },
     onError: (err) => {
-      setError(err instanceof ApiError ? getErrorMessage(err.code) : "Не удалось создать бренд");
+      setError(err instanceof ApiError ? getErrorMessage(err.code) : t("brands:createError"));
     },
   });
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!name.trim()) {
-      setError("Название обязательно");
+      setError(t("common:nameRequired"));
       return;
     }
     setError("");
@@ -38,7 +40,7 @@ export default function CreateBrandForm({ onClose }: CreateBrandFormProps) {
   return (
     <form onSubmit={handleSubmit} className="mt-4 flex items-end gap-3" data-testid="create-brand-form">
       <div className="flex-1">
-        <label className="mb-1 block text-sm font-medium text-gray-700">Название</label>
+        <label className="mb-1 block text-sm font-medium text-gray-700">{t("brands:name")}</label>
         <input
           type="text"
           value={name}
@@ -54,14 +56,14 @@ export default function CreateBrandForm({ onClose }: CreateBrandFormProps) {
         className="rounded-button bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90 disabled:opacity-50"
         data-testid="create-brand-submit"
       >
-        {mutation.isPending ? "Создание..." : "Создать"}
+        {mutation.isPending ? t("common:creating") : t("common:create")}
       </button>
       <button
         type="button"
         onClick={onClose}
         className="rounded-button border border-surface-300 px-4 py-2 text-sm text-gray-600 hover:bg-surface-200"
       >
-        Отмена
+        {t("common:cancel")}
       </button>
       {error && <p className="text-sm text-red-600" role="alert">{error}</p>}
     </form>

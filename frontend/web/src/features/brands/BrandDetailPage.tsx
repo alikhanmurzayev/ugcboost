@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import { getBrand } from "@/api/brands";
 import { ROUTES } from "@/shared/constants/routes";
 import { brandKeys } from "@/shared/constants/queryKeys";
@@ -11,6 +12,7 @@ import ManagerList from "./components/ManagerList";
 import AssignManagerForm from "./components/AssignManagerForm";
 
 export default function BrandDetailPage() {
+  const { t } = useTranslation("brands");
   const { brandId } = useParams<{ brandId: string }>();
   const navigate = useNavigate();
   const [editing, setEditing] = useState(false);
@@ -21,9 +23,9 @@ export default function BrandDetailPage() {
     enabled: !!brandId,
   });
 
-  if (!brandId) return <ErrorState message="Бренд не найден" />;
+  if (!brandId) return <ErrorState message={t("notFound")} />;
   if (isLoading) return <Spinner className="mt-12" />;
-  if (isError || !data) return <ErrorState message="Ошибка загрузки" onRetry={() => void refetch()} />;
+  if (isError || !data) return <ErrorState message={t("loadDetailError")} onRetry={() => void refetch()} />;
 
   const brand = data.data;
 
@@ -33,16 +35,12 @@ export default function BrandDetailPage() {
         onClick={() => navigate("/" + ROUTES.BRANDS)}
         className="mb-4 text-sm text-primary hover:underline"
       >
-        &larr; Назад к списку
+        &larr; {t("backToList")}
       </button>
 
       <div className="rounded-card border border-surface-300 bg-white p-6">
         {editing ? (
-          <BrandEditForm
-            brandId={brandId}
-            currentName={brand.name}
-            onClose={() => setEditing(false)}
-          />
+          <BrandEditForm brandId={brandId} currentName={brand.name} onClose={() => setEditing(false)} />
         ) : (
           <div className="flex items-center justify-between">
             <h1 className="text-2xl font-bold text-gray-900">{brand.name}</h1>
@@ -51,17 +49,17 @@ export default function BrandDetailPage() {
               className="rounded-button border border-surface-300 px-3 py-1.5 text-sm text-gray-600 hover:bg-surface-200"
               data-testid="edit-brand-button"
             >
-              Изменить
+              {t("common:edit")}
             </button>
           </div>
         )}
         <p className="mt-2 text-sm text-gray-500">
-          Создан: {new Date(brand.createdAt).toLocaleDateString("ru")}
+          {t("created", { date: new Date(brand.createdAt).toLocaleDateString("ru") })}
         </p>
       </div>
 
       <div className="mt-6 rounded-card border border-surface-300 bg-white p-6">
-        <h2 className="text-lg font-bold text-gray-900">Менеджеры</h2>
+        <h2 className="text-lg font-bold text-gray-900">{t("managers")}</h2>
         <ManagerList brandId={brandId} managers={brand.managers} />
         <AssignManagerForm brandId={brandId} />
       </div>

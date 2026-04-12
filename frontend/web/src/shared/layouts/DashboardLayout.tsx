@@ -1,24 +1,26 @@
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { useAuthStore } from "@/stores/auth";
 import { logout } from "@/api/auth";
 import { ROUTES } from "@/shared/constants/routes";
 import { Roles } from "@/shared/constants/roles";
 
-const adminNav = [
-  { to: ROUTES.DASHBOARD, label: "Дашборд" },
-  { to: ROUTES.BRANDS, label: "Бренды" },
-  { to: ROUTES.AUDIT, label: "Журнал действий" },
-];
-
-const brandNav = [
-  { to: ROUTES.DASHBOARD, label: "Дашборд" },
-  { to: ROUTES.BRANDS, label: "Мои бренды" },
-];
-
 export default function DashboardLayout() {
+  const { t } = useTranslation(["auth", "brands", "audit", "dashboard"]);
   const user = useAuthStore((s) => s.user);
   const clearAuth = useAuthStore((s) => s.clearAuth);
   const navigate = useNavigate();
+
+  const adminNav = [
+    { to: ROUTES.DASHBOARD, label: t("dashboard:title") },
+    { to: ROUTES.BRANDS, label: t("brands:title") },
+    { to: ROUTES.AUDIT, label: t("audit:title") },
+  ];
+
+  const brandNav = [
+    { to: ROUTES.DASHBOARD, label: t("dashboard:title") },
+    { to: ROUTES.BRANDS, label: t("brands:myBrands") },
+  ];
 
   const nav = user?.role === Roles.ADMIN ? adminNav : brandNav;
 
@@ -64,11 +66,9 @@ export default function DashboardLayout() {
 
         <div className="border-t border-surface-300 px-3 py-4">
           <div className="mb-3 px-3">
-            <p className="truncate text-sm font-medium text-gray-900">
-              {user?.email}
-            </p>
+            <p className="truncate text-sm font-medium text-gray-900">{user?.email}</p>
             <p className="text-xs text-gray-500">
-              {user?.role === Roles.ADMIN ? "Админ" : "Бренд-менеджер"}
+              {user?.role === Roles.ADMIN ? t("auth:admin") : t("auth:brandManager")}
             </p>
           </div>
           <button
@@ -76,7 +76,7 @@ export default function DashboardLayout() {
             className="w-full rounded-button px-3 py-2 text-left text-sm text-gray-600 transition hover:bg-surface-200 hover:text-gray-900"
             data-testid="logout-button"
           >
-            Выйти
+            {t("auth:logout")}
           </button>
         </div>
       </aside>

@@ -1,5 +1,6 @@
 import { Component } from "react";
 import type { ErrorInfo, ReactNode } from "react";
+import i18n from "@/shared/i18n/config";
 
 interface Props {
   children: ReactNode;
@@ -28,10 +29,10 @@ export default class ErrorBoundary extends Component<Props, State> {
       return (
         <div className="flex min-h-screen flex-col items-center justify-center bg-surface-100">
           <p className="text-lg font-medium text-gray-900">
-            Что-то пошло не так
+            {i18n.t("common:somethingWentWrong")}
           </p>
           <p className="mt-1 text-sm text-gray-500">
-            Произошла непредвиденная ошибка
+            {i18n.t("common:unexpectedError")}
           </p>
           <button
             onClick={() => {
@@ -40,7 +41,7 @@ export default class ErrorBoundary extends Component<Props, State> {
             }}
             className="mt-4 rounded-button bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90"
           >
-            Перезагрузить
+            {i18n.t("common:reload")}
           </button>
         </div>
       );

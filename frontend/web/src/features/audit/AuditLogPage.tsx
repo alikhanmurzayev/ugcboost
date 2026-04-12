@@ -1,21 +1,23 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import { listAuditLogs } from "@/api/audit";
 import { auditKeys } from "@/shared/constants/queryKeys";
 import Spinner from "@/shared/components/Spinner";
 import ErrorState from "@/shared/components/ErrorState";
 
-const ACTION_LABELS: Record<string, string> = {
-  login: "Вход",
-  password_reset: "Сброс пароля",
-  brand_create: "Создание бренда",
-  brand_update: "Обновление бренда",
-  brand_delete: "Удаление бренда",
-  manager_assign: "Назначение менеджера",
-  manager_remove: "Удаление менеджера",
-};
+const ACTION_KEYS = [
+  "login",
+  "password_reset",
+  "brand_create",
+  "brand_update",
+  "brand_delete",
+  "manager_assign",
+  "manager_remove",
+] as const;
 
 export default function AuditLogPage() {
+  const { t } = useTranslation(["audit", "common"]);
   const [entityType, setEntityType] = useState("");
   const [action, setAction] = useState("");
   const [page, setPage] = useState(1);
@@ -38,9 +40,8 @@ export default function AuditLogPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-gray-900">Журнал действий</h1>
+      <h1 className="text-2xl font-bold text-gray-900">{t("audit:title")}</h1>
 
-      {/* Filters */}
       <div className="mt-4 flex gap-4">
         <select
           value={entityType}
@@ -49,12 +50,12 @@ export default function AuditLogPage() {
             setPage(1);
           }}
           className="rounded-button border border-surface-300 px-3 py-2 text-sm"
-          aria-label="Фильтр по типу сущности"
+          aria-label={t("audit:entityTypeLabel")}
           data-testid="entity-type-filter"
         >
-          <option value="">Все типы</option>
-          <option value="user">Пользователь</option>
-          <option value="brand">Бренд</option>
+          <option value="">{t("audit:allTypes")}</option>
+          <option value="user">{t("audit:entityTypes.user")}</option>
+          <option value="brand">{t("audit:entityTypes.brand")}</option>
         </select>
 
         <select
@@ -64,60 +65,53 @@ export default function AuditLogPage() {
             setPage(1);
           }}
           className="rounded-button border border-surface-300 px-3 py-2 text-sm"
-          aria-label="Фильтр по действию"
+          aria-label={t("audit:actionLabel")}
           data-testid="action-filter"
         >
-          <option value="">Все действия</option>
-          {Object.entries(ACTION_LABELS).map(([key, label]) => (
+          <option value="">{t("audit:allActions")}</option>
+          {ACTION_KEYS.map((key) => (
             <option key={key} value={key}>
-              {label}
+              {t(`audit:actions.${key}`)}
             </option>
           ))}
         </select>
       </div>
 
-      {/* Table */}
       {isLoading ? (
         <Spinner className="mt-6" />
       ) : isError ? (
-        <ErrorState message="Не удалось загрузить журнал" onRetry={() => void refetch()} />
+        <ErrorState message={t("audit:loadError")} onRetry={() => void refetch()} />
       ) : logs.length === 0 ? (
-        <p className="mt-6 text-gray-500">Нет записей</p>
+        <p className="mt-6 text-gray-500">{t("audit:noRecords")}</p>
       ) : (
         <>
           <table className="mt-6 w-full text-left text-sm" data-testid="audit-table">
             <thead>
               <tr className="border-b border-surface-300 text-gray-500">
-                <th className="pb-2 font-medium">Дата</th>
-                <th className="pb-2 font-medium">Действие</th>
-                <th className="pb-2 font-medium">Тип</th>
-                <th className="pb-2 font-medium">Роль</th>
-                <th className="pb-2 font-medium">IP</th>
+                <th className="pb-2 font-medium">{t("audit:date")}</th>
+                <th className="pb-2 font-medium">{t("audit:action")}</th>
+                <th className="pb-2 font-medium">{t("audit:type")}</th>
+                <th className="pb-2 font-medium">{t("audit:role")}</th>
+                <th className="pb-2 font-medium">{t("audit:ip")}</th>
               </tr>
             </thead>
             <tbody>
               {logs.map((log) => (
-                <tr
-                  key={log.id}
-                  className="border-b border-surface-200"
-                >
+                <tr key={log.id} className="border-b border-surface-200">
                   <td className="py-2 text-gray-500">
                     {new Date(log.createdAt).toLocaleString("ru")}
                   </td>
                   <td className="py-2 font-medium text-gray-900">
-                    {ACTION_LABELS[log.action] ?? log.action}
+                    {t(`audit:actions.${log.action}`, { defaultValue: log.action })}
                   </td>
                   <td className="py-2 text-gray-600">{log.entityType}</td>
                   <td className="py-2 text-gray-600">{log.actorRole}</td>
-                  <td className="py-2 font-mono text-xs text-gray-400">
-                    {log.ipAddress}
-                  </td>
+                  <td className="py-2 font-mono text-xs text-gray-400">{log.ipAddress}</td>
                 </tr>
               ))}
             </tbody>
           </table>
 
-          {/* Pagination */}
           {totalPages > 1 && (
             <div className="mt-4 flex items-center gap-2">
               <button
@@ -125,7 +119,7 @@ export default function AuditLogPage() {
                 disabled={page <= 1}
                 className="rounded-button border border-surface-300 px-3 py-1 text-sm disabled:opacity-50"
               >
-                Назад
+                {t("common:prev")}
               </button>
               <span className="text-sm text-gray-500">
                 {page} / {totalPages}
@@ -135,10 +129,10 @@ export default function AuditLogPage() {
                 disabled={page >= totalPages}
                 className="rounded-button border border-surface-300 px-3 py-1 text-sm disabled:opacity-50"
               >
-                Вперёд
+                {t("common:next")}
               </button>
               <span className="text-xs text-gray-400">
-                Всего: {total}
+                {t("common:total", { count: total })}
               </span>
             </div>
           )}

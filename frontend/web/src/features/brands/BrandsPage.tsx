@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import { listBrands } from "@/api/brands";
 import { brandKeys } from "@/shared/constants/queryKeys";
 import Spinner from "@/shared/components/Spinner";
@@ -8,6 +9,7 @@ import CreateBrandForm from "./components/CreateBrandForm";
 import BrandList from "./components/BrandList";
 
 export default function BrandsPage() {
+  const { t } = useTranslation("brands");
   const [showCreate, setShowCreate] = useState(false);
 
   const { data, isLoading, isError, refetch } = useQuery({
@@ -20,13 +22,13 @@ export default function BrandsPage() {
   return (
     <div>
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-900">Бренды</h1>
+        <h1 className="text-2xl font-bold text-gray-900">{t("title")}</h1>
         <button
           onClick={() => setShowCreate(true)}
           className="rounded-button bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90"
           data-testid="create-brand-button"
         >
-          Создать бренд
+          {t("createBrand")}
         </button>
       </div>
 
@@ -35,7 +37,7 @@ export default function BrandsPage() {
       {isLoading ? (
         <Spinner className="mt-6" />
       ) : isError ? (
-        <ErrorState message="Не удалось загрузить бренды" onRetry={() => void refetch()} />
+        <ErrorState message={t("loadError")} onRetry={() => void refetch()} />
       ) : (
         <BrandList brands={brands} />
       )}
