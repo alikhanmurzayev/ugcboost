@@ -63,12 +63,8 @@ type Config struct {
 // Returns an error if a required variable is missing or a value cannot be parsed.
 func Load() (*Config, error) {
 	// Load .env if present (ignore if missing — Docker/CI set env vars directly).
-	// Check current dir first, then parent (supports running from backend/).
-	for _, path := range []string{".env", "../.env"} {
-		if _, err := os.Stat(path); err == nil {
-			_ = godotenv.Load(path)
-			break
-		}
+	if _, err := os.Stat(".env"); err == nil {
+		_ = godotenv.Load()
 	}
 
 	cfg := &Config{}
