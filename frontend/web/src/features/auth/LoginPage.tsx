@@ -47,7 +47,7 @@ export default function LoginPage() {
           <p className="mt-1 text-sm text-gray-500">Войдите в кабинет</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4" data-testid="login-form">
           <div>
             <label
               htmlFor="email"
@@ -64,6 +64,7 @@ export default function LoginPage() {
               onChange={(e) => setEmail(e.target.value)}
               className="w-full rounded-button border border-gray-300 px-3 py-2 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary-100"
               placeholder="admin@ugcboost.kz"
+              data-testid="email-input"
             />
           </div>
 
@@ -83,11 +84,12 @@ export default function LoginPage() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="w-full rounded-button border border-gray-300 px-3 py-2 text-sm outline-none transition focus:border-primary focus:ring-2 focus:ring-primary-100"
+              data-testid="password-input"
             />
           </div>
 
           {error && (
-            <p className="text-sm text-red-600" role="alert">
+            <p className="text-sm text-red-600" role="alert" data-testid="login-error">
               {error}
             </p>
           )}
@@ -96,6 +98,7 @@ export default function LoginPage() {
             type="submit"
             disabled={loading}
             className="w-full rounded-button bg-primary px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-primary-600 disabled:opacity-50"
+            data-testid="login-button"
           >
             {loading ? "Вход..." : "Войти"}
           </button>

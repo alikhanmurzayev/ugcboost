@@ -49,6 +49,8 @@ export default function AuditLogPage() {
             setPage(1);
           }}
           className="rounded-button border border-surface-300 px-3 py-2 text-sm"
+          aria-label="Фильтр по типу сущности"
+          data-testid="entity-type-filter"
         >
           <option value="">Все типы</option>
           <option value="user">Пользователь</option>
@@ -62,6 +64,8 @@ export default function AuditLogPage() {
             setPage(1);
           }}
           className="rounded-button border border-surface-300 px-3 py-2 text-sm"
+          aria-label="Фильтр по действию"
+          data-testid="action-filter"
         >
           <option value="">Все действия</option>
           {Object.entries(ACTION_LABELS).map(([key, label]) => (
@@ -81,7 +85,7 @@ export default function AuditLogPage() {
         <p className="mt-6 text-gray-500">Нет записей</p>
       ) : (
         <>
-          <table className="mt-6 w-full text-left text-sm">
+          <table className="mt-6 w-full text-left text-sm" data-testid="audit-table">
             <thead>
               <tr className="border-b border-surface-300 text-gray-500">
                 <th className="pb-2 font-medium">Дата</th>

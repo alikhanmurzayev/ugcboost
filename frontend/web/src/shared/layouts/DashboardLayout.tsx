@@ -34,8 +34,7 @@ export default function DashboardLayout() {
 
   return (
     <div className="flex min-h-screen bg-surface-100">
-      {/* Sidebar */}
-      <aside className="flex w-60 flex-col border-r border-surface-300 bg-white">
+      <aside className="flex w-60 flex-col border-r border-surface-300 bg-white" data-testid="sidebar">
         <div className="border-b border-surface-300 px-5 py-4">
           <span className="text-lg font-bold text-gray-900">UGCBoost</span>
         </div>
@@ -54,6 +53,7 @@ export default function DashboardLayout() {
                         : "text-gray-600 hover:bg-surface-200 hover:text-gray-900"
                     }`
                   }
+                  data-testid={`nav-link-${item.to}`}
                 >
                   {item.label}
                 </NavLink>
@@ -74,13 +74,13 @@ export default function DashboardLayout() {
           <button
             onClick={handleLogout}
             className="w-full rounded-button px-3 py-2 text-left text-sm text-gray-600 transition hover:bg-surface-200 hover:text-gray-900"
+            data-testid="logout-button"
           >
             Выйти
           </button>
         </div>
       </aside>
 
-      {/* Main */}
       <main className="flex-1 overflow-y-auto p-8">
         <Outlet />
       </main>
