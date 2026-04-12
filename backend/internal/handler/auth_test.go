@@ -13,7 +13,6 @@ import (
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/domain"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/handler/mocks"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/middleware"
-	"github.com/alikhanmurzayev/ugcboost/backend/internal/repository"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/service"
 )
 
@@ -28,7 +27,7 @@ func TestServer_Login(t *testing.T) {
 				AccessToken:      "jwt-token",
 				RefreshTokenRaw:  "refresh-raw",
 				RefreshExpiresAt: 1234567890,
-				User:             repository.UserRow{ID: "u-1", Email: "test@example.com", Role: "admin"},
+				User:             domain.User{ID: "u-1", Email: "test@example.com", Role: domain.RoleAdmin},
 			}, nil)
 
 		s := NewServer(auth, nil, nil, false)
@@ -134,7 +133,7 @@ func TestServer_RefreshToken(t *testing.T) {
 				AccessToken:      "new-access",
 				RefreshTokenRaw:  "new-refresh",
 				RefreshExpiresAt: 9999999999,
-				User:             repository.UserRow{ID: "u-1", Email: "test@example.com", Role: "admin"},
+				User:             domain.User{ID: "u-1", Email: "test@example.com", Role: domain.RoleAdmin},
 			}, nil)
 
 		s := NewServer(auth, nil, nil, false)
@@ -256,7 +255,7 @@ func TestServer_GetMe(t *testing.T) {
 		t.Parallel()
 		auth := mocks.NewMockAuthService(t)
 		auth.EXPECT().GetUser(mock.Anything, "user-1").
-			Return(&repository.UserRow{ID: "user-1", Email: "test@example.com", Role: "admin"}, nil)
+			Return(&domain.User{ID: "user-1", Email: "test@example.com", Role: domain.RoleAdmin}, nil)
 
 		s := NewServer(auth, nil, nil, false)
 		w := httptest.NewRecorder()

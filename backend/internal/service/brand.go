@@ -48,34 +48,53 @@ func NewBrandService(brands BrandRepo, users BrandUserRepo, bcryptCost int) *Bra
 }
 
 // CreateBrand creates a new brand.
-func (s *BrandService) CreateBrand(ctx context.Context, name string, logoURL *string) (*repository.BrandRow, error) {
+func (s *BrandService) CreateBrand(ctx context.Context, name string, logoURL *string) (*domain.Brand, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return nil, domain.NewValidationError(domain.CodeValidation, "Brand name is required")
 	}
-	return s.brands.Create(ctx, name, logoURL)
+	row, err := s.brands.Create(ctx, name, logoURL)
+	if err != nil {
+		return nil, err
+	}
+	return brandRowToDomain(row), nil
 }
 
 // GetBrand returns a brand by ID.
-func (s *BrandService) GetBrand(ctx context.Context, id string) (*repository.BrandRow, error) {
-	return s.brands.GetByID(ctx, id)
+func (s *BrandService) GetBrand(ctx context.Context, id string) (*domain.Brand, error) {
+	row, err := s.brands.GetByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	return brandRowToDomain(row), nil
 }
 
 // ListBrands returns all brands (admin) or user's brands (brand_manager).
-func (s *BrandService) ListBrands(ctx context.Context, userID, role string) ([]*repository.BrandWithManagerCount, error) {
+func (s *BrandService) ListBrands(ctx context.Context, userID, role string) ([]*domain.BrandListItem, error) {
+	var rows []*repository.BrandWithManagerCount
+	var err error
 	if role == string(domain.RoleAdmin) {
-		return s.brands.List(ctx)
+		rows, err = s.brands.List(ctx)
+	} else {
+		rows, err = s.brands.ListByUser(ctx, userID)
 	}
-	return s.brands.ListByUser(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	return brandListRowsToDomain(rows), nil
 }
 
 // UpdateBrand updates a brand's name and logo.
-func (s *BrandService) UpdateBrand(ctx context.Context, id, name string, logoURL *string) (*repository.BrandRow, error) {
+func (s *BrandService) UpdateBrand(ctx context.Context, id, name string, logoURL *string) (*domain.Brand, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return nil, domain.NewValidationError(domain.CodeValidation, "Brand name is required")
 	}
-	return s.brands.Update(ctx, id, name, logoURL)
+	row, err := s.brands.Update(ctx, id, name, logoURL)
+	if err != nil {
+		return nil, err
+	}
+	return brandRowToDomain(row), nil
 }
 
 // DeleteBrand removes a brand.
@@ -84,13 +103,17 @@ func (s *BrandService) DeleteBrand(ctx context.Context, id string) error {
 }
 
 // ListManagers returns all managers for a brand.
-func (s *BrandService) ListManagers(ctx context.Context, brandID string) ([]*repository.BrandManagerRow, error) {
-	return s.brands.ListManagers(ctx, brandID)
+func (s *BrandService) ListManagers(ctx context.Context, brandID string) ([]*domain.BrandManager, error) {
+	rows, err := s.brands.ListManagers(ctx, brandID)
+	if err != nil {
+		return nil, err
+	}
+	return managerRowsToDomain(rows), nil
 }
 
 // AssignManager assigns a user as brand manager. Creates user if not exists.
 // Returns the user and temporary password (if newly created).
-func (s *BrandService) AssignManager(ctx context.Context, brandID, email string) (*repository.UserRow, string, error) {
+func (s *BrandService) AssignManager(ctx context.Context, brandID, email string) (*domain.User, string, error) {
 	email = strings.TrimSpace(strings.ToLower(email))
 	if email == "" {
 		return nil, "", domain.NewValidationError(domain.CodeValidation, "Email is required")
@@ -101,7 +124,7 @@ func (s *BrandService) AssignManager(ctx context.Context, brandID, email string)
 		return nil, "", fmt.Errorf("get brand: %w", err)
 	}
 
-	var user *repository.UserRow
+	var userRow *repository.UserRow
 	var tempPassword string
 
 	exists, err := s.users.ExistsByEmail(ctx, email)
@@ -110,7 +133,7 @@ func (s *BrandService) AssignManager(ctx context.Context, brandID, email string)
 	}
 
 	if exists {
-		user, err = s.users.GetByEmail(ctx, email)
+		userRow, err = s.users.GetByEmail(ctx, email)
 		if err != nil {
 			return nil, "", fmt.Errorf("get user: %w", err)
 		}
@@ -123,18 +146,19 @@ func (s *BrandService) AssignManager(ctx context.Context, brandID, email string)
 		if err != nil {
 			return nil, "", fmt.Errorf("hash password: %w", err)
 		}
-		user, err = s.users.Create(ctx, email, string(hash), string(domain.RoleBrandManager))
+		userRow, err = s.users.Create(ctx, email, string(hash), string(domain.RoleBrandManager))
 		if err != nil {
 			return nil, "", fmt.Errorf("create user: %w", err)
 		}
 		slog.Info("temporary password generated for new manager", "email", email)
 	}
 
-	if err := s.brands.AssignManager(ctx, brandID, user.ID); err != nil {
+	if err := s.brands.AssignManager(ctx, brandID, userRow.ID); err != nil {
 		return nil, "", fmt.Errorf("assign manager: %w", err)
 	}
 
-	return user, tempPassword, nil
+	u := userRowToDomain(userRow)
+	return &u, tempPassword, nil
 }
 
 // RemoveManager removes a manager from a brand.
@@ -169,4 +193,41 @@ func generateTempPassword() (string, error) {
 		b[i] = tempPasswordChars[n.Int64()]
 	}
 	return string(b), nil
+}
+
+func brandRowToDomain(row *repository.BrandRow) *domain.Brand {
+	return &domain.Brand{
+		ID:        row.ID,
+		Name:      row.Name,
+		LogoURL:   row.LogoURL,
+		CreatedAt: row.CreatedAt,
+		UpdatedAt: row.UpdatedAt,
+	}
+}
+
+func brandListRowsToDomain(rows []*repository.BrandWithManagerCount) []*domain.BrandListItem {
+	result := make([]*domain.BrandListItem, len(rows))
+	for i, row := range rows {
+		result[i] = &domain.BrandListItem{
+			ID:           row.ID,
+			Name:         row.Name,
+			LogoURL:      row.LogoURL,
+			ManagerCount: row.ManagerCount,
+			CreatedAt:    row.CreatedAt,
+			UpdatedAt:    row.UpdatedAt,
+		}
+	}
+	return result
+}
+
+func managerRowsToDomain(rows []*repository.BrandManagerRow) []*domain.BrandManager {
+	result := make([]*domain.BrandManager, len(rows))
+	for i, row := range rows {
+		result[i] = &domain.BrandManager{
+			UserID:     row.UserID,
+			Email:      row.Email,
+			AssignedAt: row.CreatedAt,
+		}
+	}
+	return result
 }

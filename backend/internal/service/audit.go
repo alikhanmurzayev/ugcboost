@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/alikhanmurzayev/ugcboost/backend/internal/domain"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/repository"
 )
 
@@ -12,6 +13,36 @@ import (
 type AuditRepo interface {
 	Create(ctx context.Context, entry repository.AuditLogRow) error
 	List(ctx context.Context, f repository.AuditFilter, page, perPage int) ([]*repository.AuditLogRow, int64, error)
+}
+
+func domainFilterToRepo(f domain.AuditFilter) repository.AuditFilter {
+	return repository.AuditFilter{
+		ActorID:    f.ActorID,
+		EntityType: f.EntityType,
+		EntityID:   f.EntityID,
+		Action:     f.Action,
+		DateFrom:   f.DateFrom,
+		DateTo:     f.DateTo,
+	}
+}
+
+func auditRowsToDomain(rows []*repository.AuditLogRow) []*domain.AuditLog {
+	result := make([]*domain.AuditLog, len(rows))
+	for i, row := range rows {
+		result[i] = &domain.AuditLog{
+			ID:         row.ID,
+			ActorID:    row.ActorID,
+			ActorRole:  row.ActorRole,
+			Action:     row.Action,
+			EntityType: row.EntityType,
+			EntityID:   row.EntityID,
+			OldValue:   row.OldValue,
+			NewValue:   row.NewValue,
+			IPAddress:  row.IPAddress,
+			CreatedAt:  row.CreatedAt,
+		}
+	}
+	return result
 }
 
 // AuditService handles audit logging.
@@ -72,6 +103,10 @@ func (s *AuditService) Log(ctx context.Context, e AuditEntry) error {
 
 // List returns audit logs matching the filter with pagination.
 // Validation is the handler's responsibility (CS-18).
-func (s *AuditService) List(ctx context.Context, f repository.AuditFilter, page, perPage int) ([]*repository.AuditLogRow, int64, error) {
-	return s.repo.List(ctx, f, page, perPage)
+func (s *AuditService) List(ctx context.Context, f domain.AuditFilter, page, perPage int) ([]*domain.AuditLog, int64, error) {
+	rows, total, err := s.repo.List(ctx, domainFilterToRepo(f), page, perPage)
+	if err != nil {
+		return nil, 0, err
+	}
+	return auditRowsToDomain(rows), total, nil
 }

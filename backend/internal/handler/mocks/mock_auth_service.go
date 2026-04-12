@@ -7,7 +7,7 @@ package mocks
 import (
 	"context"
 
-	"github.com/alikhanmurzayev/ugcboost/backend/internal/repository"
+	"github.com/alikhanmurzayev/ugcboost/backend/internal/domain"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/service"
 	mock "github.com/stretchr/testify/mock"
 )
@@ -40,23 +40,23 @@ func (_m *MockAuthService) EXPECT() *MockAuthService_Expecter {
 }
 
 // GetUser provides a mock function for the type MockAuthService
-func (_mock *MockAuthService) GetUser(ctx context.Context, userID string) (*repository.UserRow, error) {
+func (_mock *MockAuthService) GetUser(ctx context.Context, userID string) (*domain.User, error) {
 	ret := _mock.Called(ctx, userID)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetUser")
 	}
 
-	var r0 *repository.UserRow
+	var r0 *domain.User
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string) (*repository.UserRow, error)); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) (*domain.User, error)); ok {
 		return returnFunc(ctx, userID)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string) *repository.UserRow); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) *domain.User); ok {
 		r0 = returnFunc(ctx, userID)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*repository.UserRow)
+			r0 = ret.Get(0).(*domain.User)
 		}
 	}
 	if returnFunc, ok := ret.Get(1).(func(context.Context, string) error); ok {
@@ -97,12 +97,12 @@ func (_c *MockAuthService_GetUser_Call) Run(run func(ctx context.Context, userID
 	return _c
 }
 
-func (_c *MockAuthService_GetUser_Call) Return(userRow *repository.UserRow, err error) *MockAuthService_GetUser_Call {
-	_c.Call.Return(userRow, err)
+func (_c *MockAuthService_GetUser_Call) Return(user *domain.User, err error) *MockAuthService_GetUser_Call {
+	_c.Call.Return(user, err)
 	return _c
 }
 
-func (_c *MockAuthService_GetUser_Call) RunAndReturn(run func(ctx context.Context, userID string) (*repository.UserRow, error)) *MockAuthService_GetUser_Call {
+func (_c *MockAuthService_GetUser_Call) RunAndReturn(run func(ctx context.Context, userID string) (*domain.User, error)) *MockAuthService_GetUser_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -436,23 +436,23 @@ func (_c *MockAuthService_ResetPassword_Call) RunAndReturn(run func(ctx context.
 }
 
 // SeedUser provides a mock function for the type MockAuthService
-func (_mock *MockAuthService) SeedUser(ctx context.Context, email string, password string, role string) (*repository.UserRow, error) {
+func (_mock *MockAuthService) SeedUser(ctx context.Context, email string, password string, role string) (*domain.User, error) {
 	ret := _mock.Called(ctx, email, password, role)
 
 	if len(ret) == 0 {
 		panic("no return value specified for SeedUser")
 	}
 
-	var r0 *repository.UserRow
+	var r0 *domain.User
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, string) (*repository.UserRow, error)); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, string) (*domain.User, error)); ok {
 		return returnFunc(ctx, email, password, role)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, string) *repository.UserRow); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, string) *domain.User); ok {
 		r0 = returnFunc(ctx, email, password, role)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*repository.UserRow)
+			r0 = ret.Get(0).(*domain.User)
 		}
 	}
 	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string, string) error); ok {
@@ -505,12 +505,12 @@ func (_c *MockAuthService_SeedUser_Call) Run(run func(ctx context.Context, email
 	return _c
 }
 
-func (_c *MockAuthService_SeedUser_Call) Return(userRow *repository.UserRow, err error) *MockAuthService_SeedUser_Call {
-	_c.Call.Return(userRow, err)
+func (_c *MockAuthService_SeedUser_Call) Return(user *domain.User, err error) *MockAuthService_SeedUser_Call {
+	_c.Call.Return(user, err)
 	return _c
 }
 
-func (_c *MockAuthService_SeedUser_Call) RunAndReturn(run func(ctx context.Context, email string, password string, role string) (*repository.UserRow, error)) *MockAuthService_SeedUser_Call {
+func (_c *MockAuthService_SeedUser_Call) RunAndReturn(run func(ctx context.Context, email string, password string, role string) (*domain.User, error)) *MockAuthService_SeedUser_Call {
 	_c.Call.Return(run)
 	return _c
 }

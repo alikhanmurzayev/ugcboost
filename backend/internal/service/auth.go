@@ -51,7 +51,7 @@ type LoginResult struct {
 	AccessToken      string
 	RefreshTokenRaw  string
 	RefreshExpiresAt int64
-	User             repository.UserRow
+	User             domain.User
 }
 
 // Login authenticates a user by email and password.
@@ -83,7 +83,7 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (*Login
 		AccessToken:      accessToken,
 		RefreshTokenRaw:  refreshRaw,
 		RefreshExpiresAt: refreshExpires.Unix(),
-		User:             *user,
+		User:             userRowToDomain(user),
 	}, nil
 }
 
@@ -92,7 +92,7 @@ type RefreshResult struct {
 	AccessToken      string
 	RefreshTokenRaw  string
 	RefreshExpiresAt int64
-	User             repository.UserRow
+	User             domain.User
 }
 
 // Refresh validates a refresh token, rotates it, and returns new tokens.
@@ -128,7 +128,7 @@ func (s *AuthService) Refresh(ctx context.Context, rawRefreshToken string) (*Ref
 		AccessToken:      accessToken,
 		RefreshTokenRaw:  newRaw,
 		RefreshExpiresAt: newExpires.Unix(),
-		User:             *user,
+		User:             userRowToDomain(user),
 	}, nil
 }
 
@@ -195,17 +195,27 @@ func (s *AuthService) ResetPassword(ctx context.Context, rawToken, newPassword s
 }
 
 // GetUser returns a user by ID.
-func (s *AuthService) GetUser(ctx context.Context, userID string) (*repository.UserRow, error) {
-	return s.users.GetByID(ctx, userID)
+func (s *AuthService) GetUser(ctx context.Context, userID string) (*domain.User, error) {
+	row, err := s.users.GetByID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	u := userRowToDomain(row)
+	return &u, nil
 }
 
 // SeedUser creates a user with the given role. Used by test endpoints.
-func (s *AuthService) SeedUser(ctx context.Context, email, password, role string) (*repository.UserRow, error) {
+func (s *AuthService) SeedUser(ctx context.Context, email, password, role string) (*domain.User, error) {
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), s.bcryptCost)
 	if err != nil {
 		return nil, fmt.Errorf("hash password: %w", err)
 	}
-	return s.users.Create(ctx, email, string(hash), role)
+	row, err := s.users.Create(ctx, email, string(hash), role)
+	if err != nil {
+		return nil, err
+	}
+	u := userRowToDomain(row)
+	return &u, nil
 }
 
 // SeedAdmin creates the admin user if it doesn't exist.
@@ -236,4 +246,14 @@ func (s *AuthService) SeedAdmin(ctx context.Context, email, password string) err
 
 	slog.Info("admin user created", "email", email)
 	return nil
+}
+
+func userRowToDomain(row *repository.UserRow) domain.User {
+	return domain.User{
+		ID:        row.ID,
+		Email:     row.Email,
+		Role:      domain.UserRole(row.Role),
+		CreatedAt: row.CreatedAt,
+		UpdatedAt: row.UpdatedAt,
+	}
 }

@@ -39,7 +39,7 @@ func (s *Server) Login(w http.ResponseWriter, r *http.Request) {
 	s.setRefreshCookie(w, result.RefreshTokenRaw, result.RefreshExpiresAt)
 
 	logAudit(r.Context(), s.auditService, service.AuditEntry{
-		ActorID: result.User.ID, ActorRole: result.User.Role,
+		ActorID: result.User.ID, ActorRole: string(result.User.Role),
 		Action: "login", EntityType: "user", EntityID: result.User.ID,
 		IPAddress: clientIP(r),
 	})

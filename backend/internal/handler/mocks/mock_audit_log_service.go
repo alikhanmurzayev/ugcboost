@@ -7,7 +7,7 @@ package mocks
 import (
 	"context"
 
-	"github.com/alikhanmurzayev/ugcboost/backend/internal/repository"
+	"github.com/alikhanmurzayev/ugcboost/backend/internal/domain"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/service"
 	mock "github.com/stretchr/testify/mock"
 )
@@ -40,32 +40,32 @@ func (_m *MockAuditLogService) EXPECT() *MockAuditLogService_Expecter {
 }
 
 // List provides a mock function for the type MockAuditLogService
-func (_mock *MockAuditLogService) List(ctx context.Context, f repository.AuditFilter, page int, perPage int) ([]*repository.AuditLogRow, int64, error) {
+func (_mock *MockAuditLogService) List(ctx context.Context, f domain.AuditFilter, page int, perPage int) ([]*domain.AuditLog, int64, error) {
 	ret := _mock.Called(ctx, f, page, perPage)
 
 	if len(ret) == 0 {
 		panic("no return value specified for List")
 	}
 
-	var r0 []*repository.AuditLogRow
+	var r0 []*domain.AuditLog
 	var r1 int64
 	var r2 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, repository.AuditFilter, int, int) ([]*repository.AuditLogRow, int64, error)); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, domain.AuditFilter, int, int) ([]*domain.AuditLog, int64, error)); ok {
 		return returnFunc(ctx, f, page, perPage)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, repository.AuditFilter, int, int) []*repository.AuditLogRow); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, domain.AuditFilter, int, int) []*domain.AuditLog); ok {
 		r0 = returnFunc(ctx, f, page, perPage)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).([]*repository.AuditLogRow)
+			r0 = ret.Get(0).([]*domain.AuditLog)
 		}
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, repository.AuditFilter, int, int) int64); ok {
+	if returnFunc, ok := ret.Get(1).(func(context.Context, domain.AuditFilter, int, int) int64); ok {
 		r1 = returnFunc(ctx, f, page, perPage)
 	} else {
 		r1 = ret.Get(1).(int64)
 	}
-	if returnFunc, ok := ret.Get(2).(func(context.Context, repository.AuditFilter, int, int) error); ok {
+	if returnFunc, ok := ret.Get(2).(func(context.Context, domain.AuditFilter, int, int) error); ok {
 		r2 = returnFunc(ctx, f, page, perPage)
 	} else {
 		r2 = ret.Error(2)
@@ -80,22 +80,22 @@ type MockAuditLogService_List_Call struct {
 
 // List is a helper method to define mock.On call
 //   - ctx context.Context
-//   - f repository.AuditFilter
+//   - f domain.AuditFilter
 //   - page int
 //   - perPage int
 func (_e *MockAuditLogService_Expecter) List(ctx interface{}, f interface{}, page interface{}, perPage interface{}) *MockAuditLogService_List_Call {
 	return &MockAuditLogService_List_Call{Call: _e.mock.On("List", ctx, f, page, perPage)}
 }
 
-func (_c *MockAuditLogService_List_Call) Run(run func(ctx context.Context, f repository.AuditFilter, page int, perPage int)) *MockAuditLogService_List_Call {
+func (_c *MockAuditLogService_List_Call) Run(run func(ctx context.Context, f domain.AuditFilter, page int, perPage int)) *MockAuditLogService_List_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
 			arg0 = args[0].(context.Context)
 		}
-		var arg1 repository.AuditFilter
+		var arg1 domain.AuditFilter
 		if args[1] != nil {
-			arg1 = args[1].(repository.AuditFilter)
+			arg1 = args[1].(domain.AuditFilter)
 		}
 		var arg2 int
 		if args[2] != nil {
@@ -115,12 +115,12 @@ func (_c *MockAuditLogService_List_Call) Run(run func(ctx context.Context, f rep
 	return _c
 }
 
-func (_c *MockAuditLogService_List_Call) Return(auditLogRows []*repository.AuditLogRow, n int64, err error) *MockAuditLogService_List_Call {
-	_c.Call.Return(auditLogRows, n, err)
+func (_c *MockAuditLogService_List_Call) Return(auditLogs []*domain.AuditLog, n int64, err error) *MockAuditLogService_List_Call {
+	_c.Call.Return(auditLogs, n, err)
 	return _c
 }
 
-func (_c *MockAuditLogService_List_Call) RunAndReturn(run func(ctx context.Context, f repository.AuditFilter, page int, perPage int) ([]*repository.AuditLogRow, int64, error)) *MockAuditLogService_List_Call {
+func (_c *MockAuditLogService_List_Call) RunAndReturn(run func(ctx context.Context, f domain.AuditFilter, page int, perPage int) ([]*domain.AuditLog, int64, error)) *MockAuditLogService_List_Call {
 	_c.Call.Return(run)
 	return _c
 }

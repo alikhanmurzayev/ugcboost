@@ -5,7 +5,7 @@ import (
 
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/api"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/authz"
-	"github.com/alikhanmurzayev/ugcboost/backend/internal/repository"
+	"github.com/alikhanmurzayev/ugcboost/backend/internal/domain"
 )
 
 // ListAuditLogs handles GET /audit-logs
@@ -15,7 +15,7 @@ func (s *Server) ListAuditLogs(w http.ResponseWriter, r *http.Request, params ap
 		return
 	}
 
-	f := repository.AuditFilter{}
+	f := domain.AuditFilter{}
 	if params.ActorId != nil {
 		f.ActorID = *params.ActorId
 	}

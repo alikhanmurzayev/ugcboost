@@ -13,7 +13,6 @@ import (
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/domain"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/handler/mocks"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/middleware"
-	"github.com/alikhanmurzayev/ugcboost/backend/internal/repository"
 )
 
 // adminContext creates a request context with admin user credentials.
@@ -37,7 +36,7 @@ func TestServer_CreateBrand(t *testing.T) {
 		t.Parallel()
 		brands := mocks.NewMockBrandService(t)
 		brands.EXPECT().CreateBrand(mock.Anything, "Test Brand", (*string)(nil)).
-			Return(&repository.BrandRow{ID: "b-1", Name: "Test Brand"}, nil)
+			Return(&domain.Brand{ID: "b-1", Name: "Test Brand"}, nil)
 
 		s := NewServer(nil, brands, nil, false)
 		w := httptest.NewRecorder()
@@ -74,7 +73,7 @@ func TestServer_CreateBrand(t *testing.T) {
 		t.Parallel()
 		brands := mocks.NewMockBrandService(t)
 		brands.EXPECT().CreateBrand(mock.Anything, "", (*string)(nil)).
-			Return((*repository.BrandRow)(nil), domain.NewValidationError("VALIDATION_ERROR", "Brand name is required"))
+			Return((*domain.Brand)(nil), domain.NewValidationError("VALIDATION_ERROR", "Brand name is required"))
 
 		s := NewServer(nil, brands, nil, false)
 		w := httptest.NewRecorder()
@@ -93,7 +92,7 @@ func TestServer_ListBrands(t *testing.T) {
 		t.Parallel()
 		brands := mocks.NewMockBrandService(t)
 		brands.EXPECT().ListBrands(mock.Anything, "u-1", "admin").
-			Return([]*repository.BrandWithManagerCount{
+			Return([]*domain.BrandListItem{
 				{ID: "b-1", Name: "Brand 1", ManagerCount: 2},
 			}, nil)
 
@@ -114,9 +113,9 @@ func TestServer_GetBrand(t *testing.T) {
 		brands := mocks.NewMockBrandService(t)
 		brands.EXPECT().CanViewBrand(mock.Anything, "u-1", "admin", "b-1").Return(nil)
 		brands.EXPECT().GetBrand(mock.Anything, "b-1").
-			Return(&repository.BrandRow{ID: "b-1", Name: "Test"}, nil)
+			Return(&domain.Brand{ID: "b-1", Name: "Test"}, nil)
 		brands.EXPECT().ListManagers(mock.Anything, "b-1").
-			Return([]*repository.BrandManagerRow{}, nil)
+			Return([]*domain.BrandManager{}, nil)
 
 		s := NewServer(nil, brands, nil, false)
 		w := httptest.NewRecorder()
@@ -148,7 +147,7 @@ func TestServer_UpdateBrand(t *testing.T) {
 		t.Parallel()
 		brands := mocks.NewMockBrandService(t)
 		brands.EXPECT().UpdateBrand(mock.Anything, "b-1", "New Name", (*string)(nil)).
-			Return(&repository.BrandRow{ID: "b-1", Name: "New Name"}, nil)
+			Return(&domain.Brand{ID: "b-1", Name: "New Name"}, nil)
 
 		s := NewServer(nil, brands, nil, false)
 		w := httptest.NewRecorder()
@@ -205,7 +204,7 @@ func TestServer_AssignManager(t *testing.T) {
 		t.Parallel()
 		brands := mocks.NewMockBrandService(t)
 		brands.EXPECT().AssignManager(mock.Anything, "b-1", "mgr@example.com").
-			Return(&repository.UserRow{ID: "u-2", Email: "mgr@example.com", Role: "brand_manager"}, "temp123", nil)
+			Return(&domain.User{ID: "u-2", Email: "mgr@example.com", Role: domain.RoleBrandManager}, "temp123", nil)
 
 		s := NewServer(nil, brands, nil, false)
 		w := httptest.NewRecorder()
@@ -220,7 +219,7 @@ func TestServer_AssignManager(t *testing.T) {
 		t.Parallel()
 		brands := mocks.NewMockBrandService(t)
 		brands.EXPECT().AssignManager(mock.Anything, "b-1", "existing@example.com").
-			Return(&repository.UserRow{ID: "u-2", Email: "existing@example.com", Role: "brand_manager"}, "", nil)
+			Return(&domain.User{ID: "u-2", Email: "existing@example.com", Role: domain.RoleBrandManager}, "", nil)
 
 		s := NewServer(nil, brands, nil, false)
 		w := httptest.NewRecorder()

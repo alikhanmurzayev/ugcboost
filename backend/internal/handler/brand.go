@@ -7,7 +7,6 @@ import (
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/authz"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/domain"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/middleware"
-	"github.com/alikhanmurzayev/ugcboost/backend/internal/repository"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/service"
 )
 
@@ -39,7 +38,7 @@ func (s *Server) CreateBrand(w http.ResponseWriter, r *http.Request) {
 		NewValue: map[string]string{"name": brand.Name}, IPAddress: clientIP(r),
 	})
 
-	respondJSON(w, http.StatusCreated, brandToJSON(*brand))
+	respondJSON(w, http.StatusCreated, brandToJSON(brand))
 }
 
 // ListBrands handles GET /brands
@@ -97,11 +96,11 @@ func (s *Server) GetBrand(w http.ResponseWriter, r *http.Request, brandID string
 		managerList[i] = map[string]any{
 			"userId":     m.UserID,
 			"email":      m.Email,
-			"assignedAt": m.CreatedAt,
+			"assignedAt": m.AssignedAt,
 		}
 	}
 
-	resp := brandToJSON(*brand)
+	resp := brandToJSON(brand)
 	resp["managers"] = managerList
 
 	respondJSON(w, http.StatusOK, resp)
@@ -135,7 +134,7 @@ func (s *Server) UpdateBrand(w http.ResponseWriter, r *http.Request, brandID str
 		NewValue: map[string]string{"name": brand.Name}, IPAddress: clientIP(r),
 	})
 
-	respondJSON(w, http.StatusOK, brandToJSON(*brand))
+	respondJSON(w, http.StatusOK, brandToJSON(brand))
 }
 
 // DeleteBrand handles DELETE /brands/{brandID}
@@ -223,7 +222,7 @@ func (s *Server) RemoveManager(w http.ResponseWriter, r *http.Request, brandID s
 	})
 }
 
-func brandToJSON(b repository.BrandRow) map[string]any {
+func brandToJSON(b *domain.Brand) map[string]any {
 	return map[string]any{
 		"id":        b.ID,
 		"name":      b.Name,
