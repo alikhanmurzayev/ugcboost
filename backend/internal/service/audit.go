@@ -5,14 +5,14 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/alikhanmurzayev/ugcboost/backend/internal/dbutil"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/domain"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/repository"
 )
 
-// AuditRepo is the interface AuditService needs from the audit repository.
-type AuditRepo interface {
-	Create(ctx context.Context, entry repository.AuditLogRow) error
-	List(ctx context.Context, f repository.AuditFilter, page, perPage int) ([]*repository.AuditLogRow, int64, error)
+// AuditRepoFactory creates repositories needed by AuditService.
+type AuditRepoFactory interface {
+	NewAuditRepo(db dbutil.DB) repository.AuditRepo
 }
 
 func domainFilterToRepo(f domain.AuditFilter) repository.AuditFilter {
@@ -47,12 +47,13 @@ func auditRowsToDomain(rows []*repository.AuditLogRow) []*domain.AuditLog {
 
 // AuditService handles audit logging.
 type AuditService struct {
-	repo AuditRepo
+	pool        dbutil.Pool
+	repoFactory AuditRepoFactory
 }
 
 // NewAuditService creates a new AuditService.
-func NewAuditService(repo AuditRepo) *AuditService {
-	return &AuditService{repo: repo}
+func NewAuditService(pool dbutil.Pool, repoFactory AuditRepoFactory) *AuditService {
+	return &AuditService{pool: pool, repoFactory: repoFactory}
 }
 
 // AuditEntry describes a single audit event to record.
@@ -69,6 +70,8 @@ type AuditEntry struct {
 
 // Log writes an audit log entry. Returns error so the caller can decide how to handle it.
 func (s *AuditService) Log(ctx context.Context, e AuditEntry) error {
+	auditRepo := s.repoFactory.NewAuditRepo(s.pool)
+
 	var entityID *string
 	if e.EntityID != "" {
 		entityID = &e.EntityID
@@ -98,13 +101,14 @@ func (s *AuditService) Log(ctx context.Context, e AuditEntry) error {
 		row.NewValue = data
 	}
 
-	return s.repo.Create(ctx, row)
+	return auditRepo.Create(ctx, row)
 }
 
 // List returns audit logs matching the filter with pagination.
 // Validation is the handler's responsibility (CS-18).
 func (s *AuditService) List(ctx context.Context, f domain.AuditFilter, page, perPage int) ([]*domain.AuditLog, int64, error) {
-	rows, total, err := s.repo.List(ctx, domainFilterToRepo(f), page, perPage)
+	auditRepo := s.repoFactory.NewAuditRepo(s.pool)
+	rows, total, err := auditRepo.List(ctx, domainFilterToRepo(f), page, perPage)
 	if err != nil {
 		return nil, 0, err
 	}

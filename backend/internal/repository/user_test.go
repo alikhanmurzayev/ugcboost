@@ -16,7 +16,7 @@ func TestUserRepository_GetByEmail(t *testing.T) {
 	t.Run("SQL", func(t *testing.T) {
 		t.Parallel()
 		db := mocks.NewMockDB(t)
-		repo := NewUserRepository(db)
+		repo := &userRepository{db: db}
 		gotSQL, gotArgs := captureQuery(t, db, 1)
 
 		_, _ = repo.GetByEmail(context.Background(), "alice@example.com")
@@ -34,7 +34,7 @@ func TestUserRepository_GetByID(t *testing.T) {
 	t.Run("SQL", func(t *testing.T) {
 		t.Parallel()
 		db := mocks.NewMockDB(t)
-		repo := NewUserRepository(db)
+		repo := &userRepository{db: db}
 		gotSQL, gotArgs := captureQuery(t, db, 1)
 
 		_, _ = repo.GetByID(context.Background(), "user-42")
@@ -52,7 +52,7 @@ func TestUserRepository_Create(t *testing.T) {
 	t.Run("SQL", func(t *testing.T) {
 		t.Parallel()
 		db := mocks.NewMockDB(t)
-		repo := NewUserRepository(db)
+		repo := &userRepository{db: db}
 		gotSQL, gotArgs := captureQuery(t, db, 3)
 
 		_, _ = repo.Create(context.Background(), "bob@example.com", "hashed-pw", "brand_manager")
@@ -70,11 +70,11 @@ func TestUserRepository_UpdatePassword(t *testing.T) {
 	t.Run("SQL", func(t *testing.T) {
 		t.Parallel()
 		db := mocks.NewMockDB(t)
-		repo := NewUserRepository(db)
+		repo := &userRepository{db: db}
 		gotSQL, gotArgs := captureExec(t, db, 2)
 
 		// captureExec returns CommandTag("OK") which reports 0 rows affected,
-		// so UpdatePassword returns pgx.ErrNoRows. That's fine for SQL assertion.
+		// so UpdatePassword returns sql.ErrNoRows. That's fine for SQL assertion.
 		_ = repo.UpdatePassword(context.Background(), "user-1", "new-hash")
 
 		require.Equal(t,
@@ -90,10 +90,10 @@ func TestUserRepository_ExistsByEmail(t *testing.T) {
 	t.Run("SQL", func(t *testing.T) {
 		t.Parallel()
 		db := mocks.NewMockDB(t)
-		repo := NewUserRepository(db)
+		repo := &userRepository{db: db}
 		gotSQL, gotArgs := captureQuery(t, db, 1)
 
-		// captureQuery returns a generic error (not pgx.ErrNoRows),
+		// captureQuery returns a generic error (not sql.ErrNoRows),
 		// so ExistsByEmail now propagates it. Fine for SQL assertion.
 		exists, err := repo.ExistsByEmail(context.Background(), "test@example.com")
 		require.Error(t, err)
@@ -112,7 +112,7 @@ func TestUserRepository_SaveRefreshToken(t *testing.T) {
 	t.Run("SQL", func(t *testing.T) {
 		t.Parallel()
 		db := mocks.NewMockDB(t)
-		repo := NewUserRepository(db)
+		repo := &userRepository{db: db}
 		expiresAt := time.Date(2026, 5, 1, 12, 0, 0, 0, time.UTC)
 		gotSQL, gotArgs := captureExec(t, db, 3)
 
@@ -132,7 +132,7 @@ func TestUserRepository_ClaimRefreshToken(t *testing.T) {
 	t.Run("SQL", func(t *testing.T) {
 		t.Parallel()
 		db := mocks.NewMockDB(t)
-		repo := NewUserRepository(db)
+		repo := &userRepository{db: db}
 		gotSQL, gotArgs := captureQuery(t, db, 1)
 
 		_, _ = repo.ClaimRefreshToken(context.Background(), "token-hash")
@@ -150,7 +150,7 @@ func TestUserRepository_DeleteUserRefreshTokens(t *testing.T) {
 	t.Run("SQL", func(t *testing.T) {
 		t.Parallel()
 		db := mocks.NewMockDB(t)
-		repo := NewUserRepository(db)
+		repo := &userRepository{db: db}
 		gotSQL, gotArgs := captureExec(t, db, 1)
 
 		err := repo.DeleteUserRefreshTokens(context.Background(), "user-1")
@@ -169,7 +169,7 @@ func TestUserRepository_SaveResetToken(t *testing.T) {
 	t.Run("SQL", func(t *testing.T) {
 		t.Parallel()
 		db := mocks.NewMockDB(t)
-		repo := NewUserRepository(db)
+		repo := &userRepository{db: db}
 		expiresAt := time.Date(2026, 5, 1, 14, 0, 0, 0, time.UTC)
 		gotSQL, gotArgs := captureExec(t, db, 3)
 
@@ -189,14 +189,14 @@ func TestUserRepository_ClaimResetToken(t *testing.T) {
 	t.Run("SQL", func(t *testing.T) {
 		t.Parallel()
 		db := mocks.NewMockDB(t)
-		repo := NewUserRepository(db)
-		gotSQL, gotArgs := captureQuery(t, db, 2)
+		repo := &userRepository{db: db}
+		gotSQL, gotArgs := captureQuery(t, db, 3)
 
 		_, _ = repo.ClaimResetToken(context.Background(), "reset-hash")
 
 		require.Equal(t,
-			"UPDATE password_reset_tokens SET used = $1 WHERE token_hash = $2 AND used = false AND expires_at > now() RETURNING created_at, expires_at, id, token_hash, used, user_id",
+			"UPDATE password_reset_tokens SET used = $1 WHERE token_hash = $2 AND used = $3 AND expires_at > now() RETURNING created_at, expires_at, id, token_hash, used, user_id",
 			*gotSQL)
-		require.Equal(t, []any{true, "reset-hash"}, *gotArgs)
+		require.Equal(t, []any{true, "reset-hash", false}, *gotArgs)
 	})
 }

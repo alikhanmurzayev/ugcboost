@@ -3,21 +3,11 @@ structname: "Mock{{.InterfaceName}}"
 pkgname: mocks
 filename: "mock_{{.InterfaceName | snakecase}}.go"
 template: testify
+all: true
 packages:
   github.com/alikhanmurzayev/ugcboost/backend/internal/dbutil:
-    interfaces:
-      DB: {}
-  github.com/alikhanmurzayev/ugcboost/backend/internal/handler:
-    interfaces:
-      AuthService: {}
-      BrandService: {}
-      AuditLogService: {}
+  github.com/alikhanmurzayev/ugcboost/backend/internal/repository:
   github.com/alikhanmurzayev/ugcboost/backend/internal/service:
-    interfaces:
-      UserRepo: {}
-      TokenGenerator: {}
-      BrandRepo: {}
-      BrandUserRepo: {}
+  github.com/alikhanmurzayev/ugcboost/backend/internal/handler:
   github.com/alikhanmurzayev/ugcboost/backend/internal/middleware:
-    interfaces:
-      TokenValidator: {}
+  github.com/alikhanmurzayev/ugcboost/backend/internal/authz:

@@ -78,7 +78,24 @@ func sortColumns(columns []string) []string {
 - Single insert: `squirrel.Insert(TableUsers).SetMap(toMap(row, userInsertMapper))`
 - Batch insert: `insertEntities(qb, userInsertMapper, userInsertColumns, row)` в цикле
 
-Query builder создаётся через `squirrel` напрямую. Формат плейсхолдеров устанавливается внутри хелперов `dbutil` (`Val`, `Row` и т.д.), которые принимают `squirrel.Sqlizer`.
+Query builder создаётся через чистый `squirrel` (`squirrel.Select(...)`, `squirrel.Insert(...)` и т.д.). Репозитории **не** используют `dbutil.Psql` и не знают про формат плейсхолдеров — `$1, $2, ...` подставляется автоматически внутри хелперов `dbutil` (`One`, `Many`, `Val`, `Vals`, `Exec`).
+
+## Условия WHERE
+
+Для условий используется `squirrel.Eq`, `squirrel.Gt`, `squirrel.Lt` и т.д. вместо строковых литералов. Цепочка `.Where()` вызовов объединяется через AND:
+
+```go
+q := squirrel.Select(cols...).
+    From(TableUsers).
+    Where(squirrel.Eq{UserColumnEmail: email}).
+    Where(squirrel.Gt{UserColumnCreatedAt: since})
+```
+
+Для OR — `squirrel.Or{...}`.
+
+## Ошибки
+
+Репозитории используют `sql.ErrNoRows` из стандартной библиотеки, не `pgx.ErrNoRows`. Прямой импорт `pgx` в пакете `repository` запрещён (кроме тестов, где мокается `pgx.Rows`).
 
 ## Возвращаемые значения
 

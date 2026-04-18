@@ -70,9 +70,7 @@ func run() error {
 	slog.Info("cron scheduler started")
 
 	// Dependencies
-	userRepo := repository.NewUserRepository(pool)
-	brandRepo := repository.NewBrandRepository(pool)
-	auditRepo := repository.NewAuditRepository(pool)
+	repoFactory := repository.NewRepoFactory()
 	tokenSvc := service.NewTokenService(cfg.JWTSecret, cfg.JWTExpiry, cfg.RefreshExpiry, cfg.ResetExpiry)
 
 	// Reset token store is only needed for test endpoints.
@@ -81,9 +79,9 @@ func run() error {
 		resetTokenStore = service.NewInMemoryResetTokenStore()
 	}
 
-	authSvc := service.NewAuthService(userRepo, tokenSvc, resetTokenStore, cfg.BcryptCost)
-	brandSvc := service.NewBrandService(brandRepo, userRepo, cfg.BcryptCost)
-	auditSvc := service.NewAuditService(auditRepo)
+	authSvc := service.NewAuthService(pool, repoFactory, tokenSvc, resetTokenStore, cfg.BcryptCost)
+	brandSvc := service.NewBrandService(pool, repoFactory, cfg.BcryptCost)
+	auditSvc := service.NewAuditService(pool, repoFactory)
 
 	// Seed admin
 	if err := authSvc.SeedAdmin(ctx, cfg.AdminEmail, cfg.AdminPassword); err != nil {

@@ -13,17 +13,17 @@ import (
 
 // AuditLogs table and column names.
 const (
-	TableAuditLogs              = "audit_logs"
-	AuditLogColumnID            = "id"
-	AuditLogColumnActorID       = "actor_id"
-	AuditLogColumnActorRole     = "actor_role"
-	AuditLogColumnAction        = "action"
-	AuditLogColumnEntityType    = "entity_type"
-	AuditLogColumnEntityID      = "entity_id"
-	AuditLogColumnOldValue      = "old_value"
-	AuditLogColumnNewValue      = "new_value"
-	AuditLogColumnIPAddress     = "ip_address"
-	AuditLogColumnCreatedAt     = "created_at"
+	TableAuditLogs           = "audit_logs"
+	AuditLogColumnID         = "id"
+	AuditLogColumnActorID    = "actor_id"
+	AuditLogColumnActorRole  = "actor_role"
+	AuditLogColumnAction     = "action"
+	AuditLogColumnEntityType = "entity_type"
+	AuditLogColumnEntityID   = "entity_id"
+	AuditLogColumnOldValue   = "old_value"
+	AuditLogColumnNewValue   = "new_value"
+	AuditLogColumnIPAddress  = "ip_address"
+	AuditLogColumnCreatedAt  = "created_at"
 )
 
 // AuditLogRow maps to the audit_logs table.
@@ -43,7 +43,7 @@ type AuditLogRow struct {
 var (
 	auditSelectColumns = sortColumns(stom.MustNewStom(AuditLogRow{}).SetTag(string(tagSelect)).TagValues())
 	auditInsertMapper  = stom.MustNewStom(AuditLogRow{}).SetTag(string(tagInsert))
-	auditInsertColumns = sortColumns(auditInsertMapper.TagValues()) //nolint:unused // will be used for audit log inserts
+	auditInsertColumns = sortColumns(auditInsertMapper.TagValues()) //nolint:unused // will be used for batch audit log inserts
 )
 
 // AuditFilter defines the filter parameters for listing audit logs.
@@ -56,30 +56,27 @@ type AuditFilter struct {
 	DateTo     *time.Time
 }
 
-// AuditRepository handles audit log persistence.
-type AuditRepository struct {
+// AuditRepo lists all public methods of the audit repository.
+type AuditRepo interface {
+	Create(ctx context.Context, entry AuditLogRow) error
+	List(ctx context.Context, f AuditFilter, page, perPage int) ([]*AuditLogRow, int64, error)
+}
+
+type auditRepository struct {
 	db dbutil.DB
 }
 
-// NewAuditRepository creates a new AuditRepository.
-func NewAuditRepository(db dbutil.DB) *AuditRepository {
-	return &AuditRepository{db: db}
-}
-
-// Create inserts a new audit log entry.
-func (r *AuditRepository) Create(ctx context.Context, entry AuditLogRow) error {
-	q := dbutil.Psql.
-		Insert(TableAuditLogs).
+func (r *auditRepository) Create(ctx context.Context, entry AuditLogRow) error {
+	q := sq.Insert(TableAuditLogs).
 		SetMap(toMap(entry, auditInsertMapper))
 
 	_, err := dbutil.Exec(ctx, r.db, q)
 	return err
 }
 
-// List returns audit logs matching the given filter with pagination.
-func (r *AuditRepository) List(ctx context.Context, f AuditFilter, page, perPage int) ([]*AuditLogRow, int64, error) {
+func (r *auditRepository) List(ctx context.Context, f AuditFilter, page, perPage int) ([]*AuditLogRow, int64, error) {
 	// Count
-	countQ := dbutil.Psql.Select("COUNT(*)").From(TableAuditLogs)
+	countQ := sq.Select("COUNT(*)").From(TableAuditLogs)
 	countQ = applyAuditFilters(countQ, f)
 	total, err := dbutil.Val[int64](ctx, r.db, countQ)
 	if err != nil {
@@ -91,8 +88,7 @@ func (r *AuditRepository) List(ctx context.Context, f AuditFilter, page, perPage
 	}
 
 	// Data
-	q := dbutil.Psql.
-		Select(auditSelectColumns...).
+	q := sq.Select(auditSelectColumns...).
 		From(TableAuditLogs)
 
 	q = applyAuditFilters(q, f)

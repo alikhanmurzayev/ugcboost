@@ -2,25 +2,25 @@ package repository
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"time"
 
 	sq "github.com/Masterminds/squirrel"
 	"github.com/elgris/stom"
-	"github.com/jackc/pgx/v5"
 
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/dbutil"
 )
 
 // Users table and column names.
 const (
-	TableUsers              = "users"
-	UserColumnID            = "id"
-	UserColumnEmail         = "email"
-	UserColumnPasswordHash  = "password_hash"
-	UserColumnRole          = "role"
-	UserColumnCreatedAt     = "created_at"
-	UserColumnUpdatedAt     = "updated_at"
+	TableUsers             = "users"
+	UserColumnID           = "id"
+	UserColumnEmail        = "email"
+	UserColumnPasswordHash = "password_hash"
+	UserColumnRole         = "role"
+	UserColumnCreatedAt    = "created_at"
+	UserColumnUpdatedAt    = "updated_at"
 )
 
 // RefreshTokens table and column names.
@@ -35,13 +35,13 @@ const (
 
 // PasswordResetTokens table and column names.
 const (
-	TablePasswordResetTokens       = "password_reset_tokens"
-	ResetTokenColumnID             = "id"
-	ResetTokenColumnUserID         = "user_id"
-	ResetTokenColumnTokenHash      = "token_hash"
-	ResetTokenColumnExpiresAt      = "expires_at"
-	ResetTokenColumnUsed           = "used"
-	ResetTokenColumnCreatedAt      = "created_at"
+	TablePasswordResetTokens  = "password_reset_tokens"
+	ResetTokenColumnID        = "id"
+	ResetTokenColumnUserID    = "user_id"
+	ResetTokenColumnTokenHash = "token_hash"
+	ResetTokenColumnExpiresAt = "expires_at"
+	ResetTokenColumnUsed      = "used"
+	ResetTokenColumnCreatedAt = "created_at"
 )
 
 // UserRow maps to the users table.
@@ -57,7 +57,7 @@ type UserRow struct {
 var (
 	userSelectColumns = sortColumns(stom.MustNewStom(UserRow{}).SetTag(string(tagSelect)).TagValues())
 	userInsertMapper  = stom.MustNewStom(UserRow{}).SetTag(string(tagInsert))
-	userInsertColumns = sortColumns(userInsertMapper.TagValues())
+	userInsertColumns = sortColumns(userInsertMapper.TagValues()) //nolint:unused // will be used for batch user inserts
 )
 
 // RefreshTokenRow maps to the refresh_tokens table.
@@ -89,62 +89,68 @@ var (
 	resetTokenInsertMapper  = stom.MustNewStom(PasswordResetTokenRow{}).SetTag(string(tagInsert))
 )
 
-// UserRepository handles user data access.
-type UserRepository struct {
+// UserRepo lists all public methods of the user repository.
+type UserRepo interface {
+	GetByEmail(ctx context.Context, email string) (*UserRow, error)
+	GetByID(ctx context.Context, id string) (*UserRow, error)
+	Create(ctx context.Context, email, passwordHash, role string) (*UserRow, error)
+	UpdatePassword(ctx context.Context, userID, passwordHash string) error
+	ExistsByEmail(ctx context.Context, email string) (bool, error)
+	SaveRefreshToken(ctx context.Context, userID, tokenHash string, expiresAt time.Time) error
+	ClaimRefreshToken(ctx context.Context, tokenHash string) (*RefreshTokenRow, error)
+	DeleteUserRefreshTokens(ctx context.Context, userID string) error
+	SaveResetToken(ctx context.Context, userID, tokenHash string, expiresAt time.Time) error
+	ClaimResetToken(ctx context.Context, tokenHash string) (*PasswordResetTokenRow, error)
+}
+
+type userRepository struct {
 	db dbutil.DB
 }
 
-// NewUserRepository creates a new UserRepository.
-func NewUserRepository(db dbutil.DB) *UserRepository {
-	return &UserRepository{db: db}
-}
-
-// GetByEmail finds a user by email.
-func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*UserRow, error) {
-	q := dbutil.Psql.Select(userSelectColumns...).
+func (r *userRepository) GetByEmail(ctx context.Context, email string) (*UserRow, error) {
+	q := sq.Select(userSelectColumns...).
 		From(TableUsers).
-		Where(UserColumnEmail+" = ?", email)
+		Where(sq.Eq{UserColumnEmail: email})
 	return dbutil.One[UserRow](ctx, r.db, q)
 }
 
-// GetByID finds a user by ID.
-func (r *UserRepository) GetByID(ctx context.Context, id string) (*UserRow, error) {
-	q := dbutil.Psql.Select(userSelectColumns...).
+func (r *userRepository) GetByID(ctx context.Context, id string) (*UserRow, error) {
+	q := sq.Select(userSelectColumns...).
 		From(TableUsers).
-		Where(UserColumnID+" = ?", id)
+		Where(sq.Eq{UserColumnID: id})
 	return dbutil.One[UserRow](ctx, r.db, q)
 }
 
-// Create inserts a new user and returns it.
-func (r *UserRepository) Create(ctx context.Context, email, passwordHash, role string) (*UserRow, error) {
-	q := dbutil.Psql.Insert(TableUsers).
+func (r *userRepository) Create(ctx context.Context, email, passwordHash, role string) (*UserRow, error) {
+	q := sq.Insert(TableUsers).
 		SetMap(toMap(UserRow{Email: email, PasswordHash: passwordHash, Role: role}, userInsertMapper)).
 		Suffix(returningClause(userSelectColumns))
 	return dbutil.One[UserRow](ctx, r.db, q)
 }
 
-// UpdatePassword updates the password hash for a user.
-func (r *UserRepository) UpdatePassword(ctx context.Context, userID, passwordHash string) error {
-	q := dbutil.Psql.Update(TableUsers).
+func (r *userRepository) UpdatePassword(ctx context.Context, userID, passwordHash string) error {
+	q := sq.Update(TableUsers).
 		Set(UserColumnPasswordHash, passwordHash).
 		Set(UserColumnUpdatedAt, sq.Expr("now()")).
-		Where(UserColumnID+" = ?", userID)
+		Where(sq.Eq{UserColumnID: userID})
 	n, err := dbutil.Exec(ctx, r.db, q)
 	if err != nil {
 		return err
 	}
 	if n == 0 {
-		return pgx.ErrNoRows
+		return sql.ErrNoRows
 	}
 	return nil
 }
 
-// ExistsByEmail checks if a user with the given email exists.
-func (r *UserRepository) ExistsByEmail(ctx context.Context, email string) (bool, error) {
-	q := dbutil.Psql.Select("1").From(TableUsers).Where(UserColumnEmail+" = ?", email).Limit(1)
+func (r *userRepository) ExistsByEmail(ctx context.Context, email string) (bool, error) {
+	q := sq.Select("1").
+		From(TableUsers).
+		Where(sq.Eq{UserColumnEmail: email}).
+		Limit(1)
 	_, err := dbutil.Val[int](ctx, r.db, q)
 	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+		if errors.Is(err, sql.ErrNoRows) {
 			return false, nil
 		}
 		return false, err
@@ -152,44 +158,41 @@ func (r *UserRepository) ExistsByEmail(ctx context.Context, email string) (bool,
 	return true, nil
 }
 
-// SaveRefreshToken stores a hashed refresh token.
-func (r *UserRepository) SaveRefreshToken(ctx context.Context, userID, tokenHash string, expiresAt time.Time) error {
-	q := dbutil.Psql.Insert(TableRefreshTokens).
+func (r *userRepository) SaveRefreshToken(ctx context.Context, userID, tokenHash string, expiresAt time.Time) error {
+	q := sq.Insert(TableRefreshTokens).
 		SetMap(toMap(RefreshTokenRow{UserID: userID, TokenHash: tokenHash, ExpiresAt: expiresAt}, refreshTokenInsertMapper))
 	_, err := dbutil.Exec(ctx, r.db, q)
 	return err
 }
 
-// ClaimRefreshToken atomically deletes a valid refresh token and returns it.
-// Returns pgx.ErrNoRows (wrapped) if token not found or expired.
-func (r *UserRepository) ClaimRefreshToken(ctx context.Context, tokenHash string) (*RefreshTokenRow, error) {
-	q := dbutil.Psql.Delete(TableRefreshTokens).
-		Where(RefreshTokenColumnTokenHash+" = ? AND "+RefreshTokenColumnExpiresAt+" > now()", tokenHash).
+func (r *userRepository) ClaimRefreshToken(ctx context.Context, tokenHash string) (*RefreshTokenRow, error) {
+	q := sq.Delete(TableRefreshTokens).
+		Where(sq.Eq{RefreshTokenColumnTokenHash: tokenHash}).
+		Where(sq.Expr(RefreshTokenColumnExpiresAt + " > now()")).
 		Suffix(returningClause(refreshTokenSelectColumns))
 	return dbutil.One[RefreshTokenRow](ctx, r.db, q)
 }
 
-// DeleteUserRefreshTokens removes all refresh tokens for a user.
-func (r *UserRepository) DeleteUserRefreshTokens(ctx context.Context, userID string) error {
-	q := dbutil.Psql.Delete(TableRefreshTokens).Where(RefreshTokenColumnUserID+" = ?", userID)
+func (r *userRepository) DeleteUserRefreshTokens(ctx context.Context, userID string) error {
+	q := sq.Delete(TableRefreshTokens).
+		Where(sq.Eq{RefreshTokenColumnUserID: userID})
 	_, err := dbutil.Exec(ctx, r.db, q)
 	return err
 }
 
-// SaveResetToken stores a hashed password reset token.
-func (r *UserRepository) SaveResetToken(ctx context.Context, userID, tokenHash string, expiresAt time.Time) error {
-	q := dbutil.Psql.Insert(TablePasswordResetTokens).
+func (r *userRepository) SaveResetToken(ctx context.Context, userID, tokenHash string, expiresAt time.Time) error {
+	q := sq.Insert(TablePasswordResetTokens).
 		SetMap(toMap(PasswordResetTokenRow{UserID: userID, TokenHash: tokenHash, ExpiresAt: expiresAt}, resetTokenInsertMapper))
 	_, err := dbutil.Exec(ctx, r.db, q)
 	return err
 }
 
-// ClaimResetToken atomically marks a valid reset token as used and returns it.
-// Returns pgx.ErrNoRows (wrapped) if token not found, already used, or expired.
-func (r *UserRepository) ClaimResetToken(ctx context.Context, tokenHash string) (*PasswordResetTokenRow, error) {
-	q := dbutil.Psql.Update(TablePasswordResetTokens).
+func (r *userRepository) ClaimResetToken(ctx context.Context, tokenHash string) (*PasswordResetTokenRow, error) {
+	q := sq.Update(TablePasswordResetTokens).
 		Set(ResetTokenColumnUsed, true).
-		Where(ResetTokenColumnTokenHash+" = ? AND "+ResetTokenColumnUsed+" = false AND "+ResetTokenColumnExpiresAt+" > now()", tokenHash).
+		Where(sq.Eq{ResetTokenColumnTokenHash: tokenHash}).
+		Where(sq.Eq{ResetTokenColumnUsed: false}).
+		Where(sq.Expr(ResetTokenColumnExpiresAt + " > now()")).
 		Suffix(returningClause(resetTokenSelectColumns))
 	return dbutil.One[PasswordResetTokenRow](ctx, r.db, q)
 }

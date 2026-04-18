@@ -15,7 +15,7 @@ func TestBrandRepository_Create(t *testing.T) {
 	t.Run("SQL", func(t *testing.T) {
 		t.Parallel()
 		db := mocks.NewMockDB(t)
-		repo := NewBrandRepository(db)
+		repo := &brandRepository{db: db}
 		logoURL := "https://example.com/logo.png"
 		gotSQL, gotArgs := captureQuery(t, db, 2)
 
@@ -34,7 +34,7 @@ func TestBrandRepository_GetByID(t *testing.T) {
 	t.Run("SQL", func(t *testing.T) {
 		t.Parallel()
 		db := mocks.NewMockDB(t)
-		repo := NewBrandRepository(db)
+		repo := &brandRepository{db: db}
 		gotSQL, gotArgs := captureQuery(t, db, 1)
 
 		_, _ = repo.GetByID(context.Background(), "brand-1")
@@ -52,7 +52,7 @@ func TestBrandRepository_List(t *testing.T) {
 	t.Run("SQL", func(t *testing.T) {
 		t.Parallel()
 		db := mocks.NewMockDB(t)
-		repo := NewBrandRepository(db)
+		repo := &brandRepository{db: db}
 		gotSQL, _ := captureQuery(t, db, 0)
 
 		_, _ = repo.List(context.Background())
@@ -69,7 +69,7 @@ func TestBrandRepository_ListByUser(t *testing.T) {
 	t.Run("SQL", func(t *testing.T) {
 		t.Parallel()
 		db := mocks.NewMockDB(t)
-		repo := NewBrandRepository(db)
+		repo := &brandRepository{db: db}
 		gotSQL, gotArgs := captureQuery(t, db, 1)
 
 		_, _ = repo.ListByUser(context.Background(), "user-1")
@@ -87,7 +87,7 @@ func TestBrandRepository_Update(t *testing.T) {
 	t.Run("SQL", func(t *testing.T) {
 		t.Parallel()
 		db := mocks.NewMockDB(t)
-		repo := NewBrandRepository(db)
+		repo := &brandRepository{db: db}
 		gotSQL, gotArgs := captureQuery(t, db, 3)
 
 		_, _ = repo.Update(context.Background(), "brand-1", "New Name", nil)
@@ -105,7 +105,7 @@ func TestBrandRepository_Delete(t *testing.T) {
 	t.Run("SQL", func(t *testing.T) {
 		t.Parallel()
 		db := mocks.NewMockDB(t)
-		repo := NewBrandRepository(db)
+		repo := &brandRepository{db: db}
 		gotSQL, gotArgs := captureExec(t, db, 1)
 
 		_ = repo.Delete(context.Background(), "brand-1")
@@ -123,7 +123,7 @@ func TestBrandRepository_AssignManager(t *testing.T) {
 	t.Run("SQL", func(t *testing.T) {
 		t.Parallel()
 		db := mocks.NewMockDB(t)
-		repo := NewBrandRepository(db)
+		repo := &brandRepository{db: db}
 		gotSQL, gotArgs := captureExec(t, db, 2)
 
 		err := repo.AssignManager(context.Background(), "brand-1", "user-1")
@@ -142,7 +142,7 @@ func TestBrandRepository_RemoveManager(t *testing.T) {
 	t.Run("SQL", func(t *testing.T) {
 		t.Parallel()
 		db := mocks.NewMockDB(t)
-		repo := NewBrandRepository(db)
+		repo := &brandRepository{db: db}
 		gotSQL, gotArgs := captureExec(t, db, 2)
 
 		_ = repo.RemoveManager(context.Background(), "brand-1", "user-1")
@@ -160,7 +160,7 @@ func TestBrandRepository_ListManagers(t *testing.T) {
 	t.Run("SQL", func(t *testing.T) {
 		t.Parallel()
 		db := mocks.NewMockDB(t)
-		repo := NewBrandRepository(db)
+		repo := &brandRepository{db: db}
 		gotSQL, gotArgs := captureQuery(t, db, 1)
 
 		_, _ = repo.ListManagers(context.Background(), "brand-1")
@@ -178,7 +178,7 @@ func TestBrandRepository_GetBrandIDsForUser(t *testing.T) {
 	t.Run("SQL", func(t *testing.T) {
 		t.Parallel()
 		db := mocks.NewMockDB(t)
-		repo := NewBrandRepository(db)
+		repo := &brandRepository{db: db}
 		gotSQL, gotArgs := captureQuery(t, db, 1)
 
 		_, _ = repo.GetBrandIDsForUser(context.Background(), "user-1")
@@ -196,7 +196,7 @@ func TestBrandRepository_IsManager(t *testing.T) {
 	t.Run("SQL", func(t *testing.T) {
 		t.Parallel()
 		db := mocks.NewMockDB(t)
-		repo := NewBrandRepository(db)
+		repo := &brandRepository{db: db}
 		gotSQL, gotArgs := captureQuery(t, db, 2)
 
 		ok, err := repo.IsManager(context.Background(), "user-1", "brand-1")

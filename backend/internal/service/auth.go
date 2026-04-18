@@ -8,22 +8,14 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 
+	"github.com/alikhanmurzayev/ugcboost/backend/internal/dbutil"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/domain"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/repository"
 )
 
-// UserRepo is the interface AuthService needs from the user repository.
-type UserRepo interface {
-	GetByEmail(ctx context.Context, email string) (*repository.UserRow, error)
-	GetByID(ctx context.Context, id string) (*repository.UserRow, error)
-	Create(ctx context.Context, email, passwordHash, role string) (*repository.UserRow, error)
-	ExistsByEmail(ctx context.Context, email string) (bool, error)
-	UpdatePassword(ctx context.Context, userID, passwordHash string) error
-	SaveRefreshToken(ctx context.Context, userID, tokenHash string, expiresAt time.Time) error
-	ClaimRefreshToken(ctx context.Context, tokenHash string) (*repository.RefreshTokenRow, error)
-	DeleteUserRefreshTokens(ctx context.Context, userID string) error
-	SaveResetToken(ctx context.Context, userID, tokenHash string, expiresAt time.Time) error
-	ClaimResetToken(ctx context.Context, tokenHash string) (*repository.PasswordResetTokenRow, error)
+// AuthRepoFactory creates repositories needed by AuthService.
+type AuthRepoFactory interface {
+	NewUserRepo(db dbutil.DB) repository.UserRepo
 }
 
 // TokenGenerator is the interface AuthService needs from the token service.
@@ -35,15 +27,16 @@ type TokenGenerator interface {
 
 // AuthService handles authentication business logic.
 type AuthService struct {
-	users         UserRepo
+	pool          dbutil.Pool
+	repoFactory   AuthRepoFactory
 	tokens        TokenGenerator
 	resetNotifier ResetTokenNotifier
 	bcryptCost    int
 }
 
 // NewAuthService creates a new AuthService. resetNotifier may be nil.
-func NewAuthService(users UserRepo, tokens TokenGenerator, resetNotifier ResetTokenNotifier, bcryptCost int) *AuthService {
-	return &AuthService{users: users, tokens: tokens, resetNotifier: resetNotifier, bcryptCost: bcryptCost}
+func NewAuthService(pool dbutil.Pool, repoFactory AuthRepoFactory, tokens TokenGenerator, resetNotifier ResetTokenNotifier, bcryptCost int) *AuthService {
+	return &AuthService{pool: pool, repoFactory: repoFactory, tokens: tokens, resetNotifier: resetNotifier, bcryptCost: bcryptCost}
 }
 
 // LoginResult contains the result of a successful login.
@@ -56,7 +49,9 @@ type LoginResult struct {
 
 // Login authenticates a user by email and password.
 func (s *AuthService) Login(ctx context.Context, email, password string) (*LoginResult, error) {
-	user, err := s.users.GetByEmail(ctx, email)
+	userRepo := s.repoFactory.NewUserRepo(s.pool)
+
+	user, err := userRepo.GetByEmail(ctx, email)
 	if err != nil {
 		return nil, domain.ErrUnauthorized
 	}
@@ -75,7 +70,7 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (*Login
 		return nil, fmt.Errorf("generate refresh token: %w", err)
 	}
 
-	if err := s.users.SaveRefreshToken(ctx, user.ID, refreshHash, refreshExpires); err != nil {
+	if err := userRepo.SaveRefreshToken(ctx, user.ID, refreshHash, refreshExpires); err != nil {
 		return nil, fmt.Errorf("save refresh token: %w", err)
 	}
 
@@ -97,15 +92,16 @@ type RefreshResult struct {
 
 // Refresh validates a refresh token, rotates it, and returns new tokens.
 func (s *AuthService) Refresh(ctx context.Context, rawRefreshToken string) (*RefreshResult, error) {
+	userRepo := s.repoFactory.NewUserRepo(s.pool)
 	hash := HashToken(rawRefreshToken)
 
 	// Atomic claim: DELETE...RETURNING prevents race condition on reuse
-	rt, err := s.users.ClaimRefreshToken(ctx, hash)
+	rt, err := userRepo.ClaimRefreshToken(ctx, hash)
 	if err != nil {
 		return nil, domain.ErrUnauthorized
 	}
 
-	user, err := s.users.GetByID(ctx, rt.UserID)
+	user, err := userRepo.GetByID(ctx, rt.UserID)
 	if err != nil {
 		return nil, domain.ErrUnauthorized
 	}
@@ -120,7 +116,7 @@ func (s *AuthService) Refresh(ctx context.Context, rawRefreshToken string) (*Ref
 		return nil, fmt.Errorf("generate refresh token: %w", err)
 	}
 
-	if err := s.users.SaveRefreshToken(ctx, user.ID, newHash, newExpires); err != nil {
+	if err := userRepo.SaveRefreshToken(ctx, user.ID, newHash, newExpires); err != nil {
 		return nil, fmt.Errorf("save refresh token: %w", err)
 	}
 
@@ -134,12 +130,15 @@ func (s *AuthService) Refresh(ctx context.Context, rawRefreshToken string) (*Ref
 
 // Logout invalidates all refresh tokens for the user.
 func (s *AuthService) Logout(ctx context.Context, userID string) error {
-	return s.users.DeleteUserRefreshTokens(ctx, userID)
+	userRepo := s.repoFactory.NewUserRepo(s.pool)
+	return userRepo.DeleteUserRefreshTokens(ctx, userID)
 }
 
 // RequestPasswordReset generates a reset token. Always returns nil to prevent email enumeration.
 func (s *AuthService) RequestPasswordReset(ctx context.Context, email string) error {
-	user, err := s.users.GetByEmail(ctx, email)
+	userRepo := s.repoFactory.NewUserRepo(s.pool)
+
+	user, err := userRepo.GetByEmail(ctx, email)
 	if err != nil {
 		return nil //nolint:nilerr // intentional: don't reveal if email exists (prevent enumeration)
 	}
@@ -149,7 +148,7 @@ func (s *AuthService) RequestPasswordReset(ctx context.Context, email string) er
 		return fmt.Errorf("generate reset token: %w", err)
 	}
 
-	if err := s.users.SaveResetToken(ctx, user.ID, hash, expiresAt); err != nil {
+	if err := userRepo.SaveResetToken(ctx, user.ID, hash, expiresAt); err != nil {
 		return fmt.Errorf("save reset token: %w", err)
 	}
 
@@ -171,32 +170,40 @@ func (s *AuthService) RequestPasswordReset(ctx context.Context, email string) er
 func (s *AuthService) ResetPassword(ctx context.Context, rawToken, newPassword string) (string, error) {
 	hash := HashToken(rawToken)
 
-	// Atomic claim: UPDATE SET used=true...RETURNING prevents TOCTOU race
-	rt, err := s.users.ClaimResetToken(ctx, hash)
-	if err != nil {
-		return "", domain.ErrUnauthorized
-	}
-
 	passwordHash, err := bcrypt.GenerateFromPassword([]byte(newPassword), s.bcryptCost)
 	if err != nil {
 		return "", fmt.Errorf("hash password: %w", err)
 	}
 
-	if err := s.users.UpdatePassword(ctx, rt.UserID, string(passwordHash)); err != nil {
-		return "", fmt.Errorf("update password: %w", err)
+	var userID string
+	err = dbutil.WithTx(ctx, s.pool, func(tx dbutil.DB) error {
+		userRepo := s.repoFactory.NewUserRepo(tx)
+
+		// Atomic claim: UPDATE SET used=true...RETURNING prevents TOCTOU race
+		rt, err := userRepo.ClaimResetToken(ctx, hash)
+		if err != nil {
+			return domain.ErrUnauthorized
+		}
+		userID = rt.UserID
+
+		if err := userRepo.UpdatePassword(ctx, userID, string(passwordHash)); err != nil {
+			return fmt.Errorf("update password: %w", err)
+		}
+
+		// Invalidate all refresh tokens on password change
+		return userRepo.DeleteUserRefreshTokens(ctx, userID)
+	})
+	if err != nil {
+		return "", err
 	}
 
-	// Invalidate all refresh tokens on password change
-	if err := s.users.DeleteUserRefreshTokens(ctx, rt.UserID); err != nil {
-		return "", fmt.Errorf("delete refresh tokens: %w", err)
-	}
-
-	return rt.UserID, nil
+	return userID, nil
 }
 
 // GetUser returns a user by ID.
 func (s *AuthService) GetUser(ctx context.Context, userID string) (*domain.User, error) {
-	row, err := s.users.GetByID(ctx, userID)
+	userRepo := s.repoFactory.NewUserRepo(s.pool)
+	row, err := userRepo.GetByID(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -206,11 +213,12 @@ func (s *AuthService) GetUser(ctx context.Context, userID string) (*domain.User,
 
 // SeedUser creates a user with the given role. Used by test endpoints.
 func (s *AuthService) SeedUser(ctx context.Context, email, password, role string) (*domain.User, error) {
+	userRepo := s.repoFactory.NewUserRepo(s.pool)
 	hash, err := bcrypt.GenerateFromPassword([]byte(password), s.bcryptCost)
 	if err != nil {
 		return nil, fmt.Errorf("hash password: %w", err)
 	}
-	row, err := s.users.Create(ctx, email, string(hash), role)
+	row, err := userRepo.Create(ctx, email, string(hash), role)
 	if err != nil {
 		return nil, err
 	}
@@ -225,7 +233,9 @@ func (s *AuthService) SeedAdmin(ctx context.Context, email, password string) err
 		return nil
 	}
 
-	exists, err := s.users.ExistsByEmail(ctx, email)
+	userRepo := s.repoFactory.NewUserRepo(s.pool)
+
+	exists, err := userRepo.ExistsByEmail(ctx, email)
 	if err != nil {
 		return fmt.Errorf("check admin exists: %w", err)
 	}
@@ -239,7 +249,7 @@ func (s *AuthService) SeedAdmin(ctx context.Context, email, password string) err
 		return fmt.Errorf("hash admin password: %w", err)
 	}
 
-	_, err = s.users.Create(ctx, email, string(hash), string(domain.RoleAdmin))
+	_, err = userRepo.Create(ctx, email, string(hash), string(domain.RoleAdmin))
 	if err != nil {
 		return fmt.Errorf("create admin: %w", err)
 	}

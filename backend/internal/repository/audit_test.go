@@ -19,7 +19,7 @@ func TestAuditRepository_Create(t *testing.T) {
 	t.Run("SQL", func(t *testing.T) {
 		t.Parallel()
 		db := mocks.NewMockDB(t)
-		repo := NewAuditRepository(db)
+		repo := &auditRepository{db: db}
 		entityID := "e-1"
 		newVal := json.RawMessage(`{"name":"test"}`)
 		gotSQL, gotArgs := captureExec(t, db, 8)
@@ -47,7 +47,7 @@ func TestAuditRepository_List(t *testing.T) {
 	t.Run("count SQL no filters", func(t *testing.T) {
 		t.Parallel()
 		db := mocks.NewMockDB(t)
-		repo := NewAuditRepository(db)
+		repo := &auditRepository{db: db}
 		gotSQL, _ := captureQuery(t, db, 0)
 
 		_, _, _ = repo.List(context.Background(), AuditFilter{}, 1, 20)
@@ -60,7 +60,7 @@ func TestAuditRepository_List(t *testing.T) {
 	t.Run("count SQL with all filters", func(t *testing.T) {
 		t.Parallel()
 		db := mocks.NewMockDB(t)
-		repo := NewAuditRepository(db)
+		repo := &auditRepository{db: db}
 		dateFrom := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 		dateTo := time.Date(2026, 12, 31, 23, 59, 59, 0, time.UTC)
 		gotSQL, gotArgs := captureQuery(t, db, 6)
@@ -83,7 +83,7 @@ func TestAuditRepository_List(t *testing.T) {
 	t.Run("data SQL with pagination", func(t *testing.T) {
 		t.Parallel()
 		db := mocks.NewMockDB(t)
-		repo := NewAuditRepository(db)
+		repo := &auditRepository{db: db}
 
 		var capturedSQL string
 		var capturedArgs []any

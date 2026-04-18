@@ -4,18 +4,25 @@ import (
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/dbutil"
 )
 
-// RepoFactory provides access to all repositories, sharing the same DB connection.
-// Pass pgxpool.Pool for normal operations or pgx.Tx (via dbutil.WithTx) for transactions.
-type RepoFactory struct {
-	db dbutil.DB
-}
+// RepoFactory is a stateless factory that creates repositories.
+// Each method accepts a dbutil.DB so repos work transparently with both
+// pgxpool.Pool (normal operations) and pgx.Tx (inside transactions).
+type RepoFactory struct{}
 
 // NewRepoFactory creates a new repository factory.
-func NewRepoFactory(db dbutil.DB) *RepoFactory {
-	return &RepoFactory{db: db}
+func NewRepoFactory() *RepoFactory { return &RepoFactory{} }
+
+// NewUserRepo creates a user repository bound to the given DB.
+func (f *RepoFactory) NewUserRepo(db dbutil.DB) UserRepo {
+	return &userRepository{db: db}
 }
 
-// DB returns the underlying database connection.
-func (f *RepoFactory) DB() dbutil.DB {
-	return f.db
+// NewBrandRepo creates a brand repository bound to the given DB.
+func (f *RepoFactory) NewBrandRepo(db dbutil.DB) BrandRepo {
+	return &brandRepository{db: db}
+}
+
+// NewAuditRepo creates an audit repository bound to the given DB.
+func (f *RepoFactory) NewAuditRepo(db dbutil.DB) AuditRepo {
+	return &auditRepository{db: db}
 }

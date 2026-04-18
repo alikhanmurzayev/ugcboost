@@ -68,24 +68,24 @@ func (f *RepoFactory) NewEntityRepo(db dbutil.DB) EntityRepo {
 
 ### Интерфейс RepoFactory в сервисе
 
-Каждый сервис объявляет свой интерфейс `RepoFactory` с только нужными ему конструкторами (Go convention: accept interfaces, return structs):
+Каждый сервис объявляет свой интерфейс `{Service}RepoFactory` с только нужными ему конструкторами (Go convention: accept interfaces, return structs). Имя содержит название сервиса, чтобы избежать конфликтов в пакете `service`:
 
 ```go
-type RepoFactory interface {
+type SomeRepoFactory interface {
     NewEntityARepo(db dbutil.DB) repository.EntityARepo
     NewEntityBRepo(db dbutil.DB) repository.EntityBRepo
     // ...только те repos, которые нужны этому сервису
 }
 
 type SomeService struct {
-    pool        dbutil.TxStarter
-    repoFactory RepoFactory
+    pool        dbutil.Pool
+    repoFactory SomeRepoFactory
 }
 ```
 
 ## Использование в сервисе
 
-Сервис хранит `pool` (для начала транзакций) и `repoFactory` (для создания repos). Внутри `WithTx` сервис передаёт `tx` в фабрику и получает repos, привязанные к транзакции:
+Сервис хранит `pool dbutil.Pool` (для начала транзакций и для read-only операций) и `repoFactory` (для создания repos). Внутри `WithTx` сервис передаёт `tx` в фабрику и получает repos, привязанные к транзакции:
 
 ```go
 func (s *SomeService) SomeOperation(ctx context.Context, ...) error {

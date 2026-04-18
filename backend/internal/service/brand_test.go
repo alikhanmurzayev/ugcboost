@@ -7,9 +7,11 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	dbmocks "github.com/alikhanmurzayev/ugcboost/backend/internal/dbutil/mocks"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/domain"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/repository"
-	"github.com/alikhanmurzayev/ugcboost/backend/internal/service/mocks"
+	repomocks "github.com/alikhanmurzayev/ugcboost/backend/internal/repository/mocks"
+	svcmocks "github.com/alikhanmurzayev/ugcboost/backend/internal/service/mocks"
 )
 
 func testBrand() *repository.BrandRow {
@@ -21,11 +23,15 @@ func TestBrandService_CreateBrand(t *testing.T) {
 
 	t.Run("success", func(t *testing.T) {
 		t.Parallel()
-		brands := mocks.NewMockBrandRepo(t)
+		pool := dbmocks.NewMockPool(t)
+		factory := svcmocks.NewMockBrandRepoFactory(t)
+		brands := repomocks.NewMockBrandRepo(t)
+
+		factory.EXPECT().NewBrandRepo(mock.Anything).Return(brands)
 		brands.EXPECT().Create(mock.Anything, "My Brand", (*string)(nil)).
 			Return(&repository.BrandRow{ID: "b-1", Name: "My Brand"}, nil)
 
-		svc := NewBrandService(brands, nil, testBcryptCost)
+		svc := NewBrandService(pool, factory, testBcryptCost)
 		b, err := svc.CreateBrand(context.Background(), "My Brand", nil)
 
 		require.NoError(t, err)
@@ -35,7 +41,10 @@ func TestBrandService_CreateBrand(t *testing.T) {
 
 	t.Run("empty name", func(t *testing.T) {
 		t.Parallel()
-		svc := NewBrandService(nil, nil, testBcryptCost)
+		pool := dbmocks.NewMockPool(t)
+		factory := svcmocks.NewMockBrandRepoFactory(t)
+
+		svc := NewBrandService(pool, factory, testBcryptCost)
 		_, err := svc.CreateBrand(context.Background(), "  ", nil)
 
 		var ve *domain.ValidationError
@@ -44,11 +53,15 @@ func TestBrandService_CreateBrand(t *testing.T) {
 
 	t.Run("trims whitespace", func(t *testing.T) {
 		t.Parallel()
-		brands := mocks.NewMockBrandRepo(t)
+		pool := dbmocks.NewMockPool(t)
+		factory := svcmocks.NewMockBrandRepoFactory(t)
+		brands := repomocks.NewMockBrandRepo(t)
+
+		factory.EXPECT().NewBrandRepo(mock.Anything).Return(brands)
 		brands.EXPECT().Create(mock.Anything, "Trimmed", (*string)(nil)).
 			Return(&repository.BrandRow{ID: "b-1", Name: "Trimmed"}, nil)
 
-		svc := NewBrandService(brands, nil, testBcryptCost)
+		svc := NewBrandService(pool, factory, testBcryptCost)
 		_, err := svc.CreateBrand(context.Background(), "  Trimmed  ", nil)
 
 		require.NoError(t, err)
@@ -60,11 +73,15 @@ func TestBrandService_ListBrands(t *testing.T) {
 
 	t.Run("admin", func(t *testing.T) {
 		t.Parallel()
-		brands := mocks.NewMockBrandRepo(t)
+		pool := dbmocks.NewMockPool(t)
+		factory := svcmocks.NewMockBrandRepoFactory(t)
+		brands := repomocks.NewMockBrandRepo(t)
+
+		factory.EXPECT().NewBrandRepo(mock.Anything).Return(brands)
 		brands.EXPECT().List(mock.Anything).
 			Return([]*repository.BrandWithManagerCount{{ID: "b-1"}}, nil)
 
-		svc := NewBrandService(brands, nil, testBcryptCost)
+		svc := NewBrandService(pool, factory, testBcryptCost)
 		list, err := svc.ListBrands(context.Background(), "u-1", "admin")
 
 		require.NoError(t, err)
@@ -73,11 +90,15 @@ func TestBrandService_ListBrands(t *testing.T) {
 
 	t.Run("manager", func(t *testing.T) {
 		t.Parallel()
-		brands := mocks.NewMockBrandRepo(t)
+		pool := dbmocks.NewMockPool(t)
+		factory := svcmocks.NewMockBrandRepoFactory(t)
+		brands := repomocks.NewMockBrandRepo(t)
+
+		factory.EXPECT().NewBrandRepo(mock.Anything).Return(brands)
 		brands.EXPECT().ListByUser(mock.Anything, "u-1").
 			Return([]*repository.BrandWithManagerCount{{ID: "b-1"}}, nil)
 
-		svc := NewBrandService(brands, nil, testBcryptCost)
+		svc := NewBrandService(pool, factory, testBcryptCost)
 		list, err := svc.ListBrands(context.Background(), "u-1", "brand_manager")
 
 		require.NoError(t, err)
@@ -90,11 +111,15 @@ func TestBrandService_UpdateBrand(t *testing.T) {
 
 	t.Run("success", func(t *testing.T) {
 		t.Parallel()
-		brands := mocks.NewMockBrandRepo(t)
+		pool := dbmocks.NewMockPool(t)
+		factory := svcmocks.NewMockBrandRepoFactory(t)
+		brands := repomocks.NewMockBrandRepo(t)
+
+		factory.EXPECT().NewBrandRepo(mock.Anything).Return(brands)
 		brands.EXPECT().Update(mock.Anything, "b-1", "New Name", (*string)(nil)).
 			Return(&repository.BrandRow{ID: "b-1", Name: "New Name"}, nil)
 
-		svc := NewBrandService(brands, nil, testBcryptCost)
+		svc := NewBrandService(pool, factory, testBcryptCost)
 		b, err := svc.UpdateBrand(context.Background(), "b-1", "New Name", nil)
 
 		require.NoError(t, err)
@@ -103,7 +128,10 @@ func TestBrandService_UpdateBrand(t *testing.T) {
 
 	t.Run("empty name", func(t *testing.T) {
 		t.Parallel()
-		svc := NewBrandService(nil, nil, testBcryptCost)
+		pool := dbmocks.NewMockPool(t)
+		factory := svcmocks.NewMockBrandRepoFactory(t)
+
+		svc := NewBrandService(pool, factory, testBcryptCost)
 		_, err := svc.UpdateBrand(context.Background(), "b-1", "", nil)
 
 		var ve *domain.ValidationError
@@ -116,8 +144,15 @@ func TestBrandService_AssignManager(t *testing.T) {
 
 	t.Run("new user", func(t *testing.T) {
 		t.Parallel()
-		brands := mocks.NewMockBrandRepo(t)
-		users := mocks.NewMockBrandUserRepo(t)
+		pool := dbmocks.NewMockPool(t)
+		factory := svcmocks.NewMockBrandRepoFactory(t)
+		brands := repomocks.NewMockBrandRepo(t)
+		users := repomocks.NewMockUserRepo(t)
+
+		// WithTx
+		pool.EXPECT().Begin(mock.Anything).Return(testTx{}, nil)
+		factory.EXPECT().NewBrandRepo(mock.Anything).Return(brands)
+		factory.EXPECT().NewUserRepo(mock.Anything).Return(users)
 
 		brands.EXPECT().GetByID(mock.Anything, "b-1").
 			Return(testBrand(), nil)
@@ -128,7 +163,7 @@ func TestBrandService_AssignManager(t *testing.T) {
 		brands.EXPECT().AssignManager(mock.Anything, "b-1", "u-new").
 			Return(nil)
 
-		svc := NewBrandService(brands, users, testBcryptCost)
+		svc := NewBrandService(pool, factory, testBcryptCost)
 		user, tempPass, err := svc.AssignManager(context.Background(), "b-1", "new@example.com")
 
 		require.NoError(t, err)
@@ -138,8 +173,14 @@ func TestBrandService_AssignManager(t *testing.T) {
 
 	t.Run("existing user", func(t *testing.T) {
 		t.Parallel()
-		brands := mocks.NewMockBrandRepo(t)
-		users := mocks.NewMockBrandUserRepo(t)
+		pool := dbmocks.NewMockPool(t)
+		factory := svcmocks.NewMockBrandRepoFactory(t)
+		brands := repomocks.NewMockBrandRepo(t)
+		users := repomocks.NewMockUserRepo(t)
+
+		pool.EXPECT().Begin(mock.Anything).Return(testTx{}, nil)
+		factory.EXPECT().NewBrandRepo(mock.Anything).Return(brands)
+		factory.EXPECT().NewUserRepo(mock.Anything).Return(users)
 
 		brands.EXPECT().GetByID(mock.Anything, "b-1").
 			Return(testBrand(), nil)
@@ -150,7 +191,7 @@ func TestBrandService_AssignManager(t *testing.T) {
 		brands.EXPECT().AssignManager(mock.Anything, "b-1", "u-exist").
 			Return(nil)
 
-		svc := NewBrandService(brands, users, testBcryptCost)
+		svc := NewBrandService(pool, factory, testBcryptCost)
 		user, tempPass, err := svc.AssignManager(context.Background(), "b-1", "existing@example.com")
 
 		require.NoError(t, err)
@@ -160,7 +201,10 @@ func TestBrandService_AssignManager(t *testing.T) {
 
 	t.Run("empty email", func(t *testing.T) {
 		t.Parallel()
-		svc := NewBrandService(nil, nil, testBcryptCost)
+		pool := dbmocks.NewMockPool(t)
+		factory := svcmocks.NewMockBrandRepoFactory(t)
+
+		svc := NewBrandService(pool, factory, testBcryptCost)
 		_, _, err := svc.AssignManager(context.Background(), "b-1", "")
 
 		var ve *domain.ValidationError
@@ -169,8 +213,14 @@ func TestBrandService_AssignManager(t *testing.T) {
 
 	t.Run("normalizes email", func(t *testing.T) {
 		t.Parallel()
-		brands := mocks.NewMockBrandRepo(t)
-		users := mocks.NewMockBrandUserRepo(t)
+		pool := dbmocks.NewMockPool(t)
+		factory := svcmocks.NewMockBrandRepoFactory(t)
+		brands := repomocks.NewMockBrandRepo(t)
+		users := repomocks.NewMockUserRepo(t)
+
+		pool.EXPECT().Begin(mock.Anything).Return(testTx{}, nil)
+		factory.EXPECT().NewBrandRepo(mock.Anything).Return(brands)
+		factory.EXPECT().NewUserRepo(mock.Anything).Return(users)
 
 		brands.EXPECT().GetByID(mock.Anything, "b-1").
 			Return(testBrand(), nil)
@@ -181,7 +231,7 @@ func TestBrandService_AssignManager(t *testing.T) {
 		brands.EXPECT().AssignManager(mock.Anything, "b-1", "u-1").
 			Return(nil)
 
-		svc := NewBrandService(brands, users, testBcryptCost)
+		svc := NewBrandService(pool, factory, testBcryptCost)
 		_, _, err := svc.AssignManager(context.Background(), "b-1", "  Upper@Example.com  ")
 		require.NoError(t, err)
 	})
@@ -192,27 +242,38 @@ func TestBrandService_CanViewBrand(t *testing.T) {
 
 	t.Run("admin", func(t *testing.T) {
 		t.Parallel()
-		svc := NewBrandService(nil, nil, testBcryptCost)
+		pool := dbmocks.NewMockPool(t)
+		factory := svcmocks.NewMockBrandRepoFactory(t)
+
+		svc := NewBrandService(pool, factory, testBcryptCost)
 		err := svc.CanViewBrand(context.Background(), "u-1", "admin", "b-1")
 		require.NoError(t, err)
 	})
 
 	t.Run("manager is manager", func(t *testing.T) {
 		t.Parallel()
-		brands := mocks.NewMockBrandRepo(t)
+		pool := dbmocks.NewMockPool(t)
+		factory := svcmocks.NewMockBrandRepoFactory(t)
+		brands := repomocks.NewMockBrandRepo(t)
+
+		factory.EXPECT().NewBrandRepo(mock.Anything).Return(brands)
 		brands.EXPECT().IsManager(mock.Anything, "u-1", "b-1").Return(true, nil)
 
-		svc := NewBrandService(brands, nil, testBcryptCost)
+		svc := NewBrandService(pool, factory, testBcryptCost)
 		err := svc.CanViewBrand(context.Background(), "u-1", "brand_manager", "b-1")
 		require.NoError(t, err)
 	})
 
 	t.Run("manager not manager", func(t *testing.T) {
 		t.Parallel()
-		brands := mocks.NewMockBrandRepo(t)
+		pool := dbmocks.NewMockPool(t)
+		factory := svcmocks.NewMockBrandRepoFactory(t)
+		brands := repomocks.NewMockBrandRepo(t)
+
+		factory.EXPECT().NewBrandRepo(mock.Anything).Return(brands)
 		brands.EXPECT().IsManager(mock.Anything, "u-1", "b-1").Return(false, nil)
 
-		svc := NewBrandService(brands, nil, testBcryptCost)
+		svc := NewBrandService(pool, factory, testBcryptCost)
 		err := svc.CanViewBrand(context.Background(), "u-1", "brand_manager", "b-1")
 		require.ErrorIs(t, err, domain.ErrForbidden)
 	})

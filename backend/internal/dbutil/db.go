@@ -18,13 +18,25 @@ type DB interface {
 	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
 }
 
-// Psql is the PostgreSQL-flavoured squirrel statement builder ($1, $2, ...).
-var Psql = sq.StatementBuilder.PlaceholderFormat(sq.Dollar)
+// toSQL builds SQL from a squirrel query and applies PostgreSQL $1,$2,... placeholders.
+// Repositories use plain squirrel builders (with ? placeholders); this function
+// converts them before execution.
+func toSQL(query sq.Sqlizer) (string, []any, error) {
+	raw, args, err := query.ToSql()
+	if err != nil {
+		return "", nil, err
+	}
+	sql, err := sq.Dollar.ReplacePlaceholders(raw)
+	if err != nil {
+		return "", nil, err
+	}
+	return sql, args, nil
+}
 
 // One executes a squirrel query and scans a single row into *T.
-// Returns pgx.ErrNoRows (wrapped) when no row matches.
+// Returns sql.ErrNoRows (wrapped) when no row matches.
 func One[T any](ctx context.Context, db DB, query sq.Sqlizer) (*T, error) {
-	sql, args, err := query.ToSql()
+	sql, args, err := toSQL(query)
 	if err != nil {
 		return nil, fmt.Errorf("dbutil.One build sql: %w", err)
 	}
@@ -41,7 +53,7 @@ func One[T any](ctx context.Context, db DB, query sq.Sqlizer) (*T, error) {
 
 // Many executes a squirrel query and scans all rows into []*T.
 func Many[T any](ctx context.Context, db DB, query sq.Sqlizer) ([]*T, error) {
-	sql, args, err := query.ToSql()
+	sql, args, err := toSQL(query)
 	if err != nil {
 		return nil, fmt.Errorf("dbutil.Many build sql: %w", err)
 	}
@@ -63,7 +75,7 @@ func Many[T any](ctx context.Context, db DB, query sq.Sqlizer) ([]*T, error) {
 // Val executes a squirrel query and returns a single scalar value.
 func Val[T any](ctx context.Context, db DB, query sq.Sqlizer) (T, error) {
 	var zero T
-	sql, args, err := query.ToSql()
+	sql, args, err := toSQL(query)
 	if err != nil {
 		return zero, fmt.Errorf("dbutil.Val build sql: %w", err)
 	}
@@ -80,7 +92,7 @@ func Val[T any](ctx context.Context, db DB, query sq.Sqlizer) (T, error) {
 
 // Vals executes a squirrel query and returns a slice of scalar values.
 func Vals[T any](ctx context.Context, db DB, query sq.Sqlizer) ([]T, error) {
-	sql, args, err := query.ToSql()
+	sql, args, err := toSQL(query)
 	if err != nil {
 		return nil, fmt.Errorf("dbutil.Vals build sql: %w", err)
 	}
@@ -97,7 +109,7 @@ func Vals[T any](ctx context.Context, db DB, query sq.Sqlizer) ([]T, error) {
 
 // Exec executes a squirrel INSERT/UPDATE/DELETE and returns rows affected.
 func Exec(ctx context.Context, db DB, query sq.Sqlizer) (int64, error) {
-	sql, args, err := query.ToSql()
+	sql, args, err := toSQL(query)
 	if err != nil {
 		return 0, fmt.Errorf("dbutil.Exec build sql: %w", err)
 	}
@@ -111,6 +123,13 @@ func Exec(ctx context.Context, db DB, query sq.Sqlizer) (int64, error) {
 // TxStarter abstracts the ability to begin a transaction.
 type TxStarter interface {
 	Begin(ctx context.Context) (pgx.Tx, error)
+}
+
+// Pool combines DB operations with the ability to start transactions.
+// pgxpool.Pool implements this interface.
+type Pool interface {
+	DB
+	TxStarter
 }
 
 // WithTx runs fn inside a database transaction. If fn returns an error the
