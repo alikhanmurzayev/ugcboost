@@ -12,6 +12,24 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
+// Defines values for CleanupEntityRequestType.
+const (
+	Brand CleanupEntityRequestType = "brand"
+	User  CleanupEntityRequestType = "user"
+)
+
+// Valid indicates whether the value is a known member of the CleanupEntityRequestType enum.
+func (e CleanupEntityRequestType) Valid() bool {
+	switch e {
+	case Brand:
+		return true
+	case User:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for SeedUserDataRole.
 const (
 	SeedUserDataRoleAdmin        SeedUserDataRole = "admin"
@@ -48,6 +66,15 @@ func (e SeedUserRequestRole) Valid() bool {
 	}
 }
 
+// CleanupEntityRequest defines model for CleanupEntityRequest.
+type CleanupEntityRequest struct {
+	Id   string                   `json:"id"`
+	Type CleanupEntityRequestType `json:"type"`
+}
+
+// CleanupEntityRequestType defines model for CleanupEntityRequest.Type.
+type CleanupEntityRequestType string
+
 // ErrorResponse defines model for ErrorResponse.
 type ErrorResponse struct {
 	Error struct {
@@ -64,24 +91,6 @@ type ResetTokenData struct {
 // ResetTokenResult defines model for ResetTokenResult.
 type ResetTokenResult struct {
 	Data ResetTokenData `json:"data"`
-}
-
-// SeedBrandData defines model for SeedBrandData.
-type SeedBrandData struct {
-	Id   string `json:"id"`
-	Name string `json:"name"`
-}
-
-// SeedBrandRequest defines model for SeedBrandRequest.
-type SeedBrandRequest struct {
-	// ManagerEmail If provided, assigns this user as manager (creates user if needed)
-	ManagerEmail *openapi_types.Email `json:"managerEmail,omitempty"`
-	Name         string               `json:"name"`
-}
-
-// SeedBrandResult defines model for SeedBrandResult.
-type SeedBrandResult struct {
-	Data SeedBrandData `json:"data"`
 }
 
 // SeedUserData defines model for SeedUserData.
@@ -114,20 +123,20 @@ type GetResetTokenParams struct {
 	Email openapi_types.Email `form:"email" json:"email"`
 }
 
-// SeedBrandJSONRequestBody defines body for SeedBrand for application/json ContentType.
-type SeedBrandJSONRequestBody = SeedBrandRequest
+// CleanupEntityJSONRequestBody defines body for CleanupEntity for application/json ContentType.
+type CleanupEntityJSONRequestBody = CleanupEntityRequest
 
 // SeedUserJSONRequestBody defines body for SeedUser for application/json ContentType.
 type SeedUserJSONRequestBody = SeedUserRequest
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
+	// Hard-delete a test entity (user or brand) and its references
+	// (POST /test/cleanup-entity)
+	CleanupEntity(w http.ResponseWriter, r *http.Request)
 	// Get the raw reset token captured for the given email
 	// (GET /test/reset-tokens)
 	GetResetToken(w http.ResponseWriter, r *http.Request, params GetResetTokenParams)
-	// Create a test brand and optionally assign a manager
-	// (POST /test/seed-brand)
-	SeedBrand(w http.ResponseWriter, r *http.Request)
 	// Create a test user with given credentials and role
 	// (POST /test/seed-user)
 	SeedUser(w http.ResponseWriter, r *http.Request)
@@ -137,15 +146,15 @@ type ServerInterface interface {
 
 type Unimplemented struct{}
 
-// Get the raw reset token captured for the given email
-// (GET /test/reset-tokens)
-func (_ Unimplemented) GetResetToken(w http.ResponseWriter, r *http.Request, params GetResetTokenParams) {
+// Hard-delete a test entity (user or brand) and its references
+// (POST /test/cleanup-entity)
+func (_ Unimplemented) CleanupEntity(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
-// Create a test brand and optionally assign a manager
-// (POST /test/seed-brand)
-func (_ Unimplemented) SeedBrand(w http.ResponseWriter, r *http.Request) {
+// Get the raw reset token captured for the given email
+// (GET /test/reset-tokens)
+func (_ Unimplemented) GetResetToken(w http.ResponseWriter, r *http.Request, params GetResetTokenParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -163,6 +172,20 @@ type ServerInterfaceWrapper struct {
 }
 
 type MiddlewareFunc func(http.Handler) http.Handler
+
+// CleanupEntity operation middleware
+func (siw *ServerInterfaceWrapper) CleanupEntity(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CleanupEntity(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
 
 // GetResetToken operation middleware
 func (siw *ServerInterfaceWrapper) GetResetToken(w http.ResponseWriter, r *http.Request) {
@@ -189,20 +212,6 @@ func (siw *ServerInterfaceWrapper) GetResetToken(w http.ResponseWriter, r *http.
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetResetToken(w, r, params)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// SeedBrand operation middleware
-func (siw *ServerInterfaceWrapper) SeedBrand(w http.ResponseWriter, r *http.Request) {
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.SeedBrand(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -340,10 +349,10 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	}
 
 	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/test/reset-tokens", wrapper.GetResetToken)
+		r.Post(options.BaseURL+"/test/cleanup-entity", wrapper.CleanupEntity)
 	})
 	r.Group(func(r chi.Router) {
-		r.Post(options.BaseURL+"/test/seed-brand", wrapper.SeedBrand)
+		r.Get(options.BaseURL+"/test/reset-tokens", wrapper.GetResetToken)
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/test/seed-user", wrapper.SeedUser)

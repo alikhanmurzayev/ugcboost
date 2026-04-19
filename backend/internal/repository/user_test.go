@@ -413,6 +413,106 @@ func TestUserRepository_SaveResetToken(t *testing.T) {
 	})
 }
 
+func TestUserRepository_DeleteForTests(t *testing.T) {
+	t.Parallel()
+
+	const (
+		sqlAudit    = "DELETE FROM audit_logs WHERE actor_id = $1"
+		sqlBrandMgr = "DELETE FROM brand_managers WHERE user_id = $1"
+		sqlUser     = "DELETE FROM users WHERE id = $1"
+	)
+
+	t.Run("success deletes audit, brand_managers, users in order", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &userRepository{db: mock}
+
+		mock.ExpectExec(sqlAudit).WithArgs("u-1").
+			WillReturnResult(pgconn.NewCommandTag("DELETE 3"))
+		mock.ExpectExec(sqlBrandMgr).WithArgs("u-1").
+			WillReturnResult(pgconn.NewCommandTag("DELETE 2"))
+		mock.ExpectExec(sqlUser).WithArgs("u-1").
+			WillReturnResult(pgconn.NewCommandTag("DELETE 1"))
+
+		err := repo.DeleteForTests(context.Background(), "u-1")
+		require.NoError(t, err)
+	})
+
+	t.Run("no audit rows still deletes user", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &userRepository{db: mock}
+
+		mock.ExpectExec(sqlAudit).WithArgs("u-2").
+			WillReturnResult(pgconn.NewCommandTag("DELETE 0"))
+		mock.ExpectExec(sqlBrandMgr).WithArgs("u-2").
+			WillReturnResult(pgconn.NewCommandTag("DELETE 0"))
+		mock.ExpectExec(sqlUser).WithArgs("u-2").
+			WillReturnResult(pgconn.NewCommandTag("DELETE 1"))
+
+		err := repo.DeleteForTests(context.Background(), "u-2")
+		require.NoError(t, err)
+	})
+
+	t.Run("user not found returns sql.ErrNoRows", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &userRepository{db: mock}
+
+		mock.ExpectExec(sqlAudit).WithArgs("u-missing").
+			WillReturnResult(pgconn.NewCommandTag("DELETE 0"))
+		mock.ExpectExec(sqlBrandMgr).WithArgs("u-missing").
+			WillReturnResult(pgconn.NewCommandTag("DELETE 0"))
+		mock.ExpectExec(sqlUser).WithArgs("u-missing").
+			WillReturnResult(pgconn.NewCommandTag("DELETE 0"))
+
+		err := repo.DeleteForTests(context.Background(), "u-missing")
+		require.ErrorIs(t, err, sql.ErrNoRows)
+	})
+
+	t.Run("audit delete error aborts sequence", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &userRepository{db: mock}
+
+		mock.ExpectExec(sqlAudit).WithArgs("u-3").
+			WillReturnError(errors.New("audit boom"))
+
+		err := repo.DeleteForTests(context.Background(), "u-3")
+		require.ErrorContains(t, err, "audit boom")
+	})
+
+	t.Run("brand_managers delete error aborts sequence", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &userRepository{db: mock}
+
+		mock.ExpectExec(sqlAudit).WithArgs("u-4").
+			WillReturnResult(pgconn.NewCommandTag("DELETE 0"))
+		mock.ExpectExec(sqlBrandMgr).WithArgs("u-4").
+			WillReturnError(errors.New("fk violation"))
+
+		err := repo.DeleteForTests(context.Background(), "u-4")
+		require.ErrorContains(t, err, "fk violation")
+	})
+
+	t.Run("user delete error propagates", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &userRepository{db: mock}
+
+		mock.ExpectExec(sqlAudit).WithArgs("u-5").
+			WillReturnResult(pgconn.NewCommandTag("DELETE 0"))
+		mock.ExpectExec(sqlBrandMgr).WithArgs("u-5").
+			WillReturnResult(pgconn.NewCommandTag("DELETE 0"))
+		mock.ExpectExec(sqlUser).WithArgs("u-5").
+			WillReturnError(errors.New("connection lost"))
+
+		err := repo.DeleteForTests(context.Background(), "u-5")
+		require.ErrorContains(t, err, "connection lost")
+	})
+}
+
 func TestUserRepository_ClaimResetToken(t *testing.T) {
 	t.Parallel()
 

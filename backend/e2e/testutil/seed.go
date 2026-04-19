@@ -27,12 +27,13 @@ func UniqueEmail(prefix string) string {
 	return fmt.Sprintf("test-%s-%s-%d@e2e.test", prefix, runID, n)
 }
 
-// SeedUser creates a user via POST /test/seed-user and returns email + password.
-func SeedUser(t *testing.T, role string) (email, password string) {
+// seedUser is the full-detail workhorse behind SeedUser and the Setup*
+// helpers. Returns the user ID so callers can register targeted cleanup.
+func seedUser(t *testing.T, role string) (id, email, password string) {
 	t.Helper()
 	tc := NewTestClient(t)
 	email = UniqueEmail(role)
-	password = "testpass123"
+	password = DefaultPassword
 
 	resp, err := tc.SeedUserWithResponse(context.Background(), testclient.SeedUserJSONRequestBody{
 		Email:    openapi_types.Email(email),
@@ -41,6 +42,16 @@ func SeedUser(t *testing.T, role string) (email, password string) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, http.StatusCreated, resp.StatusCode())
+	require.NotNil(t, resp.JSON201)
+	return resp.JSON201.Data.Id, email, password
+}
+
+// SeedUser creates a user via POST /test/seed-user and returns email + password.
+// Prefer SetupAdmin / SetupManager / SetupManagerWithLogin in new tests — they
+// also register cleanup. This helper remains for low-level flows that don't
+// need auto-cleanup (e.g. password-reset tests that handle teardown manually).
+func SeedUser(t *testing.T, role string) (email, password string) {
+	_, email, password = seedUser(t, role)
 	return email, password
 }
 
@@ -71,47 +82,112 @@ func LoginAs(t *testing.T, c *apiclient.ClientWithResponses, email, password str
 	return resp.JSON200.Data.AccessToken
 }
 
-// SeedBrand creates a brand via POST /test/seed-brand and returns brandID.
-func SeedBrand(t *testing.T, name string) string {
+// SetupAdmin seeds a fresh admin and returns the access token. The seeded
+// user is automatically removed after the test via POST /test/cleanup-entity.
+func SetupAdmin(t *testing.T) string {
+	_, token, _ := SetupAdminClient(t)
+	return token
+}
+
+// SetupAdminClient seeds a fresh admin, logs in through a new cookie-backed
+// API client, and returns (client, accessToken, email). The seeded user is
+// automatically removed after the test.
+func SetupAdminClient(t *testing.T) (*apiclient.ClientWithResponses, string, string) {
 	t.Helper()
-	tc := NewTestClient(t)
-	resp, err := tc.SeedBrandWithResponse(context.Background(), testclient.SeedBrandJSONRequestBody{
+	id, email, password := seedUser(t, "admin")
+	RegisterUserCleanup(t, id)
+	c := NewAPIClient(t)
+	token := LoginAs(t, c, email, password)
+	return c, token, email
+}
+
+// SetupBrand creates a brand through POST /brands using adminToken and
+// returns brandID. The brand is automatically removed after the test via
+// DELETE /brands/{id} — this reuses the same business endpoint a human
+// admin would call, so cleanup goes through the normal audit path.
+func SetupBrand(t *testing.T, c *apiclient.ClientWithResponses, adminToken, name string) string {
+	t.Helper()
+	resp, err := c.CreateBrandWithResponse(context.Background(), apiclient.CreateBrandJSONRequestBody{
 		Name: name,
-	})
+	}, WithAuth(adminToken))
 	require.NoError(t, err)
 	require.Equal(t, http.StatusCreated, resp.StatusCode())
 	require.NotNil(t, resp.JSON201)
-	return resp.JSON201.Data.Id
+	brandID := resp.JSON201.Data.Id
+
+	RegisterBrandCleanup(t, c, adminToken, brandID)
+	return brandID
 }
 
-// SeedBrandWithManager creates a brand with a manager via POST /test/seed-brand.
-func SeedBrandWithManager(t *testing.T, name, managerEmail string) string {
+// SetupManager assigns a freshly-generated brand_manager email to the given
+// brand via POST /brands/{id}/managers and returns (email, tempPassword).
+// The created user is automatically removed after the test. The assignment
+// itself is removed as part of the brand cleanup (on brand delete) or as a
+// side effect of the user cleanup (audit + brand_managers wiped there).
+func SetupManager(t *testing.T, c *apiclient.ClientWithResponses, adminToken, brandID string) (email, password string) {
 	t.Helper()
-	tc := NewTestClient(t)
-	resp, err := tc.SeedBrandWithResponse(context.Background(), testclient.SeedBrandJSONRequestBody{
-		Name:         name,
-		ManagerEmail: (*openapi_types.Email)(&managerEmail),
-	})
+	email = UniqueEmail("mgr")
+	resp, err := c.AssignManagerWithResponse(context.Background(), brandID, apiclient.AssignManagerJSONRequestBody{
+		Email: email,
+	}, WithAuth(adminToken))
 	require.NoError(t, err)
 	require.Equal(t, http.StatusCreated, resp.StatusCode())
 	require.NotNil(t, resp.JSON201)
-	return resp.JSON201.Data.Id
+	require.NotNil(t, resp.JSON201.Data.TempPassword, "new manager must return a temp password")
+	RegisterUserCleanup(t, resp.JSON201.Data.UserId)
+	return email, *resp.JSON201.Data.TempPassword
 }
 
-// LoginAsAdmin seeds an admin user and returns an authenticated API client with token.
-func LoginAsAdmin(t *testing.T) (*apiclient.ClientWithResponses, string) {
+// SetupManagerWithLogin combines SetupManager with a login step, returning
+// an authenticated client, access token, and the manager's email. The
+// manager user is auto-cleaned after the test.
+func SetupManagerWithLogin(t *testing.T, adminClient *apiclient.ClientWithResponses, adminToken, brandID string) (*apiclient.ClientWithResponses, string, string) {
 	t.Helper()
-	email, password := SeedUser(t, "admin")
-	c := NewAPIClient(t)
-	token := LoginAs(t, c, email, password)
-	return c, token
+	email, password := SetupManager(t, adminClient, adminToken, brandID)
+	mgrClient := NewAPIClient(t)
+	token := LoginAs(t, mgrClient, email, password)
+	return mgrClient, token, email
 }
 
-// LoginAsBrandManager seeds a brand_manager user and returns client, token, email, password.
-func LoginAsBrandManager(t *testing.T) (*apiclient.ClientWithResponses, string, string, string) {
+// RegisterUserCleanup schedules a POST /test/cleanup-entity for the given
+// user after the test. Not found is tolerated — the user may have already
+// been removed by a nested cleanup or by a business flow inside the test.
+// Exposed so tests that learn a user ID from an API response (not through
+// Setup*) can still benefit from the cleanup stack.
+func RegisterUserCleanup(t *testing.T, userID string) {
 	t.Helper()
-	email, password := SeedUser(t, "brand_manager")
-	c := NewAPIClient(t)
-	token := LoginAs(t, c, email, password)
-	return c, token, email, password
+	RegisterCleanup(t, func(ctx context.Context) error {
+		tc := NewTestClient(t)
+		resp, err := tc.CleanupEntityWithResponse(ctx, testclient.CleanupEntityJSONRequestBody{
+			Type: testclient.User,
+			Id:   userID,
+		})
+		if err != nil {
+			return fmt.Errorf("cleanup user %s: %w", userID, err)
+		}
+		if resp.StatusCode() != http.StatusNoContent && resp.StatusCode() != http.StatusNotFound {
+			return fmt.Errorf("cleanup user %s: unexpected status %d", userID, resp.StatusCode())
+		}
+		return nil
+	})
+}
+
+// RegisterBrandCleanup schedules DELETE /brands/{id} after the test using
+// the admin token that created it. Delete goes through the business path on
+// purpose — we want audit history for the cleanup too, consistent with how
+// a real admin would remove a brand. Exposed for tests that bypass
+// SetupBrand to exercise the raw create/delete response shape but still
+// need cleanup.
+func RegisterBrandCleanup(t *testing.T, c *apiclient.ClientWithResponses, adminToken, brandID string) {
+	t.Helper()
+	RegisterCleanup(t, func(ctx context.Context) error {
+		resp, err := c.DeleteBrandWithResponse(ctx, brandID, WithAuth(adminToken))
+		if err != nil {
+			return fmt.Errorf("cleanup brand %s: %w", brandID, err)
+		}
+		if resp.StatusCode() != http.StatusOK && resp.StatusCode() != http.StatusNoContent && resp.StatusCode() != http.StatusNotFound {
+			return fmt.Errorf("cleanup brand %s: unexpected status %d", brandID, resp.StatusCode())
+		}
+		return nil
+	})
 }

@@ -89,13 +89,13 @@ func WithRequestEditorFn(fn RequestEditorFn) ClientOption {
 
 // The interface specification for the client above.
 type ClientInterface interface {
+	// CleanupEntityWithBody request with any body
+	CleanupEntityWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	CleanupEntity(ctx context.Context, body CleanupEntityJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetResetToken request
 	GetResetToken(ctx context.Context, params *GetResetTokenParams, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	// SeedBrandWithBody request with any body
-	SeedBrandWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
-
-	SeedBrand(ctx context.Context, body SeedBrandJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// SeedUserWithBody request with any body
 	SeedUserWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -103,32 +103,32 @@ type ClientInterface interface {
 	SeedUser(ctx context.Context, body SeedUserJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 }
 
+func (c *Client) CleanupEntityWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCleanupEntityRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) CleanupEntity(ctx context.Context, body CleanupEntityJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCleanupEntityRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 func (c *Client) GetResetToken(ctx context.Context, params *GetResetTokenParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetResetTokenRequest(c.Server, params)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) SeedBrandWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewSeedBrandRequestWithBody(c.Server, contentType, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) SeedBrand(ctx context.Context, body SeedBrandJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewSeedBrandRequest(c.Server, body)
 	if err != nil {
 		return nil, err
 	}
@@ -161,6 +161,46 @@ func (c *Client) SeedUser(ctx context.Context, body SeedUserJSONRequestBody, req
 		return nil, err
 	}
 	return c.Client.Do(req)
+}
+
+// NewCleanupEntityRequest calls the generic CleanupEntity builder with application/json body
+func NewCleanupEntityRequest(server string, body CleanupEntityJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewCleanupEntityRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewCleanupEntityRequestWithBody generates requests for CleanupEntity with any type of body
+func NewCleanupEntityRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/test/cleanup-entity")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
 }
 
 // NewGetResetTokenRequest generates requests for GetResetToken
@@ -204,46 +244,6 @@ func NewGetResetTokenRequest(server string, params *GetResetTokenParams) (*http.
 	if err != nil {
 		return nil, err
 	}
-
-	return req, nil
-}
-
-// NewSeedBrandRequest calls the generic SeedBrand builder with application/json body
-func NewSeedBrandRequest(server string, body SeedBrandJSONRequestBody) (*http.Request, error) {
-	var bodyReader io.Reader
-	buf, err := json.Marshal(body)
-	if err != nil {
-		return nil, err
-	}
-	bodyReader = bytes.NewReader(buf)
-	return NewSeedBrandRequestWithBody(server, "application/json", bodyReader)
-}
-
-// NewSeedBrandRequestWithBody generates requests for SeedBrand with any type of body
-func NewSeedBrandRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
-	var err error
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/test/seed-brand")
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("POST", queryURL.String(), body)
-	if err != nil {
-		return nil, err
-	}
-
-	req.Header.Add("Content-Type", contentType)
 
 	return req, nil
 }
@@ -331,18 +331,41 @@ func WithBaseURL(baseURL string) ClientOption {
 
 // ClientWithResponsesInterface is the interface specification for the client with responses above.
 type ClientWithResponsesInterface interface {
+	// CleanupEntityWithBodyWithResponse request with any body
+	CleanupEntityWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CleanupEntityResponse, error)
+
+	CleanupEntityWithResponse(ctx context.Context, body CleanupEntityJSONRequestBody, reqEditors ...RequestEditorFn) (*CleanupEntityResponse, error)
+
 	// GetResetTokenWithResponse request
 	GetResetTokenWithResponse(ctx context.Context, params *GetResetTokenParams, reqEditors ...RequestEditorFn) (*GetResetTokenResponse, error)
-
-	// SeedBrandWithBodyWithResponse request with any body
-	SeedBrandWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SeedBrandResponse, error)
-
-	SeedBrandWithResponse(ctx context.Context, body SeedBrandJSONRequestBody, reqEditors ...RequestEditorFn) (*SeedBrandResponse, error)
 
 	// SeedUserWithBodyWithResponse request with any body
 	SeedUserWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SeedUserResponse, error)
 
 	SeedUserWithResponse(ctx context.Context, body SeedUserJSONRequestBody, reqEditors ...RequestEditorFn) (*SeedUserResponse, error)
+}
+
+type CleanupEntityResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON404      *ErrorResponse
+	JSON422      *ErrorResponse
+}
+
+// Status returns HTTPResponse.Status
+func (r CleanupEntityResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r CleanupEntityResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
 }
 
 type GetResetTokenResponse struct {
@@ -362,29 +385,6 @@ func (r GetResetTokenResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r GetResetTokenResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-type SeedBrandResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON201      *SeedBrandResult
-	JSON422      *ErrorResponse
-}
-
-// Status returns HTTPResponse.Status
-func (r SeedBrandResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r SeedBrandResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -414,6 +414,23 @@ func (r SeedUserResponse) StatusCode() int {
 	return 0
 }
 
+// CleanupEntityWithBodyWithResponse request with arbitrary body returning *CleanupEntityResponse
+func (c *ClientWithResponses) CleanupEntityWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CleanupEntityResponse, error) {
+	rsp, err := c.CleanupEntityWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCleanupEntityResponse(rsp)
+}
+
+func (c *ClientWithResponses) CleanupEntityWithResponse(ctx context.Context, body CleanupEntityJSONRequestBody, reqEditors ...RequestEditorFn) (*CleanupEntityResponse, error) {
+	rsp, err := c.CleanupEntity(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCleanupEntityResponse(rsp)
+}
+
 // GetResetTokenWithResponse request returning *GetResetTokenResponse
 func (c *ClientWithResponses) GetResetTokenWithResponse(ctx context.Context, params *GetResetTokenParams, reqEditors ...RequestEditorFn) (*GetResetTokenResponse, error) {
 	rsp, err := c.GetResetToken(ctx, params, reqEditors...)
@@ -421,23 +438,6 @@ func (c *ClientWithResponses) GetResetTokenWithResponse(ctx context.Context, par
 		return nil, err
 	}
 	return ParseGetResetTokenResponse(rsp)
-}
-
-// SeedBrandWithBodyWithResponse request with arbitrary body returning *SeedBrandResponse
-func (c *ClientWithResponses) SeedBrandWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SeedBrandResponse, error) {
-	rsp, err := c.SeedBrandWithBody(ctx, contentType, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseSeedBrandResponse(rsp)
-}
-
-func (c *ClientWithResponses) SeedBrandWithResponse(ctx context.Context, body SeedBrandJSONRequestBody, reqEditors ...RequestEditorFn) (*SeedBrandResponse, error) {
-	rsp, err := c.SeedBrand(ctx, body, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseSeedBrandResponse(rsp)
 }
 
 // SeedUserWithBodyWithResponse request with arbitrary body returning *SeedUserResponse
@@ -455,6 +455,39 @@ func (c *ClientWithResponses) SeedUserWithResponse(ctx context.Context, body See
 		return nil, err
 	}
 	return ParseSeedUserResponse(rsp)
+}
+
+// ParseCleanupEntityResponse parses an HTTP response from a CleanupEntityWithResponse call
+func ParseCleanupEntityResponse(rsp *http.Response) (*CleanupEntityResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &CleanupEntityResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON422 = &dest
+
+	}
+
+	return response, nil
 }
 
 // ParseGetResetTokenResponse parses an HTTP response from a GetResetTokenWithResponse call
@@ -484,39 +517,6 @@ func ParseGetResetTokenResponse(rsp *http.Response) (*GetResetTokenResponse, err
 			return nil, err
 		}
 		response.JSON404 = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParseSeedBrandResponse parses an HTTP response from a SeedBrandWithResponse call
-func ParseSeedBrandResponse(rsp *http.Response) (*SeedBrandResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &SeedBrandResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
-		var dest SeedBrandResult
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON201 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
-		var dest ErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON422 = &dest
 
 	}
 

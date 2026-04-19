@@ -7,6 +7,24 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
+// Defines values for CleanupEntityRequestType.
+const (
+	Brand CleanupEntityRequestType = "brand"
+	User  CleanupEntityRequestType = "user"
+)
+
+// Valid indicates whether the value is a known member of the CleanupEntityRequestType enum.
+func (e CleanupEntityRequestType) Valid() bool {
+	switch e {
+	case Brand:
+		return true
+	case User:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for SeedUserDataRole.
 const (
 	SeedUserDataRoleAdmin        SeedUserDataRole = "admin"
@@ -43,6 +61,15 @@ func (e SeedUserRequestRole) Valid() bool {
 	}
 }
 
+// CleanupEntityRequest defines model for CleanupEntityRequest.
+type CleanupEntityRequest struct {
+	Id   string                   `json:"id"`
+	Type CleanupEntityRequestType `json:"type"`
+}
+
+// CleanupEntityRequestType defines model for CleanupEntityRequest.Type.
+type CleanupEntityRequestType string
+
 // ErrorResponse defines model for ErrorResponse.
 type ErrorResponse struct {
 	Error struct {
@@ -59,24 +86,6 @@ type ResetTokenData struct {
 // ResetTokenResult defines model for ResetTokenResult.
 type ResetTokenResult struct {
 	Data ResetTokenData `json:"data"`
-}
-
-// SeedBrandData defines model for SeedBrandData.
-type SeedBrandData struct {
-	Id   string `json:"id"`
-	Name string `json:"name"`
-}
-
-// SeedBrandRequest defines model for SeedBrandRequest.
-type SeedBrandRequest struct {
-	// ManagerEmail If provided, assigns this user as manager (creates user if needed)
-	ManagerEmail *openapi_types.Email `json:"managerEmail,omitempty"`
-	Name         string               `json:"name"`
-}
-
-// SeedBrandResult defines model for SeedBrandResult.
-type SeedBrandResult struct {
-	Data SeedBrandData `json:"data"`
 }
 
 // SeedUserData defines model for SeedUserData.
@@ -109,8 +118,8 @@ type GetResetTokenParams struct {
 	Email openapi_types.Email `form:"email" json:"email"`
 }
 
-// SeedBrandJSONRequestBody defines body for SeedBrand for application/json ContentType.
-type SeedBrandJSONRequestBody = SeedBrandRequest
+// CleanupEntityJSONRequestBody defines body for CleanupEntity for application/json ContentType.
+type CleanupEntityJSONRequestBody = CleanupEntityRequest
 
 // SeedUserJSONRequestBody defines body for SeedUser for application/json ContentType.
 type SeedUserJSONRequestBody = SeedUserRequest

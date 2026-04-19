@@ -2,15 +2,17 @@ package handler
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	openapi_types "github.com/oapi-codegen/runtime/types"
 
-	"github.com/alikhanmurzayev/ugcboost/backend/internal/api"
+	"github.com/alikhanmurzayev/ugcboost/backend/internal/dbutil"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/domain"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/logger"
-	"github.com/alikhanmurzayev/ugcboost/backend/internal/middleware"
+	"github.com/alikhanmurzayev/ugcboost/backend/internal/repository"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/testapi"
 )
 
@@ -25,35 +27,44 @@ type TestAPIAuthService interface {
 	SeedUser(ctx context.Context, email, password, role string) (*domain.User, error)
 }
 
-// TestAPIBrandService is the subset of prod BrandService methods the test
-// endpoints need. Kept separate so the generic BrandService interface stays
-// minimal and the test handler only depends on the operations it actually
-// uses.
-type TestAPIBrandService interface {
-	CreateBrand(ctx context.Context, name string, logoURL *string) (*domain.Brand, error)
-	AssignManager(ctx context.Context, brandID, email string) (*domain.User, string, error)
+// TestAPICleanupRepoFactory is the narrow repo-factory interface the test
+// cleanup endpoint uses. Kept separate from the production repo factory so
+// the test handler only sees the constructors it actually needs.
+type TestAPICleanupRepoFactory interface {
+	NewUserRepo(db dbutil.DB) repository.UserRepo
+	NewBrandRepo(db dbutil.DB) repository.BrandRepo
 }
 
 // TestAPIHandler provides test-only endpoints that back openapi-test.yaml.
-// Only registered when ENVIRONMENT=local. Seed-brand operations need a real
-// actor for audit FK integrity, so the handler impersonates the seed admin
-// when calling the production brand service.
+// Only registered when ENVIRONMENT != production. The cleanup endpoint
+// reaches into the repository layer directly (rather than through a service)
+// because the hard-delete semantics are test-only and must not leak into
+// production call sites — see repository.UserRepo.DeleteForTests for details.
 type TestAPIHandler struct {
 	auth       TestAPIAuthService
-	brands     TestAPIBrandService
+	pool       dbutil.Pool
+	repos      TestAPICleanupRepoFactory
 	tokenStore TokenStore
-	adminID    string
 	logger     logger.Logger
 }
 
 var _ testapi.ServerInterface = (*TestAPIHandler)(nil)
 
-// NewTestAPIHandler creates a new TestAPIHandler. adminID must be the seed
-// admin's user ID (resolved at startup from cfg.AdminEmail); it is written
-// into the request context for brand-seed operations so audit rows have a
-// valid actor.
-func NewTestAPIHandler(auth TestAPIAuthService, brands TestAPIBrandService, tokenStore TokenStore, adminID string, log logger.Logger) *TestAPIHandler {
-	return &TestAPIHandler{auth: auth, brands: brands, tokenStore: tokenStore, adminID: adminID, logger: log}
+// NewTestAPIHandler creates a new TestAPIHandler.
+func NewTestAPIHandler(
+	auth TestAPIAuthService,
+	pool dbutil.Pool,
+	repos TestAPICleanupRepoFactory,
+	tokenStore TokenStore,
+	log logger.Logger,
+) *TestAPIHandler {
+	return &TestAPIHandler{
+		auth:       auth,
+		pool:       pool,
+		repos:      repos,
+		tokenStore: tokenStore,
+		logger:     log,
+	}
 }
 
 // SeedUser handles POST /test/seed-user.
@@ -85,44 +96,44 @@ func (h *TestAPIHandler) SeedUser(w http.ResponseWriter, r *http.Request) {
 	}, h.logger)
 }
 
-// SeedBrand handles POST /test/seed-brand.
-func (h *TestAPIHandler) SeedBrand(w http.ResponseWriter, r *http.Request) {
-	var req testapi.SeedBrandRequest
+// CleanupEntity handles POST /test/cleanup-entity.
+// Dispatches by req.Type: "user" hard-deletes the user and its references
+// inside a transaction; "brand" forwards to the standard brand delete.
+func (h *TestAPIHandler) CleanupEntity(w http.ResponseWriter, r *http.Request) {
+	var req testapi.CleanupEntityRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondError(w, r, domain.NewValidationError(domain.CodeValidation, "Invalid request body"), h.logger)
 		return
 	}
 
-	if req.Name == "" {
-		respondError(w, r, domain.NewValidationError(domain.CodeValidation, "name is required"), h.logger)
+	if req.Id == "" {
+		respondError(w, r, domain.NewValidationError(domain.CodeValidation, "id is required"), h.logger)
 		return
 	}
 
-	// Impersonate the seed admin so audit rows created inside BrandService have
-	// a valid actor. The /test endpoints run unauthenticated by design, so the
-	// normal auth middleware never populates user/role in the context.
-	ctx := context.WithValue(r.Context(), middleware.ContextKeyUserID, h.adminID)
-	ctx = context.WithValue(ctx, middleware.ContextKeyRole, api.Admin)
-
-	brand, err := h.brands.CreateBrand(ctx, req.Name, nil)
-	if err != nil {
-		respondError(w, r, err, h.logger)
+	var deleteErr error
+	switch req.Type {
+	case testapi.User:
+		deleteErr = dbutil.WithTx(r.Context(), h.pool, func(tx dbutil.DB) error {
+			return h.repos.NewUserRepo(tx).DeleteForTests(r.Context(), req.Id)
+		})
+	case testapi.Brand:
+		deleteErr = h.repos.NewBrandRepo(h.pool).Delete(r.Context(), req.Id)
+	default:
+		respondError(w, r, domain.NewValidationError(domain.CodeValidation, "type must be 'user' or 'brand'"), h.logger)
 		return
 	}
 
-	if req.ManagerEmail != nil && string(*req.ManagerEmail) != "" {
-		if _, _, err := h.brands.AssignManager(ctx, brand.ID, string(*req.ManagerEmail)); err != nil {
-			respondError(w, r, err, h.logger)
+	if deleteErr != nil {
+		if errors.Is(deleteErr, sql.ErrNoRows) {
+			respondError(w, r, domain.ErrNotFound, h.logger)
 			return
 		}
+		respondError(w, r, deleteErr, h.logger)
+		return
 	}
 
-	respondJSON(w, r, http.StatusCreated, testapi.SeedBrandResult{
-		Data: testapi.SeedBrandData{
-			Id:   brand.ID,
-			Name: brand.Name,
-		},
-	}, h.logger)
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // GetResetToken handles GET /test/reset-tokens?email=...

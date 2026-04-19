@@ -62,24 +62,32 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
-  /test/seed-brand:
+  /test/cleanup-entity:
     post:
-      operationId: seedBrand
-      summary: Create a test brand and optionally assign a manager
+      operationId: cleanupEntity
+      summary: Hard-delete a test entity (user or brand) and its references
+      description: |
+        Test-only cleanup endpoint used by the e2e cleanup stack when no
+        business delete exists. For users this is a destructive hard delete
+        that also wipes audit_logs, brand_managers, refresh_tokens and
+        password_reset_tokens. For brands it forwards to the regular brand
+        delete. NEVER enabled in production.
       tags: [test]
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/SeedBrandRequest"
+              $ref: "#/components/schemas/CleanupEntityRequest"
       responses:
-        "201":
-          description: Brand created
+        "204":
+          description: Entity deleted
+        "404":
+          description: Entity not found
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/SeedBrandResult"
+                $ref: "#/components/schemas/ErrorResponse"
         "422":
           description: Validation error
           content:
@@ -137,32 +145,15 @@ components:
         data:
           $ref: "#/components/schemas/ResetTokenData"
 
-    SeedBrandRequest:
+    CleanupEntityRequest:
       type: object
-      required: [name]
+      required: [type, id]
       properties:
-        name:
+        type:
           type: string
-        managerEmail:
-          type: string
-          format: email
-          description: If provided, assigns this user as manager (creates user if needed)
-
-    SeedBrandData:
-      type: object
-      required: [id, name]
-      properties:
+          enum: [user, brand]
         id:
           type: string
-        name:
-          type: string
-
-    SeedBrandResult:
-      type: object
-      required: [data]
-      properties:
-        data:
-          $ref: "#/components/schemas/SeedBrandData"
 
     ErrorResponse:
       type: object

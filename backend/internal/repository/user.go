@@ -101,6 +101,7 @@ type UserRepo interface {
 	DeleteUserRefreshTokens(ctx context.Context, userID string) error
 	SaveResetToken(ctx context.Context, userID, tokenHash string, expiresAt time.Time) error
 	ClaimResetToken(ctx context.Context, tokenHash string) (*PasswordResetTokenRow, error)
+	DeleteForTests(ctx context.Context, id string) error
 }
 
 type userRepository struct {
@@ -195,4 +196,36 @@ func (r *userRepository) ClaimResetToken(ctx context.Context, tokenHash string) 
 		Where(sq.Expr(ResetTokenColumnExpiresAt + " > now()")).
 		Suffix(returningClause(resetTokenSelectColumns))
 	return dbutil.One[PasswordResetTokenRow](ctx, r.db, q)
+}
+
+// DeleteForTests hard-deletes the user AND wipes every row that references
+// them: audit_logs (actor_id), brand_managers (user_id), refresh_tokens and
+// password_reset_tokens (both via ON DELETE CASCADE). Intended to run inside
+// a transaction opened by the caller — it accepts `dbutil.DB` through the
+// repo and issues three sequential DELETEs so either all succeed or nothing
+// is committed.
+//
+// DANGER: TEST-ONLY. This destroys audit history. NEVER call from business
+// code, from a service, from a handler other than the /test/* cleanup
+// endpoint, or from a migration. Production deletion of users must be a
+// soft delete that preserves audit integrity; use a different method for
+// that. If you are tempted to call this in a real flow — stop and ask.
+func (r *userRepository) DeleteForTests(ctx context.Context, id string) error {
+	auditQ := sq.Delete(TableAuditLogs).Where(sq.Eq{AuditLogColumnActorID: id})
+	if _, err := dbutil.Exec(ctx, r.db, auditQ); err != nil {
+		return err
+	}
+	brandMgrQ := sq.Delete(TableBrandManagers).Where(sq.Eq{BrandManagerColumnUserID: id})
+	if _, err := dbutil.Exec(ctx, r.db, brandMgrQ); err != nil {
+		return err
+	}
+	userQ := sq.Delete(TableUsers).Where(sq.Eq{UserColumnID: id})
+	n, err := dbutil.Exec(ctx, r.db, userQ)
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
 }

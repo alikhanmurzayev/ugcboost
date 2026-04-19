@@ -118,16 +118,11 @@ func run() error {
 		ErrorHandlerFunc: handler.HandleParamError(appLogger),
 	})
 
-	// Test endpoints (only when ENVIRONMENT != production).
-	// Seed-brand and friends impersonate the seed admin so audit rows get a
-	// valid actor FK — resolve the admin here, next to the wiring.
+	// Test endpoints (only when ENVIRONMENT != production). The cleanup
+	// endpoint uses the repo factory directly — the hard-delete for users
+	// is test-only and intentionally not exposed through any service.
 	if cfg.EnableTestEndpoints {
-		admin, err := authSvc.GetUserByEmail(ctx, cfg.AdminEmail)
-		if err != nil {
-			return fmt.Errorf("lookup seed admin for test endpoints: %w", err)
-		}
-
-		testHandler := handler.NewTestAPIHandler(authSvc, brandSvc, resetTokenStore, admin.ID, appLogger)
+		testHandler := handler.NewTestAPIHandler(authSvc, pool, repoFactory, resetTokenStore, appLogger)
 		testapi.HandlerWithOptions(testHandler, testapi.ChiServerOptions{
 			BaseRouter:       r,
 			ErrorHandlerFunc: handler.HandleParamError(appLogger),
