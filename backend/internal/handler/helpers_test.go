@@ -10,11 +10,19 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/api"
+	logmocks "github.com/alikhanmurzayev/ugcboost/backend/internal/logger/mocks"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/middleware"
 )
+
+func expectHandlerUnexpectedErrorLog(log *logmocks.MockLogger, path string) {
+	log.EXPECT().Error(mock.Anything, "unexpected error", mock.MatchedBy(func(args []any) bool {
+		return len(args) == 4 && args[0] == "error" && args[2] == "path" && args[3] == path
+	})).Once()
+}
 
 // newTestRouter registers the given Server behind the generated chi wrapper.
 // The returned router accepts requests exactly like the production router
@@ -25,7 +33,7 @@ func newTestRouter(t *testing.T, s *Server) chi.Router {
 	r := chi.NewRouter()
 	api.HandlerWithOptions(s, api.ChiServerOptions{
 		BaseRouter:       r,
-		ErrorHandlerFunc: HandleParamError,
+		ErrorHandlerFunc: HandleParamError(logmocks.NewMockLogger(t)),
 	})
 	return r
 }

@@ -11,3 +11,4 @@ packages:
   github.com/alikhanmurzayev/ugcboost/backend/internal/handler:
   github.com/alikhanmurzayev/ugcboost/backend/internal/middleware:
   github.com/alikhanmurzayev/ugcboost/backend/internal/authz:
+  github.com/alikhanmurzayev/ugcboost/backend/internal/logger:

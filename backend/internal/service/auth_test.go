@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -14,10 +15,12 @@ import (
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/api"
 	dbmocks "github.com/alikhanmurzayev/ugcboost/backend/internal/dbutil/mocks"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/domain"
+	logmocks "github.com/alikhanmurzayev/ugcboost/backend/internal/logger/mocks"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/repository"
 	repomocks "github.com/alikhanmurzayev/ugcboost/backend/internal/repository/mocks"
 	svcmocks "github.com/alikhanmurzayev/ugcboost/backend/internal/service/mocks"
 )
+
 
 var _ = mock.Anything // keep testify/mock import even when no direct use below
 
@@ -89,7 +92,7 @@ func TestAuthService_Login(t *testing.T) {
 		repo.EXPECT().GetByEmail(mock.Anything, "nobody@example.com").
 			Return((*repository.UserRow)(nil), errNotFound)
 
-		svc := NewAuthService(pool, factory, tokens, nil, testBcryptCost)
+		svc := NewAuthService(pool, factory, tokens, nil, testBcryptCost, logmocks.NewMockLogger(t))
 		_, err := svc.Login(context.Background(), "nobody@example.com", "password")
 		require.ErrorIs(t, err, domain.ErrUnauthorized)
 	})
@@ -106,7 +109,7 @@ func TestAuthService_Login(t *testing.T) {
 		factory.EXPECT().NewUserRepo(mock.Anything).Return(repo)
 		repo.EXPECT().GetByEmail(mock.Anything, user.Email).Return(&user, nil)
 
-		svc := NewAuthService(pool, factory, tokens, nil, testBcryptCost)
+		svc := NewAuthService(pool, factory, tokens, nil, testBcryptCost, logmocks.NewMockLogger(t))
 		_, err := svc.Login(context.Background(), user.Email, "wrongpass")
 		require.ErrorIs(t, err, domain.ErrUnauthorized)
 	})
@@ -124,7 +127,7 @@ func TestAuthService_Login(t *testing.T) {
 		repo.EXPECT().GetByEmail(mock.Anything, user.Email).Return(&user, nil)
 		tokens.EXPECT().GenerateAccessToken(user.ID, user.Role).Return("", errors.New("signing failed"))
 
-		svc := NewAuthService(pool, factory, tokens, nil, testBcryptCost)
+		svc := NewAuthService(pool, factory, tokens, nil, testBcryptCost, logmocks.NewMockLogger(t))
 		_, err := svc.Login(context.Background(), user.Email, "password123")
 		require.ErrorContains(t, err, "generate access token")
 	})
@@ -143,7 +146,7 @@ func TestAuthService_Login(t *testing.T) {
 		tokens.EXPECT().GenerateAccessToken(user.ID, user.Role).Return("access", nil)
 		tokens.EXPECT().GenerateRefreshToken().Return("", "", time.Time{}, errors.New("rand failed"))
 
-		svc := NewAuthService(pool, factory, tokens, nil, testBcryptCost)
+		svc := NewAuthService(pool, factory, tokens, nil, testBcryptCost, logmocks.NewMockLogger(t))
 		_, err := svc.Login(context.Background(), user.Email, "password123")
 		require.ErrorContains(t, err, "generate refresh token")
 	})
@@ -169,7 +172,7 @@ func TestAuthService_Login(t *testing.T) {
 		repo.EXPECT().SaveRefreshToken(mock.Anything, user.ID, "hash", futureTime).
 			Return(errors.New("db error"))
 
-		svc := NewAuthService(pool, factory, tokens, nil, testBcryptCost)
+		svc := NewAuthService(pool, factory, tokens, nil, testBcryptCost, logmocks.NewMockLogger(t))
 		_, err := svc.Login(context.Background(), user.Email, "password123")
 		require.ErrorContains(t, err, "save refresh token")
 	})
@@ -195,7 +198,7 @@ func TestAuthService_Login(t *testing.T) {
 		repo.EXPECT().SaveRefreshToken(mock.Anything, user.ID, "hash", futureTime).Return(nil)
 		audit.EXPECT().Create(mock.Anything, mock.Anything).Return(errors.New("audit failed"))
 
-		svc := NewAuthService(pool, factory, tokens, nil, testBcryptCost)
+		svc := NewAuthService(pool, factory, tokens, nil, testBcryptCost, logmocks.NewMockLogger(t))
 		_, err := svc.Login(context.Background(), user.Email, "password123")
 		require.ErrorContains(t, err, "audit failed")
 	})
@@ -229,7 +232,7 @@ func TestAuthService_Login(t *testing.T) {
 			EntityID:   &entityID,
 		}, "", "")
 
-		svc := NewAuthService(pool, factory, tokens, nil, testBcryptCost)
+		svc := NewAuthService(pool, factory, tokens, nil, testBcryptCost, logmocks.NewMockLogger(t))
 		result, err := svc.Login(context.Background(), user.Email, "password123")
 
 		require.NoError(t, err)
@@ -268,7 +271,7 @@ func TestAuthService_Refresh(t *testing.T) {
 		repo.EXPECT().ClaimRefreshToken(mock.Anything, tokenHash).
 			Return((*repository.RefreshTokenRow)(nil), errNotFound)
 
-		svc := NewAuthService(pool, factory, tokens, nil, testBcryptCost)
+		svc := NewAuthService(pool, factory, tokens, nil, testBcryptCost, logmocks.NewMockLogger(t))
 		_, err := svc.Refresh(context.Background(), "invalid-token")
 		require.ErrorIs(t, err, domain.ErrUnauthorized)
 	})
@@ -289,7 +292,7 @@ func TestAuthService_Refresh(t *testing.T) {
 		repo.EXPECT().GetByID(mock.Anything, "user-1").
 			Return((*repository.UserRow)(nil), errNotFound)
 
-		svc := NewAuthService(pool, factory, tokens, nil, testBcryptCost)
+		svc := NewAuthService(pool, factory, tokens, nil, testBcryptCost, logmocks.NewMockLogger(t))
 		_, err := svc.Refresh(context.Background(), "token")
 		require.ErrorIs(t, err, domain.ErrUnauthorized)
 	})
@@ -311,7 +314,7 @@ func TestAuthService_Refresh(t *testing.T) {
 		repo.EXPECT().GetByID(mock.Anything, user.ID).Return(&user, nil)
 		tokens.EXPECT().GenerateAccessToken(user.ID, user.Role).Return("", errors.New("signing failed"))
 
-		svc := NewAuthService(pool, factory, tokens, nil, testBcryptCost)
+		svc := NewAuthService(pool, factory, tokens, nil, testBcryptCost, logmocks.NewMockLogger(t))
 		_, err := svc.Refresh(context.Background(), "token")
 		require.ErrorContains(t, err, "generate access token")
 	})
@@ -334,7 +337,7 @@ func TestAuthService_Refresh(t *testing.T) {
 		tokens.EXPECT().GenerateAccessToken(user.ID, user.Role).Return("access", nil)
 		tokens.EXPECT().GenerateRefreshToken().Return("", "", time.Time{}, errors.New("rand failed"))
 
-		svc := NewAuthService(pool, factory, tokens, nil, testBcryptCost)
+		svc := NewAuthService(pool, factory, tokens, nil, testBcryptCost, logmocks.NewMockLogger(t))
 		_, err := svc.Refresh(context.Background(), "token")
 		require.ErrorContains(t, err, "generate refresh token")
 	})
@@ -359,7 +362,7 @@ func TestAuthService_Refresh(t *testing.T) {
 		repo.EXPECT().SaveRefreshToken(mock.Anything, user.ID, "hash", futureTime).
 			Return(errors.New("db error"))
 
-		svc := NewAuthService(pool, factory, tokens, nil, testBcryptCost)
+		svc := NewAuthService(pool, factory, tokens, nil, testBcryptCost, logmocks.NewMockLogger(t))
 		_, err := svc.Refresh(context.Background(), "token")
 		require.ErrorContains(t, err, "save refresh token")
 	})
@@ -373,7 +376,7 @@ func TestAuthService_Refresh(t *testing.T) {
 
 		pool.EXPECT().Begin(mock.Anything).Return(nil, errors.New("begin failed"))
 
-		svc := NewAuthService(pool, factory, tokens, nil, testBcryptCost)
+		svc := NewAuthService(pool, factory, tokens, nil, testBcryptCost, logmocks.NewMockLogger(t))
 		_, err := svc.Refresh(context.Background(), "token")
 		require.ErrorContains(t, err, "begin failed")
 	})
@@ -397,7 +400,7 @@ func TestAuthService_Refresh(t *testing.T) {
 		tokens.EXPECT().GenerateRefreshToken().Return("new-raw", "new-hash", futureTime, nil)
 		repo.EXPECT().SaveRefreshToken(mock.Anything, user.ID, "new-hash", futureTime).Return(nil)
 
-		svc := NewAuthService(pool, factory, tokens, nil, testBcryptCost)
+		svc := NewAuthService(pool, factory, tokens, nil, testBcryptCost, logmocks.NewMockLogger(t))
 		result, err := svc.Refresh(context.Background(), "some-raw-token")
 
 		require.NoError(t, err)
@@ -434,7 +437,7 @@ func TestAuthService_Logout(t *testing.T) {
 		repo.EXPECT().DeleteUserRefreshTokens(mock.Anything, "user-1").
 			Return(errors.New("db error"))
 
-		svc := NewAuthService(pool, factory, tokens, nil, testBcryptCost)
+		svc := NewAuthService(pool, factory, tokens, nil, testBcryptCost, logmocks.NewMockLogger(t))
 		err := svc.Logout(context.Background(), "user-1")
 		require.ErrorContains(t, err, "db error")
 	})
@@ -454,7 +457,7 @@ func TestAuthService_Logout(t *testing.T) {
 		repo.EXPECT().DeleteUserRefreshTokens(mock.Anything, "user-1").Return(nil)
 		audit.EXPECT().Create(mock.Anything, mock.Anything).Return(errors.New("audit failed"))
 
-		svc := NewAuthService(pool, factory, tokens, nil, testBcryptCost)
+		svc := NewAuthService(pool, factory, tokens, nil, testBcryptCost, logmocks.NewMockLogger(t))
 		err := svc.Logout(context.Background(), "user-1")
 		require.ErrorContains(t, err, "audit failed")
 	})
@@ -482,7 +485,7 @@ func TestAuthService_Logout(t *testing.T) {
 			EntityID:   &entityID,
 		}, "", "")
 
-		svc := NewAuthService(pool, factory, tokens, nil, testBcryptCost)
+		svc := NewAuthService(pool, factory, tokens, nil, testBcryptCost, logmocks.NewMockLogger(t))
 		err := svc.Logout(context.Background(), "user-1")
 		require.NoError(t, err)
 	})
@@ -503,7 +506,7 @@ func TestAuthService_RequestPasswordReset(t *testing.T) {
 		repo.EXPECT().GetByEmail(mock.Anything, "nobody@example.com").
 			Return((*repository.UserRow)(nil), errNotFound)
 
-		svc := NewAuthService(pool, factory, tokens, nil, testBcryptCost)
+		svc := NewAuthService(pool, factory, tokens, nil, testBcryptCost, logmocks.NewMockLogger(t))
 		err := svc.RequestPasswordReset(context.Background(), "nobody@example.com")
 		require.NoError(t, err)
 	})
@@ -521,7 +524,7 @@ func TestAuthService_RequestPasswordReset(t *testing.T) {
 		repo.EXPECT().GetByEmail(mock.Anything, user.Email).Return(&user, nil)
 		tokens.EXPECT().GenerateResetToken().Return("", "", time.Time{}, errors.New("rand failed"))
 
-		svc := NewAuthService(pool, factory, tokens, nil, testBcryptCost)
+		svc := NewAuthService(pool, factory, tokens, nil, testBcryptCost, logmocks.NewMockLogger(t))
 		err := svc.RequestPasswordReset(context.Background(), user.Email)
 		require.ErrorContains(t, err, "generate reset token")
 	})
@@ -541,7 +544,7 @@ func TestAuthService_RequestPasswordReset(t *testing.T) {
 		repo.EXPECT().SaveResetToken(mock.Anything, user.ID, "hash", futureTime).
 			Return(errors.New("db error"))
 
-		svc := NewAuthService(pool, factory, tokens, nil, testBcryptCost)
+		svc := NewAuthService(pool, factory, tokens, nil, testBcryptCost, logmocks.NewMockLogger(t))
 		err := svc.RequestPasswordReset(context.Background(), user.Email)
 		require.ErrorContains(t, err, "save reset token")
 	})
@@ -554,13 +557,22 @@ func TestAuthService_RequestPasswordReset(t *testing.T) {
 		factory := svcmocks.NewMockAuthRepoFactory(t)
 		repo := repomocks.NewMockUserRepo(t)
 		tokens := svcmocks.NewMockTokenGenerator(t)
+		log := logmocks.NewMockLogger(t)
 
 		factory.EXPECT().NewUserRepo(mock.Anything).Return(repo)
 		repo.EXPECT().GetByEmail(mock.Anything, user.Email).Return(&user, nil)
 		tokens.EXPECT().GenerateResetToken().Return("raw-token", "hash-token", futureTime, nil)
 		repo.EXPECT().SaveResetToken(mock.Anything, user.ID, "hash-token", futureTime).Return(nil)
 
-		svc := NewAuthService(pool, factory, tokens, nil, testBcryptCost)
+		log.EXPECT().Info(mock.Anything, "password reset token generated", mock.Anything).Run(func(_ context.Context, _ string, args ...any) {
+			require.Len(t, args, 4)
+			require.Equal(t, "user_id", args[0])
+			require.Equal(t, user.ID, args[1])
+			require.Equal(t, "expires_at", args[2])
+			require.NotContains(t, fmt.Sprint(args...), "raw-token")
+		}).Once()
+
+		svc := NewAuthService(pool, factory, tokens, nil, testBcryptCost, log)
 		err := svc.RequestPasswordReset(context.Background(), user.Email)
 		require.NoError(t, err)
 	})
@@ -574,13 +586,17 @@ func TestAuthService_RequestPasswordReset(t *testing.T) {
 		repo := repomocks.NewMockUserRepo(t)
 		tokens := svcmocks.NewMockTokenGenerator(t)
 		notifier := &stubResetNotifier{}
+		log := logmocks.NewMockLogger(t)
 
 		factory.EXPECT().NewUserRepo(mock.Anything).Return(repo)
 		repo.EXPECT().GetByEmail(mock.Anything, user.Email).Return(&user, nil)
 		tokens.EXPECT().GenerateResetToken().Return("raw-token", "hash-token", futureTime, nil)
 		repo.EXPECT().SaveResetToken(mock.Anything, user.ID, "hash-token", futureTime).Return(nil)
+		log.EXPECT().Info(mock.Anything, "password reset token generated", mock.Anything).Run(func(_ context.Context, _ string, args ...any) {
+			require.NotContains(t, fmt.Sprint(args...), "raw-token")
+		}).Once()
 
-		svc := NewAuthService(pool, factory, tokens, notifier, testBcryptCost)
+		svc := NewAuthService(pool, factory, tokens, notifier, testBcryptCost, log)
 		err := svc.RequestPasswordReset(context.Background(), user.Email)
 		require.NoError(t, err)
 		require.Len(t, notifier.calls, 1)
@@ -602,7 +618,7 @@ func TestAuthService_ResetPassword(t *testing.T) {
 		// bcrypt rejects passwords > 72 bytes.
 		longPassword := strings.Repeat("a", 73)
 
-		svc := NewAuthService(pool, factory, tokens, nil, testBcryptCost)
+		svc := NewAuthService(pool, factory, tokens, nil, testBcryptCost, logmocks.NewMockLogger(t))
 		userID, err := svc.ResetPassword(context.Background(), "raw", longPassword)
 		require.ErrorContains(t, err, "hash password")
 		require.ErrorIs(t, err, bcrypt.ErrPasswordTooLong)
@@ -625,7 +641,7 @@ func TestAuthService_ResetPassword(t *testing.T) {
 		repo.EXPECT().ClaimResetToken(mock.Anything, tokenHash).
 			Return((*repository.PasswordResetTokenRow)(nil), errNotFound)
 
-		svc := NewAuthService(pool, factory, tokens, nil, testBcryptCost)
+		svc := NewAuthService(pool, factory, tokens, nil, testBcryptCost, logmocks.NewMockLogger(t))
 		userID, err := svc.ResetPassword(context.Background(), "bad-token", "newpass123")
 		require.ErrorIs(t, err, domain.ErrUnauthorized)
 		require.Empty(t, userID)
@@ -649,7 +665,7 @@ func TestAuthService_ResetPassword(t *testing.T) {
 		repo.EXPECT().UpdatePassword(mock.Anything, "user-1", mock.AnythingOfType("string")).
 			Return(errors.New("db error"))
 
-		svc := NewAuthService(pool, factory, tokens, nil, testBcryptCost)
+		svc := NewAuthService(pool, factory, tokens, nil, testBcryptCost, logmocks.NewMockLogger(t))
 		_, err := svc.ResetPassword(context.Background(), "raw-token", "newpass123")
 		require.ErrorContains(t, err, "update password")
 	})
@@ -673,7 +689,7 @@ func TestAuthService_ResetPassword(t *testing.T) {
 		repo.EXPECT().DeleteUserRefreshTokens(mock.Anything, "user-1").
 			Return(errors.New("db error"))
 
-		svc := NewAuthService(pool, factory, tokens, nil, testBcryptCost)
+		svc := NewAuthService(pool, factory, tokens, nil, testBcryptCost, logmocks.NewMockLogger(t))
 		_, err := svc.ResetPassword(context.Background(), "raw-token", "newpass123")
 		require.ErrorContains(t, err, "db error")
 	})
@@ -697,7 +713,7 @@ func TestAuthService_ResetPassword(t *testing.T) {
 		repo.EXPECT().DeleteUserRefreshTokens(mock.Anything, "user-1").Return(nil)
 		audit.EXPECT().Create(mock.Anything, mock.Anything).Return(errors.New("audit failed"))
 
-		svc := NewAuthService(pool, factory, tokens, nil, testBcryptCost)
+		svc := NewAuthService(pool, factory, tokens, nil, testBcryptCost, logmocks.NewMockLogger(t))
 		_, err := svc.ResetPassword(context.Background(), "raw-token", "newpass123")
 		require.ErrorContains(t, err, "audit failed")
 	})
@@ -729,7 +745,7 @@ func TestAuthService_ResetPassword(t *testing.T) {
 			EntityID:   &entityID,
 		}, "", "")
 
-		svc := NewAuthService(pool, factory, tokens, nil, testBcryptCost)
+		svc := NewAuthService(pool, factory, tokens, nil, testBcryptCost, logmocks.NewMockLogger(t))
 		userID, err := svc.ResetPassword(context.Background(), "raw-reset-token", "newpass123")
 		require.NoError(t, err)
 		require.Equal(t, "user-1", userID)
@@ -751,7 +767,7 @@ func TestAuthService_GetUser(t *testing.T) {
 		factory.EXPECT().NewUserRepo(mock.Anything).Return(repo)
 		repo.EXPECT().GetByID(mock.Anything, user.ID).Return(&user, nil)
 
-		svc := NewAuthService(pool, factory, tokens, nil, testBcryptCost)
+		svc := NewAuthService(pool, factory, tokens, nil, testBcryptCost, logmocks.NewMockLogger(t))
 		got, err := svc.GetUser(context.Background(), user.ID)
 		require.NoError(t, err)
 		require.Equal(t, &domain.User{
@@ -775,7 +791,7 @@ func TestAuthService_GetUser(t *testing.T) {
 		repo.EXPECT().GetByID(mock.Anything, "missing").
 			Return((*repository.UserRow)(nil), errNotFound)
 
-		svc := NewAuthService(pool, factory, tokens, nil, testBcryptCost)
+		svc := NewAuthService(pool, factory, tokens, nil, testBcryptCost, logmocks.NewMockLogger(t))
 		_, err := svc.GetUser(context.Background(), "missing")
 		require.ErrorIs(t, err, errNotFound)
 	})
@@ -796,7 +812,7 @@ func TestAuthService_GetUserByEmail(t *testing.T) {
 		factory.EXPECT().NewUserRepo(mock.Anything).Return(repo)
 		repo.EXPECT().GetByEmail(mock.Anything, user.Email).Return(&user, nil)
 
-		svc := NewAuthService(pool, factory, tokens, nil, testBcryptCost)
+		svc := NewAuthService(pool, factory, tokens, nil, testBcryptCost, logmocks.NewMockLogger(t))
 		got, err := svc.GetUserByEmail(context.Background(), user.Email)
 		require.NoError(t, err)
 		require.Equal(t, &domain.User{
@@ -820,7 +836,7 @@ func TestAuthService_GetUserByEmail(t *testing.T) {
 		repo.EXPECT().GetByEmail(mock.Anything, "missing@example.com").
 			Return((*repository.UserRow)(nil), errNotFound)
 
-		svc := NewAuthService(pool, factory, tokens, nil, testBcryptCost)
+		svc := NewAuthService(pool, factory, tokens, nil, testBcryptCost, logmocks.NewMockLogger(t))
 		_, err := svc.GetUserByEmail(context.Background(), "missing@example.com")
 		require.ErrorIs(t, err, errNotFound)
 	})
@@ -842,7 +858,7 @@ func TestAuthService_SeedUser(t *testing.T) {
 
 		longPassword := strings.Repeat("a", 73)
 
-		svc := NewAuthService(pool, factory, tokens, nil, testBcryptCost)
+		svc := NewAuthService(pool, factory, tokens, nil, testBcryptCost, logmocks.NewMockLogger(t))
 		_, err := svc.SeedUser(context.Background(), "seed@example.com", longPassword, "admin")
 		require.ErrorContains(t, err, "hash password")
 		require.ErrorIs(t, err, bcrypt.ErrPasswordTooLong)
@@ -860,7 +876,7 @@ func TestAuthService_SeedUser(t *testing.T) {
 		repo.EXPECT().Create(mock.Anything, "seed@example.com", mock.AnythingOfType("string"), "admin").
 			Return((*repository.UserRow)(nil), errors.New("unique violation"))
 
-		svc := NewAuthService(pool, factory, tokens, nil, testBcryptCost)
+		svc := NewAuthService(pool, factory, tokens, nil, testBcryptCost, logmocks.NewMockLogger(t))
 		_, err := svc.SeedUser(context.Background(), "seed@example.com", "pass", "admin")
 		require.ErrorContains(t, err, "unique violation")
 	})
@@ -881,7 +897,7 @@ func TestAuthService_SeedUser(t *testing.T) {
 				CreatedAt: created, UpdatedAt: created,
 			}, nil)
 
-		svc := NewAuthService(pool, factory, tokens, nil, testBcryptCost)
+		svc := NewAuthService(pool, factory, tokens, nil, testBcryptCost, logmocks.NewMockLogger(t))
 		got, err := svc.SeedUser(context.Background(), "seed@example.com", "pass", "admin")
 		require.NoError(t, err)
 		require.Equal(t, &domain.User{
@@ -903,8 +919,10 @@ func TestAuthService_SeedAdmin(t *testing.T) {
 		pool := dbmocks.NewMockPool(t)
 		factory := svcmocks.NewMockAuthRepoFactory(t)
 		tokens := svcmocks.NewMockTokenGenerator(t)
+		log := logmocks.NewMockLogger(t)
+		log.EXPECT().Info(mock.Anything, "admin seed skipped: ADMIN_EMAIL or ADMIN_PASSWORD not set").Once()
 
-		svc := NewAuthService(pool, factory, tokens, nil, testBcryptCost)
+		svc := NewAuthService(pool, factory, tokens, nil, testBcryptCost, log)
 		err := svc.SeedAdmin(context.Background(), "", "pass")
 		require.NoError(t, err)
 	})
@@ -915,8 +933,10 @@ func TestAuthService_SeedAdmin(t *testing.T) {
 		pool := dbmocks.NewMockPool(t)
 		factory := svcmocks.NewMockAuthRepoFactory(t)
 		tokens := svcmocks.NewMockTokenGenerator(t)
+		log := logmocks.NewMockLogger(t)
+		log.EXPECT().Info(mock.Anything, "admin seed skipped: ADMIN_EMAIL or ADMIN_PASSWORD not set").Once()
 
-		svc := NewAuthService(pool, factory, tokens, nil, testBcryptCost)
+		svc := NewAuthService(pool, factory, tokens, nil, testBcryptCost, log)
 		err := svc.SeedAdmin(context.Background(), "admin@example.com", "")
 		require.NoError(t, err)
 	})
@@ -933,7 +953,7 @@ func TestAuthService_SeedAdmin(t *testing.T) {
 		repo.EXPECT().ExistsByEmail(mock.Anything, "admin@test.com").
 			Return(false, errors.New("db error"))
 
-		svc := NewAuthService(pool, factory, tokens, nil, testBcryptCost)
+		svc := NewAuthService(pool, factory, tokens, nil, testBcryptCost, logmocks.NewMockLogger(t))
 		err := svc.SeedAdmin(context.Background(), "admin@test.com", "secret")
 		require.ErrorContains(t, err, "check admin exists")
 	})
@@ -945,11 +965,13 @@ func TestAuthService_SeedAdmin(t *testing.T) {
 		factory := svcmocks.NewMockAuthRepoFactory(t)
 		repo := repomocks.NewMockUserRepo(t)
 		tokens := svcmocks.NewMockTokenGenerator(t)
+		log := logmocks.NewMockLogger(t)
 
 		factory.EXPECT().NewUserRepo(mock.Anything).Return(repo)
 		repo.EXPECT().ExistsByEmail(mock.Anything, "admin@test.com").Return(true, nil)
+		log.EXPECT().Info(mock.Anything, "admin already exists", []any{"email", "admin@test.com"}).Once()
 
-		svc := NewAuthService(pool, factory, tokens, nil, testBcryptCost)
+		svc := NewAuthService(pool, factory, tokens, nil, testBcryptCost, log)
 		err := svc.SeedAdmin(context.Background(), "admin@test.com", "secret")
 		require.NoError(t, err)
 	})
@@ -967,7 +989,7 @@ func TestAuthService_SeedAdmin(t *testing.T) {
 
 		longPassword := strings.Repeat("x", 73)
 
-		svc := NewAuthService(pool, factory, tokens, nil, testBcryptCost)
+		svc := NewAuthService(pool, factory, tokens, nil, testBcryptCost, logmocks.NewMockLogger(t))
 		err := svc.SeedAdmin(context.Background(), "admin@test.com", longPassword)
 		require.ErrorContains(t, err, "hash admin password")
 		require.ErrorIs(t, err, bcrypt.ErrPasswordTooLong)
@@ -986,7 +1008,7 @@ func TestAuthService_SeedAdmin(t *testing.T) {
 		repo.EXPECT().Create(mock.Anything, "admin@test.com", mock.AnythingOfType("string"), string(api.Admin)).
 			Return((*repository.UserRow)(nil), errors.New("db error"))
 
-		svc := NewAuthService(pool, factory, tokens, nil, testBcryptCost)
+		svc := NewAuthService(pool, factory, tokens, nil, testBcryptCost, logmocks.NewMockLogger(t))
 		err := svc.SeedAdmin(context.Background(), "admin@test.com", "secret")
 		require.ErrorContains(t, err, "create admin")
 	})
@@ -998,13 +1020,15 @@ func TestAuthService_SeedAdmin(t *testing.T) {
 		factory := svcmocks.NewMockAuthRepoFactory(t)
 		repo := repomocks.NewMockUserRepo(t)
 		tokens := svcmocks.NewMockTokenGenerator(t)
+		log := logmocks.NewMockLogger(t)
 
 		factory.EXPECT().NewUserRepo(mock.Anything).Return(repo)
 		repo.EXPECT().ExistsByEmail(mock.Anything, "admin@test.com").Return(false, nil)
 		repo.EXPECT().Create(mock.Anything, "admin@test.com", mock.AnythingOfType("string"), string(api.Admin)).
 			Return(&repository.UserRow{ID: "new-admin"}, nil)
+		log.EXPECT().Info(mock.Anything, "admin user created", []any{"email", "admin@test.com"}).Once()
 
-		svc := NewAuthService(pool, factory, tokens, nil, testBcryptCost)
+		svc := NewAuthService(pool, factory, tokens, nil, testBcryptCost, log)
 		err := svc.SeedAdmin(context.Background(), "admin@test.com", "secret")
 		require.NoError(t, err)
 	})

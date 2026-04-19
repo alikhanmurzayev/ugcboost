@@ -2,8 +2,9 @@ package closer
 
 import (
 	"context"
-	"log/slog"
 	"sync"
+
+	"github.com/alikhanmurzayev/ugcboost/backend/internal/logger"
 )
 
 // Func is a shutdown function that may return an error.
@@ -12,8 +13,9 @@ type Func func(ctx context.Context) error
 // Closer manages ordered shutdown of resources.
 // Resources are closed in LIFO order (last added = first closed).
 type Closer struct {
-	mu    sync.Mutex
-	funcs []namedFunc
+	mu     sync.Mutex
+	funcs  []namedFunc
+	logger logger.Logger
 }
 
 type namedFunc struct {
@@ -22,8 +24,8 @@ type namedFunc struct {
 }
 
 // New creates a new Closer.
-func New() *Closer {
-	return &Closer{}
+func New(log logger.Logger) *Closer {
+	return &Closer{logger: log}
 }
 
 // Add registers a shutdown function with a descriptive name.
@@ -44,9 +46,9 @@ func (c *Closer) Close(ctx context.Context) error {
 	var firstErr error
 	for i := len(funcs) - 1; i >= 0; i-- {
 		nf := funcs[i]
-		slog.Info("shutting down", "resource", nf.name)
+		c.logger.Info(ctx, "shutting down", "resource", nf.name)
 		if err := nf.fn(ctx); err != nil {
-			slog.Error("shutdown error", "resource", nf.name, "error", err)
+			c.logger.Error(ctx, "shutdown error", "resource", nf.name, "error", err)
 			if firstErr == nil {
 				firstErr = err
 			}

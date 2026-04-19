@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/rand"
 	"fmt"
-	"log/slog"
 	"math/big"
 	"strings"
 
@@ -13,6 +12,7 @@ import (
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/api"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/dbutil"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/domain"
+	"github.com/alikhanmurzayev/ugcboost/backend/internal/logger"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/repository"
 )
 
@@ -28,11 +28,12 @@ type BrandService struct {
 	pool        dbutil.Pool
 	repoFactory BrandRepoFactory
 	bcryptCost  int
+	logger      logger.Logger
 }
 
 // NewBrandService creates a new BrandService.
-func NewBrandService(pool dbutil.Pool, repoFactory BrandRepoFactory, bcryptCost int) *BrandService {
-	return &BrandService{pool: pool, repoFactory: repoFactory, bcryptCost: bcryptCost}
+func NewBrandService(pool dbutil.Pool, repoFactory BrandRepoFactory, bcryptCost int, log logger.Logger) *BrandService {
+	return &BrandService{pool: pool, repoFactory: repoFactory, bcryptCost: bcryptCost, logger: log}
 }
 
 // CreateBrand creates a new brand and writes the matching audit log
@@ -189,7 +190,7 @@ func (s *BrandService) AssignManager(ctx context.Context, brandID, email string)
 			if err != nil {
 				return fmt.Errorf("create user: %w", err)
 			}
-			slog.Info("temporary password generated for new manager", "email", email)
+			s.logger.Info(ctx, "temporary password generated for new manager", "user_id", userRow.ID)
 		}
 
 		if err := brandRepo.AssignManager(ctx, brandID, userRow.ID); err != nil {

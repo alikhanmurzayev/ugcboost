@@ -1,9 +1,10 @@
 package middleware
 
 import (
-	"log/slog"
 	"net/http"
 	"time"
+
+	"github.com/alikhanmurzayev/ugcboost/backend/internal/logger"
 )
 
 type responseWriter struct {
@@ -16,20 +17,22 @@ func (rw *responseWriter) WriteHeader(code int) {
 	rw.ResponseWriter.WriteHeader(code)
 }
 
-// Logging logs HTTP requests with slog.
-func Logging(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		start := time.Now()
-		rw := &responseWriter{ResponseWriter: w, status: http.StatusOK}
+// Logging logs HTTP requests.
+func Logging(log logger.Logger) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			start := time.Now()
+			rw := &responseWriter{ResponseWriter: w, status: http.StatusOK}
 
-		next.ServeHTTP(rw, r)
+			next.ServeHTTP(rw, r)
 
-		slog.Info("http request",
-			"method", r.Method,
-			"path", r.URL.Path,
-			"status", rw.status,
-			"duration_ms", time.Since(start).Milliseconds(),
-			"remote_addr", r.RemoteAddr,
-		)
-	})
+			log.Info(r.Context(), "http request",
+				"method", r.Method,
+				"path", r.URL.Path,
+				"status", rw.status,
+				"duration_ms", time.Since(start).Milliseconds(),
+				"remote_addr", r.RemoteAddr,
+			)
+		})
+	}
 }

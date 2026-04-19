@@ -14,12 +14,13 @@ import (
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/api"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/domain"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/handler/mocks"
+	logmocks "github.com/alikhanmurzayev/ugcboost/backend/internal/logger/mocks"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/middleware"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/testapi"
 )
 
-// newTestTestRouter registers a TestHandler behind the generated testapi wrapper.
-func newTestTestRouter(t *testing.T, h *TestHandler) chi.Router {
+// newTestAPIRouter registers a TestAPIHandler behind the generated testapi wrapper.
+func newTestAPIRouter(t *testing.T, h *TestAPIHandler) chi.Router {
 	t.Helper()
 	r := chi.NewRouter()
 	testapi.HandlerFromMux(h, r)
@@ -28,15 +29,22 @@ func newTestTestRouter(t *testing.T, h *TestHandler) chi.Router {
 
 const seedAdminID = "admin-seed-id"
 
-func TestTestHandler_SeedUser(t *testing.T) {
+func expectUnexpectedErrorLog(log *logmocks.MockLogger, path string) {
+	log.EXPECT().Error(mock.Anything, "unexpected error", mock.MatchedBy(func(args []any) bool {
+		return len(args) == 4 && args[0] == "error" && args[2] == "path" && args[3] == path
+	})).Once()
+}
+
+func TestTestAPIHandler_SeedUser(t *testing.T) {
 	t.Parallel()
 
 	t.Run("invalid JSON", func(t *testing.T) {
 		t.Parallel()
-		auth := mocks.NewMockTestAuthService(t)
-		brands := mocks.NewMockTestBrandService(t)
+		auth := mocks.NewMockTestAPIAuthService(t)
+		brands := mocks.NewMockTestAPIBrandService(t)
 		store := mocks.NewMockTokenStore(t)
-		router := newTestTestRouter(t, NewTestHandler(auth, brands, store, seedAdminID))
+		log := logmocks.NewMockLogger(t)
+		router := newTestAPIRouter(t, NewTestAPIHandler(auth, brands, store, seedAdminID, log))
 
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/test/seed-user",
 			map[string]any{"email": 123})
@@ -46,10 +54,11 @@ func TestTestHandler_SeedUser(t *testing.T) {
 
 	t.Run("missing required field", func(t *testing.T) {
 		t.Parallel()
-		auth := mocks.NewMockTestAuthService(t)
-		brands := mocks.NewMockTestBrandService(t)
+		auth := mocks.NewMockTestAPIAuthService(t)
+		brands := mocks.NewMockTestAPIBrandService(t)
 		store := mocks.NewMockTokenStore(t)
-		router := newTestTestRouter(t, NewTestHandler(auth, brands, store, seedAdminID))
+		log := logmocks.NewMockLogger(t)
+		router := newTestAPIRouter(t, NewTestAPIHandler(auth, brands, store, seedAdminID, log))
 
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/test/seed-user",
 			testapi.SeedUserRequest{Email: "user@example.com", Password: "pass"})
@@ -59,12 +68,14 @@ func TestTestHandler_SeedUser(t *testing.T) {
 
 	t.Run("service error returns 500", func(t *testing.T) {
 		t.Parallel()
-		auth := mocks.NewMockTestAuthService(t)
-		brands := mocks.NewMockTestBrandService(t)
+		auth := mocks.NewMockTestAPIAuthService(t)
+		brands := mocks.NewMockTestAPIBrandService(t)
 		store := mocks.NewMockTokenStore(t)
+		log := logmocks.NewMockLogger(t)
 		auth.EXPECT().SeedUser(mock.Anything, "user@example.com", "pass", "admin").
 			Return(nil, errors.New("db error"))
-		router := newTestTestRouter(t, NewTestHandler(auth, brands, store, seedAdminID))
+		expectUnexpectedErrorLog(log, "/test/seed-user")
+		router := newTestAPIRouter(t, NewTestAPIHandler(auth, brands, store, seedAdminID, log))
 
 		w, _ := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/test/seed-user",
 			testapi.SeedUserRequest{
@@ -76,12 +87,13 @@ func TestTestHandler_SeedUser(t *testing.T) {
 
 	t.Run("success", func(t *testing.T) {
 		t.Parallel()
-		auth := mocks.NewMockTestAuthService(t)
-		brands := mocks.NewMockTestBrandService(t)
+		auth := mocks.NewMockTestAPIAuthService(t)
+		brands := mocks.NewMockTestAPIBrandService(t)
 		store := mocks.NewMockTokenStore(t)
+		log := logmocks.NewMockLogger(t)
 		auth.EXPECT().SeedUser(mock.Anything, "user@example.com", "pass", "admin").
 			Return(&domain.User{ID: "u-seed", Email: "user@example.com", Role: api.Admin}, nil)
-		router := newTestTestRouter(t, NewTestHandler(auth, brands, store, seedAdminID))
+		router := newTestAPIRouter(t, NewTestAPIHandler(auth, brands, store, seedAdminID, log))
 
 		w, resp := doJSON[testapi.SeedUserResult](t, router, http.MethodPost, "/test/seed-user",
 			testapi.SeedUserRequest{
@@ -99,15 +111,16 @@ func TestTestHandler_SeedUser(t *testing.T) {
 	})
 }
 
-func TestTestHandler_SeedBrand(t *testing.T) {
+func TestTestAPIHandler_SeedBrand(t *testing.T) {
 	t.Parallel()
 
 	t.Run("invalid JSON", func(t *testing.T) {
 		t.Parallel()
-		auth := mocks.NewMockTestAuthService(t)
-		brands := mocks.NewMockTestBrandService(t)
+		auth := mocks.NewMockTestAPIAuthService(t)
+		brands := mocks.NewMockTestAPIBrandService(t)
 		store := mocks.NewMockTokenStore(t)
-		router := newTestTestRouter(t, NewTestHandler(auth, brands, store, seedAdminID))
+		log := logmocks.NewMockLogger(t)
+		router := newTestAPIRouter(t, NewTestAPIHandler(auth, brands, store, seedAdminID, log))
 
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/test/seed-brand",
 			map[string]any{"name": 42})
@@ -117,10 +130,11 @@ func TestTestHandler_SeedBrand(t *testing.T) {
 
 	t.Run("empty name", func(t *testing.T) {
 		t.Parallel()
-		auth := mocks.NewMockTestAuthService(t)
-		brands := mocks.NewMockTestBrandService(t)
+		auth := mocks.NewMockTestAPIAuthService(t)
+		brands := mocks.NewMockTestAPIBrandService(t)
 		store := mocks.NewMockTokenStore(t)
-		router := newTestTestRouter(t, NewTestHandler(auth, brands, store, seedAdminID))
+		log := logmocks.NewMockLogger(t)
+		router := newTestAPIRouter(t, NewTestAPIHandler(auth, brands, store, seedAdminID, log))
 
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/test/seed-brand",
 			testapi.SeedBrandRequest{Name: ""})
@@ -130,12 +144,14 @@ func TestTestHandler_SeedBrand(t *testing.T) {
 
 	t.Run("brand create error returns 500", func(t *testing.T) {
 		t.Parallel()
-		auth := mocks.NewMockTestAuthService(t)
-		brands := mocks.NewMockTestBrandService(t)
+		auth := mocks.NewMockTestAPIAuthService(t)
+		brands := mocks.NewMockTestAPIBrandService(t)
 		store := mocks.NewMockTokenStore(t)
+		log := logmocks.NewMockLogger(t)
 		brands.EXPECT().CreateBrand(mock.Anything, "Test Brand", (*string)(nil)).
 			Return(nil, errors.New("db error"))
-		router := newTestTestRouter(t, NewTestHandler(auth, brands, store, seedAdminID))
+		expectUnexpectedErrorLog(log, "/test/seed-brand")
+		router := newTestAPIRouter(t, NewTestAPIHandler(auth, brands, store, seedAdminID, log))
 
 		w, _ := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/test/seed-brand",
 			testapi.SeedBrandRequest{Name: "Test Brand"})
@@ -144,9 +160,10 @@ func TestTestHandler_SeedBrand(t *testing.T) {
 
 	t.Run("success without managerEmail impersonates admin", func(t *testing.T) {
 		t.Parallel()
-		auth := mocks.NewMockTestAuthService(t)
-		brands := mocks.NewMockTestBrandService(t)
+		auth := mocks.NewMockTestAPIAuthService(t)
+		brands := mocks.NewMockTestAPIBrandService(t)
 		store := mocks.NewMockTokenStore(t)
+		log := logmocks.NewMockLogger(t)
 
 		brands.EXPECT().CreateBrand(mock.Anything, "Test Brand", (*string)(nil)).
 			Run(func(ctx context.Context, _ string, _ *string) {
@@ -157,7 +174,7 @@ func TestTestHandler_SeedBrand(t *testing.T) {
 			}).
 			Return(&domain.Brand{ID: "b-seed", Name: "Test Brand"}, nil)
 
-		router := newTestTestRouter(t, NewTestHandler(auth, brands, store, seedAdminID))
+		router := newTestAPIRouter(t, NewTestAPIHandler(auth, brands, store, seedAdminID, log))
 
 		w, resp := doJSON[testapi.SeedBrandResult](t, router, http.MethodPost, "/test/seed-brand",
 			testapi.SeedBrandRequest{Name: "Test Brand"})
@@ -169,9 +186,10 @@ func TestTestHandler_SeedBrand(t *testing.T) {
 
 	t.Run("success with managerEmail assigns manager", func(t *testing.T) {
 		t.Parallel()
-		auth := mocks.NewMockTestAuthService(t)
-		brands := mocks.NewMockTestBrandService(t)
+		auth := mocks.NewMockTestAPIAuthService(t)
+		brands := mocks.NewMockTestAPIBrandService(t)
 		store := mocks.NewMockTokenStore(t)
+		log := logmocks.NewMockLogger(t)
 
 		managerEmail := openapi_types.Email("mgr@example.com")
 
@@ -180,7 +198,7 @@ func TestTestHandler_SeedBrand(t *testing.T) {
 		brands.EXPECT().AssignManager(mock.Anything, "b-seed", "mgr@example.com").
 			Return(&domain.User{ID: "u-mgr", Email: "mgr@example.com"}, "tmp-pass", nil)
 
-		router := newTestTestRouter(t, NewTestHandler(auth, brands, store, seedAdminID))
+		router := newTestAPIRouter(t, NewTestAPIHandler(auth, brands, store, seedAdminID, log))
 
 		w, resp := doJSON[testapi.SeedBrandResult](t, router, http.MethodPost, "/test/seed-brand",
 			testapi.SeedBrandRequest{Name: "Test Brand", ManagerEmail: &managerEmail})
@@ -192,9 +210,10 @@ func TestTestHandler_SeedBrand(t *testing.T) {
 
 	t.Run("assign manager error returns 500", func(t *testing.T) {
 		t.Parallel()
-		auth := mocks.NewMockTestAuthService(t)
-		brands := mocks.NewMockTestBrandService(t)
+		auth := mocks.NewMockTestAPIAuthService(t)
+		brands := mocks.NewMockTestAPIBrandService(t)
 		store := mocks.NewMockTokenStore(t)
+		log := logmocks.NewMockLogger(t)
 
 		managerEmail := openapi_types.Email("mgr@example.com")
 
@@ -202,8 +221,9 @@ func TestTestHandler_SeedBrand(t *testing.T) {
 			Return(&domain.Brand{ID: "b-seed", Name: "Test Brand"}, nil)
 		brands.EXPECT().AssignManager(mock.Anything, "b-seed", "mgr@example.com").
 			Return(nil, "", errors.New("assign failed"))
+		expectUnexpectedErrorLog(log, "/test/seed-brand")
 
-		router := newTestTestRouter(t, NewTestHandler(auth, brands, store, seedAdminID))
+		router := newTestAPIRouter(t, NewTestAPIHandler(auth, brands, store, seedAdminID, log))
 
 		w, _ := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/test/seed-brand",
 			testapi.SeedBrandRequest{Name: "Test Brand", ManagerEmail: &managerEmail})
@@ -211,16 +231,17 @@ func TestTestHandler_SeedBrand(t *testing.T) {
 	})
 }
 
-func TestTestHandler_GetResetToken(t *testing.T) {
+func TestTestAPIHandler_GetResetToken(t *testing.T) {
 	t.Parallel()
 
 	t.Run("not found returns 404", func(t *testing.T) {
 		t.Parallel()
-		auth := mocks.NewMockTestAuthService(t)
-		brands := mocks.NewMockTestBrandService(t)
+		auth := mocks.NewMockTestAPIAuthService(t)
+		brands := mocks.NewMockTestAPIBrandService(t)
 		store := mocks.NewMockTokenStore(t)
+		log := logmocks.NewMockLogger(t)
 		store.EXPECT().GetToken("missing@example.com").Return("", false)
-		router := newTestTestRouter(t, NewTestHandler(auth, brands, store, seedAdminID))
+		router := newTestAPIRouter(t, NewTestAPIHandler(auth, brands, store, seedAdminID, log))
 
 		w, _ := doJSON[api.ErrorResponse](t, router, http.MethodGet,
 			"/test/reset-tokens?email=missing@example.com", nil)
@@ -229,11 +250,12 @@ func TestTestHandler_GetResetToken(t *testing.T) {
 
 	t.Run("success", func(t *testing.T) {
 		t.Parallel()
-		auth := mocks.NewMockTestAuthService(t)
-		brands := mocks.NewMockTestBrandService(t)
+		auth := mocks.NewMockTestAPIAuthService(t)
+		brands := mocks.NewMockTestAPIBrandService(t)
 		store := mocks.NewMockTokenStore(t)
+		log := logmocks.NewMockLogger(t)
 		store.EXPECT().GetToken("alice@example.com").Return("raw-token-123", true)
-		router := newTestTestRouter(t, NewTestHandler(auth, brands, store, seedAdminID))
+		router := newTestAPIRouter(t, NewTestAPIHandler(auth, brands, store, seedAdminID, log))
 
 		w, resp := doJSON[testapi.ResetTokenResult](t, router, http.MethodGet,
 			"/test/reset-tokens?email=alice@example.com", nil)

@@ -5,6 +5,7 @@ import (
 
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/api"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/domain"
+	"github.com/alikhanmurzayev/ugcboost/backend/internal/logger"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/service"
 )
 
@@ -55,12 +56,13 @@ type Server struct {
 	auditService AuditLogService
 	version      string
 	cookieSecure bool
+	logger       logger.Logger
 }
 
 var _ api.ServerInterface = (*Server)(nil)
 
 // NewServer creates a new Server.
-func NewServer(auth AuthService, brands BrandService, authz AuthzService, audit AuditLogService, version string, cookieSecure bool) *Server {
+func NewServer(auth AuthService, brands BrandService, authz AuthzService, audit AuditLogService, version string, cookieSecure bool, log logger.Logger) *Server {
 	return &Server{
 		authService:  auth,
 		brandService: brands,
@@ -68,5 +70,6 @@ func NewServer(auth AuthService, brands BrandService, authz AuthzService, audit 
 		auditService: audit,
 		version:      version,
 		cookieSecure: cookieSecure,
+		logger:       log,
 	}
 }

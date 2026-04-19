@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
@@ -11,6 +10,7 @@ import (
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/api"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/dbutil"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/domain"
+	"github.com/alikhanmurzayev/ugcboost/backend/internal/logger"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/middleware"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/repository"
 )
@@ -35,11 +35,12 @@ type AuthService struct {
 	tokens        TokenGenerator
 	resetNotifier ResetTokenNotifier
 	bcryptCost    int
+	logger        logger.Logger
 }
 
 // NewAuthService creates a new AuthService. resetNotifier may be nil.
-func NewAuthService(pool dbutil.Pool, repoFactory AuthRepoFactory, tokens TokenGenerator, resetNotifier ResetTokenNotifier, bcryptCost int) *AuthService {
-	return &AuthService{pool: pool, repoFactory: repoFactory, tokens: tokens, resetNotifier: resetNotifier, bcryptCost: bcryptCost}
+func NewAuthService(pool dbutil.Pool, repoFactory AuthRepoFactory, tokens TokenGenerator, resetNotifier ResetTokenNotifier, bcryptCost int, log logger.Logger) *AuthService {
+	return &AuthService{pool: pool, repoFactory: repoFactory, tokens: tokens, resetNotifier: resetNotifier, bcryptCost: bcryptCost, logger: log}
 }
 
 // LoginResult contains the result of a successful login.
@@ -205,8 +206,7 @@ func (s *AuthService) RequestPasswordReset(ctx context.Context, email string) er
 		s.resetNotifier.OnResetToken(email, raw)
 	}
 
-	// MVP: log to stdout. Email sending in Epic 3.
-	slog.Info("password reset token generated",
+	s.logger.Info(ctx, "password reset token generated",
 		"user_id", user.ID,
 		"expires_at", expiresAt,
 	)
@@ -297,7 +297,7 @@ func (s *AuthService) SeedUser(ctx context.Context, email, password, role string
 // SeedAdmin creates the admin user if it doesn't exist.
 func (s *AuthService) SeedAdmin(ctx context.Context, email, password string) error {
 	if email == "" || password == "" {
-		slog.Info("admin seed skipped: ADMIN_EMAIL or ADMIN_PASSWORD not set")
+		s.logger.Info(ctx, "admin seed skipped: ADMIN_EMAIL or ADMIN_PASSWORD not set")
 		return nil
 	}
 
@@ -308,7 +308,7 @@ func (s *AuthService) SeedAdmin(ctx context.Context, email, password string) err
 		return fmt.Errorf("check admin exists: %w", err)
 	}
 	if exists {
-		slog.Info("admin already exists", "email", email)
+		s.logger.Info(ctx, "admin already exists", "email", email)
 		return nil
 	}
 
@@ -322,7 +322,7 @@ func (s *AuthService) SeedAdmin(ctx context.Context, email, password string) err
 		return fmt.Errorf("create admin: %w", err)
 	}
 
-	slog.Info("admin user created", "email", email)
+	s.logger.Info(ctx, "admin user created", "email", email)
 	return nil
 }
 

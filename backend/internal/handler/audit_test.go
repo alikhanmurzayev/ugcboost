@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -14,6 +15,7 @@ import (
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/api"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/domain"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/handler/mocks"
+	logmocks "github.com/alikhanmurzayev/ugcboost/backend/internal/logger/mocks"
 )
 
 func newRecorder() *httptest.ResponseRecorder { return httptest.NewRecorder() }
@@ -27,7 +29,7 @@ func TestServer_ListAuditLogs(t *testing.T) {
 		authz := mocks.NewMockAuthzService(t)
 		authz.EXPECT().CanListAuditLogs(mock.Anything).Return(domain.ErrForbidden)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, "test-version", false))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, "test-version", false, logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodGet, "/audit-logs", nil)
 		require.Equal(t, http.StatusForbidden, w.Code)
 		require.Equal(t, domain.CodeForbidden, resp.Error.Code)
@@ -49,7 +51,7 @@ func TestServer_ListAuditLogs(t *testing.T) {
 				},
 			}, int64(1), nil)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, audit, "test-version", false))
+		router := newTestRouter(t, NewServer(nil, nil, authz, audit, "test-version", false, logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.AuditLogsResult](t, router, http.MethodGet, "/audit-logs", nil)
 		require.Equal(t, http.StatusOK, w.Code)
 		require.Equal(t, api.AuditLogsResult{
@@ -97,7 +99,7 @@ func TestServer_ListAuditLogs(t *testing.T) {
 				},
 			}, int64(1), nil)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, audit, "test-version", false))
+		router := newTestRouter(t, NewServer(nil, nil, authz, audit, "test-version", false, logmocks.NewMockLogger(t)))
 		url := "/audit-logs?actor_id=u-1&entity_type=brand&entity_id=e-1&action=brand_update" +
 			"&date_from=2026-01-01T00:00:00Z&date_to=2026-12-31T23:59:59Z&page=2&per_page=50"
 		w, resp := doJSON[api.AuditLogsResult](t, router, http.MethodGet, url, nil)
@@ -126,7 +128,7 @@ func TestServer_ListAuditLogs(t *testing.T) {
 		audit.EXPECT().List(mock.Anything, domain.AuditFilter{}, 1, 20).
 			Return([]*domain.AuditLog{}, int64(0), nil)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, audit, "test-version", false))
+		router := newTestRouter(t, NewServer(nil, nil, authz, audit, "test-version", false, logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.AuditLogsResult](t, router, http.MethodGet, "/audit-logs", nil)
 		require.Equal(t, http.StatusOK, w.Code)
 		require.Equal(t, api.AuditLogsResult{
@@ -146,8 +148,10 @@ func TestServer_ListAuditLogs(t *testing.T) {
 		audit := mocks.NewMockAuditLogService(t)
 		audit.EXPECT().List(mock.Anything, domain.AuditFilter{}, 1, 20).
 			Return(nil, int64(0), errors.New("db error"))
+		log := logmocks.NewMockLogger(t)
+		expectHandlerUnexpectedErrorLog(log, "/audit-logs")
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, audit, "test-version", false))
+		router := newTestRouter(t, NewServer(nil, nil, authz, audit, "test-version", false, log))
 		w, _ := doJSON[api.ErrorResponse](t, router, http.MethodGet, "/audit-logs", nil)
 		require.Equal(t, http.StatusInternalServerError, w.Code)
 	})
@@ -158,7 +162,7 @@ func TestHandleParamError(t *testing.T) {
 
 	w := newRecorder()
 	r := newGetRequest("/x")
-	HandleParamError(w, r, errors.New("invalid date"))
+	HandleParamError(logmocks.NewMockLogger(t))(w, r, errors.New("invalid date"))
 
 	require.Equal(t, http.StatusBadRequest, w.Code)
 	var resp api.ErrorResponse
@@ -167,36 +171,48 @@ func TestHandleParamError(t *testing.T) {
 	require.Contains(t, resp.Error.Message, "invalid date")
 }
 
+func newServerForRawJSON(log *logmocks.MockLogger) *Server {
+	return NewServer(nil, nil, nil, nil, "test-version", false, log)
+}
+
 func TestRawJSONToAny(t *testing.T) {
 	t.Parallel()
 
 	t.Run("nil returns nil", func(t *testing.T) {
 		t.Parallel()
-		require.Nil(t, rawJSONToAny("al-1", nil))
+		s := newServerForRawJSON(logmocks.NewMockLogger(t))
+		require.Nil(t, s.rawJSONToAny(context.Background(), "al-1", nil))
 	})
 
 	t.Run("empty returns nil", func(t *testing.T) {
 		t.Parallel()
-		require.Nil(t, rawJSONToAny("al-1", []byte{}))
+		s := newServerForRawJSON(logmocks.NewMockLogger(t))
+		require.Nil(t, s.rawJSONToAny(context.Background(), "al-1", []byte{}))
 	})
 
 	t.Run("valid JSON object is decoded", func(t *testing.T) {
 		t.Parallel()
-		got := rawJSONToAny("al-1", []byte(`{"name":"Acme","count":3}`))
+		s := newServerForRawJSON(logmocks.NewMockLogger(t))
+		got := s.rawJSONToAny(context.Background(), "al-1", []byte(`{"name":"Acme","count":3}`))
 		require.Equal(t, map[string]any{"name": "Acme", "count": float64(3)}, got)
 	})
 
 	t.Run("valid JSON array is decoded", func(t *testing.T) {
 		t.Parallel()
-		got := rawJSONToAny("al-1", []byte(`["a","b"]`))
+		s := newServerForRawJSON(logmocks.NewMockLogger(t))
+		got := s.rawJSONToAny(context.Background(), "al-1", []byte(`["a","b"]`))
 		require.Equal(t, []any{"a", "b"}, got)
 	})
 
-	t.Run("invalid JSON returns nil", func(t *testing.T) {
+	t.Run("invalid JSON logs error and returns nil", func(t *testing.T) {
 		t.Parallel()
-		// Ассерт на факт лог-вызова отложен до рефакторинга логгера
-		// (logger-refactor-brief.md). Сейчас проверяем только результат.
-		require.Nil(t, rawJSONToAny("al-1", []byte(`not json`)))
+		log := logmocks.NewMockLogger(t)
+		log.EXPECT().Error(mock.Anything, "failed to unmarshal audit log value", mock.MatchedBy(func(args []any) bool {
+			return len(args) == 4 && args[0] == "error" && args[2] == "auditLogID" && args[3] == "al-1"
+		})).Once()
+
+		s := newServerForRawJSON(log)
+		require.Nil(t, s.rawJSONToAny(context.Background(), "al-1", []byte(`not json`)))
 	})
 }
 

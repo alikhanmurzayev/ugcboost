@@ -18,5 +18,5 @@ func (s *Server) HealthCheck(w http.ResponseWriter, r *http.Request) {
 	encodeJSON(w, r, healthResponse{
 		Status:  "ok",
 		Version: s.version,
-	})
+	}, s.logger)
 }

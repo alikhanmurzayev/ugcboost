@@ -19,6 +19,7 @@ import (
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/closer"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/config"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/handler"
+	"github.com/alikhanmurzayev/ugcboost/backend/internal/logger"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/middleware"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/repository"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/service"
@@ -40,10 +41,12 @@ func run() error {
 	}
 
 	// Logger
-	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: cfg.LogLevel})))
+	slogLogger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: cfg.LogLevel}))
+	slog.SetDefault(slogLogger)
+	appLogger := logger.New(slogLogger)
 
 	// Closer (LIFO: last added = first closed)
-	cl := closer.New()
+	cl := closer.New(appLogger)
 
 	// Database
 	ctx := context.Background()
@@ -59,7 +62,7 @@ func run() error {
 	if err := pool.Ping(ctx); err != nil {
 		return fmt.Errorf("ping database: %w", err)
 	}
-	slog.Info("database connected")
+	appLogger.Info(ctx, "database connected")
 
 	// Cron scheduler
 	scheduler := cron.New(cron.WithSeconds())
@@ -69,7 +72,7 @@ func run() error {
 		<-ctx.Done()
 		return nil
 	})
-	slog.Info("cron scheduler started")
+	appLogger.Info(ctx, "cron scheduler started")
 
 	// Dependencies
 	repoFactory := repository.NewRepoFactory()
@@ -81,8 +84,8 @@ func run() error {
 		resetTokenStore = service.NewInMemoryResetTokenStore()
 	}
 
-	authSvc := service.NewAuthService(pool, repoFactory, tokenSvc, resetTokenStore, cfg.BcryptCost)
-	brandSvc := service.NewBrandService(pool, repoFactory, cfg.BcryptCost)
+	authSvc := service.NewAuthService(pool, repoFactory, tokenSvc, resetTokenStore, cfg.BcryptCost, appLogger)
+	brandSvc := service.NewBrandService(pool, repoFactory, cfg.BcryptCost, appLogger)
 	auditSvc := service.NewAuditService(pool, repoFactory)
 	authzSvc := authz.NewAuthzService(brandSvc)
 
@@ -95,16 +98,16 @@ func run() error {
 	r := chi.NewRouter()
 
 	// Global middleware
-	r.Use(middleware.Recovery)
+	r.Use(middleware.Recovery(appLogger))
 	r.Use(middleware.BodyLimit(int64(cfg.BodyLimitBytes)))
 	r.Use(middleware.RealIP)
 	r.Use(middleware.ClientIP)
 	r.Use(middleware.SecureHeaders)
 	r.Use(middleware.CORS(cfg.CORSOrigins))
-	r.Use(middleware.Logging)
+	r.Use(middleware.Logging(appLogger))
 
 	// Create server implementing ServerInterface
-	server := handler.NewServer(authSvc, brandSvc, authzSvc, auditSvc, cfg.Version, cfg.CookieSecure)
+	server := handler.NewServer(authSvc, brandSvc, authzSvc, auditSvc, cfg.Version, cfg.CookieSecure, appLogger)
 
 	// Register API routes via generated handler
 	api.HandlerWithOptions(server, api.ChiServerOptions{
@@ -112,7 +115,7 @@ func run() error {
 		Middlewares: []api.MiddlewareFunc{
 			middleware.AuthFromScopes(tokenSvc),
 		},
-		ErrorHandlerFunc: handler.HandleParamError,
+		ErrorHandlerFunc: handler.HandleParamError(appLogger),
 	})
 
 	// Test endpoints (only when ENVIRONMENT != production).
@@ -124,12 +127,12 @@ func run() error {
 			return fmt.Errorf("lookup seed admin for test endpoints: %w", err)
 		}
 
-		testHandler := handler.NewTestHandler(authSvc, brandSvc, resetTokenStore, admin.ID)
+		testHandler := handler.NewTestAPIHandler(authSvc, brandSvc, resetTokenStore, admin.ID, appLogger)
 		testapi.HandlerWithOptions(testHandler, testapi.ChiServerOptions{
 			BaseRouter:       r,
-			ErrorHandlerFunc: handler.HandleParamError,
+			ErrorHandlerFunc: handler.HandleParamError(appLogger),
 		})
-		slog.Warn("TEST ENDPOINTS ENABLED — do not use in production")
+		appLogger.Warn(ctx, "TEST ENDPOINTS ENABLED — do not use in production")
 	}
 
 	// Server
@@ -147,7 +150,7 @@ func run() error {
 	// Start server
 	errCh := make(chan error, 1)
 	go func() {
-		slog.Info("server starting", "port", cfg.Port)
+		appLogger.Info(ctx, "server starting", "port", cfg.Port)
 		errCh <- srv.ListenAndServe()
 	}()
 
@@ -156,7 +159,7 @@ func run() error {
 
 	select {
 	case sig := <-quit:
-		slog.Info("shutting down", "signal", sig.String())
+		appLogger.Info(ctx, "shutting down", "signal", sig.String())
 	case err := <-errCh:
 		if err != nil && !errors.Is(err, http.ErrServerClosed) {
 			return fmt.Errorf("server error: %w", err)
