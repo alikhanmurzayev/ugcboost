@@ -14,7 +14,7 @@ import (
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/middleware/mocks"
 )
 
-func setRole(ctx context.Context, role string) context.Context {
+func setRole(ctx context.Context, role api.UserRole) context.Context {
 	return context.WithValue(ctx, ContextKeyRole, role)
 }
 
@@ -39,7 +39,8 @@ func TestAuth_ValidateAccessToken(t *testing.T) {
 		v := mocks.NewMockTokenValidator(t)
 		v.EXPECT().ValidateAccessToken("good-token").Return("user-1", "admin", nil)
 
-		var gotUserID, gotRole string
+		var gotUserID string
+		var gotRole api.UserRole
 		handler := Auth(v)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			gotUserID = UserIDFromContext(r.Context())
 			gotRole = RoleFromContext(r.Context())
@@ -53,7 +54,7 @@ func TestAuth_ValidateAccessToken(t *testing.T) {
 
 		require.Equal(t, http.StatusOK, w.Code)
 		require.Equal(t, "user-1", gotUserID)
-		require.Equal(t, "admin", gotRole)
+		require.Equal(t, api.Admin, gotRole)
 	})
 
 	t.Run("missing header", func(t *testing.T) {
@@ -134,10 +135,10 @@ func TestRequireRole_Check(t *testing.T) {
 
 	t.Run("allowed", func(t *testing.T) {
 		t.Parallel()
-		handler := RequireRole("admin", "brand_manager")(okHandler())
+		handler := RequireRole(api.Admin, api.BrandManager)(okHandler())
 
 		r := httptest.NewRequest("GET", "/", nil)
-		ctx := setRole(r.Context(), "admin")
+		ctx := setRole(r.Context(), api.Admin)
 		w := httptest.NewRecorder()
 		handler.ServeHTTP(w, r.WithContext(ctx))
 
@@ -146,10 +147,10 @@ func TestRequireRole_Check(t *testing.T) {
 
 	t.Run("denied", func(t *testing.T) {
 		t.Parallel()
-		handler := RequireRole("admin")(okHandler())
+		handler := RequireRole(api.Admin)(okHandler())
 
 		r := httptest.NewRequest("GET", "/", nil)
-		ctx := setRole(r.Context(), "brand_manager")
+		ctx := setRole(r.Context(), api.BrandManager)
 		w := httptest.NewRecorder()
 		handler.ServeHTTP(w, r.WithContext(ctx))
 
@@ -160,7 +161,7 @@ func TestRequireRole_Check(t *testing.T) {
 
 	t.Run("empty role", func(t *testing.T) {
 		t.Parallel()
-		handler := RequireRole("admin")(okHandler())
+		handler := RequireRole(api.Admin)(okHandler())
 
 		r := httptest.NewRequest("GET", "/", nil)
 		w := httptest.NewRecorder()
@@ -177,6 +178,6 @@ func TestContextHelpers_Empty(t *testing.T) {
 		t.Parallel()
 		r := httptest.NewRequest("GET", "/", nil)
 		require.Equal(t, "", UserIDFromContext(r.Context()))
-		require.Equal(t, "", RoleFromContext(r.Context()))
+		require.Equal(t, api.UserRole(""), RoleFromContext(r.Context()))
 	})
 }

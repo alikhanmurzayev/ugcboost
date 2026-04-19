@@ -9,6 +9,15 @@
        lint-backend lint-web lint-tma lint-landing \
        generate-api generate-mocks
 
+# ── Build-time version stamping ───────────────────────────────────
+# GIT_COMMIT is baked into the backend binary via -ldflags and surfaced
+# by /healthz. CI (GitHub Actions) passes its own GIT_COMMIT through
+# docker/build-push-action build-args — this Makefile variable is used
+# only for local `make build-backend` / `make start-backend`.
+
+GIT_COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo dev)
+export GIT_COMMIT
+
 
 # ── Infrastructure ────────────────────────────────────────────────
 
@@ -64,7 +73,7 @@ stop-landing:
 # ── Run locally (dev mode) ────────────────────────────────────────
 
 run-backend:
-	cd backend && go run -race ./cmd/api
+	cd backend && go run -ldflags "-X 'github.com/alikhanmurzayev/ugcboost/backend/internal/handler.version=$(GIT_COMMIT)'" -race ./cmd/api
 
 run-web:
 	cd frontend/web && npm run dev
@@ -78,7 +87,7 @@ run-landing:
 # ── Build ─────────────────────────────────────────────────────────
 
 build-backend:
-	cd backend && go build ./...
+	cd backend && go build -ldflags "-X 'github.com/alikhanmurzayev/ugcboost/backend/internal/handler.version=$(GIT_COMMIT)'" ./...
 
 build-web:
 	cd frontend/web && npm run build
@@ -131,17 +140,20 @@ lint-landing:
 generate-api:
 	oapi-codegen -package api -generate chi-server,models \
 		-o backend/internal/api/server.gen.go \
-		api/openapi.yaml
-	cd frontend/web && npx openapi-typescript ../../api/openapi.yaml -o src/api/generated/schema.ts
-	cd frontend/tma && npx openapi-typescript ../../api/openapi.yaml -o src/api/generated/schema.ts
+		backend/api/openapi.yaml
+	oapi-codegen -package testapi -generate chi-server,models \
+		-o backend/internal/testapi/server.gen.go \
+		backend/api/openapi-test.yaml
+	cd frontend/web && npx openapi-typescript ../../backend/api/openapi.yaml -o src/api/generated/schema.ts
+	cd frontend/tma && npx openapi-typescript ../../backend/api/openapi.yaml -o src/api/generated/schema.ts
 	oapi-codegen -package apiclient -generate types \
-		-o backend/e2e/apiclient/types.gen.go api/openapi.yaml
+		-o backend/e2e/apiclient/types.gen.go backend/api/openapi.yaml
 	oapi-codegen -package apiclient -generate client \
-		-o backend/e2e/apiclient/client.gen.go api/openapi.yaml
+		-o backend/e2e/apiclient/client.gen.go backend/api/openapi.yaml
 	oapi-codegen -package testclient -generate types \
-		-o backend/e2e/testclient/types.gen.go api/openapi-test.yaml
+		-o backend/e2e/testclient/types.gen.go backend/api/openapi-test.yaml
 	oapi-codegen -package testclient -generate client \
-		-o backend/e2e/testclient/client.gen.go api/openapi-test.yaml
+		-o backend/e2e/testclient/client.gen.go backend/api/openapi-test.yaml
 
 generate-mocks:
 	cd backend && mockery

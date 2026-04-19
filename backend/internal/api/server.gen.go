@@ -45,6 +45,14 @@ type APIError struct {
 	Message string `json:"message"`
 }
 
+// AssignManagerData defines model for AssignManagerData.
+type AssignManagerData struct {
+	Email        string  `json:"email"`
+	Role         string  `json:"role"`
+	TempPassword *string `json:"tempPassword,omitempty"`
+	UserId       string  `json:"userId"`
+}
+
 // AssignManagerRequest defines model for AssignManagerRequest.
 type AssignManagerRequest struct {
 	Email string `json:"email"`
@@ -52,12 +60,7 @@ type AssignManagerRequest struct {
 
 // AssignManagerResult defines model for AssignManagerResult.
 type AssignManagerResult struct {
-	Data struct {
-		Email        string  `json:"email"`
-		Role         string  `json:"role"`
-		TempPassword *string `json:"tempPassword,omitempty"`
-		UserId       string  `json:"userId"`
-	} `json:"data"`
+	Data AssignManagerData `json:"data"`
 }
 
 // AuditLogEntry defines model for AuditLogEntry.
@@ -76,12 +79,7 @@ type AuditLogEntry struct {
 
 // AuditLogsResult defines model for AuditLogsResult.
 type AuditLogsResult struct {
-	Data struct {
-		Logs    []AuditLogEntry `json:"logs"`
-		Page    int             `json:"page"`
-		PerPage int             `json:"perPage"`
-		Total   int             `json:"total"`
-	} `json:"data"`
+	Data ListAuditLogsData `json:"data"`
 }
 
 // Brand defines model for Brand.
@@ -91,6 +89,16 @@ type Brand struct {
 	LogoUrl   *string   `json:"logoUrl,omitempty"`
 	Name      string    `json:"name"`
 	UpdatedAt time.Time `json:"updatedAt"`
+}
+
+// BrandDetailData defines model for BrandDetailData.
+type BrandDetailData struct {
+	CreatedAt time.Time     `json:"createdAt"`
+	Id        string        `json:"id"`
+	LogoUrl   *string       `json:"logoUrl,omitempty"`
+	Managers  []ManagerInfo `json:"managers"`
+	Name      string        `json:"name"`
+	UpdatedAt time.Time     `json:"updatedAt"`
 }
 
 // BrandListItem defines model for BrandListItem.
@@ -121,14 +129,7 @@ type ErrorResponse struct {
 
 // GetBrandResult defines model for GetBrandResult.
 type GetBrandResult struct {
-	Data struct {
-		CreatedAt time.Time     `json:"createdAt"`
-		Id        string        `json:"id"`
-		LogoUrl   *string       `json:"logoUrl,omitempty"`
-		Managers  []ManagerInfo `json:"managers"`
-		Name      string        `json:"name"`
-		UpdatedAt time.Time     `json:"updatedAt"`
-	} `json:"data"`
+	Data BrandDetailData `json:"data"`
 }
 
 // HealthResponse defines model for HealthResponse.
@@ -137,11 +138,28 @@ type HealthResponse struct {
 	Version string `json:"version"`
 }
 
+// ListAuditLogsData defines model for ListAuditLogsData.
+type ListAuditLogsData struct {
+	Logs    []AuditLogEntry `json:"logs"`
+	Page    int             `json:"page"`
+	PerPage int             `json:"perPage"`
+	Total   int             `json:"total"`
+}
+
+// ListBrandsData defines model for ListBrandsData.
+type ListBrandsData struct {
+	Brands []BrandListItem `json:"brands"`
+}
+
 // ListBrandsResult defines model for ListBrandsResult.
 type ListBrandsResult struct {
-	Data struct {
-		Brands []BrandListItem `json:"brands"`
-	} `json:"data"`
+	Data ListBrandsData `json:"data"`
+}
+
+// LoginData defines model for LoginData.
+type LoginData struct {
+	AccessToken string `json:"accessToken"`
+	User        User   `json:"user"`
 }
 
 // LoginRequest defines model for LoginRequest.
@@ -152,10 +170,7 @@ type LoginRequest struct {
 
 // LoginResult defines model for LoginResult.
 type LoginResult struct {
-	Data struct {
-		AccessToken string `json:"accessToken"`
-		User        User   `json:"user"`
-	} `json:"data"`
+	Data LoginData `json:"data"`
 }
 
 // ManagerInfo defines model for ManagerInfo.
@@ -165,11 +180,14 @@ type ManagerInfo struct {
 	UserId     string    `json:"userId"`
 }
 
+// MessageData defines model for MessageData.
+type MessageData struct {
+	Message string `json:"message"`
+}
+
 // MessageResponse defines model for MessageResponse.
 type MessageResponse struct {
-	Data struct {
-		Message string `json:"message"`
-	} `json:"data"`
+	Data MessageData `json:"data"`
 }
 
 // PasswordResetBody defines model for PasswordResetBody.

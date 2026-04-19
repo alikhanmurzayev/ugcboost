@@ -8,7 +8,6 @@ import (
 	"context"
 
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/domain"
-	"github.com/alikhanmurzayev/ugcboost/backend/internal/service"
 	mock "github.com/stretchr/testify/mock"
 )
 
@@ -121,63 +120,6 @@ func (_c *MockAuditLogService_List_Call) Return(auditLogs []*domain.AuditLog, n 
 }
 
 func (_c *MockAuditLogService_List_Call) RunAndReturn(run func(ctx context.Context, f domain.AuditFilter, page int, perPage int) ([]*domain.AuditLog, int64, error)) *MockAuditLogService_List_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
-// Log provides a mock function for the type MockAuditLogService
-func (_mock *MockAuditLogService) Log(ctx context.Context, entry service.AuditEntry) error {
-	ret := _mock.Called(ctx, entry)
-
-	if len(ret) == 0 {
-		panic("no return value specified for Log")
-	}
-
-	var r0 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, service.AuditEntry) error); ok {
-		r0 = returnFunc(ctx, entry)
-	} else {
-		r0 = ret.Error(0)
-	}
-	return r0
-}
-
-// MockAuditLogService_Log_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Log'
-type MockAuditLogService_Log_Call struct {
-	*mock.Call
-}
-
-// Log is a helper method to define mock.On call
-//   - ctx context.Context
-//   - entry service.AuditEntry
-func (_e *MockAuditLogService_Expecter) Log(ctx interface{}, entry interface{}) *MockAuditLogService_Log_Call {
-	return &MockAuditLogService_Log_Call{Call: _e.mock.On("Log", ctx, entry)}
-}
-
-func (_c *MockAuditLogService_Log_Call) Run(run func(ctx context.Context, entry service.AuditEntry)) *MockAuditLogService_Log_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 context.Context
-		if args[0] != nil {
-			arg0 = args[0].(context.Context)
-		}
-		var arg1 service.AuditEntry
-		if args[1] != nil {
-			arg1 = args[1].(service.AuditEntry)
-		}
-		run(
-			arg0,
-			arg1,
-		)
-	})
-	return _c
-}
-
-func (_c *MockAuditLogService_Log_Call) Return(err error) *MockAuditLogService_Log_Call {
-	_c.Call.Return(err)
-	return _c
-}
-
-func (_c *MockAuditLogService_Log_Call) RunAndReturn(run func(ctx context.Context, entry service.AuditEntry) error) *MockAuditLogService_Log_Call {
 	_c.Call.Return(run)
 	return _c
 }

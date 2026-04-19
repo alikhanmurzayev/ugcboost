@@ -1,5 +1,7 @@
 FROM golang:1.25-alpine AS builder
 
+ARG GIT_COMMIT=dev
+
 RUN wget -O /usr/local/bin/goose https://github.com/pressly/goose/releases/download/v3.27.0/goose_linux_x86_64 \
     && chmod +x /usr/local/bin/goose
 
@@ -10,7 +12,9 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 COPY . .
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
-    CGO_ENABLED=0 go build -ldflags="-s -w" -o /api ./cmd/api
+    CGO_ENABLED=0 go build \
+        -ldflags="-s -w -X 'github.com/alikhanmurzayev/ugcboost/backend/internal/handler.version=${GIT_COMMIT}'" \
+        -o /api ./cmd/api
 
 FROM alpine:3.20
 RUN apk --no-cache add ca-certificates tzdata && \

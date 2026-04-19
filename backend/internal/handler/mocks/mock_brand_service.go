@@ -118,75 +118,6 @@ func (_c *MockBrandService_AssignManager_Call) RunAndReturn(run func(ctx context
 	return _c
 }
 
-// CanViewBrand provides a mock function for the type MockBrandService
-func (_mock *MockBrandService) CanViewBrand(ctx context.Context, userID string, role string, brandID string) error {
-	ret := _mock.Called(ctx, userID, role, brandID)
-
-	if len(ret) == 0 {
-		panic("no return value specified for CanViewBrand")
-	}
-
-	var r0 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, string) error); ok {
-		r0 = returnFunc(ctx, userID, role, brandID)
-	} else {
-		r0 = ret.Error(0)
-	}
-	return r0
-}
-
-// MockBrandService_CanViewBrand_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'CanViewBrand'
-type MockBrandService_CanViewBrand_Call struct {
-	*mock.Call
-}
-
-// CanViewBrand is a helper method to define mock.On call
-//   - ctx context.Context
-//   - userID string
-//   - role string
-//   - brandID string
-func (_e *MockBrandService_Expecter) CanViewBrand(ctx interface{}, userID interface{}, role interface{}, brandID interface{}) *MockBrandService_CanViewBrand_Call {
-	return &MockBrandService_CanViewBrand_Call{Call: _e.mock.On("CanViewBrand", ctx, userID, role, brandID)}
-}
-
-func (_c *MockBrandService_CanViewBrand_Call) Run(run func(ctx context.Context, userID string, role string, brandID string)) *MockBrandService_CanViewBrand_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 context.Context
-		if args[0] != nil {
-			arg0 = args[0].(context.Context)
-		}
-		var arg1 string
-		if args[1] != nil {
-			arg1 = args[1].(string)
-		}
-		var arg2 string
-		if args[2] != nil {
-			arg2 = args[2].(string)
-		}
-		var arg3 string
-		if args[3] != nil {
-			arg3 = args[3].(string)
-		}
-		run(
-			arg0,
-			arg1,
-			arg2,
-			arg3,
-		)
-	})
-	return _c
-}
-
-func (_c *MockBrandService_CanViewBrand_Call) Return(err error) *MockBrandService_CanViewBrand_Call {
-	_c.Call.Return(err)
-	return _c
-}
-
-func (_c *MockBrandService_CanViewBrand_Call) RunAndReturn(run func(ctx context.Context, userID string, role string, brandID string) error) *MockBrandService_CanViewBrand_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
 // CreateBrand provides a mock function for the type MockBrandService
 func (_mock *MockBrandService) CreateBrand(ctx context.Context, name string, logoURL *string) (*domain.Brand, error) {
 	ret := _mock.Called(ctx, name, logoURL)
@@ -387,8 +318,8 @@ func (_c *MockBrandService_GetBrand_Call) RunAndReturn(run func(ctx context.Cont
 }
 
 // ListBrands provides a mock function for the type MockBrandService
-func (_mock *MockBrandService) ListBrands(ctx context.Context, userID string, role string) ([]*domain.BrandListItem, error) {
-	ret := _mock.Called(ctx, userID, role)
+func (_mock *MockBrandService) ListBrands(ctx context.Context, managerID *string) ([]*domain.BrandListItem, error) {
+	ret := _mock.Called(ctx, managerID)
 
 	if len(ret) == 0 {
 		panic("no return value specified for ListBrands")
@@ -396,18 +327,18 @@ func (_mock *MockBrandService) ListBrands(ctx context.Context, userID string, ro
 
 	var r0 []*domain.BrandListItem
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) ([]*domain.BrandListItem, error)); ok {
-		return returnFunc(ctx, userID, role)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, *string) ([]*domain.BrandListItem, error)); ok {
+		return returnFunc(ctx, managerID)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) []*domain.BrandListItem); ok {
-		r0 = returnFunc(ctx, userID, role)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, *string) []*domain.BrandListItem); ok {
+		r0 = returnFunc(ctx, managerID)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).([]*domain.BrandListItem)
 		}
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string) error); ok {
-		r1 = returnFunc(ctx, userID, role)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, *string) error); ok {
+		r1 = returnFunc(ctx, managerID)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -421,30 +352,24 @@ type MockBrandService_ListBrands_Call struct {
 
 // ListBrands is a helper method to define mock.On call
 //   - ctx context.Context
-//   - userID string
-//   - role string
-func (_e *MockBrandService_Expecter) ListBrands(ctx interface{}, userID interface{}, role interface{}) *MockBrandService_ListBrands_Call {
-	return &MockBrandService_ListBrands_Call{Call: _e.mock.On("ListBrands", ctx, userID, role)}
+//   - managerID *string
+func (_e *MockBrandService_Expecter) ListBrands(ctx interface{}, managerID interface{}) *MockBrandService_ListBrands_Call {
+	return &MockBrandService_ListBrands_Call{Call: _e.mock.On("ListBrands", ctx, managerID)}
 }
 
-func (_c *MockBrandService_ListBrands_Call) Run(run func(ctx context.Context, userID string, role string)) *MockBrandService_ListBrands_Call {
+func (_c *MockBrandService_ListBrands_Call) Run(run func(ctx context.Context, managerID *string)) *MockBrandService_ListBrands_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
 			arg0 = args[0].(context.Context)
 		}
-		var arg1 string
+		var arg1 *string
 		if args[1] != nil {
-			arg1 = args[1].(string)
-		}
-		var arg2 string
-		if args[2] != nil {
-			arg2 = args[2].(string)
+			arg1 = args[1].(*string)
 		}
 		run(
 			arg0,
 			arg1,
-			arg2,
 		)
 	})
 	return _c
@@ -455,7 +380,7 @@ func (_c *MockBrandService_ListBrands_Call) Return(brandListItems []*domain.Bran
 	return _c
 }
 
-func (_c *MockBrandService_ListBrands_Call) RunAndReturn(run func(ctx context.Context, userID string, role string) ([]*domain.BrandListItem, error)) *MockBrandService_ListBrands_Call {
+func (_c *MockBrandService_ListBrands_Call) RunAndReturn(run func(ctx context.Context, managerID *string) ([]*domain.BrandListItem, error)) *MockBrandService_ListBrands_Call {
 	_c.Call.Return(run)
 	return _c
 }

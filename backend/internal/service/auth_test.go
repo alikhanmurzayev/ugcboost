@@ -48,11 +48,20 @@ func TestAuthService_Login(t *testing.T) {
 		pool := dbmocks.NewMockPool(t)
 		factory := svcmocks.NewMockAuthRepoFactory(t)
 		repo := repomocks.NewMockUserRepo(t)
+		audit := repomocks.NewMockAuditRepo(t)
 		tokens := svcmocks.NewMockTokenGenerator(t)
 
+		// Initial read outside tx, then tx for save + audit.
 		factory.EXPECT().NewUserRepo(mock.Anything).Return(repo)
 		repo.EXPECT().GetByEmail(mock.Anything, user.Email).Return(&user, nil)
+
+		pool.EXPECT().Begin(mock.Anything).Return(testTx{}, nil)
+		factory.EXPECT().NewUserRepo(mock.Anything).Return(repo)
+		factory.EXPECT().NewAuditRepo(mock.Anything).Return(audit)
 		repo.EXPECT().SaveRefreshToken(mock.Anything, user.ID, "hash-refresh", futureTime).Return(nil)
+		audit.EXPECT().Create(mock.Anything, mock.MatchedBy(func(row repository.AuditLogRow) bool {
+			return row.Action == AuditActionLogin && row.ActorID == user.ID
+		})).Return(nil)
 
 		tokens.EXPECT().GenerateAccessToken(user.ID, user.Role).Return("mock-access-token", nil)
 		tokens.EXPECT().GenerateRefreshToken().Return("raw-refresh", "hash-refresh", futureTime, nil)
@@ -157,16 +166,22 @@ func TestAuthService_Refresh(t *testing.T) {
 func TestAuthService_Logout(t *testing.T) {
 	t.Parallel()
 
-	t.Run("success", func(t *testing.T) {
+	t.Run("success writes audit in tx", func(t *testing.T) {
 		t.Parallel()
 
 		pool := dbmocks.NewMockPool(t)
 		factory := svcmocks.NewMockAuthRepoFactory(t)
 		repo := repomocks.NewMockUserRepo(t)
+		audit := repomocks.NewMockAuditRepo(t)
 		tokens := svcmocks.NewMockTokenGenerator(t)
 
+		pool.EXPECT().Begin(mock.Anything).Return(testTx{}, nil)
 		factory.EXPECT().NewUserRepo(mock.Anything).Return(repo)
+		factory.EXPECT().NewAuditRepo(mock.Anything).Return(audit)
 		repo.EXPECT().DeleteUserRefreshTokens(mock.Anything, "user-1").Return(nil)
+		audit.EXPECT().Create(mock.Anything, mock.MatchedBy(func(row repository.AuditLogRow) bool {
+			return row.Action == AuditActionLogout && row.ActorID == "user-1"
+		})).Return(nil)
 
 		svc := NewAuthService(pool, factory, tokens, nil, testBcryptCost)
 		err := svc.Logout(context.Background(), "user-1")
@@ -178,22 +193,26 @@ func TestAuthService_Logout(t *testing.T) {
 func TestAuthService_ResetPassword(t *testing.T) {
 	t.Parallel()
 
-	t.Run("success", func(t *testing.T) {
+	t.Run("success writes audit in same tx", func(t *testing.T) {
 		t.Parallel()
 		tokenHash := HashToken("raw-reset-token")
 
 		pool := dbmocks.NewMockPool(t)
 		factory := svcmocks.NewMockAuthRepoFactory(t)
 		repo := repomocks.NewMockUserRepo(t)
+		audit := repomocks.NewMockAuditRepo(t)
 		tokens := svcmocks.NewMockTokenGenerator(t)
 
-		// WithTx: pool.Begin → testTx → callback → testTx.Commit
 		pool.EXPECT().Begin(mock.Anything).Return(testTx{}, nil)
 		factory.EXPECT().NewUserRepo(mock.Anything).Return(repo)
+		factory.EXPECT().NewAuditRepo(mock.Anything).Return(audit)
 		repo.EXPECT().ClaimResetToken(mock.Anything, tokenHash).
 			Return(&repository.PasswordResetTokenRow{ID: "rt-1", UserID: "user-1"}, nil)
 		repo.EXPECT().UpdatePassword(mock.Anything, "user-1", mock.AnythingOfType("string")).Return(nil)
 		repo.EXPECT().DeleteUserRefreshTokens(mock.Anything, "user-1").Return(nil)
+		audit.EXPECT().Create(mock.Anything, mock.MatchedBy(func(row repository.AuditLogRow) bool {
+			return row.Action == AuditActionPasswordReset && row.ActorID == "user-1"
+		})).Return(nil)
 
 		svc := NewAuthService(pool, factory, tokens, nil, testBcryptCost)
 		userID, err := svc.ResetPassword(context.Background(), "raw-reset-token", "newpass123")
@@ -209,10 +228,12 @@ func TestAuthService_ResetPassword(t *testing.T) {
 		pool := dbmocks.NewMockPool(t)
 		factory := svcmocks.NewMockAuthRepoFactory(t)
 		repo := repomocks.NewMockUserRepo(t)
+		audit := repomocks.NewMockAuditRepo(t)
 		tokens := svcmocks.NewMockTokenGenerator(t)
 
 		pool.EXPECT().Begin(mock.Anything).Return(testTx{}, nil)
 		factory.EXPECT().NewUserRepo(mock.Anything).Return(repo)
+		factory.EXPECT().NewAuditRepo(mock.Anything).Return(audit)
 		repo.EXPECT().ClaimResetToken(mock.Anything, tokenHash).
 			Return((*repository.PasswordResetTokenRow)(nil), errNotFound)
 

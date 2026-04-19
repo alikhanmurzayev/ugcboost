@@ -1,58 +1,70 @@
 package handler
 
 import (
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
 
-	"github.com/jackc/pgx/v5"
-
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/api"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/domain"
 )
 
+// encodeJSON writes v as JSON and logs (but does not fail) encoding errors.
+// All handler responses go through this helper so we never silently drop
+// encoder failures with an errcheck bypass.
+func encodeJSON(w http.ResponseWriter, r *http.Request, v any) {
+	if err := json.NewEncoder(w).Encode(v); err != nil {
+		slog.Error("failed to encode response",
+			"error", err,
+			"method", r.Method,
+			"path", r.URL.Path,
+		)
+	}
+}
+
 // respondJSON writes a JSON response with the given status code.
 // The payload should be a typed API response struct (already contains Data field).
-func respondJSON(w http.ResponseWriter, status int, v any) {
+func respondJSON(w http.ResponseWriter, r *http.Request, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(v) //nolint:errcheck
+	encodeJSON(w, r, v)
 }
 
 // respondError maps domain errors to HTTP responses.
 func respondError(w http.ResponseWriter, r *http.Request, err error) {
 	var ve *domain.ValidationError
 	if errors.As(err, &ve) {
-		writeError(w, http.StatusUnprocessableEntity, ve.Code, ve.Message)
+		writeError(w, r, http.StatusUnprocessableEntity, ve.Code, ve.Message)
 		return
 	}
 
 	var be *domain.BusinessError
 	if errors.As(err, &be) {
-		writeError(w, http.StatusConflict, be.Code, be.Message)
+		writeError(w, r, http.StatusConflict, be.Code, be.Message)
 		return
 	}
 
 	switch {
-	case errors.Is(err, domain.ErrNotFound), errors.Is(err, pgx.ErrNoRows):
-		writeError(w, http.StatusNotFound, domain.CodeNotFound, "Resource not found")
+	case errors.Is(err, domain.ErrNotFound), errors.Is(err, sql.ErrNoRows):
+		writeError(w, r, http.StatusNotFound, domain.CodeNotFound, "Resource not found")
 	case errors.Is(err, domain.ErrForbidden):
-		writeError(w, http.StatusForbidden, domain.CodeForbidden, "Access denied")
+		writeError(w, r, http.StatusForbidden, domain.CodeForbidden, "Access denied")
 	case errors.Is(err, domain.ErrUnauthorized):
-		writeError(w, http.StatusUnauthorized, domain.CodeUnauthorized, "Authentication required")
+		writeError(w, r, http.StatusUnauthorized, domain.CodeUnauthorized, "Authentication required")
 	case errors.Is(err, domain.ErrConflict), errors.Is(err, domain.ErrAlreadyExists):
-		writeError(w, http.StatusConflict, domain.CodeConflict, "Resource already exists")
+		writeError(w, r, http.StatusConflict, domain.CodeConflict, "Resource already exists")
 	default:
 		slog.Error("unexpected error", "error", err, "path", r.URL.Path)
-		writeError(w, http.StatusInternalServerError, domain.CodeInternal, "Internal server error")
+		writeError(w, r, http.StatusInternalServerError, domain.CodeInternal, "Internal server error")
 	}
 }
 
-func writeError(w http.ResponseWriter, status int, code, message string) {
+func writeError(w http.ResponseWriter, r *http.Request, status int, code, message string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(api.ErrorResponse{ //nolint:errcheck
+	encodeJSON(w, r, api.ErrorResponse{
 		Error: api.APIError{Code: code, Message: message},
 	})
 }

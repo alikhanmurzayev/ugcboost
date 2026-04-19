@@ -103,33 +103,39 @@ components:
           type: string
           enum: [admin, brand_manager]
 
+    SeedUserData:
+      type: object
+      required: [id, email, role]
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+          format: email
+        role:
+          type: string
+          enum: [admin, brand_manager]
+
     SeedUserResult:
       type: object
       required: [data]
       properties:
         data:
-          type: object
-          required: [id, email, role]
-          properties:
-            id:
-              type: string
-            email:
-              type: string
-              format: email
-            role:
-              type: string
-              enum: [admin, brand_manager]
+          $ref: "#/components/schemas/SeedUserData"
+
+    ResetTokenData:
+      type: object
+      required: [token]
+      properties:
+        token:
+          type: string
 
     ResetTokenResult:
       type: object
       required: [data]
       properties:
         data:
-          type: object
-          required: [token]
-          properties:
-            token:
-              type: string
+          $ref: "#/components/schemas/ResetTokenData"
 
     SeedBrandRequest:
       type: object
@@ -142,18 +148,21 @@ components:
           format: email
           description: If provided, assigns this user as manager (creates user if needed)
 
+    SeedBrandData:
+      type: object
+      required: [id, name]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+
     SeedBrandResult:
       type: object
       required: [data]
       properties:
         data:
-          type: object
-          required: [id, name]
-          properties:
-            id:
-              type: string
-            name:
-              type: string
+          $ref: "#/components/schemas/SeedBrandData"
 
     ErrorResponse:
       type: object

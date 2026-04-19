@@ -12,7 +12,6 @@ import (
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/api"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/domain"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/middleware"
-	"github.com/alikhanmurzayev/ugcboost/backend/internal/service"
 )
 
 // Login handles POST /auth/login
@@ -38,17 +37,8 @@ func (s *Server) Login(w http.ResponseWriter, r *http.Request) {
 
 	s.setRefreshCookie(w, result.RefreshTokenRaw, result.RefreshExpiresAt)
 
-	logAudit(r.Context(), s.auditService, service.AuditEntry{
-		ActorID: result.User.ID, ActorRole: string(result.User.Role),
-		Action: "login", EntityType: "user", EntityID: result.User.ID,
-		IPAddress: clientIP(r),
-	})
-
-	respondJSON(w, http.StatusOK, api.LoginResult{
-		Data: struct {
-			AccessToken string   `json:"accessToken"`
-			User        api.User `json:"user"`
-		}{
+	respondJSON(w, r, http.StatusOK, api.LoginResult{
+		Data: api.LoginData{
 			AccessToken: result.AccessToken,
 			User:        domainUserToAPI(result.User),
 		},
@@ -71,11 +61,8 @@ func (s *Server) RefreshToken(w http.ResponseWriter, r *http.Request) {
 
 	s.setRefreshCookie(w, result.RefreshTokenRaw, result.RefreshExpiresAt)
 
-	respondJSON(w, http.StatusOK, api.LoginResult{
-		Data: struct {
-			AccessToken string   `json:"accessToken"`
-			User        api.User `json:"user"`
-		}{
+	respondJSON(w, r, http.StatusOK, api.LoginResult{
+		Data: api.LoginData{
 			AccessToken: result.AccessToken,
 			User:        domainUserToAPI(result.User),
 		},
@@ -94,12 +81,6 @@ func (s *Server) Logout(w http.ResponseWriter, r *http.Request) {
 		slog.Error("failed to revoke refresh tokens on logout", "error", err, "userID", userID)
 	}
 
-	logAudit(r.Context(), s.auditService, service.AuditEntry{
-		ActorID: userID, ActorRole: middleware.RoleFromContext(r.Context()),
-		Action: "logout", EntityType: "user", EntityID: userID,
-		IPAddress: clientIP(r),
-	})
-
 	// Clear cookie
 	http.SetCookie(w, &http.Cookie{
 		Name:     CookieRefreshToken,
@@ -111,10 +92,8 @@ func (s *Server) Logout(w http.ResponseWriter, r *http.Request) {
 		SameSite: http.SameSiteStrictMode,
 	})
 
-	respondJSON(w, http.StatusOK, api.MessageResponse{
-		Data: struct {
-			Message string `json:"message"`
-		}{Message: "Logged out"},
+	respondJSON(w, r, http.StatusOK, api.MessageResponse{
+		Data: api.MessageData{Message: "Logged out"},
 	})
 }
 
@@ -137,10 +116,8 @@ func (s *Server) RequestPasswordReset(w http.ResponseWriter, r *http.Request) {
 		slog.Error("password reset request failed", "error", err)
 	}
 
-	respondJSON(w, http.StatusOK, api.MessageResponse{
-		Data: struct {
-			Message string `json:"message"`
-		}{Message: "If the email exists, a reset link has been sent"},
+	respondJSON(w, r, http.StatusOK, api.MessageResponse{
+		Data: api.MessageData{Message: "If the email exists, a reset link has been sent"},
 	})
 }
 
@@ -156,26 +133,18 @@ func (s *Server) ResetPassword(w http.ResponseWriter, r *http.Request) {
 		respondError(w, r, domain.NewValidationError(domain.CodeValidation, "Token is required"))
 		return
 	}
-	if len(req.NewPassword) < 6 {
+	if len(req.NewPassword) < minPasswordLength {
 		respondError(w, r, domain.NewValidationError(domain.CodeValidation, "Password must be at least 6 characters"))
 		return
 	}
 
-	resetUserID, err := s.authService.ResetPassword(r.Context(), req.Token, req.NewPassword)
-	if err != nil {
+	if _, err := s.authService.ResetPassword(r.Context(), req.Token, req.NewPassword); err != nil {
 		respondError(w, r, err)
 		return
 	}
 
-	logAudit(r.Context(), s.auditService, service.AuditEntry{
-		ActorID: resetUserID, EntityType: "user", EntityID: resetUserID,
-		Action: "password_reset", IPAddress: clientIP(r),
-	})
-
-	respondJSON(w, http.StatusOK, api.MessageResponse{
-		Data: struct {
-			Message string `json:"message"`
-		}{Message: "Password updated successfully"},
+	respondJSON(w, r, http.StatusOK, api.MessageResponse{
+		Data: api.MessageData{Message: "Password updated successfully"},
 	})
 }
 
@@ -193,7 +162,7 @@ func (s *Server) GetMe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	respondJSON(w, http.StatusOK, api.UserResponse{
+	respondJSON(w, r, http.StatusOK, api.UserResponse{
 		Data: domainUserToAPI(*user),
 	})
 }

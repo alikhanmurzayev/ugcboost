@@ -3,18 +3,14 @@ package handler
 import (
 	"encoding/json"
 	"net/http"
-	"time"
 
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/api"
-	"github.com/alikhanmurzayev/ugcboost/backend/internal/authz"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/domain"
-	"github.com/alikhanmurzayev/ugcboost/backend/internal/middleware"
-	"github.com/alikhanmurzayev/ugcboost/backend/internal/service"
 )
 
 // CreateBrand handles POST /brands
 func (s *Server) CreateBrand(w http.ResponseWriter, r *http.Request) {
-	if err := authz.RequireAdmin(r.Context()); err != nil {
+	if err := s.authzService.CanCreateBrand(r.Context()); err != nil {
 		respondError(w, r, err)
 		return
 	}
@@ -31,23 +27,25 @@ func (s *Server) CreateBrand(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	logAudit(r.Context(), s.auditService, service.AuditEntry{
-		ActorID: middleware.UserIDFromContext(r.Context()), ActorRole: middleware.RoleFromContext(r.Context()),
-		Action: "brand_create", EntityType: "brand", EntityID: brand.ID,
-		NewValue: map[string]string{"name": brand.Name}, IPAddress: clientIP(r),
-	})
-
-	respondJSON(w, http.StatusCreated, api.BrandResult{
+	respondJSON(w, r, http.StatusCreated, api.BrandResult{
 		Data: domainBrandToAPI(brand),
 	})
 }
 
 // ListBrands handles GET /brands
 func (s *Server) ListBrands(w http.ResponseWriter, r *http.Request) {
-	userID := middleware.UserIDFromContext(r.Context())
-	role := middleware.RoleFromContext(r.Context())
+	canViewAll, userID, err := s.authzService.CanListBrands(r.Context())
+	if err != nil {
+		respondError(w, r, err)
+		return
+	}
 
-	brands, err := s.brandService.ListBrands(r.Context(), userID, role)
+	var managerID *string
+	if !canViewAll {
+		managerID = &userID
+	}
+
+	brands, err := s.brandService.ListBrands(r.Context(), managerID)
 	if err != nil {
 		respondError(w, r, err)
 		return
@@ -65,19 +63,14 @@ func (s *Server) ListBrands(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	respondJSON(w, http.StatusOK, api.ListBrandsResult{
-		Data: struct {
-			Brands []api.BrandListItem `json:"brands"`
-		}{Brands: items},
+	respondJSON(w, r, http.StatusOK, api.ListBrandsResult{
+		Data: api.ListBrandsData{Brands: items},
 	})
 }
 
 // GetBrand handles GET /brands/{brandID}
 func (s *Server) GetBrand(w http.ResponseWriter, r *http.Request, brandID string) {
-	userID := middleware.UserIDFromContext(r.Context())
-	role := middleware.RoleFromContext(r.Context())
-
-	if err := s.brandService.CanViewBrand(r.Context(), userID, role, brandID); err != nil {
+	if err := s.authzService.CanViewBrand(r.Context(), brandID); err != nil {
 		respondError(w, r, err)
 		return
 	}
@@ -103,15 +96,8 @@ func (s *Server) GetBrand(w http.ResponseWriter, r *http.Request, brandID string
 		}
 	}
 
-	respondJSON(w, http.StatusOK, api.GetBrandResult{
-		Data: struct {
-			CreatedAt time.Time        `json:"createdAt"`
-			Id        string           `json:"id"`
-			LogoUrl   *string          `json:"logoUrl,omitempty"`
-			Managers  []api.ManagerInfo `json:"managers"`
-			Name      string           `json:"name"`
-			UpdatedAt time.Time        `json:"updatedAt"`
-		}{
+	respondJSON(w, r, http.StatusOK, api.GetBrandResult{
+		Data: api.BrandDetailData{
 			Id:        brand.ID,
 			Name:      brand.Name,
 			LogoUrl:   brand.LogoURL,
@@ -124,7 +110,7 @@ func (s *Server) GetBrand(w http.ResponseWriter, r *http.Request, brandID string
 
 // UpdateBrand handles PUT /brands/{brandID}
 func (s *Server) UpdateBrand(w http.ResponseWriter, r *http.Request, brandID string) {
-	if err := authz.RequireAdmin(r.Context()); err != nil {
+	if err := s.authzService.CanUpdateBrand(r.Context(), brandID); err != nil {
 		respondError(w, r, err)
 		return
 	}
@@ -141,20 +127,14 @@ func (s *Server) UpdateBrand(w http.ResponseWriter, r *http.Request, brandID str
 		return
 	}
 
-	logAudit(r.Context(), s.auditService, service.AuditEntry{
-		ActorID: middleware.UserIDFromContext(r.Context()), ActorRole: middleware.RoleFromContext(r.Context()),
-		Action: "brand_update", EntityType: "brand", EntityID: brandID,
-		NewValue: map[string]string{"name": brand.Name}, IPAddress: clientIP(r),
-	})
-
-	respondJSON(w, http.StatusOK, api.BrandResult{
+	respondJSON(w, r, http.StatusOK, api.BrandResult{
 		Data: domainBrandToAPI(brand),
 	})
 }
 
 // DeleteBrand handles DELETE /brands/{brandID}
 func (s *Server) DeleteBrand(w http.ResponseWriter, r *http.Request, brandID string) {
-	if err := authz.RequireAdmin(r.Context()); err != nil {
+	if err := s.authzService.CanDeleteBrand(r.Context(), brandID); err != nil {
 		respondError(w, r, err)
 		return
 	}
@@ -164,22 +144,14 @@ func (s *Server) DeleteBrand(w http.ResponseWriter, r *http.Request, brandID str
 		return
 	}
 
-	logAudit(r.Context(), s.auditService, service.AuditEntry{
-		ActorID: middleware.UserIDFromContext(r.Context()), ActorRole: middleware.RoleFromContext(r.Context()),
-		Action: "brand_delete", EntityType: "brand", EntityID: brandID,
-		IPAddress: clientIP(r),
-	})
-
-	respondJSON(w, http.StatusOK, api.MessageResponse{
-		Data: struct {
-			Message string `json:"message"`
-		}{Message: "Brand deleted"},
+	respondJSON(w, r, http.StatusOK, api.MessageResponse{
+		Data: api.MessageData{Message: "Brand deleted"},
 	})
 }
 
 // AssignManager handles POST /brands/{brandID}/managers
 func (s *Server) AssignManager(w http.ResponseWriter, r *http.Request, brandID string) {
-	if err := authz.RequireAdmin(r.Context()); err != nil {
+	if err := s.authzService.CanAssignManager(r.Context(), brandID); err != nil {
 		respondError(w, r, err)
 		return
 	}
@@ -196,24 +168,13 @@ func (s *Server) AssignManager(w http.ResponseWriter, r *http.Request, brandID s
 		return
 	}
 
-	logAudit(r.Context(), s.auditService, service.AuditEntry{
-		ActorID: middleware.UserIDFromContext(r.Context()), ActorRole: middleware.RoleFromContext(r.Context()),
-		Action: "manager_assign", EntityType: "brand", EntityID: brandID,
-		NewValue: map[string]string{"email": user.Email}, IPAddress: clientIP(r),
-	})
-
 	var tp *string
 	if tempPassword != "" {
 		tp = &tempPassword
 	}
 
-	respondJSON(w, http.StatusCreated, api.AssignManagerResult{
-		Data: struct {
-			Email        string  `json:"email"`
-			Role         string  `json:"role"`
-			TempPassword *string `json:"tempPassword,omitempty"`
-			UserId       string  `json:"userId"`
-		}{
+	respondJSON(w, r, http.StatusCreated, api.AssignManagerResult{
+		Data: api.AssignManagerData{
 			UserId:       user.ID,
 			Email:        user.Email,
 			Role:         string(user.Role),
@@ -224,7 +185,7 @@ func (s *Server) AssignManager(w http.ResponseWriter, r *http.Request, brandID s
 
 // RemoveManager handles DELETE /brands/{brandID}/managers/{userID}
 func (s *Server) RemoveManager(w http.ResponseWriter, r *http.Request, brandID string, userID string) {
-	if err := authz.RequireAdmin(r.Context()); err != nil {
+	if err := s.authzService.CanRemoveManager(r.Context(), brandID, userID); err != nil {
 		respondError(w, r, err)
 		return
 	}
@@ -234,16 +195,8 @@ func (s *Server) RemoveManager(w http.ResponseWriter, r *http.Request, brandID s
 		return
 	}
 
-	logAudit(r.Context(), s.auditService, service.AuditEntry{
-		ActorID: middleware.UserIDFromContext(r.Context()), ActorRole: middleware.RoleFromContext(r.Context()),
-		Action: "manager_remove", EntityType: "brand", EntityID: brandID,
-		OldValue: map[string]string{"userId": userID}, IPAddress: clientIP(r),
-	})
-
-	respondJSON(w, http.StatusOK, api.MessageResponse{
-		Data: struct {
-			Message string `json:"message"`
-		}{Message: "Manager removed"},
+	respondJSON(w, r, http.StatusOK, api.MessageResponse{
+		Data: api.MessageData{Message: "Manager removed"},
 	})
 }
 

@@ -15,12 +15,14 @@ import (
 	"github.com/robfig/cron/v3"
 
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/api"
+	"github.com/alikhanmurzayev/ugcboost/backend/internal/authz"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/closer"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/config"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/handler"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/middleware"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/repository"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/service"
+	"github.com/alikhanmurzayev/ugcboost/backend/internal/testapi"
 )
 
 func main() {
@@ -82,6 +84,7 @@ func run() error {
 	authSvc := service.NewAuthService(pool, repoFactory, tokenSvc, resetTokenStore, cfg.BcryptCost)
 	brandSvc := service.NewBrandService(pool, repoFactory, cfg.BcryptCost)
 	auditSvc := service.NewAuditService(pool, repoFactory)
+	authzSvc := authz.NewAuthzService(brandSvc)
 
 	// Seed admin
 	if err := authSvc.SeedAdmin(ctx, cfg.AdminEmail, cfg.AdminPassword); err != nil {
@@ -94,12 +97,14 @@ func run() error {
 	// Global middleware
 	r.Use(middleware.Recovery)
 	r.Use(middleware.BodyLimit(int64(cfg.BodyLimitBytes)))
+	r.Use(middleware.RealIP)
+	r.Use(middleware.ClientIP)
 	r.Use(middleware.SecureHeaders)
 	r.Use(middleware.CORS(cfg.CORSOrigins))
 	r.Use(middleware.Logging)
 
 	// Create server implementing ServerInterface
-	server := handler.NewServer(authSvc, brandSvc, auditSvc, cfg.CookieSecure)
+	server := handler.NewServer(authSvc, brandSvc, authzSvc, auditSvc, cfg.CookieSecure)
 
 	// Register API routes via generated handler
 	api.HandlerWithOptions(server, api.ChiServerOptions{
@@ -110,15 +115,20 @@ func run() error {
 		ErrorHandlerFunc: handler.HandleParamError,
 	})
 
-	// Test endpoints (only when ENVIRONMENT=local)
+	// Test endpoints (only when ENVIRONMENT != production).
+	// Seed-brand and friends impersonate the seed admin so audit rows get a
+	// valid actor FK — resolve the admin here, next to the wiring.
 	if cfg.EnableTestEndpoints {
-		testHandler := handler.NewTestHandler(authSvc, brandSvc, resetTokenStore)
-		r.Route("/test", func(r chi.Router) {
-			r.Post("/seed-user", testHandler.SeedUser)
-			r.Post("/seed-brand", testHandler.SeedBrand)
-			r.Get("/reset-tokens", testHandler.GetResetToken)
-		})
+		admin, err := authSvc.GetUserByEmail(ctx, cfg.AdminEmail)
+		if err != nil {
+			return fmt.Errorf("lookup seed admin for test endpoints: %w", err)
+		}
 
+		testHandler := handler.NewTestHandler(authSvc, brandSvc, resetTokenStore, admin.ID)
+		testapi.HandlerWithOptions(testHandler, testapi.ChiServerOptions{
+			BaseRouter:       r,
+			ErrorHandlerFunc: handler.HandleParamError,
+		})
 		slog.Warn("TEST ENDPOINTS ENABLED — do not use in production")
 	}
 

@@ -8,14 +8,17 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 
+	"github.com/alikhanmurzayev/ugcboost/backend/internal/api"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/dbutil"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/domain"
+	"github.com/alikhanmurzayev/ugcboost/backend/internal/middleware"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/repository"
 )
 
 // AuthRepoFactory creates repositories needed by AuthService.
 type AuthRepoFactory interface {
 	NewUserRepo(db dbutil.DB) repository.UserRepo
+	NewAuditRepo(db dbutil.DB) repository.AuditRepo
 }
 
 // TokenGenerator is the interface AuthService needs from the token service.
@@ -47,11 +50,12 @@ type LoginResult struct {
 	User             domain.User
 }
 
-// Login authenticates a user by email and password.
+// Login authenticates a user by email and password. On success it persists a
+// refresh token and writes a login audit entry inside the same transaction.
 func (s *AuthService) Login(ctx context.Context, email, password string) (*LoginResult, error) {
-	userRepo := s.repoFactory.NewUserRepo(s.pool)
+	readRepo := s.repoFactory.NewUserRepo(s.pool)
 
-	user, err := userRepo.GetByEmail(ctx, email)
+	user, err := readRepo.GetByEmail(ctx, email)
 	if err != nil {
 		return nil, domain.ErrUnauthorized
 	}
@@ -70,8 +74,24 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (*Login
 		return nil, fmt.Errorf("generate refresh token: %w", err)
 	}
 
-	if err := userRepo.SaveRefreshToken(ctx, user.ID, refreshHash, refreshExpires); err != nil {
-		return nil, fmt.Errorf("save refresh token: %w", err)
+	// Write refresh token + audit entry atomically. Login has no authenticated
+	// context user, so actor info for the audit row is derived from the user
+	// that just authenticated.
+	loginCtx := contextWithActor(ctx, user.ID, user.Role)
+
+	err = dbutil.WithTx(ctx, s.pool, func(tx dbutil.DB) error {
+		userRepo := s.repoFactory.NewUserRepo(tx)
+		auditRepo := s.repoFactory.NewAuditRepo(tx)
+
+		if err := userRepo.SaveRefreshToken(ctx, user.ID, refreshHash, refreshExpires); err != nil {
+			return fmt.Errorf("save refresh token: %w", err)
+		}
+
+		return writeAudit(loginCtx, auditRepo,
+			AuditActionLogin, AuditEntityTypeUser, user.ID, nil, nil)
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	return &LoginResult{
@@ -128,10 +148,29 @@ func (s *AuthService) Refresh(ctx context.Context, rawRefreshToken string) (*Ref
 	}, nil
 }
 
-// Logout invalidates all refresh tokens for the user.
+// Logout invalidates all refresh tokens for the user and records the
+// logout audit entry inside the same transaction.
 func (s *AuthService) Logout(ctx context.Context, userID string) error {
-	userRepo := s.repoFactory.NewUserRepo(s.pool)
-	return userRepo.DeleteUserRefreshTokens(ctx, userID)
+	return dbutil.WithTx(ctx, s.pool, func(tx dbutil.DB) error {
+		userRepo := s.repoFactory.NewUserRepo(tx)
+		auditRepo := s.repoFactory.NewAuditRepo(tx)
+
+		if err := userRepo.DeleteUserRefreshTokens(ctx, userID); err != nil {
+			return err
+		}
+
+		// Ensure actor info is present even if the caller supplied a bare
+		// context (e.g. background jobs). In production the auth middleware
+		// already fills these keys, but overriding with the explicit userID
+		// keeps audit rows consistent in every code path.
+		actorCtx := ctx
+		if middleware.UserIDFromContext(actorCtx) == "" {
+			actorCtx = contextWithActor(actorCtx, userID, "")
+		}
+
+		return writeAudit(actorCtx, auditRepo,
+			AuditActionLogout, AuditEntityTypeUser, userID, nil, nil)
+	})
 }
 
 // RequestPasswordReset generates a reset token. Always returns nil to prevent email enumeration.
@@ -178,6 +217,7 @@ func (s *AuthService) ResetPassword(ctx context.Context, rawToken, newPassword s
 	var userID string
 	err = dbutil.WithTx(ctx, s.pool, func(tx dbutil.DB) error {
 		userRepo := s.repoFactory.NewUserRepo(tx)
+		auditRepo := s.repoFactory.NewAuditRepo(tx)
 
 		// Atomic claim: UPDATE SET used=true...RETURNING prevents TOCTOU race
 		rt, err := userRepo.ClaimResetToken(ctx, hash)
@@ -191,7 +231,14 @@ func (s *AuthService) ResetPassword(ctx context.Context, rawToken, newPassword s
 		}
 
 		// Invalidate all refresh tokens on password change
-		return userRepo.DeleteUserRefreshTokens(ctx, userID)
+		if err := userRepo.DeleteUserRefreshTokens(ctx, userID); err != nil {
+			return err
+		}
+
+		// Actor for password reset is the user whose password just changed.
+		resetCtx := contextWithActor(ctx, userID, "")
+		return writeAudit(resetCtx, auditRepo,
+			AuditActionPasswordReset, AuditEntityTypeUser, userID, nil, nil)
 	})
 	if err != nil {
 		return "", err
@@ -204,6 +251,17 @@ func (s *AuthService) ResetPassword(ctx context.Context, rawToken, newPassword s
 func (s *AuthService) GetUser(ctx context.Context, userID string) (*domain.User, error) {
 	userRepo := s.repoFactory.NewUserRepo(s.pool)
 	row, err := userRepo.GetByID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	u := userRowToDomain(row)
+	return &u, nil
+}
+
+// GetUserByEmail returns a user by email.
+func (s *AuthService) GetUserByEmail(ctx context.Context, email string) (*domain.User, error) {
+	userRepo := s.repoFactory.NewUserRepo(s.pool)
+	row, err := userRepo.GetByEmail(ctx, email)
 	if err != nil {
 		return nil, err
 	}
@@ -249,7 +307,7 @@ func (s *AuthService) SeedAdmin(ctx context.Context, email, password string) err
 		return fmt.Errorf("hash admin password: %w", err)
 	}
 
-	_, err = userRepo.Create(ctx, email, string(hash), string(domain.RoleAdmin))
+	_, err = userRepo.Create(ctx, email, string(hash), string(api.Admin))
 	if err != nil {
 		return fmt.Errorf("create admin: %w", err)
 	}
@@ -262,7 +320,7 @@ func userRowToDomain(row *repository.UserRow) domain.User {
 	return domain.User{
 		ID:        row.ID,
 		Email:     row.Email,
-		Role:      domain.UserRole(row.Role),
+		Role:      api.UserRole(row.Role),
 		CreatedAt: row.CreatedAt,
 		UpdatedAt: row.UpdatedAt,
 	}

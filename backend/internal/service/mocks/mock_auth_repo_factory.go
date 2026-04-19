@@ -37,6 +37,59 @@ func (_m *MockAuthRepoFactory) EXPECT() *MockAuthRepoFactory_Expecter {
 	return &MockAuthRepoFactory_Expecter{mock: &_m.Mock}
 }
 
+// NewAuditRepo provides a mock function for the type MockAuthRepoFactory
+func (_mock *MockAuthRepoFactory) NewAuditRepo(db dbutil.DB) repository.AuditRepo {
+	ret := _mock.Called(db)
+
+	if len(ret) == 0 {
+		panic("no return value specified for NewAuditRepo")
+	}
+
+	var r0 repository.AuditRepo
+	if returnFunc, ok := ret.Get(0).(func(dbutil.DB) repository.AuditRepo); ok {
+		r0 = returnFunc(db)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(repository.AuditRepo)
+		}
+	}
+	return r0
+}
+
+// MockAuthRepoFactory_NewAuditRepo_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'NewAuditRepo'
+type MockAuthRepoFactory_NewAuditRepo_Call struct {
+	*mock.Call
+}
+
+// NewAuditRepo is a helper method to define mock.On call
+//   - db dbutil.DB
+func (_e *MockAuthRepoFactory_Expecter) NewAuditRepo(db interface{}) *MockAuthRepoFactory_NewAuditRepo_Call {
+	return &MockAuthRepoFactory_NewAuditRepo_Call{Call: _e.mock.On("NewAuditRepo", db)}
+}
+
+func (_c *MockAuthRepoFactory_NewAuditRepo_Call) Run(run func(db dbutil.DB)) *MockAuthRepoFactory_NewAuditRepo_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 dbutil.DB
+		if args[0] != nil {
+			arg0 = args[0].(dbutil.DB)
+		}
+		run(
+			arg0,
+		)
+	})
+	return _c
+}
+
+func (_c *MockAuthRepoFactory_NewAuditRepo_Call) Return(auditRepo repository.AuditRepo) *MockAuthRepoFactory_NewAuditRepo_Call {
+	_c.Call.Return(auditRepo)
+	return _c
+}
+
+func (_c *MockAuthRepoFactory_NewAuditRepo_Call) RunAndReturn(run func(db dbutil.DB) repository.AuditRepo) *MockAuthRepoFactory_NewAuditRepo_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // NewUserRepo provides a mock function for the type MockAuthRepoFactory
 func (_mock *MockAuthRepoFactory) NewUserRepo(db dbutil.DB) repository.UserRepo {
 	ret := _mock.Called(db)

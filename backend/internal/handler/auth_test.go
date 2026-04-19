@@ -1,87 +1,49 @@
 package handler
 
 import (
-	"context"
 	"net/http"
-	"net/http/httptest"
-	"strings"
 	"testing"
+	"time"
 
+	openapi_types "github.com/oapi-codegen/runtime/types"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	"github.com/alikhanmurzayev/ugcboost/backend/internal/api"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/domain"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/handler/mocks"
-	"github.com/alikhanmurzayev/ugcboost/backend/internal/middleware"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/service"
 )
+
+func newTestUser() domain.User {
+	return domain.User{ID: "u-1", Email: "user@example.com", Role: api.Admin}
+}
 
 func TestServer_Login(t *testing.T) {
 	t.Parallel()
 
-	t.Run("success", func(t *testing.T) {
-		t.Parallel()
-		auth := mocks.NewMockAuthService(t)
-		auth.EXPECT().Login(mock.Anything, "test@example.com", "password123").
-			Return(&service.LoginResult{
-				AccessToken:      "jwt-token",
-				RefreshTokenRaw:  "refresh-raw",
-				RefreshExpiresAt: 1234567890,
-				User:             domain.User{ID: "u-1", Email: "test@example.com", Role: domain.RoleAdmin},
-			}, nil)
-
-		s := NewServer(auth, nil, nil, false)
-		w := httptest.NewRecorder()
-		body := `{"email":"test@example.com","password":"password123"}`
-		r := httptest.NewRequest("POST", "/auth/login", strings.NewReader(body))
-		r.Header.Set("Content-Type", "application/json")
-		s.Login(w, r)
-
-		require.Equal(t, http.StatusOK, w.Code)
-
-		var refreshCookie *http.Cookie
-		for _, c := range w.Result().Cookies() {
-			if c.Name == "refresh_token" {
-				refreshCookie = c
-			}
-		}
-		require.NotNil(t, refreshCookie, "refresh_token cookie not set")
-		require.Equal(t, "refresh-raw", refreshCookie.Value)
-		require.True(t, refreshCookie.HttpOnly)
-	})
-
 	t.Run("invalid JSON", func(t *testing.T) {
 		t.Parallel()
-		s := NewServer(mocks.NewMockAuthService(t), nil, nil, false)
-		w := httptest.NewRecorder()
-		r := httptest.NewRequest("POST", "/", strings.NewReader("not json"))
-		r.Header.Set("Content-Type", "application/json")
-		s.Login(w, r)
+		auth := mocks.NewMockAuthService(t)
+		router := newTestRouter(t, NewServer(auth, nil, nil, nil, false))
+
+		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/auth/login", map[string]any{
+			"email":    "not-an-email",
+			"password": 12345, // wrong type makes decoding fail on Password string
+		})
 		require.Equal(t, http.StatusUnprocessableEntity, w.Code)
+		require.Equal(t, domain.CodeValidation, resp.Error.Code)
 	})
 
 	t.Run("missing fields", func(t *testing.T) {
 		t.Parallel()
-		s := NewServer(mocks.NewMockAuthService(t), nil, nil, false)
-		w := httptest.NewRecorder()
-		r := httptest.NewRequest("POST", "/", strings.NewReader(`{"email":"","password":""}`))
-		r.Header.Set("Content-Type", "application/json")
-		s.Login(w, r)
-		require.Equal(t, http.StatusUnprocessableEntity, w.Code)
-	})
-
-	t.Run("short password", func(t *testing.T) {
-		t.Parallel()
 		auth := mocks.NewMockAuthService(t)
-		auth.EXPECT().Login(mock.Anything, "a@b.com", "12345").
-			Return(nil, domain.ErrUnauthorized)
+		router := newTestRouter(t, NewServer(auth, nil, nil, nil, false))
 
-		s := NewServer(auth, nil, nil, false)
-		w := httptest.NewRecorder()
-		r := httptest.NewRequest("POST", "/", strings.NewReader(`{"email":"a@b.com","password":"12345"}`))
-		r.Header.Set("Content-Type", "application/json")
-		s.Login(w, r)
-		require.Equal(t, http.StatusUnauthorized, w.Code)
+		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/auth/login",
+			map[string]any{"email": "", "password": ""})
+		require.Equal(t, http.StatusUnprocessableEntity, w.Code)
+		require.Equal(t, domain.CodeValidation, resp.Error.Code)
 	})
 
 	t.Run("wrong credentials", func(t *testing.T) {
@@ -90,12 +52,12 @@ func TestServer_Login(t *testing.T) {
 		auth.EXPECT().Login(mock.Anything, "a@b.com", "wrongpass").
 			Return(nil, domain.ErrUnauthorized)
 
-		s := NewServer(auth, nil, nil, false)
-		w := httptest.NewRecorder()
-		r := httptest.NewRequest("POST", "/", strings.NewReader(`{"email":"a@b.com","password":"wrongpass"}`))
-		r.Header.Set("Content-Type", "application/json")
-		s.Login(w, r)
+		router := newTestRouter(t, NewServer(auth, nil, nil, nil, false))
+
+		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/auth/login",
+			api.LoginRequest{Email: "a@b.com", Password: "wrongpass"})
 		require.Equal(t, http.StatusUnauthorized, w.Code)
+		require.Equal(t, domain.CodeUnauthorized, resp.Error.Code)
 	})
 
 	t.Run("email normalization", func(t *testing.T) {
@@ -104,12 +66,52 @@ func TestServer_Login(t *testing.T) {
 		auth.EXPECT().Login(mock.Anything, "admin@example.com", "password123").
 			Return(nil, domain.ErrUnauthorized)
 
-		s := NewServer(auth, nil, nil, false)
-		w := httptest.NewRecorder()
-		r := httptest.NewRequest("POST", "/", strings.NewReader(`{"email":"  Admin@Example.COM  ","password":"password123"}`))
-		r.Header.Set("Content-Type", "application/json")
-		s.Login(w, r)
-		// If handler normalizes, mock will match on normalized email
+		router := newTestRouter(t, NewServer(auth, nil, nil, nil, false))
+
+		// Leading/trailing whitespace in email can't go through openapi_types.Email —
+		// send as plain map to let the handler normalise it.
+		w, _ := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/auth/login",
+			map[string]any{"email": "  Admin@Example.COM  ", "password": "password123"})
+		require.Equal(t, http.StatusUnauthorized, w.Code)
+	})
+
+	t.Run("success", func(t *testing.T) {
+		t.Parallel()
+		user := newTestUser()
+		refreshExpires := time.Now().Add(7 * 24 * time.Hour)
+
+		auth := mocks.NewMockAuthService(t)
+		auth.EXPECT().Login(mock.Anything, "user@example.com", "password123").
+			Return(&service.LoginResult{
+				AccessToken:      "jwt-token",
+				RefreshTokenRaw:  "refresh-raw",
+				RefreshExpiresAt: refreshExpires.Unix(),
+				User:             user,
+			}, nil)
+
+		router := newTestRouter(t, NewServer(auth, nil, nil, nil, false))
+
+		w, resp := doJSON[api.LoginResult](t, router, http.MethodPost, "/auth/login",
+			api.LoginRequest{Email: "user@example.com", Password: "password123"})
+
+		require.Equal(t, http.StatusOK, w.Code)
+		require.Equal(t, api.LoginResult{
+			Data: api.LoginData{
+				AccessToken: "jwt-token",
+				User:        api.User{Id: user.ID, Email: openapi_types.Email(user.Email), Role: user.Role},
+			},
+		}, resp)
+
+		var cookie *http.Cookie
+		for _, c := range w.Result().Cookies() {
+			if c.Name == CookieRefreshToken {
+				cookie = c
+			}
+		}
+		require.NotNil(t, cookie, "refresh_token cookie not set")
+		require.Equal(t, "refresh-raw", cookie.Value)
+		require.True(t, cookie.HttpOnly)
+		require.WithinDuration(t, refreshExpires, cookie.Expires, time.Second)
 	})
 }
 
@@ -118,161 +120,176 @@ func TestServer_RefreshToken(t *testing.T) {
 
 	t.Run("no cookie", func(t *testing.T) {
 		t.Parallel()
-		s := NewServer(mocks.NewMockAuthService(t), nil, nil, false)
-		w := httptest.NewRecorder()
-		r := httptest.NewRequest("POST", "/", nil)
-		s.RefreshToken(w, r)
+		auth := mocks.NewMockAuthService(t)
+		router := newTestRouter(t, NewServer(auth, nil, nil, nil, false))
+
+		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/auth/refresh", nil)
 		require.Equal(t, http.StatusUnauthorized, w.Code)
+		require.Equal(t, domain.CodeUnauthorized, resp.Error.Code)
 	})
 
 	t.Run("success", func(t *testing.T) {
 		t.Parallel()
+		user := newTestUser()
+		refreshExpires := time.Now().Add(30 * 24 * time.Hour)
+
 		auth := mocks.NewMockAuthService(t)
 		auth.EXPECT().Refresh(mock.Anything, "valid-refresh").
 			Return(&service.RefreshResult{
 				AccessToken:      "new-access",
 				RefreshTokenRaw:  "new-refresh",
-				RefreshExpiresAt: 9999999999,
-				User:             domain.User{ID: "u-1", Email: "test@example.com", Role: domain.RoleAdmin},
+				RefreshExpiresAt: refreshExpires.Unix(),
+				User:             user,
 			}, nil)
 
-		s := NewServer(auth, nil, nil, false)
-		w := httptest.NewRecorder()
-		r := httptest.NewRequest("POST", "/", nil)
-		r.AddCookie(&http.Cookie{Name: "refresh_token", Value: "valid-refresh"})
-		s.RefreshToken(w, r)
+		router := newTestRouter(t, NewServer(auth, nil, nil, nil, false))
+
+		w, resp := doJSON[api.LoginResult](t, router, http.MethodPost, "/auth/refresh", nil,
+			func(r *http.Request) {
+				r.AddCookie(&http.Cookie{Name: CookieRefreshToken, Value: "valid-refresh"})
+			})
 		require.Equal(t, http.StatusOK, w.Code)
+		require.Equal(t, "new-access", resp.Data.AccessToken)
 	})
 }
 
 func TestServer_RequestPasswordReset(t *testing.T) {
 	t.Parallel()
 
+	t.Run("empty email", func(t *testing.T) {
+		t.Parallel()
+		auth := mocks.NewMockAuthService(t)
+		router := newTestRouter(t, NewServer(auth, nil, nil, nil, false))
+
+		// openapi_types.Email refuses to marshal an empty string, so send the
+		// envelope as a plain map — it is still a typed request body.
+		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/auth/password-reset-request",
+			map[string]any{"email": ""})
+		require.Equal(t, http.StatusUnprocessableEntity, w.Code)
+		require.Equal(t, domain.CodeValidation, resp.Error.Code)
+	})
+
 	t.Run("always returns 200", func(t *testing.T) {
 		t.Parallel()
 		auth := mocks.NewMockAuthService(t)
 		auth.EXPECT().RequestPasswordReset(mock.Anything, "anyone@test.com").Return(nil)
 
-		s := NewServer(auth, nil, nil, false)
-		w := httptest.NewRecorder()
-		r := httptest.NewRequest("POST", "/", strings.NewReader(`{"email":"anyone@test.com"}`))
-		r.Header.Set("Content-Type", "application/json")
-		s.RequestPasswordReset(w, r)
-		require.Equal(t, http.StatusOK, w.Code)
-	})
+		router := newTestRouter(t, NewServer(auth, nil, nil, nil, false))
 
-	t.Run("empty email", func(t *testing.T) {
-		t.Parallel()
-		s := NewServer(mocks.NewMockAuthService(t), nil, nil, false)
-		w := httptest.NewRecorder()
-		r := httptest.NewRequest("POST", "/", strings.NewReader(`{"email":""}`))
-		r.Header.Set("Content-Type", "application/json")
-		s.RequestPasswordReset(w, r)
-		require.Equal(t, http.StatusUnprocessableEntity, w.Code)
+		w, resp := doJSON[api.MessageResponse](t, router, http.MethodPost, "/auth/password-reset-request",
+			api.PasswordResetRequestBody{Email: "anyone@test.com"})
+		require.Equal(t, http.StatusOK, w.Code)
+		require.NotEmpty(t, resp.Data.Message)
 	})
 }
 
 func TestServer_ResetPassword(t *testing.T) {
 	t.Parallel()
 
-	t.Run("success", func(t *testing.T) {
-		t.Parallel()
-		auth := mocks.NewMockAuthService(t)
-		auth.EXPECT().ResetPassword(mock.Anything, "abc", "newpass123").Return("user-1", nil)
-
-		s := NewServer(auth, nil, nil, false)
-		w := httptest.NewRecorder()
-		r := httptest.NewRequest("POST", "/", strings.NewReader(`{"token":"abc","newPassword":"newpass123"}`))
-		r.Header.Set("Content-Type", "application/json")
-		s.ResetPassword(w, r)
-		require.Equal(t, http.StatusOK, w.Code)
-	})
-
 	t.Run("missing token", func(t *testing.T) {
 		t.Parallel()
-		s := NewServer(mocks.NewMockAuthService(t), nil, nil, false)
-		w := httptest.NewRecorder()
-		r := httptest.NewRequest("POST", "/", strings.NewReader(`{"token":"","newPassword":"newpass123"}`))
-		r.Header.Set("Content-Type", "application/json")
-		s.ResetPassword(w, r)
+		auth := mocks.NewMockAuthService(t)
+		router := newTestRouter(t, NewServer(auth, nil, nil, nil, false))
+
+		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/auth/password-reset",
+			api.PasswordResetBody{Token: "", NewPassword: "newpass123"})
 		require.Equal(t, http.StatusUnprocessableEntity, w.Code)
+		require.Equal(t, domain.CodeValidation, resp.Error.Code)
 	})
 
 	t.Run("short password", func(t *testing.T) {
 		t.Parallel()
-		s := NewServer(mocks.NewMockAuthService(t), nil, nil, false)
-		w := httptest.NewRecorder()
-		r := httptest.NewRequest("POST", "/", strings.NewReader(`{"token":"abc","newPassword":"12345"}`))
-		r.Header.Set("Content-Type", "application/json")
-		s.ResetPassword(w, r)
+		auth := mocks.NewMockAuthService(t)
+		router := newTestRouter(t, NewServer(auth, nil, nil, nil, false))
+
+		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/auth/password-reset",
+			api.PasswordResetBody{Token: "abc", NewPassword: "12345"})
 		require.Equal(t, http.StatusUnprocessableEntity, w.Code)
+		require.Equal(t, domain.CodeValidation, resp.Error.Code)
+	})
+
+	t.Run("unauthorized", func(t *testing.T) {
+		t.Parallel()
+		auth := mocks.NewMockAuthService(t)
+		auth.EXPECT().ResetPassword(mock.Anything, "abc", "newpass123").Return("", domain.ErrUnauthorized)
+		router := newTestRouter(t, NewServer(auth, nil, nil, nil, false))
+
+		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/auth/password-reset",
+			api.PasswordResetBody{Token: "abc", NewPassword: "newpass123"})
+		require.Equal(t, http.StatusUnauthorized, w.Code)
+		require.Equal(t, domain.CodeUnauthorized, resp.Error.Code)
+	})
+
+	t.Run("success", func(t *testing.T) {
+		t.Parallel()
+		auth := mocks.NewMockAuthService(t)
+		auth.EXPECT().ResetPassword(mock.Anything, "abc", "newpass123").Return("user-1", nil)
+		router := newTestRouter(t, NewServer(auth, nil, nil, nil, false))
+
+		w, resp := doJSON[api.MessageResponse](t, router, http.MethodPost, "/auth/password-reset",
+			api.PasswordResetBody{Token: "abc", NewPassword: "newpass123"})
+		require.Equal(t, http.StatusOK, w.Code)
+		require.NotEmpty(t, resp.Data.Message)
 	})
 }
 
 func TestServer_Logout(t *testing.T) {
 	t.Parallel()
 
+	t.Run("no user in context", func(t *testing.T) {
+		t.Parallel()
+		auth := mocks.NewMockAuthService(t)
+		router := newTestRouter(t, NewServer(auth, nil, nil, nil, false))
+
+		w, _ := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/auth/logout", nil)
+		require.Equal(t, http.StatusUnauthorized, w.Code)
+	})
+
 	t.Run("success", func(t *testing.T) {
 		t.Parallel()
 		auth := mocks.NewMockAuthService(t)
-		auth.EXPECT().Logout(mock.Anything, "user-1").Return(nil)
+		auth.EXPECT().Logout(mock.Anything, "u-admin").Return(nil)
+		router := newTestRouter(t, NewServer(auth, nil, nil, nil, false))
 
-		s := NewServer(auth, nil, nil, false)
-		w := httptest.NewRecorder()
-		r := httptest.NewRequest("POST", "/", nil)
-		ctx := context.WithValue(r.Context(), middleware.ContextKeyUserID, "user-1")
-		ctx = context.WithValue(ctx, middleware.ContextKeyRole, "admin")
-		r = r.WithContext(ctx)
-		s.Logout(w, r)
+		w, resp := doJSON[api.MessageResponse](t, router, http.MethodPost, "/auth/logout", nil, withAdminCtx)
 		require.Equal(t, http.StatusOK, w.Code)
+		require.NotEmpty(t, resp.Data.Message)
 
-		// Verify refresh cookie is cleared
-		var refreshCookie *http.Cookie
+		var cookie *http.Cookie
 		for _, c := range w.Result().Cookies() {
-			if c.Name == "refresh_token" {
-				refreshCookie = c
+			if c.Name == CookieRefreshToken {
+				cookie = c
 			}
 		}
-		require.NotNil(t, refreshCookie)
-		require.Equal(t, "", refreshCookie.Value)
-		require.Equal(t, -1, refreshCookie.MaxAge)
-	})
-
-	t.Run("no user in context", func(t *testing.T) {
-		t.Parallel()
-		s := NewServer(mocks.NewMockAuthService(t), nil, nil, false)
-		w := httptest.NewRecorder()
-		r := httptest.NewRequest("POST", "/", nil)
-		s.Logout(w, r)
-		require.Equal(t, http.StatusUnauthorized, w.Code)
+		require.NotNil(t, cookie)
+		require.Equal(t, "", cookie.Value)
+		require.Equal(t, -1, cookie.MaxAge)
 	})
 }
 
 func TestServer_GetMe(t *testing.T) {
 	t.Parallel()
 
+	t.Run("no user in context", func(t *testing.T) {
+		t.Parallel()
+		auth := mocks.NewMockAuthService(t)
+		router := newTestRouter(t, NewServer(auth, nil, nil, nil, false))
+
+		w, _ := doJSON[api.ErrorResponse](t, router, http.MethodGet, "/auth/me", nil)
+		require.Equal(t, http.StatusUnauthorized, w.Code)
+	})
+
 	t.Run("success", func(t *testing.T) {
 		t.Parallel()
 		auth := mocks.NewMockAuthService(t)
-		auth.EXPECT().GetUser(mock.Anything, "user-1").
-			Return(&domain.User{ID: "user-1", Email: "test@example.com", Role: domain.RoleAdmin}, nil)
+		user := newTestUser()
+		auth.EXPECT().GetUser(mock.Anything, "u-admin").Return(&user, nil)
+		router := newTestRouter(t, NewServer(auth, nil, nil, nil, false))
 
-		s := NewServer(auth, nil, nil, false)
-		w := httptest.NewRecorder()
-		r := httptest.NewRequest("GET", "/", nil)
-		ctx := context.WithValue(r.Context(), middleware.ContextKeyUserID, "user-1")
-		ctx = context.WithValue(ctx, middleware.ContextKeyRole, "admin")
-		r = r.WithContext(ctx)
-		s.GetMe(w, r)
+		w, resp := doJSON[api.UserResponse](t, router, http.MethodGet, "/auth/me", nil, withAdminCtx)
 		require.Equal(t, http.StatusOK, w.Code)
-	})
-
-	t.Run("no user in context", func(t *testing.T) {
-		t.Parallel()
-		s := NewServer(mocks.NewMockAuthService(t), nil, nil, false)
-		w := httptest.NewRecorder()
-		r := httptest.NewRequest("GET", "/", nil)
-		s.GetMe(w, r)
-		require.Equal(t, http.StatusUnauthorized, w.Code)
+		require.Equal(t, api.UserResponse{
+			Data: api.User{Id: user.ID, Email: openapi_types.Email(user.Email), Role: user.Role},
+		}, resp)
 	})
 }

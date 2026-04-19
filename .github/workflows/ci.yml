@@ -154,7 +154,10 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Set image tag
         id: tags
-        run: echo "sha=sha-$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+        run: |
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          echo "sha=sha-${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+          echo "commit=${SHORT_SHA}" >> "$GITHUB_OUTPUT"
       - name: Build & push
         uses: docker/build-push-action@v6
         with:
@@ -163,6 +166,8 @@ jobs:
           push: true
           cache-from: type=gha,scope=${{ matrix.image }}
           cache-to: type=gha,scope=${{ matrix.image }},mode=max
+          build-args: |
+            GIT_COMMIT=${{ steps.tags.outputs.commit }}
           tags: |
             ${{ env.IMAGE_PREFIX }}/${{ matrix.image }}:staging
             ${{ env.IMAGE_PREFIX }}/${{ matrix.image }}:${{ steps.tags.outputs.sha }}

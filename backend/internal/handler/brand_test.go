@@ -1,270 +1,291 @@
 package handler
 
 import (
-	"context"
 	"net/http"
-	"net/http/httptest"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	"github.com/alikhanmurzayev/ugcboost/backend/internal/api"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/domain"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/handler/mocks"
-	"github.com/alikhanmurzayev/ugcboost/backend/internal/middleware"
 )
-
-// adminContext creates a request context with admin user credentials.
-func adminContext(r *http.Request) *http.Request {
-	ctx := context.WithValue(r.Context(), middleware.ContextKeyUserID, "u-1")
-	ctx = context.WithValue(ctx, middleware.ContextKeyRole, "admin")
-	return r.WithContext(ctx)
-}
-
-// managerContext creates a request context with brand_manager user credentials.
-func managerContext(r *http.Request) *http.Request {
-	ctx := context.WithValue(r.Context(), middleware.ContextKeyUserID, "u-1")
-	ctx = context.WithValue(ctx, middleware.ContextKeyRole, "brand_manager")
-	return r.WithContext(ctx)
-}
 
 func TestServer_CreateBrand(t *testing.T) {
 	t.Parallel()
 
-	t.Run("success", func(t *testing.T) {
-		t.Parallel()
-		brands := mocks.NewMockBrandService(t)
-		brands.EXPECT().CreateBrand(mock.Anything, "Test Brand", (*string)(nil)).
-			Return(&domain.Brand{ID: "b-1", Name: "Test Brand"}, nil)
-
-		s := NewServer(nil, brands, nil, false)
-		w := httptest.NewRecorder()
-		r := httptest.NewRequest("POST", "/", strings.NewReader(`{"name":"Test Brand"}`))
-		r.Header.Set("Content-Type", "application/json")
-		r = adminContext(r)
-		s.CreateBrand(w, r)
-		require.Equal(t, http.StatusCreated, w.Code)
-	})
-
 	t.Run("forbidden for manager", func(t *testing.T) {
 		t.Parallel()
-		s := NewServer(nil, nil, nil, false)
-		w := httptest.NewRecorder()
-		r := httptest.NewRequest("POST", "/", strings.NewReader(`{"name":"Test"}`))
-		r.Header.Set("Content-Type", "application/json")
-		r = managerContext(r)
-		s.CreateBrand(w, r)
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanCreateBrand(mock.Anything).Return(domain.ErrForbidden)
+
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, false))
+		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/brands",
+			api.CreateBrandRequest{Name: "Test"})
 		require.Equal(t, http.StatusForbidden, w.Code)
+		require.Equal(t, domain.CodeForbidden, resp.Error.Code)
 	})
 
 	t.Run("invalid JSON", func(t *testing.T) {
 		t.Parallel()
-		s := NewServer(nil, nil, nil, false)
-		w := httptest.NewRecorder()
-		r := httptest.NewRequest("POST", "/", strings.NewReader("not json"))
-		r.Header.Set("Content-Type", "application/json")
-		r = adminContext(r)
-		s.CreateBrand(w, r)
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanCreateBrand(mock.Anything).Return(nil)
+
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, false))
+		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/brands",
+			map[string]any{"name": 123})
 		require.Equal(t, http.StatusUnprocessableEntity, w.Code)
+		require.Equal(t, domain.CodeValidation, resp.Error.Code)
 	})
 
-	t.Run("validation error", func(t *testing.T) {
+	t.Run("validation error from service", func(t *testing.T) {
 		t.Parallel()
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanCreateBrand(mock.Anything).Return(nil)
 		brands := mocks.NewMockBrandService(t)
 		brands.EXPECT().CreateBrand(mock.Anything, "", (*string)(nil)).
-			Return((*domain.Brand)(nil), domain.NewValidationError("VALIDATION_ERROR", "Brand name is required"))
+			Return((*domain.Brand)(nil), domain.NewValidationError(domain.CodeValidation, "Brand name is required"))
 
-		s := NewServer(nil, brands, nil, false)
-		w := httptest.NewRecorder()
-		r := httptest.NewRequest("POST", "/", strings.NewReader(`{"name":""}`))
-		r.Header.Set("Content-Type", "application/json")
-		r = adminContext(r)
-		s.CreateBrand(w, r)
+		router := newTestRouter(t, NewServer(nil, brands, authz, nil, false))
+		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/brands",
+			api.CreateBrandRequest{Name: ""})
 		require.Equal(t, http.StatusUnprocessableEntity, w.Code)
+		require.Equal(t, domain.CodeValidation, resp.Error.Code)
+	})
+
+	t.Run("success", func(t *testing.T) {
+		t.Parallel()
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanCreateBrand(mock.Anything).Return(nil)
+		brands := mocks.NewMockBrandService(t)
+		brands.EXPECT().CreateBrand(mock.Anything, "Test Brand", (*string)(nil)).
+			Return(&domain.Brand{ID: "b-1", Name: "Test Brand"}, nil)
+
+		router := newTestRouter(t, NewServer(nil, brands, authz, nil, false))
+		w, resp := doJSON[api.BrandResult](t, router, http.MethodPost, "/brands",
+			api.CreateBrandRequest{Name: "Test Brand"})
+		require.Equal(t, http.StatusCreated, w.Code)
+		require.Equal(t, "b-1", resp.Data.Id)
+		require.Equal(t, "Test Brand", resp.Data.Name)
 	})
 }
 
 func TestServer_ListBrands(t *testing.T) {
 	t.Parallel()
 
-	t.Run("success", func(t *testing.T) {
+	t.Run("admin sees all", func(t *testing.T) {
 		t.Parallel()
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanListBrands(mock.Anything).Return(true, "u-admin", nil)
 		brands := mocks.NewMockBrandService(t)
-		brands.EXPECT().ListBrands(mock.Anything, "u-1", "admin").
-			Return([]*domain.BrandListItem{
-				{ID: "b-1", Name: "Brand 1", ManagerCount: 2},
-			}, nil)
+		brands.EXPECT().ListBrands(mock.Anything, (*string)(nil)).
+			Return([]*domain.BrandListItem{{ID: "b-1", Name: "Brand 1", ManagerCount: 2}}, nil)
 
-		s := NewServer(nil, brands, nil, false)
-		w := httptest.NewRecorder()
-		r := httptest.NewRequest("GET", "/", nil)
-		r = adminContext(r)
-		s.ListBrands(w, r)
+		router := newTestRouter(t, NewServer(nil, brands, authz, nil, false))
+		w, resp := doJSON[api.ListBrandsResult](t, router, http.MethodGet, "/brands", nil)
 		require.Equal(t, http.StatusOK, w.Code)
+		require.Len(t, resp.Data.Brands, 1)
+		require.Equal(t, "b-1", resp.Data.Brands[0].Id)
+	})
+
+	t.Run("manager sees own", func(t *testing.T) {
+		t.Parallel()
+		uid := "u-manager"
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanListBrands(mock.Anything).Return(false, uid, nil)
+		brands := mocks.NewMockBrandService(t)
+		brands.EXPECT().ListBrands(mock.Anything, &uid).
+			Return([]*domain.BrandListItem{}, nil)
+
+		router := newTestRouter(t, NewServer(nil, brands, authz, nil, false))
+		w, resp := doJSON[api.ListBrandsResult](t, router, http.MethodGet, "/brands", nil)
+		require.Equal(t, http.StatusOK, w.Code)
+		require.Len(t, resp.Data.Brands, 0)
 	})
 }
 
 func TestServer_GetBrand(t *testing.T) {
 	t.Parallel()
 
+	t.Run("forbidden", func(t *testing.T) {
+		t.Parallel()
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanViewBrand(mock.Anything, "b-1").Return(domain.ErrForbidden)
+
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, false))
+		w, _ := doJSON[api.ErrorResponse](t, router, http.MethodGet, "/brands/b-1", nil)
+		require.Equal(t, http.StatusForbidden, w.Code)
+	})
+
+	t.Run("not found", func(t *testing.T) {
+		t.Parallel()
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanViewBrand(mock.Anything, "b-1").Return(nil)
+		brands := mocks.NewMockBrandService(t)
+		brands.EXPECT().GetBrand(mock.Anything, "b-1").
+			Return((*domain.Brand)(nil), domain.ErrNotFound)
+
+		router := newTestRouter(t, NewServer(nil, brands, authz, nil, false))
+		w, _ := doJSON[api.ErrorResponse](t, router, http.MethodGet, "/brands/b-1", nil)
+		require.Equal(t, http.StatusNotFound, w.Code)
+	})
+
 	t.Run("success", func(t *testing.T) {
 		t.Parallel()
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanViewBrand(mock.Anything, "b-1").Return(nil)
 		brands := mocks.NewMockBrandService(t)
-		brands.EXPECT().CanViewBrand(mock.Anything, "u-1", "admin", "b-1").Return(nil)
 		brands.EXPECT().GetBrand(mock.Anything, "b-1").
 			Return(&domain.Brand{ID: "b-1", Name: "Test"}, nil)
 		brands.EXPECT().ListManagers(mock.Anything, "b-1").
 			Return([]*domain.BrandManager{}, nil)
 
-		s := NewServer(nil, brands, nil, false)
-		w := httptest.NewRecorder()
-		r := httptest.NewRequest("GET", "/", nil)
-		r = adminContext(r)
-		s.GetBrand(w, r, "b-1")
+		router := newTestRouter(t, NewServer(nil, brands, authz, nil, false))
+		w, resp := doJSON[api.GetBrandResult](t, router, http.MethodGet, "/brands/b-1", nil)
 		require.Equal(t, http.StatusOK, w.Code)
-	})
-
-	t.Run("forbidden", func(t *testing.T) {
-		t.Parallel()
-		brands := mocks.NewMockBrandService(t)
-		brands.EXPECT().CanViewBrand(mock.Anything, "u-1", "brand_manager", "b-1").
-			Return(domain.ErrForbidden)
-
-		s := NewServer(nil, brands, nil, false)
-		w := httptest.NewRecorder()
-		r := httptest.NewRequest("GET", "/", nil)
-		r = managerContext(r)
-		s.GetBrand(w, r, "b-1")
-		require.Equal(t, http.StatusForbidden, w.Code)
+		require.Equal(t, "b-1", resp.Data.Id)
+		require.Equal(t, "Test", resp.Data.Name)
+		require.Empty(t, resp.Data.Managers)
 	})
 }
 
 func TestServer_UpdateBrand(t *testing.T) {
 	t.Parallel()
 
+	t.Run("forbidden for manager", func(t *testing.T) {
+		t.Parallel()
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanUpdateBrand(mock.Anything, "b-1").Return(domain.ErrForbidden)
+
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, false))
+		w, _ := doJSON[api.ErrorResponse](t, router, http.MethodPut, "/brands/b-1",
+			api.UpdateBrandRequest{Name: "X"})
+		require.Equal(t, http.StatusForbidden, w.Code)
+	})
+
 	t.Run("success", func(t *testing.T) {
 		t.Parallel()
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanUpdateBrand(mock.Anything, "b-1").Return(nil)
 		brands := mocks.NewMockBrandService(t)
 		brands.EXPECT().UpdateBrand(mock.Anything, "b-1", "New Name", (*string)(nil)).
 			Return(&domain.Brand{ID: "b-1", Name: "New Name"}, nil)
 
-		s := NewServer(nil, brands, nil, false)
-		w := httptest.NewRecorder()
-		r := httptest.NewRequest("PUT", "/", strings.NewReader(`{"name":"New Name"}`))
-		r.Header.Set("Content-Type", "application/json")
-		r = adminContext(r)
-		s.UpdateBrand(w, r, "b-1")
+		router := newTestRouter(t, NewServer(nil, brands, authz, nil, false))
+		w, resp := doJSON[api.BrandResult](t, router, http.MethodPut, "/brands/b-1",
+			api.UpdateBrandRequest{Name: "New Name"})
 		require.Equal(t, http.StatusOK, w.Code)
-	})
-
-	t.Run("forbidden for manager", func(t *testing.T) {
-		t.Parallel()
-		s := NewServer(nil, nil, nil, false)
-		w := httptest.NewRecorder()
-		r := httptest.NewRequest("PUT", "/", strings.NewReader(`{"name":"X"}`))
-		r.Header.Set("Content-Type", "application/json")
-		r = managerContext(r)
-		s.UpdateBrand(w, r, "b-1")
-		require.Equal(t, http.StatusForbidden, w.Code)
+		require.Equal(t, "New Name", resp.Data.Name)
 	})
 }
 
 func TestServer_DeleteBrand(t *testing.T) {
 	t.Parallel()
 
+	t.Run("forbidden for manager", func(t *testing.T) {
+		t.Parallel()
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanDeleteBrand(mock.Anything, "b-1").Return(domain.ErrForbidden)
+
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, false))
+		w, _ := doJSON[api.ErrorResponse](t, router, http.MethodDelete, "/brands/b-1", nil)
+		require.Equal(t, http.StatusForbidden, w.Code)
+	})
+
 	t.Run("success", func(t *testing.T) {
 		t.Parallel()
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanDeleteBrand(mock.Anything, "b-1").Return(nil)
 		brands := mocks.NewMockBrandService(t)
 		brands.EXPECT().DeleteBrand(mock.Anything, "b-1").Return(nil)
 
-		s := NewServer(nil, brands, nil, false)
-		w := httptest.NewRecorder()
-		r := httptest.NewRequest("DELETE", "/", nil)
-		r = adminContext(r)
-		s.DeleteBrand(w, r, "b-1")
+		router := newTestRouter(t, NewServer(nil, brands, authz, nil, false))
+		w, resp := doJSON[api.MessageResponse](t, router, http.MethodDelete, "/brands/b-1", nil)
 		require.Equal(t, http.StatusOK, w.Code)
-	})
-
-	t.Run("forbidden for manager", func(t *testing.T) {
-		t.Parallel()
-		s := NewServer(nil, nil, nil, false)
-		w := httptest.NewRecorder()
-		r := httptest.NewRequest("DELETE", "/", nil)
-		r = managerContext(r)
-		s.DeleteBrand(w, r, "b-1")
-		require.Equal(t, http.StatusForbidden, w.Code)
+		require.NotEmpty(t, resp.Data.Message)
 	})
 }
 
 func TestServer_AssignManager(t *testing.T) {
 	t.Parallel()
 
-	t.Run("success", func(t *testing.T) {
-		t.Parallel()
-		brands := mocks.NewMockBrandService(t)
-		brands.EXPECT().AssignManager(mock.Anything, "b-1", "mgr@example.com").
-			Return(&domain.User{ID: "u-2", Email: "mgr@example.com", Role: domain.RoleBrandManager}, "temp123", nil)
-
-		s := NewServer(nil, brands, nil, false)
-		w := httptest.NewRecorder()
-		r := httptest.NewRequest("POST", "/", strings.NewReader(`{"email":"mgr@example.com"}`))
-		r.Header.Set("Content-Type", "application/json")
-		r = adminContext(r)
-		s.AssignManager(w, r, "b-1")
-		require.Equal(t, http.StatusCreated, w.Code)
-	})
-
-	t.Run("existing user", func(t *testing.T) {
-		t.Parallel()
-		brands := mocks.NewMockBrandService(t)
-		brands.EXPECT().AssignManager(mock.Anything, "b-1", "existing@example.com").
-			Return(&domain.User{ID: "u-2", Email: "existing@example.com", Role: domain.RoleBrandManager}, "", nil)
-
-		s := NewServer(nil, brands, nil, false)
-		w := httptest.NewRecorder()
-		r := httptest.NewRequest("POST", "/", strings.NewReader(`{"email":"existing@example.com"}`))
-		r.Header.Set("Content-Type", "application/json")
-		r = adminContext(r)
-		s.AssignManager(w, r, "b-1")
-		require.Equal(t, http.StatusCreated, w.Code)
-	})
-
 	t.Run("forbidden for manager", func(t *testing.T) {
 		t.Parallel()
-		s := NewServer(nil, nil, nil, false)
-		w := httptest.NewRecorder()
-		r := httptest.NewRequest("POST", "/", strings.NewReader(`{"email":"x@x.com"}`))
-		r.Header.Set("Content-Type", "application/json")
-		r = managerContext(r)
-		s.AssignManager(w, r, "b-1")
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanAssignManager(mock.Anything, "b-1").Return(domain.ErrForbidden)
+
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, false))
+		w, _ := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/brands/b-1/managers",
+			api.AssignManagerRequest{Email: "x@x.com"})
 		require.Equal(t, http.StatusForbidden, w.Code)
+	})
+
+	t.Run("new user returns temp password", func(t *testing.T) {
+		t.Parallel()
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanAssignManager(mock.Anything, "b-1").Return(nil)
+		brands := mocks.NewMockBrandService(t)
+		brands.EXPECT().AssignManager(mock.Anything, "b-1", "mgr@example.com").
+			Return(&domain.User{ID: "u-2", Email: "mgr@example.com", Role: api.BrandManager}, "temp-secret-123", nil)
+
+		router := newTestRouter(t, NewServer(nil, brands, authz, nil, false))
+		w, resp := doJSON[api.AssignManagerResult](t, router, http.MethodPost, "/brands/b-1/managers",
+			api.AssignManagerRequest{Email: "mgr@example.com"})
+
+		require.Equal(t, http.StatusCreated, w.Code)
+		require.NotNil(t, resp.Data.TempPassword)
+		require.NotEmpty(t, *resp.Data.TempPassword)
+		resp.Data.TempPassword = nil // zero dynamic field for equality check
+		require.Equal(t, api.AssignManagerResult{
+			Data: api.AssignManagerData{
+				UserId: "u-2",
+				Email:  "mgr@example.com",
+				Role:   string(api.BrandManager),
+			},
+		}, resp)
+	})
+
+	t.Run("existing user has no temp password", func(t *testing.T) {
+		t.Parallel()
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanAssignManager(mock.Anything, "b-1").Return(nil)
+		brands := mocks.NewMockBrandService(t)
+		brands.EXPECT().AssignManager(mock.Anything, "b-1", "existing@example.com").
+			Return(&domain.User{ID: "u-2", Email: "existing@example.com", Role: api.BrandManager}, "", nil)
+
+		router := newTestRouter(t, NewServer(nil, brands, authz, nil, false))
+		w, resp := doJSON[api.AssignManagerResult](t, router, http.MethodPost, "/brands/b-1/managers",
+			api.AssignManagerRequest{Email: "existing@example.com"})
+
+		require.Equal(t, http.StatusCreated, w.Code)
+		require.Nil(t, resp.Data.TempPassword)
 	})
 }
 
 func TestServer_RemoveManager(t *testing.T) {
 	t.Parallel()
 
+	t.Run("forbidden for manager", func(t *testing.T) {
+		t.Parallel()
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanRemoveManager(mock.Anything, "b-1", "u-2").Return(domain.ErrForbidden)
+
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, false))
+		w, _ := doJSON[api.ErrorResponse](t, router, http.MethodDelete, "/brands/b-1/managers/u-2", nil)
+		require.Equal(t, http.StatusForbidden, w.Code)
+	})
+
 	t.Run("success", func(t *testing.T) {
 		t.Parallel()
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanRemoveManager(mock.Anything, "b-1", "u-2").Return(nil)
 		brands := mocks.NewMockBrandService(t)
 		brands.EXPECT().RemoveManager(mock.Anything, "b-1", "u-2").Return(nil)
 
-		s := NewServer(nil, brands, nil, false)
-		w := httptest.NewRecorder()
-		r := httptest.NewRequest("DELETE", "/", nil)
-		r = adminContext(r)
-		s.RemoveManager(w, r, "b-1", "u-2")
+		router := newTestRouter(t, NewServer(nil, brands, authz, nil, false))
+		w, resp := doJSON[api.MessageResponse](t, router, http.MethodDelete, "/brands/b-1/managers/u-2", nil)
 		require.Equal(t, http.StatusOK, w.Code)
-	})
-
-	t.Run("forbidden for manager", func(t *testing.T) {
-		t.Parallel()
-		s := NewServer(nil, nil, nil, false)
-		w := httptest.NewRecorder()
-		r := httptest.NewRequest("DELETE", "/", nil)
-		r = managerContext(r)
-		s.RemoveManager(w, r, "b-1", "u-2")
-		require.Equal(t, http.StatusForbidden, w.Code)
+		require.NotEmpty(t, resp.Data.Message)
 	})
 }

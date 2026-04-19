@@ -243,11 +243,12 @@ export interface components {
         ErrorResponse: {
             error: components["schemas"]["APIError"];
         };
+        MessageData: {
+            /** @example Operation successful */
+            message: string;
+        };
         MessageResponse: {
-            data: {
-                /** @example Operation successful */
-                message: string;
-            };
+            data: components["schemas"]["MessageData"];
         };
         LoginRequest: {
             /**
@@ -258,11 +259,12 @@ export interface components {
             /** @example password123 */
             password: string;
         };
+        LoginData: {
+            accessToken: string;
+            user: components["schemas"]["User"];
+        };
         LoginResult: {
-            data: {
-                accessToken: string;
-                user: components["schemas"]["User"];
-            };
+            data: components["schemas"]["LoginData"];
         };
         PasswordResetRequestBody: {
             /** Format: email */
@@ -312,10 +314,11 @@ export interface components {
             /** Format: date-time */
             updatedAt: string;
         };
+        ListBrandsData: {
+            brands: components["schemas"]["BrandListItem"][];
+        };
         ListBrandsResult: {
-            data: {
-                brands: components["schemas"]["BrandListItem"][];
-            };
+            data: components["schemas"]["ListBrandsData"];
         };
         ManagerInfo: {
             userId: string;
@@ -323,28 +326,30 @@ export interface components {
             /** Format: date-time */
             assignedAt: string;
         };
+        BrandDetailData: {
+            id: string;
+            name: string;
+            logoUrl?: string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+            managers: components["schemas"]["ManagerInfo"][];
+        };
         GetBrandResult: {
-            data: {
-                id: string;
-                name: string;
-                logoUrl?: string;
-                /** Format: date-time */
-                createdAt: string;
-                /** Format: date-time */
-                updatedAt: string;
-                managers: components["schemas"]["ManagerInfo"][];
-            };
+            data: components["schemas"]["BrandDetailData"];
         };
         AssignManagerRequest: {
             email: string;
         };
+        AssignManagerData: {
+            userId: string;
+            email: string;
+            role: string;
+            tempPassword?: string;
+        };
         AssignManagerResult: {
-            data: {
-                userId: string;
-                email: string;
-                role: string;
-                tempPassword?: string;
-            };
+            data: components["schemas"]["AssignManagerData"];
         };
         AuditLogEntry: {
             id: string;
@@ -359,13 +364,14 @@ export interface components {
             /** Format: date-time */
             createdAt: string;
         };
+        ListAuditLogsData: {
+            logs: components["schemas"]["AuditLogEntry"][];
+            total: number;
+            page: number;
+            perPage: number;
+        };
         AuditLogsResult: {
-            data: {
-                logs: components["schemas"]["AuditLogEntry"][];
-                total: number;
-                page: number;
-                perPage: number;
-            };
+            data: components["schemas"]["ListAuditLogsData"];
         };
     };
     responses: never;

@@ -549,17 +549,20 @@ components:
         error:
           $ref: "#/components/schemas/APIError"
 
+    MessageData:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string
+          example: Operation successful
+
     MessageResponse:
       type: object
       required: [data]
       properties:
         data:
-          type: object
-          required: [message]
-          properties:
-            message:
-              type: string
-              example: Operation successful
+          $ref: "#/components/schemas/MessageData"
 
     LoginRequest:
       type: object
@@ -571,20 +574,24 @@ components:
           example: admin@ugcboost.kz
         password:
           type: string
+          minLength: 6
           example: "password123"
+
+    LoginData:
+      type: object
+      required: [accessToken, user]
+      properties:
+        accessToken:
+          type: string
+        user:
+          $ref: "#/components/schemas/User"
 
     LoginResult:
       type: object
       required: [data]
       properties:
         data:
-          type: object
-          required: [accessToken, user]
-          properties:
-            accessToken:
-              type: string
-            user:
-              $ref: "#/components/schemas/User"
+          $ref: "#/components/schemas/LoginData"
 
     PasswordResetRequestBody:
       type: object
@@ -685,18 +692,21 @@ components:
           type: string
           format: date-time
 
+    ListBrandsData:
+      type: object
+      required: [brands]
+      properties:
+        brands:
+          type: array
+          items:
+            $ref: "#/components/schemas/BrandListItem"
+
     ListBrandsResult:
       type: object
       required: [data]
       properties:
         data:
-          type: object
-          required: [brands]
-          properties:
-            brands:
-              type: array
-              items:
-                $ref: "#/components/schemas/BrandListItem"
+          $ref: "#/components/schemas/ListBrandsData"
 
     ManagerInfo:
       type: object
@@ -710,30 +720,33 @@ components:
           type: string
           format: date-time
 
+    BrandDetailData:
+      type: object
+      required: [id, name, createdAt, updatedAt, managers]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        logoUrl:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        managers:
+          type: array
+          items:
+            $ref: "#/components/schemas/ManagerInfo"
+
     GetBrandResult:
       type: object
       required: [data]
       properties:
         data:
-          type: object
-          required: [id, name, createdAt, updatedAt, managers]
-          properties:
-            id:
-              type: string
-            name:
-              type: string
-            logoUrl:
-              type: string
-            createdAt:
-              type: string
-              format: date-time
-            updatedAt:
-              type: string
-              format: date-time
-            managers:
-              type: array
-              items:
-                $ref: "#/components/schemas/ManagerInfo"
+          $ref: "#/components/schemas/BrandDetailData"
 
     AssignManagerRequest:
       type: object
@@ -742,22 +755,25 @@ components:
         email:
           type: string
 
+    AssignManagerData:
+      type: object
+      required: [userId, email, role]
+      properties:
+        userId:
+          type: string
+        email:
+          type: string
+        role:
+          type: string
+        tempPassword:
+          type: string
+
     AssignManagerResult:
       type: object
       required: [data]
       properties:
         data:
-          type: object
-          required: [userId, email, role]
-          properties:
-            userId:
-              type: string
-            email:
-              type: string
-            role:
-              type: string
-            tempPassword:
-              type: string
+          $ref: "#/components/schemas/AssignManagerData"
 
     AuditLogEntry:
       type: object
@@ -783,24 +799,27 @@ components:
           type: string
           format: date-time
 
+    ListAuditLogsData:
+      type: object
+      required: [logs, total, page, perPage]
+      properties:
+        logs:
+          type: array
+          items:
+            $ref: "#/components/schemas/AuditLogEntry"
+        total:
+          type: integer
+        page:
+          type: integer
+        perPage:
+          type: integer
+
     AuditLogsResult:
       type: object
       required: [data]
       properties:
         data:
-          type: object
-          required: [logs, total, page, perPage]
-          properties:
-            logs:
-              type: array
-              items:
-                $ref: "#/components/schemas/AuditLogEntry"
-            total:
-              type: integer
-            page:
-              type: integer
-            perPage:
-              type: integer
+          $ref: "#/components/schemas/ListAuditLogsData"
 
   securitySchemes:
     bearerAuth:

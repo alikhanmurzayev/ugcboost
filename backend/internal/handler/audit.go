@@ -2,16 +2,16 @@ package handler
 
 import (
 	"encoding/json"
+	"log/slog"
 	"net/http"
 
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/api"
-	"github.com/alikhanmurzayev/ugcboost/backend/internal/authz"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/domain"
 )
 
 // ListAuditLogs handles GET /audit-logs
 func (s *Server) ListAuditLogs(w http.ResponseWriter, r *http.Request, params api.ListAuditLogsParams) {
-	if err := authz.RequireAdmin(r.Context()); err != nil {
+	if err := s.authzService.CanListAuditLogs(r.Context()); err != nil {
 		respondError(w, r, err)
 		return
 	}
@@ -60,20 +60,15 @@ func (s *Server) ListAuditLogs(w http.ResponseWriter, r *http.Request, params ap
 			Action:     l.Action,
 			EntityType: l.EntityType,
 			EntityId:   l.EntityID,
-			OldValue:   rawJSONToAny(l.OldValue),
-			NewValue:   rawJSONToAny(l.NewValue),
+			OldValue:   rawJSONToAny(l.ID, l.OldValue),
+			NewValue:   rawJSONToAny(l.ID, l.NewValue),
 			IpAddress:  l.IPAddress,
 			CreatedAt:  l.CreatedAt,
 		}
 	}
 
-	respondJSON(w, http.StatusOK, api.AuditLogsResult{
-		Data: struct {
-			Logs    []api.AuditLogEntry `json:"logs"`
-			Page    int                 `json:"page"`
-			PerPage int                 `json:"perPage"`
-			Total   int                 `json:"total"`
-		}{
+	respondJSON(w, r, http.StatusOK, api.AuditLogsResult{
+		Data: api.ListAuditLogsData{
 			Logs:    items,
 			Page:    page,
 			PerPage: perPage,
@@ -83,12 +78,15 @@ func (s *Server) ListAuditLogs(w http.ResponseWriter, r *http.Request, params ap
 }
 
 // rawJSONToAny converts json.RawMessage to any for API serialization.
-func rawJSONToAny(raw []byte) interface{} {
+// On decode failure we log the error with the audit entry context —
+// silently dropping it would hide real data corruption.
+func rawJSONToAny(id string, raw []byte) interface{} {
 	if len(raw) == 0 {
 		return nil
 	}
 	var v interface{}
 	if err := json.Unmarshal(raw, &v); err != nil {
+		slog.Error("failed to unmarshal audit log value", "error", err, "auditLogID", id)
 		return nil
 	}
 	return v

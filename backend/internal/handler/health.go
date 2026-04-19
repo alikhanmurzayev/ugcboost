@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"encoding/json"
 	"net/http"
 )
 
@@ -15,10 +14,10 @@ type healthResponse struct {
 // HealthCheck handles GET /healthz.
 // This endpoint is intentionally outside the API envelope -- health checks
 // are consumed by load balancers and monitoring, not by the frontend.
-func (s *Server) HealthCheck(w http.ResponseWriter, _ *http.Request) {
+func (s *Server) HealthCheck(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(healthResponse{ //nolint:errcheck
+	encodeJSON(w, r, healthResponse{
 		Status:  "ok",
 		Version: version,
 	})

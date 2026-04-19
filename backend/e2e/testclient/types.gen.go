@@ -7,6 +7,24 @@ import (
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
+// Defines values for SeedUserDataRole.
+const (
+	SeedUserDataRoleAdmin        SeedUserDataRole = "admin"
+	SeedUserDataRoleBrandManager SeedUserDataRole = "brand_manager"
+)
+
+// Valid indicates whether the value is a known member of the SeedUserDataRole enum.
+func (e SeedUserDataRole) Valid() bool {
+	switch e {
+	case SeedUserDataRoleAdmin:
+		return true
+	case SeedUserDataRoleBrandManager:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for SeedUserRequestRole.
 const (
 	SeedUserRequestRoleAdmin        SeedUserRequestRole = "admin"
@@ -25,24 +43,6 @@ func (e SeedUserRequestRole) Valid() bool {
 	}
 }
 
-// Defines values for SeedUserResultDataRole.
-const (
-	SeedUserResultDataRoleAdmin        SeedUserResultDataRole = "admin"
-	SeedUserResultDataRoleBrandManager SeedUserResultDataRole = "brand_manager"
-)
-
-// Valid indicates whether the value is a known member of the SeedUserResultDataRole enum.
-func (e SeedUserResultDataRole) Valid() bool {
-	switch e {
-	case SeedUserResultDataRoleAdmin:
-		return true
-	case SeedUserResultDataRoleBrandManager:
-		return true
-	default:
-		return false
-	}
-}
-
 // ErrorResponse defines model for ErrorResponse.
 type ErrorResponse struct {
 	Error struct {
@@ -51,11 +51,20 @@ type ErrorResponse struct {
 	} `json:"error"`
 }
 
+// ResetTokenData defines model for ResetTokenData.
+type ResetTokenData struct {
+	Token string `json:"token"`
+}
+
 // ResetTokenResult defines model for ResetTokenResult.
 type ResetTokenResult struct {
-	Data struct {
-		Token string `json:"token"`
-	} `json:"data"`
+	Data ResetTokenData `json:"data"`
+}
+
+// SeedBrandData defines model for SeedBrandData.
+type SeedBrandData struct {
+	Id   string `json:"id"`
+	Name string `json:"name"`
 }
 
 // SeedBrandRequest defines model for SeedBrandRequest.
@@ -67,11 +76,18 @@ type SeedBrandRequest struct {
 
 // SeedBrandResult defines model for SeedBrandResult.
 type SeedBrandResult struct {
-	Data struct {
-		Id   string `json:"id"`
-		Name string `json:"name"`
-	} `json:"data"`
+	Data SeedBrandData `json:"data"`
 }
+
+// SeedUserData defines model for SeedUserData.
+type SeedUserData struct {
+	Email openapi_types.Email `json:"email"`
+	Id    string              `json:"id"`
+	Role  SeedUserDataRole    `json:"role"`
+}
+
+// SeedUserDataRole defines model for SeedUserData.Role.
+type SeedUserDataRole string
 
 // SeedUserRequest defines model for SeedUserRequest.
 type SeedUserRequest struct {
@@ -85,15 +101,8 @@ type SeedUserRequestRole string
 
 // SeedUserResult defines model for SeedUserResult.
 type SeedUserResult struct {
-	Data struct {
-		Email openapi_types.Email    `json:"email"`
-		Id    string                 `json:"id"`
-		Role  SeedUserResultDataRole `json:"role"`
-	} `json:"data"`
+	Data SeedUserData `json:"data"`
 }
-
-// SeedUserResultDataRole defines model for SeedUserResult.Data.Role.
-type SeedUserResultDataRole string
 
 // GetResetTokenParams defines parameters for GetResetToken.
 type GetResetTokenParams struct {

@@ -10,6 +10,7 @@ import (
 
 	"golang.org/x/crypto/bcrypt"
 
+	"github.com/alikhanmurzayev/ugcboost/backend/internal/api"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/dbutil"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/domain"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/repository"
@@ -19,6 +20,7 @@ import (
 type BrandRepoFactory interface {
 	NewBrandRepo(db dbutil.DB) repository.BrandRepo
 	NewUserRepo(db dbutil.DB) repository.UserRepo
+	NewAuditRepo(db dbutil.DB) repository.AuditRepo
 }
 
 // BrandService handles brand business logic.
@@ -33,18 +35,32 @@ func NewBrandService(pool dbutil.Pool, repoFactory BrandRepoFactory, bcryptCost 
 	return &BrandService{pool: pool, repoFactory: repoFactory, bcryptCost: bcryptCost}
 }
 
-// CreateBrand creates a new brand.
+// CreateBrand creates a new brand and writes the matching audit log
+// entry inside the same transaction.
 func (s *BrandService) CreateBrand(ctx context.Context, name string, logoURL *string) (*domain.Brand, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return nil, domain.NewValidationError(domain.CodeValidation, "Brand name is required")
 	}
-	brandRepo := s.repoFactory.NewBrandRepo(s.pool)
-	row, err := brandRepo.Create(ctx, name, logoURL)
+	var brand *domain.Brand
+	err := dbutil.WithTx(ctx, s.pool, func(tx dbutil.DB) error {
+		brandRepo := s.repoFactory.NewBrandRepo(tx)
+		auditRepo := s.repoFactory.NewAuditRepo(tx)
+
+		row, err := brandRepo.Create(ctx, name, logoURL)
+		if err != nil {
+			return err
+		}
+		brand = brandRowToDomain(row)
+
+		return writeAudit(ctx, auditRepo,
+			AuditActionBrandCreate, AuditEntityTypeBrand, brand.ID,
+			nil, map[string]string{"name": brand.Name})
+	})
 	if err != nil {
 		return nil, err
 	}
-	return brandRowToDomain(row), nil
+	return brand, nil
 }
 
 // GetBrand returns a brand by ID.
@@ -57,15 +73,16 @@ func (s *BrandService) GetBrand(ctx context.Context, id string) (*domain.Brand, 
 	return brandRowToDomain(row), nil
 }
 
-// ListBrands returns all brands (admin) or user's brands (brand_manager).
-func (s *BrandService) ListBrands(ctx context.Context, userID, role string) ([]*domain.BrandListItem, error) {
+// ListBrands returns brands. If managerID is nil, returns all brands;
+// otherwise returns only brands where managerID is a manager.
+func (s *BrandService) ListBrands(ctx context.Context, managerID *string) ([]*domain.BrandListItem, error) {
 	brandRepo := s.repoFactory.NewBrandRepo(s.pool)
 	var rows []*repository.BrandWithManagerCount
 	var err error
-	if role == string(domain.RoleAdmin) {
+	if managerID == nil {
 		rows, err = brandRepo.List(ctx)
 	} else {
-		rows, err = brandRepo.ListByUser(ctx, userID)
+		rows, err = brandRepo.ListByUser(ctx, *managerID)
 	}
 	if err != nil {
 		return nil, err
@@ -73,24 +90,48 @@ func (s *BrandService) ListBrands(ctx context.Context, userID, role string) ([]*
 	return brandListRowsToDomain(rows), nil
 }
 
-// UpdateBrand updates a brand's name and logo.
+// UpdateBrand updates a brand's name and logo. The change is recorded in
+// the audit log in the same transaction.
 func (s *BrandService) UpdateBrand(ctx context.Context, id, name string, logoURL *string) (*domain.Brand, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return nil, domain.NewValidationError(domain.CodeValidation, "Brand name is required")
 	}
-	brandRepo := s.repoFactory.NewBrandRepo(s.pool)
-	row, err := brandRepo.Update(ctx, id, name, logoURL)
+	var brand *domain.Brand
+	err := dbutil.WithTx(ctx, s.pool, func(tx dbutil.DB) error {
+		brandRepo := s.repoFactory.NewBrandRepo(tx)
+		auditRepo := s.repoFactory.NewAuditRepo(tx)
+
+		row, err := brandRepo.Update(ctx, id, name, logoURL)
+		if err != nil {
+			return err
+		}
+		brand = brandRowToDomain(row)
+
+		return writeAudit(ctx, auditRepo,
+			AuditActionBrandUpdate, AuditEntityTypeBrand, brand.ID,
+			nil, map[string]string{"name": brand.Name})
+	})
 	if err != nil {
 		return nil, err
 	}
-	return brandRowToDomain(row), nil
+	return brand, nil
 }
 
-// DeleteBrand removes a brand.
+// DeleteBrand removes a brand and writes the audit log inside the same transaction.
 func (s *BrandService) DeleteBrand(ctx context.Context, id string) error {
-	brandRepo := s.repoFactory.NewBrandRepo(s.pool)
-	return brandRepo.Delete(ctx, id)
+	return dbutil.WithTx(ctx, s.pool, func(tx dbutil.DB) error {
+		brandRepo := s.repoFactory.NewBrandRepo(tx)
+		auditRepo := s.repoFactory.NewAuditRepo(tx)
+
+		if err := brandRepo.Delete(ctx, id); err != nil {
+			return err
+		}
+
+		return writeAudit(ctx, auditRepo,
+			AuditActionBrandDelete, AuditEntityTypeBrand, id,
+			nil, nil)
+	})
 }
 
 // ListManagers returns all managers for a brand.
@@ -117,6 +158,7 @@ func (s *BrandService) AssignManager(ctx context.Context, brandID, email string)
 	err := dbutil.WithTx(ctx, s.pool, func(tx dbutil.DB) error {
 		brandRepo := s.repoFactory.NewBrandRepo(tx)
 		userRepo := s.repoFactory.NewUserRepo(tx)
+		auditRepo := s.repoFactory.NewAuditRepo(tx)
 
 		// Check brand exists
 		if _, err := brandRepo.GetByID(ctx, brandID); err != nil {
@@ -143,7 +185,7 @@ func (s *BrandService) AssignManager(ctx context.Context, brandID, email string)
 			if err != nil {
 				return fmt.Errorf("hash password: %w", err)
 			}
-			userRow, err = userRepo.Create(ctx, email, string(hash), string(domain.RoleBrandManager))
+			userRow, err = userRepo.Create(ctx, email, string(hash), string(api.BrandManager))
 			if err != nil {
 				return fmt.Errorf("create user: %w", err)
 			}
@@ -156,7 +198,10 @@ func (s *BrandService) AssignManager(ctx context.Context, brandID, email string)
 
 		u := userRowToDomain(userRow)
 		user = &u
-		return nil
+
+		return writeAudit(ctx, auditRepo,
+			AuditActionManagerAssign, AuditEntityTypeBrand, brandID,
+			nil, map[string]string{"email": user.Email})
 	})
 	if err != nil {
 		return nil, "", err
@@ -165,26 +210,31 @@ func (s *BrandService) AssignManager(ctx context.Context, brandID, email string)
 	return user, tempPassword, nil
 }
 
-// RemoveManager removes a manager from a brand.
+// RemoveManager removes a manager from a brand and records the audit log in the
+// same transaction.
 func (s *BrandService) RemoveManager(ctx context.Context, brandID, userID string) error {
-	brandRepo := s.repoFactory.NewBrandRepo(s.pool)
-	return brandRepo.RemoveManager(ctx, brandID, userID)
+	return dbutil.WithTx(ctx, s.pool, func(tx dbutil.DB) error {
+		brandRepo := s.repoFactory.NewBrandRepo(tx)
+		auditRepo := s.repoFactory.NewAuditRepo(tx)
+
+		if err := brandRepo.RemoveManager(ctx, brandID, userID); err != nil {
+			return err
+		}
+
+		return writeAudit(ctx, auditRepo,
+			AuditActionManagerRemove, AuditEntityTypeBrand, brandID,
+			map[string]string{"userId": userID}, nil)
+	})
 }
 
-// CanViewBrand checks if a user can view a specific brand.
-func (s *BrandService) CanViewBrand(ctx context.Context, userID, role, brandID string) error {
-	if role == string(domain.RoleAdmin) {
-		return nil
-	}
+// IsUserBrandManager reports whether the given user is a manager of the brand.
+func (s *BrandService) IsUserBrandManager(ctx context.Context, userID, brandID string) (bool, error) {
 	brandRepo := s.repoFactory.NewBrandRepo(s.pool)
 	ok, err := brandRepo.IsManager(ctx, userID, brandID)
 	if err != nil {
-		return fmt.Errorf("check manager: %w", err)
+		return false, fmt.Errorf("check manager: %w", err)
 	}
-	if !ok {
-		return domain.ErrForbidden
-	}
-	return nil
+	return ok, nil
 }
 
 const (

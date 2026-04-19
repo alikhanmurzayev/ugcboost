@@ -53,15 +53,15 @@ func Auth(validator TokenValidator) func(http.Handler) http.Handler {
 			}
 
 			ctx := context.WithValue(r.Context(), ContextKeyUserID, userID)
-			ctx = context.WithValue(ctx, ContextKeyRole, role)
+			ctx = context.WithValue(ctx, ContextKeyRole, api.UserRole(role))
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
 }
 
 // RequireRole returns middleware that checks the user has one of the allowed roles.
-func RequireRole(allowed ...string) func(http.Handler) http.Handler {
-	allowedSet := make(map[string]bool, len(allowed))
+func RequireRole(allowed ...api.UserRole) func(http.Handler) http.Handler {
+	allowedSet := make(map[api.UserRole]bool, len(allowed))
 	for _, r := range allowed {
 		allowedSet[r] = true
 	}
@@ -117,7 +117,7 @@ func AuthFromScopes(validator TokenValidator) func(http.Handler) http.Handler {
 			}
 
 			ctx := context.WithValue(r.Context(), ContextKeyUserID, userID)
-			ctx = context.WithValue(ctx, ContextKeyRole, role)
+			ctx = context.WithValue(ctx, ContextKeyRole, api.UserRole(role))
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
@@ -130,7 +130,7 @@ func UserIDFromContext(ctx context.Context) string {
 }
 
 // RoleFromContext extracts the user role from the request context.
-func RoleFromContext(ctx context.Context) string {
-	v, _ := ctx.Value(ContextKeyRole).(string)
+func RoleFromContext(ctx context.Context) api.UserRole {
+	v, _ := ctx.Value(ContextKeyRole).(api.UserRole)
 	return v
 }
