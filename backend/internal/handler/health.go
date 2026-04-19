@@ -4,8 +4,6 @@ import (
 	"net/http"
 )
 
-var version = "dev"
-
 type healthResponse struct {
 	Status  string `json:"status"`
 	Version string `json:"version"`
@@ -19,6 +17,6 @@ func (s *Server) HealthCheck(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	encodeJSON(w, r, healthResponse{
 		Status:  "ok",
-		Version: version,
+		Version: s.version,
 	})
 }

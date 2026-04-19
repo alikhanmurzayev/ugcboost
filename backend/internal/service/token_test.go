@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/stretchr/testify/require"
 )
 
@@ -39,6 +40,33 @@ func TestTokenService_GenerateAccessToken(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, role, gotRole)
 		}
+	})
+
+	t.Run("claims content parses sub, role and exp independently", func(t *testing.T) {
+		t.Parallel()
+		svc := newTestTokenService()
+		before := time.Now()
+		token, err := svc.GenerateAccessToken("user-42", "admin")
+		require.NoError(t, err)
+
+		claims := jwt.MapClaims{}
+		parsed, err := jwt.ParseWithClaims(token, claims, func(_ *jwt.Token) (any, error) {
+			return []byte("test-secret-key"), nil
+		})
+		require.NoError(t, err)
+		require.True(t, parsed.Valid)
+
+		sub, err := claims.GetSubject()
+		require.NoError(t, err)
+		require.Equal(t, "user-42", sub)
+
+		require.Equal(t, "admin", claims["role"])
+
+		expFloat, ok := claims["exp"].(float64)
+		require.True(t, ok, "exp claim should be numeric")
+		exp := time.Unix(int64(expFloat), 0)
+		require.True(t, exp.After(before.Add(14*time.Minute)), "exp should be ~15m in the future")
+		require.True(t, exp.Before(before.Add(16*time.Minute)), "exp should be ~15m in the future")
 	})
 }
 
@@ -79,6 +107,36 @@ func TestTokenService_ValidateAccessToken(t *testing.T) {
 		svc := newTestTokenService()
 		_, _, err := svc.ValidateAccessToken("")
 		require.Error(t, err)
+	})
+
+	t.Run("token missing sub claim returns missing claims error", func(t *testing.T) {
+		t.Parallel()
+		svc := newTestTokenService()
+		claims := jwt.MapClaims{
+			"role": "admin",
+			"exp":  time.Now().Add(time.Hour).Unix(),
+		}
+		token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+		str, err := token.SignedString([]byte("test-secret-key"))
+		require.NoError(t, err)
+
+		_, _, err = svc.ValidateAccessToken(str)
+		require.ErrorContains(t, err, "missing claims")
+	})
+
+	t.Run("token missing role claim returns missing claims error", func(t *testing.T) {
+		t.Parallel()
+		svc := newTestTokenService()
+		claims := jwt.MapClaims{
+			"sub": "u-1",
+			"exp": time.Now().Add(time.Hour).Unix(),
+		}
+		token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+		str, err := token.SignedString([]byte("test-secret-key"))
+		require.NoError(t, err)
+
+		_, _, err = svc.ValidateAccessToken(str)
+		require.ErrorContains(t, err, "missing claims")
 	})
 }
 

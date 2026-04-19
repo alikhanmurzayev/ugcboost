@@ -104,7 +104,7 @@ func run() error {
 	r.Use(middleware.Logging)
 
 	// Create server implementing ServerInterface
-	server := handler.NewServer(authSvc, brandSvc, authzSvc, auditSvc, cfg.CookieSecure)
+	server := handler.NewServer(authSvc, brandSvc, authzSvc, auditSvc, cfg.Version, cfg.CookieSecure)
 
 	// Register API routes via generated handler
 	api.HandlerWithOptions(server, api.ChiServerOptions{

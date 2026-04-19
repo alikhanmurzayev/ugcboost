@@ -46,6 +46,10 @@ type Config struct {
 	// Pagination
 	DefaultPerPage int `env:"DEFAULT_PER_PAGE" envDefault:"20"`
 
+	// Build-time version stamped into the binary via Dockerfile ARG→ENV.
+	// Surfaced by /healthz so ops can confirm which commit is running.
+	Version string `env:"GIT_COMMIT" envDefault:"dev"`
+
 	// Feature flags for mock integrations
 	LiveDuneMock bool `env:"LIVEDUNE_MOCK" envDefault:"false"`
 	TrustMeMock  bool `env:"TRUSTME_MOCK" envDefault:"false"`
@@ -82,6 +86,13 @@ func Load() (*Config, error) {
 	// Derive values from Environment
 	cfg.CookieSecure = cfg.Environment != EnvLocal
 	cfg.EnableTestEndpoints = cfg.Environment != EnvProduction
+
+	// envDefault only applies when the variable is unset; an explicit empty
+	// string from the runtime (misconfigured Dokploy entry, empty build arg)
+	// bypasses it, so guard against that here.
+	if cfg.Version == "" {
+		cfg.Version = "dev"
+	}
 
 	return cfg, nil
 }

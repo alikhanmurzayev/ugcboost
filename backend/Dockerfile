@@ -12,11 +12,13 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 COPY . .
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
-    CGO_ENABLED=0 go build \
-        -ldflags="-s -w -X 'github.com/alikhanmurzayev/ugcboost/backend/internal/handler.version=${GIT_COMMIT}'" \
-        -o /api ./cmd/api
+    CGO_ENABLED=0 go build -ldflags="-s -w" -o /api ./cmd/api
 
 FROM alpine:3.20
+ARG GIT_COMMIT=dev
+# Bake the build SHA into the image as an env var. config.Load reads it as
+# GIT_COMMIT → cfg.Version → /healthz. Dokploy doesn't need to set anything.
+ENV GIT_COMMIT=${GIT_COMMIT}
 RUN apk --no-cache add ca-certificates tzdata && \
     adduser -D -u 1000 appuser
 COPY --from=builder /usr/local/bin/goose /usr/local/bin/goose

@@ -5,15 +5,18 @@
        run-backend run-web run-tma run-landing \
        build-backend build-web build-tma build-landing \
        test-unit-backend test-unit-web test-unit-tma test-unit-landing \
+       test-unit-backend-coverage \
        test-e2e-backend test-e2e-frontend \
        lint-backend lint-web lint-tma lint-landing \
        generate-api generate-mocks
 
 # ── Build-time version stamping ───────────────────────────────────
-# GIT_COMMIT is baked into the backend binary via -ldflags and surfaced
-# by /healthz. CI (GitHub Actions) passes its own GIT_COMMIT through
-# docker/build-push-action build-args — this Makefile variable is used
-# only for local `make build-backend` / `make start-backend`.
+# GIT_COMMIT flows through the Dockerfile ARG → ENV so the running
+# container surfaces it via config.Version → /healthz. CI (GitHub
+# Actions) passes the same variable through docker/build-push-action
+# build-args; this Makefile value is consumed by `make run-backend`
+# (read from env by config.Load) and by `make start-backend` (passed
+# to docker compose as a build arg).
 
 GIT_COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo dev)
 export GIT_COMMIT
@@ -73,7 +76,7 @@ stop-landing:
 # ── Run locally (dev mode) ────────────────────────────────────────
 
 run-backend:
-	cd backend && go run -ldflags "-X 'github.com/alikhanmurzayev/ugcboost/backend/internal/handler.version=$(GIT_COMMIT)'" -race ./cmd/api
+	cd backend && go run -race ./cmd/api
 
 run-web:
 	cd frontend/web && npm run dev
@@ -87,7 +90,7 @@ run-landing:
 # ── Build ─────────────────────────────────────────────────────────
 
 build-backend:
-	cd backend && go build -ldflags "-X 'github.com/alikhanmurzayev/ugcboost/backend/internal/handler.version=$(GIT_COMMIT)'" ./...
+	cd backend && go build ./...
 
 build-web:
 	cd frontend/web && npm run build
@@ -102,6 +105,27 @@ build-landing:
 
 test-unit-backend:
 	cd backend && go test ./... -count=1 -race -timeout 5m
+
+# Per-method coverage gate — fails if any public method in the enforced
+# packages has < 80%. Scope per REQ-10: handler, service, repository,
+# middleware, authz. Excluded: generated code (*.gen.go), mockery output
+# (*/mocks/), cmd/, and out-of-scope trivial files (handler/health.go,
+# middleware/logging.go, middleware/json.go).
+# Runs a separate `go test` pass with -coverprofile so test-unit-backend
+# isn't slowed by coverage instrumentation.
+test-unit-backend-coverage:
+	cd backend && go test -coverprofile=/tmp/ugc-cover.out -race -count=1 ./internal/...
+	@cd backend && go tool cover -func=/tmp/ugc-cover.out | \
+		awk '$$1 ~ /\/(handler|service|repository|middleware|authz)\// \
+			&& $$1 !~ /\.gen\.go:/ \
+			&& $$1 !~ /\/mocks\// \
+			&& $$1 !~ /\/cmd\// \
+			&& $$1 !~ /\/handler\/health\.go:/ \
+			&& $$1 !~ /\/middleware\/(logging|json)\.go:/ \
+			&& $$2 ~ /^[A-Z]/ { \
+				pct = $$NF; gsub(/%/, "", pct); \
+				if (pct + 0 < 80.0) { printf "FAIL %s %s %s%%\n", $$1, $$2, pct; fail=1 } \
+			} END { exit fail ? 1 : 0 }'
 
 test-unit-web:
 	cd frontend/web && npm test -- --run

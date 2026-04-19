@@ -3,7 +3,7 @@ package middleware
 import (
 	"context"
 	"encoding/json"
-	"fmt"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/api"
+	"github.com/alikhanmurzayev/ugcboost/backend/internal/domain"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/middleware/mocks"
 )
 
@@ -100,7 +101,7 @@ func TestAuth_ValidateAccessToken(t *testing.T) {
 	t.Run("invalid token", func(t *testing.T) {
 		t.Parallel()
 		v := mocks.NewMockTokenValidator(t)
-		v.EXPECT().ValidateAccessToken("bad-token").Return("", "", fmt.Errorf("expired"))
+		v.EXPECT().ValidateAccessToken("bad-token").Return("", "", errors.New("expired"))
 
 		handler := Auth(v)(okHandler())
 
@@ -110,8 +111,12 @@ func TestAuth_ValidateAccessToken(t *testing.T) {
 		handler.ServeHTTP(w, r)
 
 		require.Equal(t, http.StatusUnauthorized, w.Code)
-		resp := parseError(t, w)
-		require.Equal(t, "UNAUTHORIZED", resp.Error.Code)
+		require.Equal(t, api.ErrorResponse{
+			Error: api.APIError{
+				Code:    domain.CodeUnauthorized,
+				Message: "Invalid or expired token",
+			},
+		}, parseError(t, w))
 	})
 
 	t.Run("case insensitive bearer", func(t *testing.T) {
@@ -168,6 +173,103 @@ func TestRequireRole_Check(t *testing.T) {
 		handler.ServeHTTP(w, r)
 
 		require.Equal(t, http.StatusForbidden, w.Code)
+	})
+}
+
+func TestAuth_FromScopes(t *testing.T) {
+	t.Parallel()
+
+	t.Run("no BearerAuthScopes in context skips auth", func(t *testing.T) {
+		t.Parallel()
+		v := mocks.NewMockTokenValidator(t)
+
+		called := false
+		handler := AuthFromScopes(v)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			called = true
+			// Without scopes, auth is bypassed — user id / role remain empty.
+			require.Empty(t, UserIDFromContext(r.Context()))
+			require.Empty(t, string(RoleFromContext(r.Context())))
+			w.WriteHeader(http.StatusOK)
+		}))
+
+		r := httptest.NewRequest("GET", "/", nil)
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, r)
+
+		require.Equal(t, http.StatusOK, w.Code)
+		require.True(t, called)
+	})
+
+	t.Run("with scopes enforces auth and passes claims to next handler", func(t *testing.T) {
+		t.Parallel()
+		v := mocks.NewMockTokenValidator(t)
+		v.EXPECT().ValidateAccessToken("good").Return("user-9", "admin", nil)
+
+		handler := AuthFromScopes(v)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			require.Equal(t, "user-9", UserIDFromContext(r.Context()))
+			require.Equal(t, api.Admin, RoleFromContext(r.Context()))
+			w.WriteHeader(http.StatusOK)
+		}))
+
+		r := httptest.NewRequest("GET", "/", nil)
+		r.Header.Set("Authorization", "Bearer good")
+		//nolint:staticcheck // SA1029: api.BearerAuthScopes is the exact key the generated server wrapper sets; tests must use the same.
+		ctx := context.WithValue(r.Context(), api.BearerAuthScopes, []string{})
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, r.WithContext(ctx))
+
+		require.Equal(t, http.StatusOK, w.Code)
+	})
+
+	t.Run("with scopes rejects missing header", func(t *testing.T) {
+		t.Parallel()
+		v := mocks.NewMockTokenValidator(t)
+		handler := AuthFromScopes(v)(okHandler())
+
+		r := httptest.NewRequest("GET", "/", nil)
+		//nolint:staticcheck // SA1029: api.BearerAuthScopes is the exact key the generated server wrapper sets; tests must use the same.
+		ctx := context.WithValue(r.Context(), api.BearerAuthScopes, []string{})
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, r.WithContext(ctx))
+
+		require.Equal(t, http.StatusUnauthorized, w.Code)
+		require.Equal(t, api.ErrorResponse{
+			Error: api.APIError{
+				Code:    domain.CodeUnauthorized,
+				Message: "Missing authorization header",
+			},
+		}, parseError(t, w))
+	})
+
+	t.Run("with scopes rejects malformed header", func(t *testing.T) {
+		t.Parallel()
+		v := mocks.NewMockTokenValidator(t)
+		handler := AuthFromScopes(v)(okHandler())
+
+		r := httptest.NewRequest("GET", "/", nil)
+		r.Header.Set("Authorization", "Token abc")
+		//nolint:staticcheck // SA1029: api.BearerAuthScopes is the exact key the generated server wrapper sets; tests must use the same.
+		ctx := context.WithValue(r.Context(), api.BearerAuthScopes, []string{})
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, r.WithContext(ctx))
+
+		require.Equal(t, http.StatusUnauthorized, w.Code)
+	})
+
+	t.Run("with scopes rejects invalid token", func(t *testing.T) {
+		t.Parallel()
+		v := mocks.NewMockTokenValidator(t)
+		v.EXPECT().ValidateAccessToken("bad").Return("", "", errors.New("expired"))
+		handler := AuthFromScopes(v)(okHandler())
+
+		r := httptest.NewRequest("GET", "/", nil)
+		r.Header.Set("Authorization", "Bearer bad")
+		//nolint:staticcheck // SA1029: api.BearerAuthScopes is the exact key the generated server wrapper sets; tests must use the same.
+		ctx := context.WithValue(r.Context(), api.BearerAuthScopes, []string{})
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, r.WithContext(ctx))
+
+		require.Equal(t, http.StatusUnauthorized, w.Code)
 	})
 }
 

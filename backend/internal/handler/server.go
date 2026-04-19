@@ -53,18 +53,20 @@ type Server struct {
 	brandService BrandService
 	authzService AuthzService
 	auditService AuditLogService
+	version      string
 	cookieSecure bool
 }
 
 var _ api.ServerInterface = (*Server)(nil)
 
 // NewServer creates a new Server.
-func NewServer(auth AuthService, brands BrandService, authz AuthzService, audit AuditLogService, cookieSecure bool) *Server {
+func NewServer(auth AuthService, brands BrandService, authz AuthzService, audit AuditLogService, version string, cookieSecure bool) *Server {
 	return &Server{
 		authService:  auth,
 		brandService: brands,
 		authzService: authz,
 		auditService: audit,
+		version:      version,
 		cookieSecure: cookieSecure,
 	}
 }

@@ -61,10 +61,13 @@ func doJSON[Resp any](t *testing.T, router http.Handler, method, path string, bo
 	return w, resp
 }
 
-// withAdminCtx injects admin identity into the request context the same way
-// the auth middleware would in production.
-func withAdminCtx(r *http.Request) {
-	ctx := context.WithValue(r.Context(), middleware.ContextKeyUserID, "u-admin")
-	ctx = context.WithValue(ctx, middleware.ContextKeyRole, api.Admin)
-	*r = *r.WithContext(ctx)
+// withRole injects the given userID and role into the request context the
+// same way the auth middleware would in production. Use it when a handler
+// test needs an authenticated caller with a specific role.
+func withRole(userID string, role api.UserRole) func(*http.Request) {
+	return func(r *http.Request) {
+		ctx := context.WithValue(r.Context(), middleware.ContextKeyUserID, userID)
+		ctx = context.WithValue(ctx, middleware.ContextKeyRole, role)
+		*r = *r.WithContext(ctx)
+	}
 }

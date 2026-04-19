@@ -7,24 +7,28 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/mock"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/pashagolub/pgxmock/v4"
 	"github.com/stretchr/testify/require"
-
-	"github.com/alikhanmurzayev/ugcboost/backend/internal/dbutil/mocks"
 )
 
 func TestAuditRepository_Create(t *testing.T) {
 	t.Parallel()
 
-	t.Run("SQL", func(t *testing.T) {
+	const sqlStmt = "INSERT INTO audit_logs (action,actor_id,actor_role,entity_id,entity_type,ip_address,new_value,old_value) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)"
+
+	t.Run("success", func(t *testing.T) {
 		t.Parallel()
-		db := mocks.NewMockDB(t)
-		repo := &auditRepository{db: db}
+		mock := newPgxmock(t)
+		repo := &auditRepository{db: mock}
 		entityID := "e-1"
 		newVal := json.RawMessage(`{"name":"test"}`)
-		gotSQL, gotArgs := captureExec(t, db, 8)
 
-		_ = repo.Create(context.Background(), AuditLogRow{
+		mock.ExpectExec(sqlStmt).
+			WithArgs("brand_create", "u-1", "admin", entityID, "brand", "127.0.0.1", newVal, json.RawMessage(nil)).
+			WillReturnResult(pgconn.NewCommandTag("INSERT 0 1"))
+
+		err := repo.Create(context.Background(), AuditLogRow{
 			ActorID:    "u-1",
 			ActorRole:  "admin",
 			Action:     "brand_create",
@@ -33,82 +37,140 @@ func TestAuditRepository_Create(t *testing.T) {
 			NewValue:   newVal,
 			IPAddress:  "127.0.0.1",
 		})
+		require.NoError(t, err)
+	})
 
-		require.Equal(t,
-			"INSERT INTO audit_logs (action,actor_id,actor_role,entity_id,entity_type,ip_address,new_value,old_value) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)",
-			*gotSQL)
-		require.Equal(t, []any{"brand_create", "u-1", "admin", entityID, "brand", "127.0.0.1", newVal, json.RawMessage(nil)}, *gotArgs)
+	t.Run("propagates error", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &auditRepository{db: mock}
+
+		mock.ExpectExec(sqlStmt).
+			WithArgs("brand_delete", "u-1", "admin", nil, "brand", "127.0.0.1", json.RawMessage(nil), json.RawMessage(nil)).
+			WillReturnError(errors.New("fk violation"))
+
+		err := repo.Create(context.Background(), AuditLogRow{
+			ActorID:    "u-1",
+			ActorRole:  "admin",
+			Action:     "brand_delete",
+			EntityType: "brand",
+			IPAddress:  "127.0.0.1",
+		})
+		require.ErrorContains(t, err, "fk violation")
 	})
 }
 
 func TestAuditRepository_List(t *testing.T) {
 	t.Parallel()
 
-	t.Run("count SQL no filters", func(t *testing.T) {
+	const countSQLNoFilters = "SELECT COUNT(*) FROM audit_logs"
+	const countSQLAllFilters = "SELECT COUNT(*) FROM audit_logs WHERE actor_id = $1 AND entity_type = $2 AND entity_id = $3 AND action = $4 AND created_at >= $5 AND created_at <= $6"
+	const dataSQLActorFilter = "SELECT action, actor_id, actor_role, created_at, entity_id, entity_type, id, ip_address, new_value, old_value FROM audit_logs WHERE actor_id = $1 ORDER BY created_at DESC LIMIT 20 OFFSET 20"
+
+	t.Run("empty result returns nil 0 nil without data query", func(t *testing.T) {
 		t.Parallel()
-		db := mocks.NewMockDB(t)
-		repo := &auditRepository{db: db}
-		gotSQL, _ := captureQuery(t, db, 0)
+		mock := newPgxmock(t)
+		repo := &auditRepository{db: mock}
 
-		_, _, _ = repo.List(context.Background(), AuditFilter{}, 1, 20)
+		mock.ExpectQuery(countSQLNoFilters).
+			WillReturnRows(pgxmock.NewRows([]string{"count"}).AddRow(int64(0)))
 
-		require.Equal(t,
-			"SELECT COUNT(*) FROM audit_logs",
-			*gotSQL)
+		rows, total, err := repo.List(context.Background(), AuditFilter{}, 1, 20)
+		require.NoError(t, err)
+		require.Nil(t, rows)
+		require.Zero(t, total)
 	})
 
-	t.Run("count SQL with all filters", func(t *testing.T) {
+	t.Run("count error propagates", func(t *testing.T) {
 		t.Parallel()
-		db := mocks.NewMockDB(t)
-		repo := &auditRepository{db: db}
+		mock := newPgxmock(t)
+		repo := &auditRepository{db: mock}
+
+		mock.ExpectQuery(countSQLNoFilters).
+			WillReturnError(errors.New("count failed"))
+
+		_, _, err := repo.List(context.Background(), AuditFilter{}, 1, 20)
+		require.ErrorContains(t, err, "count failed")
+	})
+
+	t.Run("data query error propagates", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &auditRepository{db: mock}
+
+		mock.ExpectQuery(countSQLNoFilters).
+			WillReturnRows(pgxmock.NewRows([]string{"count"}).AddRow(int64(5)))
+		mock.ExpectQuery("SELECT action, actor_id, actor_role, created_at, entity_id, entity_type, id, ip_address, new_value, old_value FROM audit_logs ORDER BY created_at DESC LIMIT 20 OFFSET 0").
+			WillReturnError(errors.New("data failed"))
+
+		_, _, err := repo.List(context.Background(), AuditFilter{}, 1, 20)
+		require.ErrorContains(t, err, "data failed")
+	})
+
+	t.Run("success maps rows with filters and pagination", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &auditRepository{db: mock}
+		entityID := "e-1"
+		newVal := json.RawMessage(`{"name":"test"}`)
+		oldVal := json.RawMessage(`{"name":"old"}`)
 		dateFrom := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
 		dateTo := time.Date(2026, 12, 31, 23, 59, 59, 0, time.UTC)
-		gotSQL, gotArgs := captureQuery(t, db, 6)
+		created1 := time.Date(2026, 3, 1, 10, 0, 0, 0, time.UTC)
+		created2 := time.Date(2026, 3, 2, 10, 0, 0, 0, time.UTC)
 
-		_, _, _ = repo.List(context.Background(), AuditFilter{
+		mock.ExpectQuery(countSQLAllFilters).
+			WithArgs("u-1", "brand", entityID, "brand_create", dateFrom, dateTo).
+			WillReturnRows(pgxmock.NewRows([]string{"count"}).AddRow(int64(2)))
+		mock.ExpectQuery("SELECT action, actor_id, actor_role, created_at, entity_id, entity_type, id, ip_address, new_value, old_value FROM audit_logs WHERE actor_id = $1 AND entity_type = $2 AND entity_id = $3 AND action = $4 AND created_at >= $5 AND created_at <= $6 ORDER BY created_at DESC LIMIT 20 OFFSET 0").
+			WithArgs("u-1", "brand", entityID, "brand_create", dateFrom, dateTo).
+			WillReturnRows(pgxmock.NewRows([]string{"action", "actor_id", "actor_role", "created_at", "entity_id", "entity_type", "id", "ip_address", "new_value", "old_value"}).
+				AddRow("brand_create", "u-1", "admin", created1, &entityID, "brand", "al-1", "127.0.0.1", newVal, oldVal).
+				AddRow("brand_update", "u-1", "admin", created2, &entityID, "brand", "al-2", "127.0.0.1", newVal, oldVal))
+
+		rows, total, err := repo.List(context.Background(), AuditFilter{
 			ActorID:    "u-1",
 			EntityType: "brand",
-			EntityID:   "e-1",
+			EntityID:   entityID,
 			Action:     "brand_create",
 			DateFrom:   &dateFrom,
 			DateTo:     &dateTo,
 		}, 1, 20)
+		require.NoError(t, err)
+		require.Equal(t, int64(2), total)
+		require.Len(t, rows, 2)
 
-		require.Equal(t,
-			"SELECT COUNT(*) FROM audit_logs WHERE actor_id = $1 AND entity_type = $2 AND entity_id = $3 AND action = $4 AND created_at >= $5 AND created_at <= $6",
-			*gotSQL)
-		require.Equal(t, []any{"u-1", "brand", "e-1", "brand_create", dateFrom, dateTo}, *gotArgs)
+		// Compare JSON payloads via JSONEq, then zero them for whole-struct equality.
+		require.JSONEq(t, string(newVal), string(rows[0].NewValue))
+		require.JSONEq(t, string(oldVal), string(rows[0].OldValue))
+		require.JSONEq(t, string(newVal), string(rows[1].NewValue))
+		require.JSONEq(t, string(oldVal), string(rows[1].OldValue))
+
+		for _, r := range rows {
+			r.NewValue = nil
+			r.OldValue = nil
+		}
+		require.Equal(t, []*AuditLogRow{
+			{ID: "al-1", ActorID: "u-1", ActorRole: "admin", Action: "brand_create", EntityType: "brand", EntityID: &entityID, IPAddress: "127.0.0.1", CreatedAt: created1},
+			{ID: "al-2", ActorID: "u-1", ActorRole: "admin", Action: "brand_update", EntityType: "brand", EntityID: &entityID, IPAddress: "127.0.0.1", CreatedAt: created2},
+		}, rows)
 	})
 
-	t.Run("data SQL with pagination", func(t *testing.T) {
+	t.Run("data query uses actor filter and offset for page 2", func(t *testing.T) {
 		t.Parallel()
-		db := mocks.NewMockDB(t)
-		repo := &auditRepository{db: db}
+		mock := newPgxmock(t)
+		repo := &auditRepository{db: mock}
 
-		var capturedSQL string
-		var capturedArgs []any
+		mock.ExpectQuery("SELECT COUNT(*) FROM audit_logs WHERE actor_id = $1").
+			WithArgs("u-1").
+			WillReturnRows(pgxmock.NewRows([]string{"count"}).AddRow(int64(25)))
+		mock.ExpectQuery(dataSQLActorFilter).
+			WithArgs("u-1").
+			WillReturnRows(pgxmock.NewRows([]string{"action", "actor_id", "actor_role", "created_at", "entity_id", "entity_type", "id", "ip_address", "new_value", "old_value"}))
 
-		// First Query call: count — return scalarRows with total=1.
-		db.On("Query", mock.Anything, mock.Anything, mock.Anything).
-			Return(&scalarRows{val: 1}, nil).
-			Once()
-
-		// Second Query call: data — capture SQL and args.
-		db.On("Query", mock.Anything, mock.Anything, mock.Anything).
-			Run(func(callArgs mock.Arguments) {
-				capturedSQL = callArgs.String(1)
-				if len(callArgs) > 2 {
-					capturedArgs = callArgs[2].([]any)
-				}
-			}).
-			Return(nil, errors.New("mock: query intercepted")).
-			Once()
-
-		_, _, _ = repo.List(context.Background(), AuditFilter{ActorID: "u-1"}, 2, 20)
-
-		require.Equal(t,
-			"SELECT action, actor_id, actor_role, created_at, entity_id, entity_type, id, ip_address, new_value, old_value FROM audit_logs WHERE actor_id = $1 ORDER BY created_at DESC LIMIT 20 OFFSET 20",
-			capturedSQL)
-		require.Equal(t, []any{"u-1"}, capturedArgs)
+		rows, total, err := repo.List(context.Background(), AuditFilter{ActorID: "u-1"}, 2, 20)
+		require.NoError(t, err)
+		require.Equal(t, int64(25), total)
+		require.Empty(t, rows)
 	})
 }

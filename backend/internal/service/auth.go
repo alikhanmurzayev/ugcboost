@@ -111,41 +111,51 @@ type RefreshResult struct {
 }
 
 // Refresh validates a refresh token, rotates it, and returns new tokens.
+// Claim + save happen in a single transaction so a save failure cannot leave
+// the user with their old refresh token deleted and no new one.
 func (s *AuthService) Refresh(ctx context.Context, rawRefreshToken string) (*RefreshResult, error) {
-	userRepo := s.repoFactory.NewUserRepo(s.pool)
 	hash := HashToken(rawRefreshToken)
 
-	// Atomic claim: DELETE...RETURNING prevents race condition on reuse
-	rt, err := userRepo.ClaimRefreshToken(ctx, hash)
+	var result *RefreshResult
+	err := dbutil.WithTx(ctx, s.pool, func(tx dbutil.DB) error {
+		userRepo := s.repoFactory.NewUserRepo(tx)
+
+		rt, err := userRepo.ClaimRefreshToken(ctx, hash)
+		if err != nil {
+			return domain.ErrUnauthorized
+		}
+
+		user, err := userRepo.GetByID(ctx, rt.UserID)
+		if err != nil {
+			return domain.ErrUnauthorized
+		}
+
+		accessToken, err := s.tokens.GenerateAccessToken(user.ID, user.Role)
+		if err != nil {
+			return fmt.Errorf("generate access token: %w", err)
+		}
+
+		newRaw, newHash, newExpires, err := s.tokens.GenerateRefreshToken()
+		if err != nil {
+			return fmt.Errorf("generate refresh token: %w", err)
+		}
+
+		if err := userRepo.SaveRefreshToken(ctx, user.ID, newHash, newExpires); err != nil {
+			return fmt.Errorf("save refresh token: %w", err)
+		}
+
+		result = &RefreshResult{
+			AccessToken:      accessToken,
+			RefreshTokenRaw:  newRaw,
+			RefreshExpiresAt: newExpires.Unix(),
+			User:             userRowToDomain(user),
+		}
+		return nil
+	})
 	if err != nil {
-		return nil, domain.ErrUnauthorized
+		return nil, err
 	}
-
-	user, err := userRepo.GetByID(ctx, rt.UserID)
-	if err != nil {
-		return nil, domain.ErrUnauthorized
-	}
-
-	accessToken, err := s.tokens.GenerateAccessToken(user.ID, user.Role)
-	if err != nil {
-		return nil, fmt.Errorf("generate access token: %w", err)
-	}
-
-	newRaw, newHash, newExpires, err := s.tokens.GenerateRefreshToken()
-	if err != nil {
-		return nil, fmt.Errorf("generate refresh token: %w", err)
-	}
-
-	if err := userRepo.SaveRefreshToken(ctx, user.ID, newHash, newExpires); err != nil {
-		return nil, fmt.Errorf("save refresh token: %w", err)
-	}
-
-	return &RefreshResult{
-		AccessToken:      accessToken,
-		RefreshTokenRaw:  newRaw,
-		RefreshExpiresAt: newExpires.Unix(),
-		User:             userRowToDomain(user),
-	}, nil
+	return result, nil
 }
 
 // Logout invalidates all refresh tokens for the user and records the
