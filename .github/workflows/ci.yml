@@ -89,7 +89,6 @@ jobs:
     name: Coverage Warning (non-blocking)
     runs-on: ubuntu-latest
     continue-on-error: true
-    needs: [test-unit-backend]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
