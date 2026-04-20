@@ -13,6 +13,24 @@ const (
 	BearerAuthScopes = "bearerAuth.Scopes"
 )
 
+// Defines values for SocialPlatform.
+const (
+	Instagram SocialPlatform = "instagram"
+	Tiktok    SocialPlatform = "tiktok"
+)
+
+// Valid indicates whether the value is a known member of the SocialPlatform enum.
+func (e SocialPlatform) Valid() bool {
+	switch e {
+	case Instagram:
+		return true
+	case Tiktok:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for UserRole.
 const (
 	Admin        UserRole = "admin"
@@ -111,10 +129,67 @@ type BrandResult struct {
 	Data Brand `json:"data"`
 }
 
+// ConsentsInput Four mandatory consents captured separately per FR4 and the legal
+// documents. Every field must be true; otherwise the request is rejected
+// with 422.
+type ConsentsInput struct {
+	// CrossBorder Consent to cross-border personal data transfer.
+	CrossBorder bool `json:"crossBorder"`
+
+	// Processing Consent to personal data processing.
+	Processing bool `json:"processing"`
+
+	// Terms Acceptance of the user agreement and platform terms.
+	Terms bool `json:"terms"`
+
+	// ThirdParty Consent to personal data transfer to third parties (LiveDune, TrustMe, etc.).
+	ThirdParty bool `json:"thirdParty"`
+}
+
 // CreateBrandRequest defines model for CreateBrandRequest.
 type CreateBrandRequest struct {
 	LogoUrl *string `json:"logoUrl,omitempty"`
 	Name    string  `json:"name"`
+}
+
+// CreatorApplicationSubmitData defines model for CreatorApplicationSubmitData.
+type CreatorApplicationSubmitData struct {
+	// ApplicationId UUID of the newly created application (also embedded into the bot deep-link).
+	ApplicationId openapi_types.UUID `json:"applicationId"`
+
+	// TelegramBotUrl Deep-link to the Telegram bot carrying application id as start parameter.
+	TelegramBotUrl string `json:"telegramBotUrl"`
+}
+
+// CreatorApplicationSubmitRequest defines model for CreatorApplicationSubmitRequest.
+type CreatorApplicationSubmitRequest struct {
+	Address string `json:"address"`
+
+	// Categories One or more category codes from the categories catalogue. Must be non-empty.
+	Categories []string `json:"categories"`
+	City       string   `json:"city"`
+
+	// Consents Four mandatory consents captured separately per FR4 and the legal
+	// documents. Every field must be true; otherwise the request is rejected
+	// with 422.
+	Consents  ConsentsInput `json:"consents"`
+	FirstName string        `json:"firstName"`
+
+	// Iin Kazakhstani individual identification number (12 digits).
+	Iin      string `json:"iin"`
+	LastName string `json:"lastName"`
+
+	// MiddleName Optional patronymic (not every applicant has one).
+	MiddleName *string `json:"middleName,omitempty"`
+	Phone      string  `json:"phone"`
+
+	// Socials One or more social accounts. Multiple handles on the same platform are allowed.
+	Socials []SocialAccountInput `json:"socials"`
+}
+
+// CreatorApplicationSubmitResult defines model for CreatorApplicationSubmitResult.
+type CreatorApplicationSubmitResult struct {
+	Data CreatorApplicationSubmitData `json:"data"`
 }
 
 // ErrorResponse defines model for ErrorResponse.
@@ -196,6 +271,18 @@ type PasswordResetRequestBody struct {
 	Email openapi_types.Email `json:"email"`
 }
 
+// SocialAccountInput defines model for SocialAccountInput.
+type SocialAccountInput struct {
+	// Handle Account handle or public identifier on the given platform.
+	Handle string `json:"handle"`
+
+	// Platform Supported social network for creator accounts (MVP scope).
+	Platform SocialPlatform `json:"platform"`
+}
+
+// SocialPlatform Supported social network for creator accounts (MVP scope).
+type SocialPlatform string
+
 // UpdateBrandRequest defines model for UpdateBrandRequest.
 type UpdateBrandRequest struct {
 	LogoUrl *string `json:"logoUrl,omitempty"`
@@ -246,3 +333,6 @@ type UpdateBrandJSONRequestBody = UpdateBrandRequest
 
 // AssignManagerJSONRequestBody defines body for AssignManager for application/json ContentType.
 type AssignManagerJSONRequestBody = AssignManagerRequest
+
+// SubmitCreatorApplicationJSONRequestBody defines body for SubmitCreatorApplication for application/json ContentType.
+type SubmitCreatorApplicationJSONRequestBody = CreatorApplicationSubmitRequest

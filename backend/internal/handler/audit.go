@@ -53,9 +53,13 @@ func (s *Server) ListAuditLogs(w http.ResponseWriter, r *http.Request, params ap
 
 	items := make([]api.AuditLogEntry, len(logs))
 	for i, l := range logs {
+		actorID := ""
+		if l.ActorID != nil {
+			actorID = *l.ActorID
+		}
 		items[i] = api.AuditLogEntry{
 			Id:         l.ID,
-			ActorId:    l.ActorID,
+			ActorId:    actorID,
 			ActorRole:  l.ActorRole,
 			Action:     l.Action,
 			EntityType: l.EntityType,

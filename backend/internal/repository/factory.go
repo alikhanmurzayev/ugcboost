@@ -26,3 +26,28 @@ func (f *RepoFactory) NewBrandRepo(db dbutil.DB) BrandRepo {
 func (f *RepoFactory) NewAuditRepo(db dbutil.DB) AuditRepo {
 	return &auditRepository{db: db}
 }
+
+// NewCategoryRepo creates a category repository bound to the given DB.
+func (f *RepoFactory) NewCategoryRepo(db dbutil.DB) CategoryRepo {
+	return &categoryRepository{db: db}
+}
+
+// NewCreatorApplicationRepo creates a creator application repository bound to the given DB.
+func (f *RepoFactory) NewCreatorApplicationRepo(db dbutil.DB) CreatorApplicationRepo {
+	return &creatorApplicationRepository{db: db}
+}
+
+// NewCreatorApplicationCategoryRepo creates a repo for the creator_application_categories join table.
+func (f *RepoFactory) NewCreatorApplicationCategoryRepo(db dbutil.DB) CreatorApplicationCategoryRepo {
+	return &creatorApplicationCategoryRepository{db: db}
+}
+
+// NewCreatorApplicationSocialRepo creates a repo for the creator_application_socials table.
+func (f *RepoFactory) NewCreatorApplicationSocialRepo(db dbutil.DB) CreatorApplicationSocialRepo {
+	return &creatorApplicationSocialRepository{db: db}
+}
+
+// NewCreatorApplicationConsentRepo creates a repo for the creator_application_consents table.
+func (f *RepoFactory) NewCreatorApplicationConsentRepo(db dbutil.DB) CreatorApplicationConsentRepo {
+	return &creatorApplicationConsentRepository{db: db}
+}

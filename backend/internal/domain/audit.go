@@ -6,9 +6,10 @@ import (
 )
 
 // AuditLog is the domain representation of an audit log entry.
+// ActorID is nil for public-surface actions (no authenticated user).
 type AuditLog struct {
 	ID         string          `json:"id"`
-	ActorID    string          `json:"actor_id"`
+	ActorID    *string         `json:"actor_id,omitempty"`
 	ActorRole  string          `json:"actor_role"`
 	Action     string          `json:"action"`
 	EntityType string          `json:"entity_type"`

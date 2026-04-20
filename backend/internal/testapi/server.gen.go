@@ -14,14 +14,17 @@ import (
 
 // Defines values for CleanupEntityRequestType.
 const (
-	Brand CleanupEntityRequestType = "brand"
-	User  CleanupEntityRequestType = "user"
+	Brand              CleanupEntityRequestType = "brand"
+	CreatorApplication CleanupEntityRequestType = "creator_application"
+	User               CleanupEntityRequestType = "user"
 )
 
 // Valid indicates whether the value is a known member of the CleanupEntityRequestType enum.
 func (e CleanupEntityRequestType) Valid() bool {
 	switch e {
 	case Brand:
+		return true
+	case CreatorApplication:
 		return true
 	case User:
 		return true

@@ -143,6 +143,11 @@ type ClientInterface interface {
 	// RemoveManager request
 	RemoveManager(ctx context.Context, brandID string, userID string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// SubmitCreatorApplicationWithBody request with any body
+	SubmitCreatorApplicationWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	SubmitCreatorApplication(ctx context.Context, body SubmitCreatorApplicationJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// HealthCheck request
 	HealthCheck(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 }
@@ -377,6 +382,30 @@ func (c *Client) AssignManager(ctx context.Context, brandID string, body AssignM
 
 func (c *Client) RemoveManager(ctx context.Context, brandID string, userID string, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewRemoveManagerRequest(c.Server, brandID, userID)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) SubmitCreatorApplicationWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewSubmitCreatorApplicationRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) SubmitCreatorApplication(ctx context.Context, body SubmitCreatorApplicationJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewSubmitCreatorApplicationRequest(c.Server, body)
 	if err != nil {
 		return nil, err
 	}
@@ -1031,6 +1060,46 @@ func NewRemoveManagerRequest(server string, brandID string, userID string) (*htt
 	return req, nil
 }
 
+// NewSubmitCreatorApplicationRequest calls the generic SubmitCreatorApplication builder with application/json body
+func NewSubmitCreatorApplicationRequest(server string, body SubmitCreatorApplicationJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewSubmitCreatorApplicationRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewSubmitCreatorApplicationRequestWithBody generates requests for SubmitCreatorApplication with any type of body
+func NewSubmitCreatorApplicationRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/creators/applications")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 // NewHealthCheckRequest generates requests for HealthCheck
 func NewHealthCheckRequest(server string) (*http.Request, error) {
 	var err error
@@ -1154,6 +1223,11 @@ type ClientWithResponsesInterface interface {
 
 	// RemoveManagerWithResponse request
 	RemoveManagerWithResponse(ctx context.Context, brandID string, userID string, reqEditors ...RequestEditorFn) (*RemoveManagerResponse, error)
+
+	// SubmitCreatorApplicationWithBodyWithResponse request with any body
+	SubmitCreatorApplicationWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SubmitCreatorApplicationResponse, error)
+
+	SubmitCreatorApplicationWithResponse(ctx context.Context, body SubmitCreatorApplicationJSONRequestBody, reqEditors ...RequestEditorFn) (*SubmitCreatorApplicationResponse, error)
 
 	// HealthCheckWithResponse request
 	HealthCheckWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*HealthCheckResponse, error)
@@ -1498,6 +1572,31 @@ func (r RemoveManagerResponse) StatusCode() int {
 	return 0
 }
 
+type SubmitCreatorApplicationResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON201      *CreatorApplicationSubmitResult
+	JSON409      *ErrorResponse
+	JSON422      *ErrorResponse
+	JSONDefault  *ErrorResponse
+}
+
+// Status returns HTTPResponse.Status
+func (r SubmitCreatorApplicationResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r SubmitCreatorApplicationResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type HealthCheckResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -1693,6 +1792,23 @@ func (c *ClientWithResponses) RemoveManagerWithResponse(ctx context.Context, bra
 		return nil, err
 	}
 	return ParseRemoveManagerResponse(rsp)
+}
+
+// SubmitCreatorApplicationWithBodyWithResponse request with arbitrary body returning *SubmitCreatorApplicationResponse
+func (c *ClientWithResponses) SubmitCreatorApplicationWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SubmitCreatorApplicationResponse, error) {
+	rsp, err := c.SubmitCreatorApplicationWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseSubmitCreatorApplicationResponse(rsp)
+}
+
+func (c *ClientWithResponses) SubmitCreatorApplicationWithResponse(ctx context.Context, body SubmitCreatorApplicationJSONRequestBody, reqEditors ...RequestEditorFn) (*SubmitCreatorApplicationResponse, error) {
+	rsp, err := c.SubmitCreatorApplication(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseSubmitCreatorApplicationResponse(rsp)
 }
 
 // HealthCheckWithResponse request returning *HealthCheckResponse
@@ -2272,6 +2388,53 @@ func ParseRemoveManagerResponse(rsp *http.Response) (*RemoveManagerResponse, err
 			return nil, err
 		}
 		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseSubmitCreatorApplicationResponse parses an HTTP response from a SubmitCreatorApplicationWithResponse call
+func ParseSubmitCreatorApplicationResponse(rsp *http.Response) (*SubmitCreatorApplicationResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &SubmitCreatorApplicationResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest CreatorApplicationSubmitResult
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON422 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
 		var dest ErrorResponse

@@ -75,16 +75,17 @@ func TestAuditService_List(t *testing.T) {
 			DateTo:     &dateTo,
 		}
 
+		actorID := "u-1"
 		factory.EXPECT().NewAuditRepo(mock.Anything).Return(repo)
 		repo.EXPECT().List(mock.Anything, expectedFilter, 2, 50).
 			Return([]*repository.AuditLogRow{
 				{
-					ID: "al-1", ActorID: "u-1", ActorRole: "admin", Action: "brand_create",
+					ID: "al-1", ActorID: &actorID, ActorRole: "admin", Action: "brand_create",
 					EntityType: "brand", EntityID: &entityID, OldValue: oldVal, NewValue: newVal,
 					IPAddress: "127.0.0.1", CreatedAt: created1,
 				},
 				{
-					ID: "al-2", ActorID: "u-1", ActorRole: "admin", Action: "brand_update",
+					ID: "al-2", ActorID: &actorID, ActorRole: "admin", Action: "brand_update",
 					EntityType: "brand", EntityID: &entityID, OldValue: oldVal, NewValue: newVal,
 					IPAddress: "127.0.0.1", CreatedAt: created2,
 				},
@@ -111,8 +112,8 @@ func TestAuditService_List(t *testing.T) {
 			l.OldValue = nil
 		}
 		require.Equal(t, []*domain.AuditLog{
-			{ID: "al-1", ActorID: "u-1", ActorRole: "admin", Action: "brand_create", EntityType: "brand", EntityID: &entityID, IPAddress: "127.0.0.1", CreatedAt: created1},
-			{ID: "al-2", ActorID: "u-1", ActorRole: "admin", Action: "brand_update", EntityType: "brand", EntityID: &entityID, IPAddress: "127.0.0.1", CreatedAt: created2},
+			{ID: "al-1", ActorID: &actorID, ActorRole: "admin", Action: "brand_create", EntityType: "brand", EntityID: &entityID, IPAddress: "127.0.0.1", CreatedAt: created1},
+			{ID: "al-2", ActorID: &actorID, ActorRole: "admin", Action: "brand_update", EntityType: "brand", EntityID: &entityID, IPAddress: "127.0.0.1", CreatedAt: created2},
 		}, logs)
 	})
 }

@@ -21,15 +21,16 @@ func TestAuditRepository_Create(t *testing.T) {
 		t.Parallel()
 		mock := newPgxmock(t)
 		repo := &auditRepository{db: mock}
+		actorID := "u-1"
 		entityID := "e-1"
 		newVal := json.RawMessage(`{"name":"test"}`)
 
 		mock.ExpectExec(sqlStmt).
-			WithArgs("brand_create", "u-1", "admin", entityID, "brand", "127.0.0.1", newVal, json.RawMessage(nil)).
+			WithArgs("brand_create", "u-1", "admin", "e-1", "brand", "127.0.0.1", newVal, json.RawMessage(nil)).
 			WillReturnResult(pgconn.NewCommandTag("INSERT 0 1"))
 
 		err := repo.Create(context.Background(), AuditLogRow{
-			ActorID:    "u-1",
+			ActorID:    &actorID,
 			ActorRole:  "admin",
 			Action:     "brand_create",
 			EntityType: "brand",
@@ -44,19 +45,37 @@ func TestAuditRepository_Create(t *testing.T) {
 		t.Parallel()
 		mock := newPgxmock(t)
 		repo := &auditRepository{db: mock}
+		actorID := "u-1"
 
 		mock.ExpectExec(sqlStmt).
 			WithArgs("brand_delete", "u-1", "admin", nil, "brand", "127.0.0.1", json.RawMessage(nil), json.RawMessage(nil)).
 			WillReturnError(errors.New("fk violation"))
 
 		err := repo.Create(context.Background(), AuditLogRow{
-			ActorID:    "u-1",
+			ActorID:    &actorID,
 			ActorRole:  "admin",
 			Action:     "brand_delete",
 			EntityType: "brand",
 			IPAddress:  "127.0.0.1",
 		})
 		require.ErrorContains(t, err, "fk violation")
+	})
+
+	t.Run("nil actor for public surface action", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &auditRepository{db: mock}
+
+		mock.ExpectExec(sqlStmt).
+			WithArgs("creator_application_submit", nil, "", nil, "creator_application", "127.0.0.1", json.RawMessage(nil), json.RawMessage(nil)).
+			WillReturnResult(pgconn.NewCommandTag("INSERT 0 1"))
+
+		err := repo.Create(context.Background(), AuditLogRow{
+			Action:     "creator_application_submit",
+			EntityType: "creator_application",
+			IPAddress:  "127.0.0.1",
+		})
+		require.NoError(t, err)
 	})
 }
 
@@ -111,6 +130,7 @@ func TestAuditRepository_List(t *testing.T) {
 		t.Parallel()
 		mock := newPgxmock(t)
 		repo := &auditRepository{db: mock}
+		actorID := "u-1"
 		entityID := "e-1"
 		newVal := json.RawMessage(`{"name":"test"}`)
 		oldVal := json.RawMessage(`{"name":"old"}`)
@@ -125,8 +145,8 @@ func TestAuditRepository_List(t *testing.T) {
 		mock.ExpectQuery("SELECT action, actor_id, actor_role, created_at, entity_id, entity_type, id, ip_address, new_value, old_value FROM audit_logs WHERE actor_id = $1 AND entity_type = $2 AND entity_id = $3 AND action = $4 AND created_at >= $5 AND created_at <= $6 ORDER BY created_at DESC LIMIT 20 OFFSET 0").
 			WithArgs("u-1", "brand", entityID, "brand_create", dateFrom, dateTo).
 			WillReturnRows(pgxmock.NewRows([]string{"action", "actor_id", "actor_role", "created_at", "entity_id", "entity_type", "id", "ip_address", "new_value", "old_value"}).
-				AddRow("brand_create", "u-1", "admin", created1, &entityID, "brand", "al-1", "127.0.0.1", newVal, oldVal).
-				AddRow("brand_update", "u-1", "admin", created2, &entityID, "brand", "al-2", "127.0.0.1", newVal, oldVal))
+				AddRow("brand_create", &actorID, "admin", created1, &entityID, "brand", "al-1", "127.0.0.1", newVal, oldVal).
+				AddRow("brand_update", &actorID, "admin", created2, &entityID, "brand", "al-2", "127.0.0.1", newVal, oldVal))
 
 		rows, total, err := repo.List(context.Background(), AuditFilter{
 			ActorID:    "u-1",
@@ -151,8 +171,8 @@ func TestAuditRepository_List(t *testing.T) {
 			r.OldValue = nil
 		}
 		require.Equal(t, []*AuditLogRow{
-			{ID: "al-1", ActorID: "u-1", ActorRole: "admin", Action: "brand_create", EntityType: "brand", EntityID: &entityID, IPAddress: "127.0.0.1", CreatedAt: created1},
-			{ID: "al-2", ActorID: "u-1", ActorRole: "admin", Action: "brand_update", EntityType: "brand", EntityID: &entityID, IPAddress: "127.0.0.1", CreatedAt: created2},
+			{ID: "al-1", ActorID: &actorID, ActorRole: "admin", Action: "brand_create", EntityType: "brand", EntityID: &entityID, IPAddress: "127.0.0.1", CreatedAt: created1},
+			{ID: "al-2", ActorID: &actorID, ActorRole: "admin", Action: "brand_update", EntityType: "brand", EntityID: &entityID, IPAddress: "127.0.0.1", CreatedAt: created2},
 		}, rows)
 	})
 
