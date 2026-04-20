@@ -1,0 +1,53 @@
+import { Component } from "react";
+import type { ErrorInfo, ReactNode } from "react";
+import i18n from "@/shared/i18n/config";
+
+interface Props {
+  children: ReactNode;
+}
+
+interface State {
+  hasError: boolean;
+}
+
+export default class ErrorBoundary extends Component<Props, State> {
+  constructor(props: Props) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError(): State {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.error("ErrorBoundary caught:", error, info.componentStack);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div role="alert" data-testid="error-boundary" className="flex min-h-screen flex-col items-center justify-center bg-surface-100">
+          <p className="text-lg font-medium text-gray-900">
+            {i18n.t("common:somethingWentWrong")}
+          </p>
+          <p className="mt-1 text-sm text-gray-500">
+            {i18n.t("common:unexpectedError")}
+          </p>
+          <button
+            onClick={() => {
+              this.setState({ hasError: false });
+              window.location.reload();
+            }}
+            className="mt-4 rounded-button bg-primary px-4 py-2 text-sm font-medium text-white hover:bg-primary/90"
+            data-testid="error-reload-button"
+          >
+            {i18n.t("common:reload")}
+          </button>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}

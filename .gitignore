@@ -9,6 +9,18 @@ venv/
 dist/
 build/
 .next/
+.astro/
+*.exe
+*.out
+
+# Go
+backend/tmp/
+backend/vendor/
+backend/api
+backend/coverage.out
+backend/coverage.html
+
+# Generated code — committed to git, regenerated via make codegen
 
 # Environment
 .env
@@ -27,9 +39,12 @@ Thumbs.db
 
 # Claude Code
 .claude/settings.local.json
+.claude/projects/
 
-# Playwright MCP
+# Playwright
 .playwright-mcp/
+frontend/web/test-results/
+frontend/web/playwright-report/
 
 # BMad per-user config (each user runs /bmad-init after cloning)
 _bmad/*/config.yaml

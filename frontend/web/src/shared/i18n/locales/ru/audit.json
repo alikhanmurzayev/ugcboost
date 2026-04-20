@@ -1,0 +1,27 @@
+{
+  "title": "Журнал действий",
+  "loadError": "Не удалось загрузить журнал",
+  "noRecords": "Нет записей",
+  "date": "Дата",
+  "action": "Действие",
+  "type": "Тип",
+  "role": "Роль",
+  "ip": "IP",
+  "allTypes": "Все типы",
+  "allActions": "Все действия",
+  "entityTypeLabel": "Фильтр по типу сущности",
+  "actionLabel": "Фильтр по действию",
+  "entityTypes": {
+    "user": "Пользователь",
+    "brand": "Бренд"
+  },
+  "actions": {
+    "login": "Вход",
+    "password_reset": "Сброс пароля",
+    "brand_create": "Создание бренда",
+    "brand_update": "Обновление бренда",
+    "brand_delete": "Удаление бренда",
+    "manager_assign": "Назначение менеджера",
+    "manager_remove": "Удаление менеджера"
+  }
+}

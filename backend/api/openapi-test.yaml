@@ -1,0 +1,169 @@
+openapi: "3.0.3"
+info:
+  title: UGCBoost Test API
+  version: "0.1.0"
+  description: |
+    Test-only endpoints for E2E testing. Available only when ENABLE_TEST_ENDPOINTS=true.
+    NEVER enabled in production.
+
+servers:
+  - url: http://localhost:8081
+    description: E2E test environment
+
+paths:
+  /test/seed-user:
+    post:
+      operationId: seedUser
+      summary: Create a test user with given credentials and role
+      tags: [test]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SeedUserRequest"
+      responses:
+        "201":
+          description: User created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SeedUserResult"
+        "422":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /test/reset-tokens:
+    get:
+      operationId: getResetToken
+      summary: Get the raw reset token captured for the given email
+      tags: [test]
+      parameters:
+        - name: email
+          in: query
+          required: true
+          schema:
+            type: string
+            format: email
+      responses:
+        "200":
+          description: Token found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ResetTokenResult"
+        "404":
+          description: No token found for this email
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /test/cleanup-entity:
+    post:
+      operationId: cleanupEntity
+      summary: Hard-delete a test entity (user or brand) and its references
+      description: |
+        Test-only cleanup endpoint used by the e2e cleanup stack when no
+        business delete exists. For users this is a destructive hard delete
+        that also wipes audit_logs, brand_managers, refresh_tokens and
+        password_reset_tokens. For brands it forwards to the regular brand
+        delete. NEVER enabled in production.
+      tags: [test]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CleanupEntityRequest"
+      responses:
+        "204":
+          description: Entity deleted
+        "404":
+          description: Entity not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+components:
+  schemas:
+    SeedUserRequest:
+      type: object
+      required: [email, password, role]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 6
+        role:
+          type: string
+          enum: [admin, brand_manager]
+
+    SeedUserData:
+      type: object
+      required: [id, email, role]
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+          format: email
+        role:
+          type: string
+          enum: [admin, brand_manager]
+
+    SeedUserResult:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: "#/components/schemas/SeedUserData"
+
+    ResetTokenData:
+      type: object
+      required: [token]
+      properties:
+        token:
+          type: string
+
+    ResetTokenResult:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: "#/components/schemas/ResetTokenData"
+
+    CleanupEntityRequest:
+      type: object
+      required: [type, id]
+      properties:
+        type:
+          type: string
+          enum: [user, brand]
+        id:
+          type: string
+
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code:
+              type: string
+            message:
+              type: string

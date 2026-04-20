@@ -1,0 +1,828 @@
+openapi: "3.0.3"
+info:
+  title: UGCBoost API
+  version: "0.1.0"
+  description: UGCBoost platform API — contract-first, single source of truth.
+
+servers:
+  - url: http://localhost:8080
+    description: Local development
+  - url: https://api.ugcboost.kz
+    description: Production
+
+paths:
+  /healthz:
+    get:
+      operationId: healthCheck
+      summary: Health check
+      tags: [system]
+      responses:
+        "200":
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+        default:
+          description: Unexpected error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/login:
+    post:
+      operationId: login
+      summary: Authenticate with email and password
+      tags: [auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Login successful
+          headers:
+            Set-Cookie:
+              description: httpOnly refresh token cookie
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResult"
+        "401":
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          description: Unexpected error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/refresh:
+    post:
+      operationId: refreshToken
+      summary: Refresh access token using refresh token cookie
+      tags: [auth]
+      responses:
+        "200":
+          description: Token refreshed
+          headers:
+            Set-Cookie:
+              description: Rotated refresh token cookie
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LoginResult"
+        "401":
+          description: Invalid or expired refresh token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          description: Unexpected error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/logout:
+    post:
+      operationId: logout
+      summary: Logout and invalidate refresh token
+      tags: [auth]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Logged out
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+        default:
+          description: Unexpected error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/password-reset-request:
+    post:
+      operationId: requestPasswordReset
+      summary: Request a password reset token
+      tags: [auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PasswordResetRequestBody"
+      responses:
+        "200":
+          description: Reset token generated (always 200 to prevent email enumeration)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+        default:
+          description: Unexpected error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/password-reset:
+    post:
+      operationId: resetPassword
+      summary: Reset password with a valid token
+      tags: [auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PasswordResetBody"
+      responses:
+        "200":
+          description: Password updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+        "401":
+          description: Invalid or expired token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          description: Unexpected error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /auth/me:
+    get:
+      operationId: getMe
+      summary: Get current authenticated user
+      tags: [auth]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserResponse"
+        "401":
+          description: Not authenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          description: Unexpected error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /brands:
+    post:
+      operationId: createBrand
+      summary: Create a new brand
+      tags: [brands]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateBrandRequest"
+      responses:
+        "201":
+          description: Brand created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BrandResult"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          description: Unexpected error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    get:
+      operationId: listBrands
+      summary: List brands (admin sees all, manager sees own)
+      tags: [brands]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: List of brands
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListBrandsResult"
+        default:
+          description: Unexpected error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /brands/{brandID}:
+    parameters:
+      - name: brandID
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      operationId: getBrand
+      summary: Get brand details with managers
+      tags: [brands]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Brand details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GetBrandResult"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          description: Unexpected error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    put:
+      operationId: updateBrand
+      summary: Update brand
+      tags: [brands]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateBrandRequest"
+      responses:
+        "200":
+          description: Brand updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BrandResult"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          description: Unexpected error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      operationId: deleteBrand
+      summary: Delete brand
+      tags: [brands]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Brand deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          description: Unexpected error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /brands/{brandID}/managers:
+    parameters:
+      - name: brandID
+        in: path
+        required: true
+        schema:
+          type: string
+    post:
+      operationId: assignManager
+      summary: Assign manager to brand
+      tags: [brands]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AssignManagerRequest"
+      responses:
+        "201":
+          description: Manager assigned
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AssignManagerResult"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          description: Unexpected error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /audit-logs:
+    get:
+      operationId: listAuditLogs
+      summary: List audit logs (admin only)
+      tags: [audit]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: actor_id
+          in: query
+          schema:
+            type: string
+        - name: entity_type
+          in: query
+          schema:
+            type: string
+        - name: entity_id
+          in: query
+          schema:
+            type: string
+        - name: action
+          in: query
+          schema:
+            type: string
+        - name: date_from
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: date_to
+          in: query
+          schema:
+            type: string
+            format: date-time
+        - name: page
+          in: query
+          schema:
+            type: integer
+        - name: per_page
+          in: query
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Audit logs
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuditLogsResult"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          description: Unexpected error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /brands/{brandID}/managers/{userID}:
+    parameters:
+      - name: brandID
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: userID
+        in: path
+        required: true
+        schema:
+          type: string
+    delete:
+      operationId: removeManager
+      summary: Remove manager from brand
+      tags: [brands]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Manager removed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MessageResponse"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          description: Unexpected error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+components:
+  schemas:
+    HealthResponse:
+      type: object
+      required: [status, version]
+      properties:
+        status:
+          type: string
+          example: ok
+        version:
+          type: string
+          example: dev
+
+    APIError:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          description: Machine-readable error code (e.g. CREATOR_NOT_FOUND)
+          example: VALIDATION_ERROR
+        message:
+          type: string
+          description: Human-readable fallback message (English)
+          example: Invalid input
+
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          $ref: "#/components/schemas/APIError"
+
+    MessageData:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string
+          example: Operation successful
+
+    MessageResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: "#/components/schemas/MessageData"
+
+    LoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+          example: admin@ugcboost.kz
+        password:
+          type: string
+          minLength: 6
+          example: "password123"
+
+    LoginData:
+      type: object
+      required: [accessToken, user]
+      properties:
+        accessToken:
+          type: string
+        user:
+          $ref: "#/components/schemas/User"
+
+    LoginResult:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: "#/components/schemas/LoginData"
+
+    PasswordResetRequestBody:
+      type: object
+      required: [email]
+      properties:
+        email:
+          type: string
+          format: email
+
+    PasswordResetBody:
+      type: object
+      required: [token, newPassword]
+      properties:
+        token:
+          type: string
+        newPassword:
+          type: string
+          minLength: 6
+
+    User:
+      type: object
+      required: [id, email, role]
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+          format: email
+        role:
+          type: string
+          enum: [admin, brand_manager]
+
+    UserResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: "#/components/schemas/User"
+
+    CreateBrandRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        logoUrl:
+          type: string
+
+    UpdateBrandRequest:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+        logoUrl:
+          type: string
+
+    Brand:
+      type: object
+      required: [id, name, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        logoUrl:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    BrandResult:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: "#/components/schemas/Brand"
+
+    BrandListItem:
+      type: object
+      required: [id, name, managerCount, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        logoUrl:
+          type: string
+        managerCount:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    ListBrandsData:
+      type: object
+      required: [brands]
+      properties:
+        brands:
+          type: array
+          items:
+            $ref: "#/components/schemas/BrandListItem"
+
+    ListBrandsResult:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: "#/components/schemas/ListBrandsData"
+
+    ManagerInfo:
+      type: object
+      required: [userId, email, assignedAt]
+      properties:
+        userId:
+          type: string
+        email:
+          type: string
+        assignedAt:
+          type: string
+          format: date-time
+
+    BrandDetailData:
+      type: object
+      required: [id, name, createdAt, updatedAt, managers]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        logoUrl:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        managers:
+          type: array
+          items:
+            $ref: "#/components/schemas/ManagerInfo"
+
+    GetBrandResult:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: "#/components/schemas/BrandDetailData"
+
+    AssignManagerRequest:
+      type: object
+      required: [email]
+      properties:
+        email:
+          type: string
+
+    AssignManagerData:
+      type: object
+      required: [userId, email, role]
+      properties:
+        userId:
+          type: string
+        email:
+          type: string
+        role:
+          type: string
+        tempPassword:
+          type: string
+
+    AssignManagerResult:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: "#/components/schemas/AssignManagerData"
+
+    AuditLogEntry:
+      type: object
+      required: [id, actorId, actorRole, action, entityType, ipAddress, createdAt]
+      properties:
+        id:
+          type: string
+        actorId:
+          type: string
+        actorRole:
+          type: string
+        action:
+          type: string
+        entityType:
+          type: string
+        entityId:
+          type: string
+        oldValue: {}
+        newValue: {}
+        ipAddress:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    ListAuditLogsData:
+      type: object
+      required: [logs, total, page, perPage]
+      properties:
+        logs:
+          type: array
+          items:
+            $ref: "#/components/schemas/AuditLogEntry"
+        total:
+          type: integer
+        page:
+          type: integer
+        perPage:
+          type: integer
+
+    AuditLogsResult:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: "#/components/schemas/ListAuditLogsData"
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

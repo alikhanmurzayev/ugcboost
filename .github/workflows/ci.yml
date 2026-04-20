@@ -1,0 +1,375 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  GO_VERSION: "1.25"
+  NODE_VERSION: "20"
+  IMAGE_PREFIX: ghcr.io/${{ github.repository_owner }}/ugcboost
+
+jobs:
+  # ── Stage 1: Lint + Unit + Build & Push (all parallel) ──────────
+
+  lint-backend:
+    name: Lint Backend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v7
+        with:
+          working-directory: backend
+          version: v2.11.4
+
+  lint-web:
+    name: Lint Web
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - run: npm ci -w web
+        working-directory: frontend
+      - run: npx tsc --noEmit
+        working-directory: frontend/web
+      - run: npx eslint src/
+        working-directory: frontend/web
+
+  lint-tma:
+    name: Lint TMA
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - run: npm ci -w tma
+        working-directory: frontend
+      - run: npx tsc --noEmit
+        working-directory: frontend/tma
+      - run: npx eslint src/
+        working-directory: frontend/tma
+
+  lint-landing:
+    name: Lint Landing
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - run: npm ci -w landing
+        working-directory: frontend
+      - run: npx tsc --noEmit
+        working-directory: frontend/landing
+      - run: npx eslint src/
+        working-directory: frontend/landing
+
+  test-unit-backend:
+    name: Unit Tests Backend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: Run unit tests
+        working-directory: backend
+        run: go test ./... -count=1 -race -timeout 5m
+
+  coverage-warning:
+    name: Coverage Warning (non-blocking)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: Per-method coverage gate
+        run: |
+          set +e
+          make test-unit-backend-coverage 2>&1 | tee /tmp/cov.out
+          rc=$?
+          if [ "$rc" -ne 0 ]; then
+            {
+              echo "## Per-method coverage below 80%"
+              echo ""
+              echo '```'
+              grep '^FAIL ' /tmp/cov.out || true
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "::warning::Per-method coverage below 80% — see job summary"
+            exit 1
+          fi
+
+  test-unit-web:
+    name: Unit Tests Web
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - run: npm ci -w web
+        working-directory: frontend
+      - run: npm test -- --run
+        working-directory: frontend/web
+
+  test-unit-tma:
+    name: Unit Tests TMA
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - run: npm ci -w tma
+        working-directory: frontend
+      - run: npm test -- --run
+        working-directory: frontend/tma
+
+  test-unit-landing:
+    name: Unit Tests Landing
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - run: npm ci -w landing
+        working-directory: frontend
+      - run: npm test -- --run
+        working-directory: frontend/landing
+
+  build-and-push-images:
+    name: Build & Push (${{ matrix.image }})
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    strategy:
+      matrix:
+        include:
+          - image: backend
+            context: ./backend
+            file: ./backend/Dockerfile
+          - image: web
+            context: .
+            file: frontend/web/Dockerfile
+          - image: tma
+            context: .
+            file: frontend/tma/Dockerfile
+          - image: landing
+            context: .
+            file: frontend/landing/Dockerfile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Set image tag
+        id: tags
+        run: |
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          echo "sha=sha-${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+          echo "commit=${SHORT_SHA}" >> "$GITHUB_OUTPUT"
+      - name: Build & push
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          file: ${{ matrix.file }}
+          push: true
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,scope=${{ matrix.image }},mode=max
+          build-args: |
+            GIT_COMMIT=${{ steps.tags.outputs.commit }}
+          tags: |
+            ${{ env.IMAGE_PREFIX }}/${{ matrix.image }}:staging
+            ${{ env.IMAGE_PREFIX }}/${{ matrix.image }}:${{ steps.tags.outputs.sha }}
+
+  # ── Stage 2: Isolated E2E (parallel with stage 3) ──────────────
+
+  test-e2e-backend:
+    name: E2E Backend
+    runs-on: ubuntu-latest
+    needs:
+      [lint-backend, lint-web, lint-tma, lint-landing,
+       test-unit-backend, test-unit-web, test-unit-tma, test-unit-landing,
+       build-and-push-images]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Start services
+        run: |
+          IMAGE_PREFIX=${{ env.IMAGE_PREFIX }} IMAGE_TAG=staging \
+            docker compose -f docker-compose.ci.isolated.yml up -d --wait
+      - name: Run E2E tests
+        working-directory: backend/e2e
+        run: go test ./... -count=1 -v -race -timeout 5m
+      - name: Dump logs on failure
+        if: failure()
+        run: docker compose -f docker-compose.ci.isolated.yml logs
+      - name: Teardown
+        if: always()
+        run: docker compose -f docker-compose.ci.isolated.yml down
+
+  test-e2e-frontend:
+    name: E2E Frontend
+    runs-on: ubuntu-latest
+    needs:
+      [lint-backend, lint-web, lint-tma, lint-landing,
+       test-unit-backend, test-unit-web, test-unit-tma, test-unit-landing,
+       build-and-push-images]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - run: npm ci -w web
+        working-directory: frontend
+      - run: npx playwright install chromium
+        working-directory: frontend/web
+      - name: Start services
+        run: |
+          IMAGE_PREFIX=${{ env.IMAGE_PREFIX }} IMAGE_TAG=staging \
+            docker compose -f docker-compose.ci.isolated.yml up -d --wait
+      - name: Run browser E2E
+        working-directory: frontend/web
+        run: CI=true npx playwright test
+        env:
+          BASE_URL: http://localhost:3001
+          API_URL: http://localhost:8082
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: frontend/web/playwright-report/
+      - name: Dump logs on failure
+        if: failure()
+        run: docker compose -f docker-compose.ci.isolated.yml logs
+      - name: Teardown
+        if: always()
+        run: docker compose -f docker-compose.ci.isolated.yml down
+
+  # ── Stage 3: Migrate + Deploy (parallel with stage 2) ──────────
+
+  migrate-staging:
+    name: Migrate Staging DB
+    runs-on: ubuntu-latest
+    needs:
+      [lint-backend, lint-web, lint-tma, lint-landing,
+       test-unit-backend, test-unit-web, test-unit-tma, test-unit-landing,
+       build-and-push-images]
+    steps:
+      - name: Run migrations via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ vars.STAGING_HOST }}
+          username: deploy
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          port: 2222
+          script: |
+            echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            docker pull ${{ env.IMAGE_PREFIX }}/backend:staging
+            docker run --rm --network=dokploy-network \
+              --entrypoint goose \
+              ${{ env.IMAGE_PREFIX }}/backend:staging \
+              -dir /migrations postgres "${{ secrets.STAGING_DATABASE_URL }}" up
+
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs:
+      [lint-backend, lint-web, lint-tma, lint-landing,
+       test-unit-backend, test-unit-web, test-unit-tma, test-unit-landing,
+       build-and-push-images]
+    steps:
+      - name: Deploy services via Dokploy
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ vars.STAGING_HOST }}
+          username: deploy
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          port: 2222
+          script: |
+            curl -sSf -X POST "${{ secrets.DOKPLOY_WEBHOOK_BACKEND }}"
+            curl -sSf -X POST "${{ secrets.DOKPLOY_WEBHOOK_WEB }}"
+            curl -sSf -X POST "${{ secrets.DOKPLOY_WEBHOOK_TMA }}"
+            curl -sSf -X POST "${{ secrets.DOKPLOY_WEBHOOK_LANDING }}"
+      - name: Health check
+        run: |
+          curl -sSf --retry 10 --retry-delay 5 --retry-all-errors \
+            -H "CF-Access-Client-Id: ${{ secrets.CF_ACCESS_CLIENT_ID }}" \
+            -H "CF-Access-Client-Secret: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}" \
+            https://staging-api.ugcboost.kz/healthz
+
+  # ── Stage 4: Staging E2E (needs stage 3) ───────────────────────
+
+  test-staging-backend:
+    name: Staging E2E Backend
+    runs-on: ubuntu-latest
+    needs: [migrate-staging, deploy-staging]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+      - name: Run E2E against staging
+        working-directory: backend/e2e
+        run: go test ./... -count=1 -v -race -timeout 5m
+        env:
+          E2E_BASE_URL: https://staging-api.ugcboost.kz
+          CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+
+  test-staging-web:
+    name: Staging E2E Frontend
+    runs-on: ubuntu-latest
+    needs: [migrate-staging, deploy-staging]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - run: npm ci -w web
+        working-directory: frontend
+      - run: npx playwright install chromium
+        working-directory: frontend/web
+      - name: Run browser E2E against staging
+        working-directory: frontend/web
+        run: CI=true npx playwright test
+        env:
+          BASE_URL: https://staging-app.ugcboost.kz
+          API_URL: https://staging-api.ugcboost.kz
+          CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-staging
+          path: frontend/web/playwright-report/

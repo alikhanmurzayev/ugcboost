@@ -1,0 +1,98 @@
+# Local development infrastructure.
+# App services run outside Docker — see Makefile targets.
+# Use `docker compose --profile backend up -d` to also start the backend (e.g. for E2E tests).
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-ugcboost}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ugcboost_dev}
+      POSTGRES_DB: ${POSTGRES_DB:-ugcboost}
+    ports:
+      - "${POSTGRES_PORT:-5433}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ugcboost}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  migrations:
+    build: ./backend
+    profiles: [backend]
+    entrypoint: ["goose", "-dir", "/migrations", "postgres", "postgres://${POSTGRES_USER:-ugcboost}:${POSTGRES_PASSWORD:-ugcboost_dev}@postgres:5432/${POSTGRES_DB:-ugcboost}?sslmode=disable", "up"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  backend:
+    build:
+      context: ./backend
+      args:
+        GIT_COMMIT: ${GIT_COMMIT:-dev}
+    profiles: [backend]
+    depends_on:
+      migrations:
+        condition: service_completed_successfully
+    ports:
+      - "8082:8082"
+    env_file: ./backend/.env
+    environment:
+      # Overrides for Docker networking
+      PORT: "8082"
+      DATABASE_URL: postgres://ugcboost:ugcboost_dev@postgres:5432/ugcboost?sslmode=disable
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8082/healthz"]
+      interval: 2s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
+  web:
+    build:
+      context: .
+      dockerfile: frontend/web/Dockerfile
+    profiles: [web]
+    ports:
+      - "3001:80"
+    environment:
+      API_URL: http://localhost:8082
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:80/"]
+      interval: 2s
+      timeout: 3s
+      retries: 5
+
+  tma:
+    build:
+      context: .
+      dockerfile: frontend/tma/Dockerfile
+    profiles: [tma]
+    ports:
+      - "3002:80"
+    environment:
+      API_URL: http://localhost:8082
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:80/"]
+      interval: 2s
+      timeout: 3s
+      retries: 5
+
+  landing:
+    build:
+      context: .
+      dockerfile: frontend/landing/Dockerfile
+    profiles: [landing]
+    ports:
+      - "3003:80"
+    environment:
+      API_URL: http://localhost:8082
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:80/"]
+      interval: 2s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  pgdata:
