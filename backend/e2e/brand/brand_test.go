@@ -1,30 +1,33 @@
-// Package brand covers E2E tests for /brands:
+// Package brand — E2E тесты HTTP-поверхности /brands.
 //
-//   - TestBrandCRUD — the full lifecycle for an admin caller:
-//       • create: 422 on empty name, 403 when a brand_manager attempts it,
-//         201 on success with the brand surfaced in GET /brands afterwards;
-//       • get:    404 on an unknown ID, 200 on success with the managers
-//         array populated by a follow-up assign;
-//       • update: 200 renaming a brand, with the response reflecting the
-//         new name;
-//       • delete: 200 on success followed by 404 on a subsequent GET.
-//   - TestBrandManagerAssignment — POST / DELETE /brands/{id}/managers:
-//       • assigning a fresh email provisions a brand_manager and returns a
-//         temp password;
-//       • assigning an already-seeded brand_manager succeeds without issuing
-//         a new temp password;
-//       • a brand_manager is forbidden to call assign (403);
-//       • remove 200 and the brand's managers array no longer lists the user.
-//   - TestBrandIsolation — role-based visibility:
-//       • manager listing returns only brands they manage;
-//       • admin listing sees every brand created in the test;
-//       • manager GET on own brand returns 200;
-//       • manager GET on an unrelated brand returns 403.
+// TestBrandCRUD проходит полный жизненный цикл бренда от лица админа. Create
+// возвращает 422 на пустое имя, 403 если его зовёт brand_manager (право на
+// создание — только у админа), и 201 на успех, после чего созданный бренд
+// виден в GET /brands. Get на неизвестном UUID отвечает 404, а на валидном —
+// 200 с заполненным массивом managers после follow-up ассайна. Update на
+// 200 переименовывает бренд, и ответ отражает новое имя. Delete отдаёт 200
+// на успех, и последующий GET на тот же id возвращает 404 — бренд
+// действительно удалён, а не помечен мягко.
 //
-// Data setup is composable through testutil.Setup* helpers; every seeded
-// user and brand is cleaned up automatically via POST /test/cleanup-entity
-// (users) or DELETE /brands/{id} (brands) after the test when
-// E2E_CLEANUP=true (the default).
+// TestBrandManagerAssignment покрывает POST / DELETE /brands/{id}/managers.
+// Ассайн свежего email создаёт нового brand_manager и возвращает temp
+// password для первичного входа. Ассайн уже заведённого brand_manager тоже
+// успешен, но новый временный пароль не выдаётся — чтобы не обнулять
+// действующий у человека. Вызов ассайна от brand_manager режется 403 на
+// уровне авторизации. Remove отвечает 200, и после него массив managers у
+// бренда пуст.
+//
+// TestBrandIsolation проверяет видимость брендов по ролям. В листинге
+// brand_manager видит только те бренды, которыми управляет; админ — все
+// созданные в тесте. GET чужого бренда для manager даёт 403 (не 404 — чтобы
+// не подтверждать существование сущности), GET своего — 200 с полным
+// детальным payload.
+//
+// Сетап компонуется через testutil.Setup* — созданные пользователи и бренды
+// автоматически убираются после теста через POST /test/cleanup-entity (для
+// пользователей) или DELETE /brands/{id} (для брендов) при E2E_CLEANUP=true
+// (дефолт). Тесты, которые сами удаляют бренд (например, delete в CRUD),
+// идут в обход SetupBrand, чтобы не получить двойное удаление в cleanup.
 package brand
 
 import (

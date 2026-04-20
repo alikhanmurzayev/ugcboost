@@ -1,31 +1,55 @@
-// Package auth covers E2E tests for the /auth/* surface:
+// Package auth — E2E тесты HTTP-поверхности /auth/*.
 //
-//   - TestHealthCheck — sanity check that the backend is reachable and reports
-//     the expected health payload before any auth scenario runs.
-//   - TestLogin — every documented response of POST /auth/login: empty email
-//     (422, raw), non-existent account (401, no enumeration), wrong password
-//     (401), short password (401, no info leak), email normalization
-//     (trim + lowercase), and the full success body including the HttpOnly
-//     refresh_token cookie.
-//   - TestRefresh — POST /auth/refresh: unauthenticated call (401) and a
-//     rotation chain where the cookie jar keeps receiving the newest refresh
-//     token.
-//   - TestGetMe — GET /auth/me: missing Authorization (401), garbage token
-//     (401), and a fully-populated success body for the logged-in admin.
-//   - TestLogout — POST /auth/logout: unauthenticated call (401), success,
-//     and the follow-up that subsequent refresh attempts are rejected.
-//   - TestPasswordReset — full reset lifecycle: request for an existing
-//     account (200), request for a non-existent account (also 200, no
-//     enumeration), empty email (raw 422), successful reset (old login
-//     blocked, new login works), invalid token (401), re-use of a consumed
-//     token (401, single-use), short password (422), and the invariant that a
-//     reset invalidates outstanding refresh tokens.
-//   - TestFullAuthFlow — login → refresh → me → logout end-to-end, then the
-//     same integration for the reset path (login → request → reset → login).
+// TestHealthCheck — санити-проверка перед любыми auth-сценариями: бэкенд
+// доступен и отдаёт ожидаемый health-payload. Без этой страховки сетевые
+// ошибки маскировались бы под auth-баги в соседних тестах.
 //
-// Each test seeds its own users via testutil.SetupAdmin / SetupAdminClient,
-// which auto-register POST /test/cleanup-entity so rows are removed after the
-// test when E2E_CLEANUP=true (default).
+// TestLogin проверяет POST /auth/login во всех задокументированных ответах.
+// Пустой email отправляется сырым HTTP — openapi_types.Email в
+// сгенерированном клиенте не пропускает пустую строку, так что достать
+// серверную валидацию можно только в обход клиента; ответ 422. Несуществующий
+// аккаунт и неправильный пароль отвечают 401 одинаково — сервер не должен
+// разглашать факт существования пользователя. Короткий пароль возвращает
+// тот же 401, чтобы не выдать формат подсказкой. Email нормализуется (trim
+// + lowercase), а успешный логин отдаёт access token, payload пользователя
+// и HttpOnly-cookie с refresh_token.
+//
+// TestRefresh покрывает POST /auth/refresh. Без cookie сервер отвечает 401.
+// В успешном сценарии мы проходим rotation chain — cookie jar после каждого
+// вызова заменяет refresh-cookie на новую ротированную, и следующий refresh
+// работает только потому, что потребляет свежий токен. Значения access token
+// между двумя близкими ротациями не сравниваем: iat/exp могут совпасть
+// посекундно, а гарантия ротации — именно в том, что каждый refresh принимает
+// свежий cookie.
+//
+// TestGetMe — GET /auth/me. Отсутствующий Authorization возвращает 401,
+// мусорный JWT тоже 401 (одинаковый код — никакой утечки о типе проблемы),
+// а авторизованный админ получает полный user-payload с корректными email
+// и ролью.
+//
+// TestLogout — POST /auth/logout. Неавторизованный вызов — 401, успешный —
+// 200. После успешного логаута последующий /auth/refresh уже отвергается:
+// refresh_token действительно инвалидирован серверной стороной, а не просто
+// очищен cookie у клиента.
+//
+// TestPasswordReset проходит полный lifecycle сброса пароля. Запрос на сброс
+// для существующего и для несуществующего email одинаково отвечает 200 —
+// это защита от enumeration. Пустой email отправляется сырым HTTP и даёт
+// 422 от серверной валидации. В happy path новый пароль работает, старый
+// блокируется. Невалидный токен — 401, повторное использование валидного
+// токена — тоже 401 (single-use). Короткий пароль отсекается валидацией с
+// 422. И ключевой инвариант: успешный reset инвалидирует все outstanding
+// refresh tokens — сессии, заведённые до сброса, умирают.
+//
+// TestFullAuthFlow гоняет конец-в-конец два сценария интеграции: сначала
+// login → refresh → me → logout, затем путь сброса login → request → reset
+// → login. Здесь важны не edge cases отдельных ручек, а согласованность
+// цепочки и то, что состояние пользователя проходит через неё без разрывов.
+//
+// Каждый тест сеет своих пользователей через testutil.SetupAdmin /
+// SetupAdminClient — хелперы автоматически регистрируют cleanup через
+// POST /test/cleanup-entity, и после теста данные удаляются при
+// E2E_CLEANUP=true (это дефолт).
 package auth
 
 import (

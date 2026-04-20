@@ -1,20 +1,27 @@
-// Package audit covers E2E tests for GET /audit-logs:
+// Package audit — E2E тесты HTTP-поверхности GET /audit-logs.
 //
-//   - TestAuditLogFiltering — the filter & pagination surface:
-//       • filter by entity (entity_type=brand + entity_id=brandID) after
-//         POST /brands records a brand_create entry tied to the same id;
-//       • filter by action=manager_assign after POST /brands/{id}/managers;
-//       • pagination: 3 brands created by the admin produce at least three
-//         audit entries; per_page=2 trims the returned slice to 2 while
-//         total counts every matching row (≥ 3).
-//   - TestAuditLogAccess — role-based access:
-//       • admin GET returns 200 with a well-formed listing;
-//       • brand_manager GET returns 403 with FORBIDDEN payload.
+// TestAuditLogFiltering проверяет фильтры и пагинацию листинга. Фильтр по
+// сущности (entity_type=brand + entity_id=brandID) после POST /brands
+// находит запись brand_create, привязанную к этому же id — значит аудит
+// действительно пишется в той же транзакции, что и создание бренда, и
+// пишет правильный entity_id. Фильтр по action=manager_assign после
+// POST /brands/{id}/managers обнаруживает ровно запись об ассайне.
+// Пагинация проверяется на трёх созданных админом брендах: per_page=2
+// урезает возвращаемый срез до двух элементов, а total продолжает считать
+// каждую подходящую строку (≥ 3) — это и есть контракт пагинации.
+// Фильтрация по actor_id в этом сценарии важна отдельно: параллельно
+// бегущие тесты могут создавать свои audit-ряды, и без пина к actor_id
+// ассерт total получился бы флаки.
 //
-// Setup goes through testutil.Setup* helpers so every seeded user / brand
-// is auto-cleaned via the cleanup stack. Audit rows themselves are removed
-// indirectly when the actor user is hard-deleted (DeleteForTests wipes
-// audit_logs WHERE actor_id = $1 in the same transaction).
+// TestAuditLogAccess закрывает авторизацию. Админский GET — 200 с валидным
+// листингом, brand_manager получает 403 с кодом FORBIDDEN: аудит — только
+// для админов, и этот инвариант закрыт на уровне e2e.
+//
+// Сетап идёт через testutil.Setup* — все созданные пользователи и бренды
+// снимаются автоматически через cleanup stack. Сами аудит-ряды удаляются
+// косвенно: при hard-delete актёра DeleteForTests в одной транзакции
+// вычищает audit_logs WHERE actor_id = $1 — так рост таблицы аудита не
+// переживает тестовые прогоны.
 package audit
 
 import (

@@ -1,16 +1,28 @@
 /**
- * Auth flow E2E tests — web application.
+ * Auth flow E2E — веб-приложение.
  *
- * Steps:
- * 1. Seed admin user via /test/seed-user
- * 2. Happy login → dashboard with sidebar
- * 3. Wrong password → error, stay on login
- * 4. Session restore → F5 keeps user logged in
- * 5. Logout → redirect to login, session destroyed
- * 6. Protected route → unauthenticated user redirected
+ * Тесты проходят полный цикл аутентификации одного администратора. В
+ * beforeAll сеем тестового пользователя через POST /test/seed-user, а в
+ * afterAll удаляем его через DELETE /test/users/${TEST_EMAIL} (если
+ * E2E_CLEANUP !== "false"). Все кейсы собраны в одном test.describe
+ * ("Auth flow") и работают на общем seeded-админе.
  *
- * Data: one test admin (TEST_EMAIL).
- * Cleanup: delete via /test/users/${TEST_EMAIL} after all tests.
+ * Happy path: правильный email и пароль ведут на дашборд, в сайдбаре виден
+ * email пользователя, роль «Админ» и полный набор навигационных ссылок
+ * (главная, бренды, аудит) — у админа доступ ко всему. Противоположный
+ * кейс — неправильный пароль: остаёмся на /login и показываем ошибку
+ * «Неверный email или пароль» без утечки того, какой именно компонент
+ * ошибся (email, пароль, сеть).
+ *
+ * Session restore проверяет, что перезагрузка страницы (F5) не выкидывает
+ * пользователя на /login: access token в памяти теряется, приложение на
+ * старте дёргает refresh через cookie и восстанавливает сессию — мы
+ * остаёмся на дашборде с тем же email в сайдбаре. Logout делает обратное:
+ * редиректит на /login и по-настоящему уничтожает сессию — попытка зайти
+ * на защищённый роут снова улетает на /login, а не пропускает по остатку
+ * клиентского состояния. Финальный кейс закрывает защиту роутов с другого
+ * конца: неаутентифицированный пользователь, идущий прямо на /, тоже
+ * редиректится на /login.
  */
 import { test, expect } from "@playwright/test";
 
