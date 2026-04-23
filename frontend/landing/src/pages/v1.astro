@@ -1,0 +1,407 @@
+---
+import "../styles/global.css";
+import {
+  hero,
+  stats,
+  benefits,
+  criteria,
+  steps,
+  formBlock,
+  faq,
+  footer,
+} from "../content";
+---
+
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>UGC boost — EURASIAN FASHION WEEK</title>
+    <style>
+      body {
+        font-family: ui-sans-serif, system-ui, sans-serif;
+      }
+      .serif {
+        font-family: "Playfair Display", "Times New Roman", Georgia, serif;
+      }
+    </style>
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;0,900;1,400&display=swap"
+    />
+  </head>
+  <body class="bg-[#faf8f4] text-neutral-900 antialiased">
+    <!-- Top bar -->
+    <header class="border-b border-neutral-900/10">
+      <div class="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
+        <a href="/" class="serif text-xl font-semibold tracking-tight">UGC boost</a>
+        <span class="text-xs uppercase tracking-[0.25em] text-neutral-500">Issue 01 — Spring 2026</span>
+      </div>
+    </header>
+
+    <!-- Hero -->
+    <section class="border-b border-neutral-900/10">
+      <div class="mx-auto grid max-w-7xl gap-12 px-6 py-20 md:grid-cols-12 md:py-28">
+        <div class="md:col-span-8">
+          <p class="mb-6 text-xs uppercase tracking-[0.3em] text-neutral-500">
+            01 — The Invitation
+          </p>
+          <h1 class="serif text-5xl leading-[1.05] tracking-tight md:text-7xl lg:text-8xl">
+            {hero.title}
+          </h1>
+          <p class="mt-8 max-w-xl text-lg leading-relaxed text-neutral-700">
+            {hero.subtitle}
+          </p>
+          <a
+            href="#form"
+            class="mt-10 inline-block border border-neutral-900 px-10 py-4 text-sm uppercase tracking-[0.25em] transition hover:bg-neutral-900 hover:text-white"
+          >
+            {hero.cta}
+          </a>
+        </div>
+        <aside class="hidden md:col-span-4 md:block">
+          <div class="h-full min-h-[420px] bg-neutral-900"></div>
+        </aside>
+      </div>
+    </section>
+
+    <!-- Stats -->
+    <section class="border-b border-neutral-900/10 bg-neutral-900 text-neutral-50">
+      <div class="mx-auto max-w-7xl px-6 py-20">
+        <p class="mb-6 text-xs uppercase tracking-[0.3em] text-neutral-400">
+          02 — By the Numbers
+        </p>
+        <h2 class="serif mb-14 max-w-2xl text-3xl leading-tight md:text-5xl">
+          {stats.title}
+        </h2>
+        <div class="grid gap-10 md:grid-cols-4">
+          {
+            stats.items.map((item) => (
+              <div class="border-t border-neutral-700 pt-6">
+                <p class="serif text-5xl font-semibold md:text-6xl">{item.value}</p>
+                <p class="mt-3 text-sm uppercase tracking-wide text-neutral-400">
+                  {item.label}
+                </p>
+              </div>
+            ))
+          }
+        </div>
+      </div>
+    </section>
+
+    <!-- Benefits -->
+    <section class="border-b border-neutral-900/10">
+      <div class="mx-auto grid max-w-7xl gap-12 px-6 py-20 md:grid-cols-12 md:py-28">
+        <div class="md:col-span-4">
+          <p class="mb-6 text-xs uppercase tracking-[0.3em] text-neutral-500">
+            03 — Collaboration
+          </p>
+          <h2 class="serif text-4xl leading-tight md:text-5xl">
+            {benefits.title}
+          </h2>
+        </div>
+        <ul class="space-y-6 md:col-span-8">
+          {
+            benefits.items.map((item, i) => (
+              <li class="flex gap-6 border-t border-neutral-900/10 pt-6">
+                <span class="serif text-sm italic text-neutral-500">
+                  {String(i + 1).padStart(2, "0")}
+                </span>
+                <p class="text-base leading-relaxed text-neutral-800">
+                  {item.bold && <strong class="font-semibold">{item.bold}</strong>}{" "}
+                  {item.text}
+                </p>
+              </li>
+            ))
+          }
+        </ul>
+        <p class="col-span-12 mt-4 text-xs italic text-neutral-500">{benefits.disclaimer}</p>
+      </div>
+    </section>
+
+    <!-- Criteria -->
+    <section class="border-b border-neutral-900/10 bg-[#f3ede2]">
+      <div class="mx-auto grid max-w-7xl gap-12 px-6 py-20 md:grid-cols-12">
+        <div class="md:col-span-5">
+          <p class="mb-6 text-xs uppercase tracking-[0.3em] text-neutral-500">
+            04 — The Profile
+          </p>
+          <h2 class="serif text-4xl leading-tight md:text-5xl">{criteria.title}</h2>
+          <p class="mt-6 serif text-xl italic text-neutral-700">{criteria.intro}</p>
+        </div>
+        <ul class="space-y-5 md:col-span-7">
+          {
+            criteria.items.map((item) => (
+              <li class="flex items-start gap-4 border-t border-neutral-900/20 pt-4">
+                <span class="serif text-xl italic">—</span>
+                <p class="text-lg text-neutral-800">
+                  {item.bold && <strong class="font-semibold">{item.bold}</strong>}{" "}
+                  {item.text}
+                </p>
+              </li>
+            ))
+          }
+        </ul>
+        <p class="col-span-12 mt-2 text-sm italic text-neutral-600">{criteria.tip}</p>
+      </div>
+    </section>
+
+    <!-- Steps -->
+    <section class="border-b border-neutral-900/10">
+      <div class="mx-auto max-w-7xl px-6 py-20">
+        <p class="mb-6 text-xs uppercase tracking-[0.3em] text-neutral-500">05 — The Path</p>
+        <h2 class="serif mb-14 text-4xl leading-tight md:text-5xl">{steps.title}</h2>
+        <ol class="grid gap-10 md:grid-cols-5">
+          {
+            steps.items.map((step, i) => (
+              <li>
+                <p class="serif text-6xl font-semibold text-neutral-300">
+                  {String(i + 1).padStart(2, "0")}
+                </p>
+                <h3 class="mt-4 font-semibold leading-snug">{step.title}</h3>
+                <p class="mt-2 text-sm text-neutral-600">{step.text}</p>
+              </li>
+            ))
+          }
+        </ol>
+        <p class="mt-10 text-xs italic text-neutral-500">{steps.disclaimer}</p>
+      </div>
+    </section>
+
+    <!-- Form -->
+    <section id="form" class="border-b border-neutral-900/10 bg-neutral-900 text-neutral-50">
+      <div class="mx-auto max-w-3xl px-6 py-24">
+        <p class="mb-6 text-xs uppercase tracking-[0.3em] text-neutral-400">06 — Apply</p>
+        <h2 class="serif mb-4 text-4xl leading-tight md:text-6xl">{formBlock.title}</h2>
+        <p class="mb-12 text-lg leading-relaxed text-neutral-300">{formBlock.subtitle}</p>
+
+        <form class="space-y-6" id="application-form">
+          <div class="grid gap-6 md:grid-cols-3">
+            <label class="block">
+              <span class="text-xs uppercase tracking-widest text-neutral-400">Фамилия *</span>
+              <input
+                required
+                type="text"
+                name="lastName"
+                class="mt-2 w-full border-b border-neutral-500 bg-transparent py-3 outline-none focus:border-white"
+              />
+            </label>
+            <label class="block">
+              <span class="text-xs uppercase tracking-widest text-neutral-400">Имя *</span>
+              <input
+                required
+                type="text"
+                name="firstName"
+                class="mt-2 w-full border-b border-neutral-500 bg-transparent py-3 outline-none focus:border-white"
+              />
+            </label>
+            <label class="block">
+              <span class="text-xs uppercase tracking-widest text-neutral-400">Отчество</span>
+              <input
+                type="text"
+                name="middleName"
+                class="mt-2 w-full border-b border-neutral-500 bg-transparent py-3 outline-none focus:border-white"
+              />
+            </label>
+          </div>
+
+          <div class="grid gap-6 md:grid-cols-2">
+            <label class="block">
+              <span class="text-xs uppercase tracking-widest text-neutral-400">
+                Номер телефона (Telegram) *
+              </span>
+              <input
+                required
+                type="tel"
+                name="phone"
+                placeholder="+7 (___) ___-__-__"
+                class="mt-2 w-full border-b border-neutral-500 bg-transparent py-3 outline-none placeholder-neutral-600 focus:border-white"
+              />
+              <span class="mt-1 block text-xs italic text-neutral-500">
+                Убедитесь, что к этому номеру привязан Telegram
+              </span>
+            </label>
+            <label class="block">
+              <span class="text-xs uppercase tracking-widest text-neutral-400">
+                Город проживания *
+              </span>
+              <select
+                required
+                name="city"
+                class="mt-2 w-full border-b border-neutral-500 bg-transparent py-3 outline-none focus:border-white"
+              >
+                <option value="">—</option>
+                {formBlock.cities.map((c) => <option value={c} class="text-neutral-900">{c}</option>)}
+              </select>
+            </label>
+          </div>
+
+          <fieldset>
+            <legend class="text-xs uppercase tracking-widest text-neutral-400">
+              Соцсети *
+            </legend>
+            <div class="mt-4 space-y-4">
+              {
+                formBlock.socials.map((s) => (
+                  <div class="flex flex-col gap-2 md:flex-row md:items-center md:gap-4">
+                    <label class="inline-flex items-center gap-3">
+                      <input
+                        type="checkbox"
+                        class="social-checkbox h-5 w-5 accent-white"
+                        data-social={s}
+                      />
+                      <span class="text-sm">{s}</span>
+                    </label>
+                    <input
+                      type="url"
+                      placeholder={`Ссылка на ${s}`}
+                      disabled
+                      data-social-input={s}
+                      class="flex-1 border-b border-neutral-700 bg-transparent py-2 text-sm opacity-50 outline-none transition focus:border-white disabled:cursor-not-allowed"
+                    />
+                  </div>
+                ))
+              }
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend class="text-xs uppercase tracking-widest text-neutral-400">
+              Категория блога (до 3) *
+            </legend>
+            <div class="mt-4 grid gap-2 md:grid-cols-2">
+              {
+                formBlock.categories.map((c) => (
+                  <label class="inline-flex items-center gap-3">
+                    <input
+                      type="checkbox"
+                      class="category-checkbox h-5 w-5 accent-white"
+                      value={c}
+                    />
+                    <span class="text-sm">{c}</span>
+                  </label>
+                ))
+              }
+            </div>
+          </fieldset>
+
+          <div class="space-y-3 pt-6">
+            <label class="flex items-start gap-3">
+              <input required type="checkbox" class="mt-1 h-5 w-5 accent-white" />
+              <span class="text-sm text-neutral-300">
+                Я принимаю условия{" "}
+                <a href="/legal/user-agreement" class="underline">
+                  Пользовательского соглашения
+                </a>
+              </span>
+            </label>
+            <label class="flex items-start gap-3">
+              <input required type="checkbox" class="mt-1 h-5 w-5 accent-white" />
+              <span class="text-sm text-neutral-300">
+                Даю согласие на обработку персональных данных в соответствии с{" "}
+                <a href="/legal/privacy-policy" class="underline">
+                  Политикой
+                </a>
+              </span>
+            </label>
+          </div>
+
+          <button
+            type="submit"
+            class="mt-8 w-full bg-white px-10 py-4 text-sm uppercase tracking-[0.25em] text-neutral-900 transition hover:bg-neutral-200"
+          >
+            {formBlock.submitLabel}
+          </button>
+        </form>
+      </div>
+    </section>
+
+    <!-- FAQ -->
+    <section class="border-b border-neutral-900/10">
+      <div class="mx-auto max-w-4xl px-6 py-20">
+        <p class="mb-6 text-xs uppercase tracking-[0.3em] text-neutral-500">07 — FAQ</p>
+        <h2 class="serif mb-12 text-4xl leading-tight md:text-5xl">{faq.title}</h2>
+        <dl class="space-y-8">
+          {
+            faq.items.map((item) => (
+              <div class="border-t border-neutral-900/20 pt-6">
+                <dt class="serif text-xl md:text-2xl">{item.q}</dt>
+                <dd class="mt-3 leading-relaxed text-neutral-700">{item.a}</dd>
+              </div>
+            ))
+          }
+        </dl>
+      </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="bg-neutral-900 text-neutral-300">
+      <div class="mx-auto grid max-w-7xl gap-10 px-6 py-14 md:grid-cols-3">
+        <div>
+          <p class="serif text-2xl font-semibold text-white">{footer.brand}</p>
+          <p class="mt-2 text-sm italic text-neutral-400">{footer.tagline}</p>
+        </div>
+        <div class="space-y-2 text-sm">
+          <p class="text-neutral-400">{footer.legalEntity}</p>
+          {footer.links.map((l) => (
+            <a href={l.href} class="block transition hover:text-white">
+              {l.label}
+            </a>
+          ))}
+        </div>
+        <div class="space-y-2 text-sm">
+          <p>Телефон: <span class="text-white">{footer.phone}</span></p>
+          <p>
+            Instagram:{" "}
+            <a href={footer.instagram.href} class="text-white hover:underline">
+              {footer.instagram.label}
+            </a>
+          </p>
+        </div>
+      </div>
+      <div class="border-t border-neutral-800">
+        <div class="mx-auto max-w-7xl px-6 py-6 text-xs text-neutral-500">
+          {footer.copyright}
+        </div>
+      </div>
+    </footer>
+
+    <script>
+      document.querySelectorAll<HTMLInputElement>(".social-checkbox").forEach((cb) => {
+        cb.addEventListener("change", () => {
+          const name = cb.dataset.social!;
+          const input = document.querySelector<HTMLInputElement>(
+            `[data-social-input="${name}"]`,
+          );
+          if (!input) return;
+          if (cb.checked) {
+            input.disabled = false;
+            input.required = true;
+            input.classList.remove("opacity-50");
+          } else {
+            input.disabled = true;
+            input.required = false;
+            input.value = "";
+            input.classList.add("opacity-50");
+          }
+        });
+      });
+
+      const categoryBoxes = document.querySelectorAll<HTMLInputElement>(".category-checkbox");
+      categoryBoxes.forEach((cb) => {
+        cb.addEventListener("change", () => {
+          const checked = Array.from(categoryBoxes).filter((c) => c.checked);
+          categoryBoxes.forEach((c) => {
+            if (!c.checked && checked.length >= 3) c.disabled = true;
+            else c.disabled = false;
+          });
+        });
+      });
+
+      document.getElementById("application-form")?.addEventListener("submit", (e) => {
+        e.preventDefault();
+        alert("Заявка отправлена (демо)\n\nВ проде тут успех-экран с CTA в Telegram-бот.");
+      });
+    </script>
+  </body>
+</html>
