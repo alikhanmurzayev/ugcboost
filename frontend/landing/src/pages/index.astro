@@ -620,7 +620,8 @@ import {
     <script>
       document.querySelectorAll<HTMLInputElement>(".social-checkbox").forEach((cb) => {
         cb.addEventListener("change", () => {
-          const name = cb.dataset.social!;
+          const name = cb.dataset.social;
+          if (!name) return;
           const input = document.querySelector<HTMLInputElement>(
             `[data-social-input="${name}"]`,
           );
