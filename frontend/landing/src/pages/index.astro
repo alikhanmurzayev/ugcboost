@@ -1,20 +1,674 @@
 ---
+import "../styles/global.css";
+import {
+  hero,
+  stats,
+  benefits,
+  criteria,
+  steps,
+  formBlock,
+  faq,
+  footer,
+} from "../content";
 ---
 
 <html lang="ru">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <script is:inline src="/config.js"></script>
-    <title>UGCBoost — UGC-маркетплейс</title>
-    <meta name="description" content="UGCBoost — платформа для связи брендов и креаторов в Казахстане" />
+    <title>UGC boost — EURASIAN FASHION WEEK</title>
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Archivo+Black&display=swap"
+    />
+    <style>
+      body {
+        font-family: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+      }
+      .display {
+        font-family: "Archivo Black", "Space Grotesk", sans-serif;
+        letter-spacing: -0.03em;
+      }
+      .marker {
+        background: linear-gradient(180deg, transparent 60%, #ff6eb4 60%);
+      }
+      .marquee-track {
+        display: inline-block;
+        white-space: nowrap;
+        vertical-align: top;
+        will-change: transform;
+        animation: marquee 14s linear infinite;
+      }
+      @keyframes marquee {
+        from {
+          transform: translate3d(0, 0, 0);
+        }
+        to {
+          transform: translate3d(-50%, 0, 0);
+        }
+      }
+      .noise {
+        background-image: radial-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+        background-size: 4px 4px;
+      }
+      .hide-scrollbar::-webkit-scrollbar {
+        display: none;
+      }
+      .hide-scrollbar {
+        -ms-overflow-style: none;
+        scrollbar-width: none;
+      }
+      @media (max-width: 767px) {
+        .hero-img {
+          -webkit-mask-image: linear-gradient(to bottom, black 80%, transparent 100%);
+          mask-image: linear-gradient(to bottom, black 80%, transparent 100%);
+        }
+      }
+      .shimmer-btn {
+        position: relative;
+        overflow: hidden;
+        isolation: isolate;
+      }
+      .shimmer-btn::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: -150%;
+        width: 75%;
+        height: 100%;
+        background: linear-gradient(
+          100deg,
+          transparent 0%,
+          rgba(255, 255, 255, 0.55) 50%,
+          transparent 100%
+        );
+        transform: skewX(-20deg);
+        animation: shimmer 2.8s ease-in-out infinite;
+        pointer-events: none;
+        z-index: 0;
+      }
+      .shimmer-btn > * {
+        position: relative;
+        z-index: 1;
+      }
+      @keyframes shimmer {
+        0% {
+          left: -150%;
+        }
+        60%,
+        100% {
+          left: 150%;
+        }
+      }
+    </style>
   </head>
-  <body>
-    <main style="display:flex;align-items:center;justify-content:center;min-height:100vh;font-family:system-ui,sans-serif;">
-      <div style="text-align:center;">
-        <h1 style="font-size:3rem;font-weight:bold;">UGCBoost</h1>
-        <p style="color:#666;margin-top:0.5rem;">UGC-маркетплейс для брендов и креаторов</p>
+  <body class="bg-neutral-950 text-white antialiased">
+    <!-- Header -->
+    <header class="sticky top-0 z-50 border-b border-white/10 bg-neutral-950/90 backdrop-blur">
+      <div class="mx-auto flex max-w-7xl items-center px-4 py-3 md:px-6 md:py-4">
+        <div class="flex items-center gap-3 md:gap-4">
+          <a href="/" class="flex items-center">
+            <img
+              src="/logos/ugc-boost-white.png"
+              alt="UGC boost"
+              class="h-11 w-auto md:h-14"
+            />
+          </a>
+          <span class="h-8 w-px bg-white/20 md:h-10" aria-hidden="true"></span>
+          <img
+            src="/logos/efw-white.png"
+            alt="EURASIAN FASHION WEEK"
+            class="h-11 w-auto md:h-14"
+          />
+        </div>
       </div>
-    </main>
+    </header>
+
+    <!-- Marquee -->
+    <div class="overflow-hidden border-y border-white/10 bg-neutral-950 py-3 text-white">
+      <div class="marquee-track display text-sm uppercase tracking-wide md:text-base">EURASIAN FASHION WEEK&nbsp;·&nbsp;13–14 МАЯ&nbsp;·&nbsp;АЛМАТЫ&nbsp;·&nbsp;ПРИГЛАШАЕМ UGC-КРЕАТОРОВ И FASHION-ИНФЛЮЕНСЕРОВ&nbsp;·&nbsp;КОЛЛАБОРАЦИИ&nbsp;·&nbsp;ПОКАЗЫ&nbsp;·&nbsp;СТРИТСТАЙЛ&nbsp;·&nbsp;EURASIAN FASHION WEEK&nbsp;·&nbsp;13–14 МАЯ&nbsp;·&nbsp;АЛМАТЫ&nbsp;·&nbsp;ПРИГЛАШАЕМ UGC-КРЕАТОРОВ И FASHION-ИНФЛЮЕНСЕРОВ&nbsp;·&nbsp;КОЛЛАБОРАЦИИ&nbsp;·&nbsp;ПОКАЗЫ&nbsp;·&nbsp;СТРИТСТАЙЛ&nbsp;·&nbsp;</div>
+    </div>
+
+    <!-- Hero -->
+    <section class="relative overflow-hidden border-b border-white/10">
+      <div class="relative h-[78vh] min-h-[560px] md:h-[calc(100vh-128px)] md:min-h-[520px]">
+        <!-- Photo: full-bleed on mobile, right panel on desktop -->
+        <div class="absolute inset-0 md:left-[38%]">
+          <img
+            src="/hero/podium.jpg"
+            alt="Подиум EURASIAN FASHION WEEK"
+            class="hero-img h-full w-full origin-bottom scale-110 object-cover object-[53%_bottom] -translate-y-[8%] md:scale-[1.25] md:translate-y-0 md:object-[30%_center]"
+          />
+        </div>
+
+        <!-- Gradient overlay: fades bottom on mobile, blends left-to-right on desktop -->
+        <div class="absolute inset-0 bg-gradient-to-t from-neutral-950 via-neutral-950/75 via-40% to-transparent to-65% md:bg-gradient-to-r md:from-neutral-950 md:from-30% md:via-neutral-950/50 md:via-45% md:to-transparent md:to-62%"></div>
+
+        <!-- Pink accent glow -->
+        <div class="pointer-events-none absolute right-0 top-1/2 h-96 w-96 -translate-y-1/2 rounded-full bg-pink-500/25 mix-blend-screen blur-3xl"></div>
+
+        <!-- Content: bottom-aligned on both mobile and desktop -->
+        <div class="absolute inset-0 flex items-end">
+          <div class="mx-auto grid w-full max-w-7xl px-4 pb-14 pt-6 md:grid-cols-12 md:gap-10 md:px-6 md:pb-12 md:pt-0">
+            <div class="translate-y-[5%] md:col-span-6 md:translate-y-0">
+              <div class="flex flex-wrap items-center gap-2 md:gap-3">
+                <span class="rounded-full border border-pink-400 bg-neutral-950/40 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-pink-400 backdrop-blur-sm md:px-4 md:py-1.5 md:text-xs">
+                  13–14 мая
+                </span>
+                <span class="rounded-full border border-white/60 bg-neutral-950/40 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-white backdrop-blur-sm md:px-4 md:py-1.5 md:text-xs">
+                  Алматы
+                </span>
+                <span class="rounded-full border border-white/60 bg-neutral-950/40 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-white backdrop-blur-sm md:px-4 md:py-1.5 md:text-xs">
+                  EURASIAN FASHION WEEK
+                </span>
+              </div>
+              <h1 class="mt-4 max-w-2xl text-2xl font-semibold leading-tight text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.5)] md:mt-6 md:max-w-[580px] md:text-[1.75rem] lg:max-w-[680px] lg:text-[2rem]">
+                Приглашаем{" "}
+                <span class="text-pink-400">
+                  UGC-креаторов<br /> и fashion-инфлюенсеров
+                </span><br /> на коллаборацию с главным<br /> фэшн-событием года
+              </h1>
+              <a
+                href="#form"
+                class="shimmer-btn group mt-6 inline-flex items-center gap-3 rounded-full bg-pink-400 px-7 py-3.5 text-xs font-bold uppercase tracking-wider text-white shadow-lg shadow-pink-500/40 transition hover:bg-white hover:text-neutral-950 md:mt-8 md:px-10 md:py-5 md:text-base"
+              >
+                <span>{hero.cta}</span>
+                <span class="transition group-hover:translate-x-1">→</span>
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Stats -->
+    <section class="border-b border-white/10 bg-white text-neutral-950">
+      <div class="mx-auto max-w-7xl px-4 py-14 md:px-6 md:py-20">
+        <div class="flex flex-col gap-6 md:flex-row md:items-center md:gap-14">
+          <img
+            src="/logos/efw-black.png"
+            alt="EURASIAN FASHION WEEK"
+            class="hidden h-24 w-auto shrink-0 md:-mt-6 md:block md:h-48 md:-translate-y-[12%] lg:h-56"
+          />
+          <h2 class="display max-w-3xl text-3xl uppercase leading-tight md:text-6xl">
+            Крупнейшая <span class="marker">неделя моды</span> прет-а-порте Казахстана
+          </h2>
+        </div>
+        <div class="mt-8 grid grid-cols-2 gap-3 md:mt-14 md:grid-cols-5 md:gap-4">
+          {
+            stats.items.map((item, i) => (
+              <div
+                class={`rounded-2xl border-2 border-neutral-950 p-4 md:rounded-3xl md:p-5 ${
+                  i === 0
+                    ? "bg-pink-400"
+                    : i === 1
+                      ? "bg-neutral-950 text-white"
+                      : i === 2
+                        ? "bg-pink-200"
+                        : i === 3
+                          ? "bg-white"
+                          : "bg-pink-500 text-white"
+                } ${i === 4 ? "col-span-2 md:col-span-1" : ""}`}
+              >
+                <p class="display text-3xl uppercase leading-none md:text-4xl">{item.value}</p>
+                <p class="mt-2 whitespace-pre-line text-xs font-semibold md:mt-3 md:text-sm">{item.label}</p>
+              </div>
+            ))
+          }
+        </div>
+      </div>
+    </section>
+
+    <!-- Benefits -->
+    <section class="border-b border-white/10">
+      <div class="mx-auto max-w-7xl px-4 py-14 md:px-6 md:py-20">
+        <h2 class="display text-3xl uppercase leading-tight md:text-6xl">
+          Что ты <span class="text-pink-400">получишь</span>
+        </h2>
+        <div class="mt-4 flex flex-wrap items-center gap-2 md:mt-6 md:gap-3">
+          <span class="rounded-full border border-pink-400 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-pink-400 md:px-4 md:py-1.5 md:text-xs">
+            13–14 мая
+          </span>
+          <span class="rounded-full border border-white/40 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-white md:px-4 md:py-1.5 md:text-xs">
+            Алматы
+          </span>
+          <span class="rounded-full border border-white/40 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-white md:px-4 md:py-1.5 md:text-xs">
+            EURASIAN FASHION WEEK
+          </span>
+        </div>
+
+        <!-- Mobile: horizontal scroll; Desktop: grid -->
+        <ul class="hide-scrollbar mt-8 flex snap-x snap-mandatory gap-3 overflow-x-auto pb-2 md:mt-12 md:grid md:snap-none md:grid-cols-3 md:gap-4 md:overflow-visible md:pb-0">
+          {
+            benefits.items.map((item, i) => (
+              <li class="group relative flex w-[80%] shrink-0 snap-start flex-col overflow-hidden rounded-2xl border border-white/10 bg-white/5 transition hover:border-pink-400 hover:bg-white/10 md:w-auto md:rounded-3xl">
+                <div class={`relative aspect-[4/3] overflow-hidden ${item.bgClass ?? (item.contain ? "bg-white" : "bg-neutral-900")}`}>
+                  <img
+                    src={item.image}
+                    alt={item.bold}
+                    loading="lazy"
+                    style={
+                      item.contain
+                        ? `transform: translateX(${item.translateX ?? 0}%) scale(${item.scale ?? 1});`
+                        : `object-position: 50% ${item.positionY ?? 0}%;`
+                    }
+                    class={`absolute inset-0 h-full w-full transition duration-500 ${item.contain ? "object-contain p-3" : "object-cover group-hover:scale-105"}`}
+                  />
+                </div>
+                <div class="relative flex-1 p-5 md:p-6">
+                  <span class="display pointer-events-none absolute right-3 top-3 text-3xl text-white/10 md:right-5 md:top-4 md:text-5xl">
+                    {String(i + 1).padStart(2, "0")}
+                  </span>
+                  <p class="relative pr-10 text-sm leading-relaxed md:pr-14">
+                    {item.bold && (
+                      <strong class="display mb-0.5 block whitespace-pre-line text-base uppercase text-pink-400 md:text-lg">
+                        {item.bold}
+                      </strong>
+                    )}
+                    {item.boldExtra && (
+                      <span class="display mb-2 block whitespace-nowrap text-sm uppercase text-pink-400 md:text-base">
+                        {item.boldExtra}
+                      </span>
+                    )}
+                    <span class={`text-neutral-300 ${
+                      item.textNowrap
+                        ? "whitespace-nowrap"
+                        : item.textNowrapMd
+                          ? "md:whitespace-nowrap"
+                          : item.textMobileBreakOnly
+                            ? "whitespace-pre-line md:whitespace-normal"
+                            : "whitespace-pre-line"
+                    }`}>{item.text}</span>
+                  </p>
+                </div>
+              </li>
+            ))
+          }
+        </ul>
+        <p class="mt-6 text-[11px] leading-relaxed text-neutral-500 md:mt-8 md:text-xs">
+          {benefits.disclaimer}
+        </p>
+      </div>
+    </section>
+
+    <!-- Criteria -->
+    <section class="border-b border-white/10 bg-pink-400 text-neutral-950">
+      <div class="mx-auto max-w-7xl px-4 py-14 md:px-6 md:py-20">
+        <h2 class="display text-3xl uppercase leading-tight md:text-6xl">
+          {criteria.intro.replace(":", "")}<span class="text-white">...</span>
+        </h2>
+        <ul class="mt-6 grid gap-3 md:mt-10 md:grid-cols-2 md:gap-4">
+          {
+            criteria.items.map((item, i) => (
+              <li class="flex items-center gap-3 rounded-xl border-2 border-neutral-950 bg-white p-4 shadow-[4px_4px_0_0_#0a0a0a] md:gap-4 md:rounded-2xl md:p-5 md:shadow-[6px_6px_0_0_#0a0a0a]">
+                <span class="display flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-pink-400 text-sm text-white md:h-10 md:w-10 md:text-lg">
+                  {i + 1}
+                </span>
+                <p class="text-sm leading-snug md:text-lg">
+                  {item.parts
+                    ? item.parts.map((p) =>
+                        p.break
+                          ? <br />
+                          : p.bold
+                            ? <strong class="font-bold">{p.bold}</strong>
+                            : <span>{p.text}</span>,
+                      )
+                    : (
+                      <>
+                        {item.bold && <strong class="font-bold">{item.bold}</strong>} {item.text}
+                      </>
+                    )}
+                </p>
+              </li>
+            ))
+          }
+        </ul>
+        <p class="mt-6 text-xs italic text-neutral-800/80 md:mt-8">{criteria.tip}</p>
+      </div>
+    </section>
+
+    <!-- Steps -->
+    <section class="border-b border-white/10">
+      <div class="mx-auto max-w-7xl px-4 py-14 md:px-6 md:py-20">
+        <h2 class="display text-3xl uppercase leading-tight md:text-6xl">
+          Как это <span class="text-pink-400">работает</span>
+        </h2>
+
+        <!-- Mobile: horizontal scroll; Desktop: grid 3 cols × 2 rows -->
+        <ol class="hide-scrollbar mt-8 flex snap-x snap-mandatory gap-3 overflow-x-auto pb-2 md:mt-12 md:grid md:snap-none md:grid-cols-3 md:gap-4 md:overflow-visible md:pb-0">
+          {
+            steps.items.map((step, i) => (
+              <li class="relative w-[78%] shrink-0 snap-start rounded-2xl border border-white/10 bg-white/5 p-4 transition hover:border-pink-400 md:w-auto md:p-5">
+                <div class="flex items-start justify-between">
+                  <span class="display text-4xl leading-none text-pink-400 md:text-5xl">
+                    {String(i + 1).padStart(2, "0")}
+                  </span>
+                  <span class="text-2xl md:text-3xl" aria-hidden="true">{step.icon}</span>
+                </div>
+                <h3 class="display mt-3 text-sm uppercase leading-tight md:text-base">
+                  <span class="block whitespace-pre-line md:hidden">{step.titleMobile ?? step.title}</span>
+                  <span class="hidden whitespace-pre-line md:block">{step.title}</span>
+                </h3>
+                <p class="mt-2 text-xs text-neutral-400 md:text-sm">{step.text}</p>
+              </li>
+            ))
+          }
+        </ol>
+        <p class="mt-6 text-[11px] leading-relaxed text-neutral-500 md:mt-8 md:text-xs">
+          {steps.disclaimer}
+        </p>
+      </div>
+    </section>
+
+    <!-- Form -->
+    <section id="form" class="border-b border-white/10 bg-pink-500 text-white">
+      <div class="mx-auto max-w-3xl px-4 py-16 md:px-6 md:py-24">
+        <h2 class="display text-3xl uppercase leading-tight md:text-6xl">
+          Присоединяйся<br />к UGC boost
+        </h2>
+        <p class="mt-3 text-base text-white/90 md:mt-4 md:whitespace-pre-line md:text-lg">{formBlock.subtitle}</p>
+
+        <form
+          id="application-form"
+          class="mt-8 space-y-5 rounded-2xl border-2 border-neutral-950 bg-white p-5 text-neutral-950 shadow-[6px_6px_0_0_#0a0a0a] md:mt-12 md:rounded-3xl md:p-10 md:shadow-[10px_10px_0_0_#0a0a0a]"
+        >
+          <div class="grid gap-4 md:grid-cols-3">
+            <label class="block">
+              <span class="text-[11px] font-bold uppercase tracking-wider md:text-sm">Фамилия *</span>
+              <input
+                required
+                type="text"
+                name="lastName"
+                class="mt-1.5 w-full border-b-2 border-neutral-950 bg-transparent py-2 text-base outline-none focus:border-pink-500 md:mt-2"
+              />
+            </label>
+            <label class="block">
+              <span class="text-[11px] font-bold uppercase tracking-wider md:text-sm">Имя *</span>
+              <input
+                required
+                type="text"
+                name="firstName"
+                class="mt-1.5 w-full border-b-2 border-neutral-950 bg-transparent py-2 text-base outline-none focus:border-pink-500 md:mt-2"
+              />
+            </label>
+            <label class="block">
+              <span class="text-[11px] font-bold uppercase tracking-wider md:text-sm">Отчество *</span>
+              <input
+                required
+                type="text"
+                name="middleName"
+                class="mt-1.5 w-full border-b-2 border-neutral-950 bg-transparent py-2 text-base outline-none focus:border-pink-500 md:mt-2"
+              />
+            </label>
+          </div>
+
+          <label class="block">
+            <span class="text-[11px] font-bold uppercase tracking-wider md:text-sm">
+              Номер телефона (Telegram) *
+            </span>
+            <input
+              required
+              type="tel"
+              name="phone"
+              placeholder="+7 (___) ___-__-__"
+              class="mt-1.5 w-full border-b-2 border-neutral-950 bg-transparent py-2 text-base outline-none focus:border-pink-500 md:mt-2"
+            />
+            <span class="mt-1 block text-xs text-neutral-600">
+              Убедись, что к этому номеру привязан Telegram
+            </span>
+          </label>
+
+          <label class="block">
+            <span class="text-[11px] font-bold uppercase tracking-wider md:text-sm">ИИН *</span>
+            <input
+              required
+              type="text"
+              name="iin"
+              inputmode="numeric"
+              pattern="\d{12}"
+              maxlength="12"
+              placeholder="____________"
+              class="mt-1.5 w-full border-b-2 border-neutral-950 bg-transparent py-2 text-base outline-none focus:border-pink-500 md:mt-2"
+            />
+            <span class="mt-1 block text-xs text-neutral-600">
+              Нужен для проверки возраста и подписания договора, если пройдешь отбор
+            </span>
+          </label>
+
+          <label class="block">
+            <span class="text-[11px] font-bold uppercase tracking-wider md:text-sm">Город проживания *</span>
+            <select
+              required
+              name="city"
+              class="mt-1.5 w-full border-b-2 border-neutral-950 bg-transparent py-2 text-base outline-none focus:border-pink-500 md:mt-2"
+            >
+              <option value="">Выбери город</option>
+              {formBlock.cities.map((c) => <option value={c}>{c}</option>)}
+            </select>
+          </label>
+
+          <fieldset>
+            <legend class="text-[11px] font-bold uppercase tracking-wider md:text-sm">Соцсети *</legend>
+            <p class="mt-1 text-xs text-neutral-600">Где ты активно ведешь контент</p>
+            <div class="mt-3 space-y-3">
+              {
+                formBlock.socials.map((s) => (
+                  <div class="flex flex-col gap-2 md:flex-row md:items-center md:gap-3">
+                    <label class="inline-flex items-center gap-2 rounded-full border-2 border-neutral-950 bg-white px-4 py-2 text-sm font-bold has-[:checked]:bg-pink-400">
+                      <input
+                        type="checkbox"
+                        class="social-checkbox h-4 w-4 accent-pink-500"
+                        data-social={s}
+                      />
+                      <span>{s}</span>
+                    </label>
+                    <input
+                      type="url"
+                      placeholder={`Ссылка на ${s}`}
+                      disabled
+                      data-social-input={s}
+                      class="hidden flex-1 border-b-2 border-neutral-950 bg-transparent py-2 text-base outline-none transition focus:border-pink-500 md:text-sm"
+                    />
+                  </div>
+                ))
+              }
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend class="text-[11px] font-bold uppercase tracking-wider md:text-sm">Категория блога (до 3) *</legend>
+            <div class="mt-3 flex flex-wrap gap-2">
+              {
+                formBlock.categories.map((c) => (
+                  <label class="inline-flex cursor-pointer items-center gap-2 rounded-full border-2 border-neutral-950 bg-white px-3 py-1.5 text-xs font-semibold transition hover:bg-pink-50 has-[:checked]:bg-pink-400 has-[:checked]:text-white md:px-4 md:py-2 md:text-sm">
+                    <input
+                      type="checkbox"
+                      class={`category-checkbox hidden ${c === "Другое" ? "category-other" : ""}`}
+                      value={c}
+                    />
+                    <span>{c}</span>
+                  </label>
+                ))
+              }
+            </div>
+            <input
+              id="category-other-input"
+              type="text"
+              name="categoryOther"
+              placeholder="Укажи категорию"
+              disabled
+              class="mt-3 hidden w-full border-b-2 border-neutral-950 bg-transparent py-2 text-base outline-none focus:border-pink-500 disabled:cursor-not-allowed"
+            />
+          </fieldset>
+
+          <div class="space-y-3 border-t-2 border-neutral-950 pt-5 md:pt-6">
+            <label class="flex items-start gap-3">
+              <input required type="checkbox" class="mt-1 h-4 w-4 accent-pink-500" />
+              <span class="text-sm">
+                Я принимаю условия{" "}
+                <a
+                  href="/legal/user-agreement"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="font-bold underline"
+                >
+                  Пользовательского соглашения
+                </a>
+              </span>
+            </label>
+            <label class="flex items-start gap-3">
+              <input required type="checkbox" class="mt-1 h-4 w-4 accent-pink-500" />
+              <span class="text-sm">
+                Даю согласие на обработку персональных данных в соответствии с{" "}
+                <a
+                  href="/legal/privacy-policy"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="font-bold underline"
+                >
+                  Политикой
+                </a>
+              </span>
+            </label>
+          </div>
+
+          <button
+            type="submit"
+            class="shimmer-btn display w-full rounded-full bg-pink-400 px-6 py-4 text-sm uppercase tracking-wider text-white transition hover:bg-pink-500 md:px-10 md:py-5 md:text-base"
+          >
+            <span>{formBlock.submitLabel}</span>
+          </button>
+        </form>
+      </div>
+    </section>
+
+    <!-- FAQ -->
+    <section class="border-b border-white/10">
+      <div class="mx-auto max-w-4xl px-4 py-14 md:px-6 md:py-20">
+        <h2 class="display text-3xl uppercase leading-tight md:text-6xl">
+          <span class="text-pink-400">FAQ</span>
+        </h2>
+        <div class="mt-8 space-y-3 md:mt-12 md:space-y-4">
+          {
+            faq.items.map((item) => (
+              <details class="group rounded-2xl border border-white/10 bg-white/5 p-5 transition open:border-pink-400 open:bg-white/10 md:p-6">
+                <summary class="flex cursor-pointer items-center justify-between gap-3">
+                  <span class="display text-sm uppercase leading-tight md:text-xl">{item.q}</span>
+                  <span class="display flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full border-2 border-pink-400 text-sm text-pink-400 transition group-open:rotate-45 md:h-10 md:w-10 md:text-lg">
+                    +
+                  </span>
+                </summary>
+                <p class="mt-3 text-sm leading-relaxed text-neutral-300 md:mt-4 md:text-base">
+                  {item.a}
+                </p>
+              </details>
+            ))
+          }
+        </div>
+      </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="bg-neutral-950">
+      <div class="mx-auto grid max-w-7xl gap-8 px-4 py-12 md:grid-cols-3 md:gap-10 md:px-6 md:py-16">
+        <div>
+          <div class="flex items-center gap-3">
+            <img
+              src="/logos/ugc-boost-white.png"
+              alt="UGC boost"
+              class="h-11 w-auto"
+            />
+            <span class="h-8 w-px bg-white/20" aria-hidden="true"></span>
+            <img
+              src="/logos/efw-white.png"
+              alt="EURASIAN FASHION WEEK"
+              class="h-11 w-auto"
+            />
+          </div>
+          <p class="mt-3 text-sm text-neutral-500">{footer.tagline}</p>
+        </div>
+        <div class="space-y-2 text-sm text-neutral-400">
+          <p>{footer.legalEntity}</p>
+          {footer.links.map((l) => (
+            <a
+              href={l.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              class="block transition hover:text-pink-400"
+            >
+              {l.label}
+            </a>
+          ))}
+        </div>
+        <div class="space-y-2 text-sm text-neutral-400">
+          <p>Телефон: <span class="text-white">{footer.phone}</span></p>
+          <p>
+            Instagram:{" "}
+            <a href={footer.instagram.href} class="text-pink-400 hover:text-pink-300">
+              {footer.instagram.label}
+            </a>
+          </p>
+        </div>
+      </div>
+      <div class="border-t border-white/10">
+        <div class="mx-auto max-w-7xl px-4 py-5 text-xs text-neutral-600 md:px-6 md:py-6">
+          {footer.copyright}
+        </div>
+      </div>
+    </footer>
+
+    <script>
+      document.querySelectorAll<HTMLInputElement>(".social-checkbox").forEach((cb) => {
+        cb.addEventListener("change", () => {
+          const name = cb.dataset.social;
+          if (!name) return;
+          const input = document.querySelector<HTMLInputElement>(
+            `[data-social-input="${name}"]`,
+          );
+          if (!input) return;
+          if (cb.checked) {
+            input.classList.remove("hidden");
+            input.disabled = false;
+            input.required = true;
+            input.focus();
+          } else {
+            input.classList.add("hidden");
+            input.disabled = true;
+            input.required = false;
+            input.value = "";
+          }
+        });
+      });
+
+      const categoryBoxes = document.querySelectorAll<HTMLInputElement>(".category-checkbox");
+      const otherInput = document.getElementById("category-other-input") as HTMLInputElement | null;
+      categoryBoxes.forEach((cb) => {
+        cb.addEventListener("change", () => {
+          const checked = Array.from(categoryBoxes).filter((c) => c.checked);
+          categoryBoxes.forEach((c) => {
+            if (!c.checked && checked.length >= 3) c.disabled = true;
+            else c.disabled = false;
+          });
+
+          if (cb.classList.contains("category-other") && otherInput) {
+            if (cb.checked) {
+              otherInput.classList.remove("hidden");
+              otherInput.disabled = false;
+              otherInput.required = true;
+            } else {
+              otherInput.classList.add("hidden");
+              otherInput.disabled = true;
+              otherInput.required = false;
+              otherInput.value = "";
+            }
+          }
+        });
+      });
+
+      document.getElementById("application-form")?.addEventListener("submit", (e) => {
+        e.preventDefault();
+        alert("Заявка отправлена (демо)\n\nВ проде тут успех-экран с CTA в Telegram-бот.");
+      });
+    </script>
   </body>
 </html>
