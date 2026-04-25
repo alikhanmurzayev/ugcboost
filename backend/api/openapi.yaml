@@ -516,6 +516,51 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /creators/applications:
+    post:
+      operationId: submitCreatorApplication
+      summary: Submit a creator application from the public landing page
+      description: |
+        Public endpoint (no authentication). Accepts creator personal data,
+        social accounts, selected categories and four mandatory consents, then
+        atomically stores the application, its related rows and an audit entry
+        inside a single DB transaction. Returns the new application id and a
+        Telegram deep-link the creator must open to bind their TG user to the
+        application.
+      tags: [creators]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatorApplicationSubmitRequest"
+      responses:
+        "201":
+          description: Application accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreatorApplicationSubmitResult"
+        "409":
+          description: Active application for this IIN already exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          description: Unexpected error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
 components:
   schemas:
     HealthResponse:
@@ -777,12 +822,14 @@ components:
 
     AuditLogEntry:
       type: object
-      required: [id, actorId, actorRole, action, entityType, ipAddress, createdAt]
+      required: [id, actorRole, action, entityType, ipAddress, createdAt]
       properties:
         id:
           type: string
         actorId:
           type: string
+          nullable: true
+          description: Null for system / public actions (e.g. public creator application submit).
         actorRole:
           type: string
         action:
@@ -820,6 +867,122 @@ components:
       properties:
         data:
           $ref: "#/components/schemas/ListAuditLogsData"
+
+    SocialPlatform:
+      type: string
+      description: Supported social network for creator accounts (MVP scope).
+      enum: [instagram, tiktok]
+
+    SocialAccountInput:
+      type: object
+      required: [platform, handle]
+      properties:
+        platform:
+          $ref: "#/components/schemas/SocialPlatform"
+        handle:
+          type: string
+          description: Account handle or public identifier on the given platform.
+          minLength: 1
+          maxLength: 128
+
+    ConsentsInput:
+      type: object
+      description: |
+        Four mandatory consents captured separately per FR4 and the legal
+        documents. Every field must be true; otherwise the request is rejected
+        with 422.
+      required: [processing, thirdParty, crossBorder, terms]
+      properties:
+        processing:
+          type: boolean
+          description: Consent to personal data processing.
+        thirdParty:
+          type: boolean
+          description: Consent to personal data transfer to third parties (LiveDune, TrustMe, etc.).
+        crossBorder:
+          type: boolean
+          description: Consent to cross-border personal data transfer.
+        terms:
+          type: boolean
+          description: Acceptance of the user agreement and platform terms.
+
+    CreatorApplicationSubmitRequest:
+      type: object
+      required:
+        - lastName
+        - firstName
+        - iin
+        - phone
+        - city
+        - address
+        - categories
+        - socials
+        - consents
+      properties:
+        lastName:
+          type: string
+          minLength: 1
+          maxLength: 128
+        firstName:
+          type: string
+          minLength: 1
+          maxLength: 128
+        middleName:
+          type: string
+          maxLength: 128
+          description: Optional patronymic (not every applicant has one).
+        iin:
+          type: string
+          description: Kazakhstani individual identification number (12 digits).
+          pattern: "^[0-9]{12}$"
+        phone:
+          type: string
+          minLength: 1
+          maxLength: 32
+        city:
+          type: string
+          minLength: 1
+          maxLength: 128
+        address:
+          type: string
+          minLength: 1
+          maxLength: 512
+        categories:
+          type: array
+          description: One or more category codes from the categories catalogue. Must be non-empty.
+          minItems: 1
+          items:
+            type: string
+            minLength: 1
+            maxLength: 64
+        socials:
+          type: array
+          description: One or more social accounts. Multiple handles on the same platform are allowed.
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/SocialAccountInput"
+        consents:
+          $ref: "#/components/schemas/ConsentsInput"
+
+    CreatorApplicationSubmitData:
+      type: object
+      required: [applicationId, telegramBotUrl]
+      properties:
+        applicationId:
+          type: string
+          format: uuid
+          description: UUID of the newly created application (also embedded into the bot deep-link).
+        telegramBotUrl:
+          type: string
+          format: uri
+          description: Deep-link to the Telegram bot carrying application id as start parameter.
+
+    CreatorApplicationSubmitResult:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: "#/components/schemas/CreatorApplicationSubmitData"
 
   securitySchemes:
     bearerAuth:

@@ -88,6 +88,7 @@ func run() error {
 	brandSvc := service.NewBrandService(pool, repoFactory, cfg.BcryptCost, appLogger)
 	auditSvc := service.NewAuditService(pool, repoFactory)
 	authzSvc := authz.NewAuthzService(brandSvc)
+	creatorApplicationSvc := service.NewCreatorApplicationService(pool, repoFactory, appLogger)
 
 	// Seed admin
 	if err := authSvc.SeedAdmin(ctx, cfg.AdminEmail, cfg.AdminPassword); err != nil {
@@ -107,7 +108,13 @@ func run() error {
 	r.Use(middleware.Logging(appLogger))
 
 	// Create server implementing ServerInterface
-	server := handler.NewServer(authSvc, brandSvc, authzSvc, auditSvc, cfg.Version, cfg.CookieSecure, appLogger)
+	server := handler.NewServer(authSvc, brandSvc, authzSvc, auditSvc, creatorApplicationSvc, handler.ServerConfig{
+		Version:               cfg.Version,
+		CookieSecure:          cfg.CookieSecure,
+		TelegramBotUsername:   cfg.TelegramBotUsername,
+		LegalAgreementVersion: cfg.LegalAgreementVersion,
+		LegalPrivacyVersion:   cfg.LegalPrivacyVersion,
+	}, appLogger)
 
 	// Register API routes via generated handler
 	api.HandlerWithOptions(server, api.ChiServerOptions{

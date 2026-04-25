@@ -225,7 +225,7 @@ func TestAuthService_Login(t *testing.T) {
 		repo.EXPECT().SaveRefreshToken(mock.Anything, user.ID, "hash-refresh", futureTime).Return(nil)
 
 		expectAudit(t, audit, repository.AuditLogRow{
-			ActorID:    user.ID,
+			ActorID:    &user.ID,
 			ActorRole:  user.Role,
 			Action:     AuditActionLogin,
 			EntityType: AuditEntityTypeUser,
@@ -477,8 +477,9 @@ func TestAuthService_Logout(t *testing.T) {
 		factory.EXPECT().NewAuditRepo(mock.Anything).Return(audit)
 		repo.EXPECT().DeleteUserRefreshTokens(mock.Anything, "user-1").Return(nil)
 
+		actorID := "user-1"
 		expectAudit(t, audit, repository.AuditLogRow{
-			ActorID:    "user-1",
+			ActorID:    &actorID,
 			ActorRole:  "",
 			Action:     AuditActionLogout,
 			EntityType: AuditEntityTypeUser,
@@ -737,8 +738,9 @@ func TestAuthService_ResetPassword(t *testing.T) {
 		repo.EXPECT().UpdatePassword(mock.Anything, "user-1", mock.AnythingOfType("string")).Return(nil)
 		repo.EXPECT().DeleteUserRefreshTokens(mock.Anything, "user-1").Return(nil)
 
+		actorID := "user-1"
 		expectAudit(t, audit, repository.AuditLogRow{
-			ActorID:    "user-1",
+			ActorID:    &actorID,
 			ActorRole:  "",
 			Action:     AuditActionPasswordReset,
 			EntityType: AuditEntityTypeUser,

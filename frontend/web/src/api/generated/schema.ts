@@ -218,6 +218,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/creators/applications": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Submit a creator application from the public landing page
+         * @description Public endpoint (no authentication). Accepts creator personal data,
+         *     social accounts, selected categories and four mandatory consents, then
+         *     atomically stores the application, its related rows and an audit entry
+         *     inside a single DB transaction. Returns the new application id and a
+         *     Telegram deep-link the creator must open to bind their TG user to the
+         *     application.
+         */
+        post: operations["submitCreatorApplication"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -353,7 +378,8 @@ export interface components {
         };
         AuditLogEntry: {
             id: string;
-            actorId: string;
+            /** @description Null for system / public actions (e.g. public creator application submit). */
+            actorId?: string | null;
             actorRole: string;
             action: string;
             entityType: string;
@@ -372,6 +398,62 @@ export interface components {
         };
         AuditLogsResult: {
             data: components["schemas"]["ListAuditLogsData"];
+        };
+        /**
+         * @description Supported social network for creator accounts (MVP scope).
+         * @enum {string}
+         */
+        SocialPlatform: "instagram" | "tiktok";
+        SocialAccountInput: {
+            platform: components["schemas"]["SocialPlatform"];
+            /** @description Account handle or public identifier on the given platform. */
+            handle: string;
+        };
+        /**
+         * @description Four mandatory consents captured separately per FR4 and the legal
+         *     documents. Every field must be true; otherwise the request is rejected
+         *     with 422.
+         */
+        ConsentsInput: {
+            /** @description Consent to personal data processing. */
+            processing: boolean;
+            /** @description Consent to personal data transfer to third parties (LiveDune, TrustMe, etc.). */
+            thirdParty: boolean;
+            /** @description Consent to cross-border personal data transfer. */
+            crossBorder: boolean;
+            /** @description Acceptance of the user agreement and platform terms. */
+            terms: boolean;
+        };
+        CreatorApplicationSubmitRequest: {
+            lastName: string;
+            firstName: string;
+            /** @description Optional patronymic (not every applicant has one). */
+            middleName?: string;
+            /** @description Kazakhstani individual identification number (12 digits). */
+            iin: string;
+            phone: string;
+            city: string;
+            address: string;
+            /** @description One or more category codes from the categories catalogue. Must be non-empty. */
+            categories: string[];
+            /** @description One or more social accounts. Multiple handles on the same platform are allowed. */
+            socials: components["schemas"]["SocialAccountInput"][];
+            consents: components["schemas"]["ConsentsInput"];
+        };
+        CreatorApplicationSubmitData: {
+            /**
+             * Format: uuid
+             * @description UUID of the newly created application (also embedded into the bot deep-link).
+             */
+            applicationId: string;
+            /**
+             * Format: uri
+             * @description Deep-link to the Telegram bot carrying application id as start parameter.
+             */
+            telegramBotUrl: string;
+        };
+        CreatorApplicationSubmitResult: {
+            data: components["schemas"]["CreatorApplicationSubmitData"];
         };
     };
     responses: never;
@@ -1000,6 +1082,57 @@ export interface operations {
             };
             /** @description Forbidden */
             403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unexpected error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    submitCreatorApplication: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreatorApplicationSubmitRequest"];
+            };
+        };
+        responses: {
+            /** @description Application accepted */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreatorApplicationSubmitResult"];
+                };
+            };
+            /** @description Active application for this IIN already exists */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation error */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -48,28 +48,60 @@ type AuditLogService interface {
 	List(ctx context.Context, f domain.AuditFilter, page, perPage int) ([]*domain.AuditLog, int64, error)
 }
 
+// CreatorApplicationService is the interface Server needs from the creator
+// application service (public submission flow from the landing page).
+type CreatorApplicationService interface {
+	Submit(ctx context.Context, in domain.CreatorApplicationInput) (*domain.CreatorApplicationSubmission, error)
+}
+
+// ServerConfig bundles configuration values the handler layer needs. Keeping
+// them in a struct lets NewServer grow without a long positional signature.
+type ServerConfig struct {
+	Version               string
+	CookieSecure          bool
+	TelegramBotUsername   string
+	LegalAgreementVersion string
+	LegalPrivacyVersion   string
+}
+
 // Server implements api.ServerInterface.
 type Server struct {
-	authService  AuthService
-	brandService BrandService
-	authzService AuthzService
-	auditService AuditLogService
-	version      string
-	cookieSecure bool
-	logger       logger.Logger
+	authService               AuthService
+	brandService              BrandService
+	authzService              AuthzService
+	auditService              AuditLogService
+	creatorApplicationService CreatorApplicationService
+	version                   string
+	cookieSecure              bool
+	telegramBotUsername       string
+	legalAgreementVersion     string
+	legalPrivacyVersion       string
+	logger                    logger.Logger
 }
 
 var _ api.ServerInterface = (*Server)(nil)
 
 // NewServer creates a new Server.
-func NewServer(auth AuthService, brands BrandService, authz AuthzService, audit AuditLogService, version string, cookieSecure bool, log logger.Logger) *Server {
+func NewServer(
+	auth AuthService,
+	brands BrandService,
+	authz AuthzService,
+	audit AuditLogService,
+	creatorApps CreatorApplicationService,
+	cfg ServerConfig,
+	log logger.Logger,
+) *Server {
 	return &Server{
-		authService:  auth,
-		brandService: brands,
-		authzService: authz,
-		auditService: audit,
-		version:      version,
-		cookieSecure: cookieSecure,
-		logger:       log,
+		authService:               auth,
+		brandService:              brands,
+		authzService:              authz,
+		auditService:              audit,
+		creatorApplicationService: creatorApps,
+		version:                   cfg.Version,
+		cookieSecure:              cfg.CookieSecure,
+		telegramBotUsername:       cfg.TelegramBotUsername,
+		legalAgreementVersion:     cfg.LegalAgreementVersion,
+		legalPrivacyVersion:       cfg.LegalPrivacyVersion,
+		logger:                    log,
 	}
 }

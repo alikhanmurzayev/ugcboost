@@ -24,3 +24,8 @@
 - Branch naming: `<username>/<description>` (e.g. `alikhan/backend-auth`)
 - No direct pushes to `main` — only via Pull Request with approval
 - Use `gh pr create` to open PRs
+
+## Start claude code session without tmux:
+   ```bash
+   claude --dangerously-skip-permissions --remote-control --effort max -c
+   ```

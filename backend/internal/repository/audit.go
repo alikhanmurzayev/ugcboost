@@ -26,10 +26,12 @@ const (
 	AuditLogColumnCreatedAt  = "created_at"
 )
 
-// AuditLogRow maps to the audit_logs table.
+// AuditLogRow maps to the audit_logs table. ActorID is nullable: public
+// endpoints (e.g. creator application submission) record audit entries
+// without an authenticated user (see migration 20260420181757).
 type AuditLogRow struct {
 	ID         string          `db:"id"`
-	ActorID    string          `db:"actor_id"     insert:"actor_id"`
+	ActorID    *string         `db:"actor_id"     insert:"actor_id"`
 	ActorRole  string          `db:"actor_role"   insert:"actor_role"`
 	Action     string          `db:"action"       insert:"action"`
 	EntityType string          `db:"entity_type"  insert:"entity_type"`
