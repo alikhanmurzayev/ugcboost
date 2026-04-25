@@ -58,7 +58,7 @@ func TestServer_ListAuditLogs(t *testing.T) {
 			Data: api.ListAuditLogsData{
 				Logs: []api.AuditLogEntry{
 					{
-						Id: "al-1", ActorId: "u-1", ActorRole: "admin", Action: "login",
+						Id: "al-1", ActorId: strptr("u-1"), ActorRole: "admin", Action: "login",
 						EntityType: "user", EntityId: strptr("u-1"),
 						OldValue: nil, NewValue: nil,
 						IpAddress: "127.0.0.1", CreatedAt: created,
@@ -108,7 +108,7 @@ func TestServer_ListAuditLogs(t *testing.T) {
 			Data: api.ListAuditLogsData{
 				Logs: []api.AuditLogEntry{
 					{
-						Id: "al-2", ActorId: "u-1", ActorRole: "admin", Action: "brand_update",
+						Id: "al-2", ActorId: strptr("u-1"), ActorRole: "admin", Action: "brand_update",
 						EntityType: "brand", EntityId: strptr("e-1"),
 						OldValue: map[string]any{"name": "Old"},
 						NewValue: map[string]any{"name": "Acme"},

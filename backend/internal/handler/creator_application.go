@@ -3,6 +3,7 @@ package handler
 import (
 	"encoding/json"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/google/uuid"
@@ -11,6 +12,11 @@ import (
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/domain"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/middleware"
 )
+
+// maxUserAgentLength caps the User-Agent string persisted with consent rows.
+// Anything longer is truncated before the service layer touches it — the
+// attacker-controlled header should not balloon DB rows or stdout logs.
+const maxUserAgentLength = 1024
 
 // SubmitCreatorApplication handles POST /creators/applications.
 //
@@ -26,6 +32,10 @@ func (s *Server) SubmitCreatorApplication(w http.ResponseWriter, r *http.Request
 		return
 	}
 
+	ua := r.UserAgent()
+	if len(ua) > maxUserAgentLength {
+		ua = ua[:maxUserAgentLength]
+	}
 	input := domain.CreatorApplicationInput{
 		LastName:         req.LastName,
 		FirstName:        req.FirstName,
@@ -38,7 +48,7 @@ func (s *Server) SubmitCreatorApplication(w http.ResponseWriter, r *http.Request
 		Socials:          apiSocialsToDomain(req.Socials),
 		Consents:         apiConsentsToDomain(req.Consents),
 		IPAddress:        middleware.ClientIPFromContext(r.Context()),
-		UserAgent:        r.UserAgent(),
+		UserAgent:        ua,
 		AgreementVersion: s.legalAgreementVersion,
 		PrivacyVersion:   s.legalPrivacyVersion,
 		Now:              time.Now().UTC(),
@@ -52,7 +62,9 @@ func (s *Server) SubmitCreatorApplication(w http.ResponseWriter, r *http.Request
 
 	applicationID, err := uuid.Parse(submission.ApplicationID)
 	if err != nil {
-		s.logger.Error(r.Context(), "invalid application id returned from service", "error", err, "application_id", submission.ApplicationID)
+		// The service always returns a DB-generated UUID here, so a parse
+		// failure indicates a real bug. respondError already logs the wrapped
+		// internal error via its default branch — no need for a second log.
 		respondError(w, r, err, s.logger)
 		return
 	}
@@ -68,9 +80,10 @@ func (s *Server) SubmitCreatorApplication(w http.ResponseWriter, r *http.Request
 // buildTelegramBotURL assembles the deep-link returned to the creator. The
 // bot username is environment-specific (dev/staging share a test bot, prod has
 // its own). ApplicationID is used directly as the start parameter so the bot
-// can link the Telegram user back to their submission.
+// can link the Telegram user back to their submission. URL-escape guards
+// against a malformed env var smuggling characters into the path or query.
 func (s *Server) buildTelegramBotURL(applicationID string) string {
-	return "https://t.me/" + s.telegramBotUsername + "?start=" + applicationID
+	return "https://t.me/" + url.PathEscape(s.telegramBotUsername) + "?start=" + url.QueryEscape(applicationID)
 }
 
 func apiSocialsToDomain(in []api.SocialAccountInput) []domain.SocialAccountInput {

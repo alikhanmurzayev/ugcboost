@@ -11,6 +11,8 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/pashagolub/pgxmock/v4"
 	"github.com/stretchr/testify/require"
+
+	"github.com/alikhanmurzayev/ugcboost/backend/internal/domain"
 )
 
 func TestCreatorApplicationRepository_HasActiveByIIN(t *testing.T) {
@@ -109,7 +111,7 @@ func TestCreatorApplicationRepository_Create(t *testing.T) {
 		}, got)
 	})
 
-	t.Run("propagates unique violation style error for duplicate iin", func(t *testing.T) {
+	t.Run("translates pgx unique violation on iin index to domain sentinel", func(t *testing.T) {
 		t.Parallel()
 		mock := newPgxmock(t)
 		repo := &creatorApplicationRepository{db: mock}
@@ -117,7 +119,7 @@ func TestCreatorApplicationRepository_Create(t *testing.T) {
 
 		mock.ExpectQuery(sqlStmt).
 			WithArgs("ул. Абая 1", birth, "Алматы", "Айдана", "950515312348", "Муратова", nil, "+77001234567").
-			WillReturnError(errors.New("duplicate key value violates unique constraint creator_applications_iin_active_idx"))
+			WillReturnError(&pgconn.PgError{Code: "23505", ConstraintName: CreatorApplicationsIINActiveIdx})
 
 		_, err := repo.Create(context.Background(), CreatorApplicationRow{
 			LastName:  "Муратова",
@@ -128,7 +130,30 @@ func TestCreatorApplicationRepository_Create(t *testing.T) {
 			City:      "Алматы",
 			Address:   "ул. Абая 1",
 		})
-		require.ErrorContains(t, err, "creator_applications_iin_active_idx")
+		require.ErrorIs(t, err, domain.ErrCreatorApplicationDuplicate)
+	})
+
+	t.Run("propagates unrelated unique violations as-is", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &creatorApplicationRepository{db: mock}
+		birth := time.Date(1995, 5, 15, 0, 0, 0, 0, time.UTC)
+
+		mock.ExpectQuery(sqlStmt).
+			WithArgs("ул. Абая 1", birth, "Алматы", "Айдана", "950515312348", "Муратова", nil, "+77001234567").
+			WillReturnError(&pgconn.PgError{Code: "23505", ConstraintName: "some_other_idx"})
+
+		_, err := repo.Create(context.Background(), CreatorApplicationRow{
+			LastName:  "Муратова",
+			FirstName: "Айдана",
+			IIN:       "950515312348",
+			BirthDate: birth,
+			Phone:     "+77001234567",
+			City:      "Алматы",
+			Address:   "ул. Абая 1",
+		})
+		require.Error(t, err)
+		require.NotErrorIs(t, err, domain.ErrCreatorApplicationDuplicate)
 	})
 }
 

@@ -38,21 +38,26 @@ func NewCreatorApplicationService(pool dbutil.Pool, repoFactory CreatorApplicati
 
 // Submit persists one application together with its related rows atomically.
 // The IIN and the mandatory consents are checked before any write: duplicates
-// yield CodeCreatorApplicationDuplicate (409) and missing consents or
-// validation errors yield VALIDATION_ERROR (422). Nothing about the personal
-// data lands in application logs — only the generated application id and
-// request id are logged.
+// yield CodeCreatorApplicationDuplicate (409) and validation errors yield
+// granular 422 codes (INVALID_IIN / UNDER_AGE / MISSING_CONSENT /
+// UNKNOWN_CATEGORY / VALIDATION_ERROR). Nothing about the personal data lands
+// in stdout-логах приложения — only the generated application id is logged on
+// success. Audit_logs may carry PII per the spec (administrator-read only).
 func (s *CreatorApplicationService) Submit(ctx context.Context, in domain.CreatorApplicationInput) (*domain.CreatorApplicationSubmission, error) {
 	if err := requireAllConsents(in.Consents); err != nil {
 		return nil, err
 	}
+	trimmed, err := trimAndValidateRequired(in)
+	if err != nil {
+		return nil, err
+	}
 
-	birth, err := domain.ValidateIIN(in.IIN)
+	birth, err := domain.ValidateIIN(trimmed.IIN)
 	if err != nil {
 		return nil, iinErrorToValidation(err)
 	}
 	if err := domain.EnsureAdult(birth, in.Now); err != nil {
-		return nil, domain.NewValidationError(domain.CodeUnderAge, "Applicant must be at least 18 years old")
+		return nil, domain.NewValidationError(domain.CodeUnderAge, "Возраст менее 18 лет")
 	}
 
 	normalisedSocials, err := normaliseSocials(in.Socials)
@@ -70,13 +75,12 @@ func (s *CreatorApplicationService) Submit(ctx context.Context, in domain.Creato
 		appConsentRepo := s.repoFactory.NewCreatorApplicationConsentRepo(tx)
 		auditRepo := s.repoFactory.NewAuditRepo(tx)
 
-		hasActive, err := appRepo.HasActiveByIIN(ctx, in.IIN)
+		hasActive, err := appRepo.HasActiveByIIN(ctx, trimmed.IIN)
 		if err != nil {
 			return fmt.Errorf("check duplicate iin: %w", err)
 		}
 		if hasActive {
-			return domain.NewBusinessError(domain.CodeCreatorApplicationDuplicate,
-				"Заявка по этому ИИН уже находится на рассмотрении или одобрена")
+			return duplicateError()
 		}
 
 		categoryIDs, err := resolveCategoryIDs(ctx, categoryRepo, in.CategoryCodes)
@@ -85,16 +89,19 @@ func (s *CreatorApplicationService) Submit(ctx context.Context, in domain.Creato
 		}
 
 		appRow, err := appRepo.Create(ctx, repository.CreatorApplicationRow{
-			LastName:   strings.TrimSpace(in.LastName),
-			FirstName:  strings.TrimSpace(in.FirstName),
+			LastName:   trimmed.LastName,
+			FirstName:  trimmed.FirstName,
 			MiddleName: trimOptional(in.MiddleName),
-			IIN:        in.IIN,
+			IIN:        trimmed.IIN,
 			BirthDate:  birth,
-			Phone:      strings.TrimSpace(in.Phone),
-			City:       strings.TrimSpace(in.City),
-			Address:    strings.TrimSpace(in.Address),
+			Phone:      trimmed.Phone,
+			City:       trimmed.City,
+			Address:    trimmed.Address,
 		})
 		if err != nil {
+			if errors.Is(err, domain.ErrCreatorApplicationDuplicate) {
+				return duplicateError()
+			}
 			return fmt.Errorf("create application: %w", err)
 		}
 
@@ -136,69 +143,153 @@ func (s *CreatorApplicationService) Submit(ctx context.Context, in domain.Creato
 			ApplicationID: appRow.ID,
 			BirthDate:     appRow.BirthDate,
 		}
-		s.logger.Info(ctx, "creator application submitted", "application_id", appRow.ID)
 		return nil
 	})
 
 	if err != nil {
 		return nil, err
 	}
+	// Log after the transaction commits so the "submitted" signal can never
+	// lie about a rolled-back request.
+	s.logger.Info(ctx, "creator application submitted", "application_id", submission.ApplicationID)
 	return submission, nil
 }
 
+// duplicateError is the single canonical 409 instance used both when the
+// service spots an active IIN up front and when the partial unique index
+// catches a concurrent race at INSERT time.
+func duplicateError() error {
+	return domain.NewBusinessError(domain.CodeCreatorApplicationDuplicate,
+		"Заявка по этому ИИН уже находится на рассмотрении или одобрена")
+}
+
+// trimmedCreatorApplicationInput holds the post-trim required-field values so
+// the service can both validate and reuse them without re-running TrimSpace.
+type trimmedCreatorApplicationInput struct {
+	LastName  string
+	FirstName string
+	IIN       string
+	Phone     string
+	City      string
+	Address   string
+}
+
+// trimAndValidateRequired trims whitespace from every mandatory string field
+// and rejects the submission if any of them becomes empty. OpenAPI's
+// minLength:1 lets a single space through, so the post-trim check is the real
+// defence against whitespace-only PII landing in the DB.
+func trimAndValidateRequired(in domain.CreatorApplicationInput) (trimmedCreatorApplicationInput, error) {
+	out := trimmedCreatorApplicationInput{
+		LastName:  strings.TrimSpace(in.LastName),
+		FirstName: strings.TrimSpace(in.FirstName),
+		IIN:       strings.TrimSpace(in.IIN),
+		Phone:     strings.TrimSpace(in.Phone),
+		City:      strings.TrimSpace(in.City),
+		Address:   strings.TrimSpace(in.Address),
+	}
+	missing := func(name string) error {
+		return domain.NewValidationError(domain.CodeValidation,
+			fmt.Sprintf("Обязательное поле не заполнено: %s", name))
+	}
+	switch {
+	case out.LastName == "":
+		return out, missing("last_name")
+	case out.FirstName == "":
+		return out, missing("first_name")
+	case out.IIN == "":
+		return out, missing("iin")
+	case out.Phone == "":
+		return out, missing("phone")
+	case out.City == "":
+		return out, missing("city")
+	case out.Address == "":
+		return out, missing("address")
+	}
+	return out, nil
+}
+
 // requireAllConsents rejects the submission if any of the four mandatory
-// consents is not explicitly true.
+// consents is not explicitly true. The friendly Russian labels match the spec
+// I/O matrix and avoid leaking internal enum values like "third_party" into
+// user-facing text.
 func requireAllConsents(c domain.ConsentsInput) error {
+	values := c.AsMap()
 	for _, name := range domain.ConsentTypeValues {
-		if !c.AsMap()[name] {
+		if !values[name] {
 			return domain.NewValidationError(domain.CodeMissingConsent,
-				fmt.Sprintf("Отсутствует обязательное согласие: %s", name))
+				fmt.Sprintf("Требуется согласие: %s", consentLabelRU(name)))
 		}
 	}
 	return nil
 }
 
+// consentLabelRU maps the canonical consent type onto a user-friendly Russian
+// label used in error messages — the machine code stays internal.
+func consentLabelRU(consentType string) string {
+	switch consentType {
+	case domain.ConsentTypeProcessing:
+		return "обработка персональных данных"
+	case domain.ConsentTypeThirdParty:
+		return "передача данных третьим лицам"
+	case domain.ConsentTypeCrossBorder:
+		return "трансграничная передача данных"
+	case domain.ConsentTypeTerms:
+		return "пользовательское соглашение"
+	default:
+		return consentType
+	}
+}
+
 // iinErrorToValidation maps domain IIN sentinel errors onto user-facing
-// validation errors. Everything that is not an IIN-format issue is treated as
-// a generic 422 with a safe message — we never leak the internal reason.
+// validation errors. Any unknown IIN-related error degrades to the safe
+// INVALID_IIN message — we never leak the internal reason via a raw 500.
 func iinErrorToValidation(err error) error {
 	switch {
-	case errors.Is(err, domain.ErrIINUnderAge18):
-		return domain.NewValidationError(domain.CodeUnderAge, "Applicant must be at least 18 years old")
 	case errors.Is(err, domain.ErrIINFormat),
 		errors.Is(err, domain.ErrIINChecksum),
 		errors.Is(err, domain.ErrIINCentury),
 		errors.Is(err, domain.ErrIINBirthDate):
-		return domain.NewValidationError(domain.CodeInvalidIIN, "Некорректный ИИН")
+		return domain.NewValidationError(domain.CodeInvalidIIN, "Невалидный ИИН")
 	default:
-		return err
+		return domain.NewValidationError(domain.CodeInvalidIIN, "Невалидный ИИН")
 	}
 }
 
-// normaliseSocials trims whitespace and strips a single leading @ from every
-// handle. Platform values are checked against the domain whitelist — any
-// unknown platform yields VALIDATION_ERROR so malformed OpenAPI bypasses (or
-// accidents from trusted callers) cannot sneak garbage into the database.
+// normaliseSocials enforces the whitelist of platforms and normalises each
+// handle: trim whitespace → strip ALL leading '@' → lowercase → validate
+// against domain.SocialHandleRegex. Duplicates on the same (platform, handle)
+// pair inside one request are rejected up front so we never hit the DB
+// UNIQUE constraint mid-TX.
 func normaliseSocials(accounts []domain.SocialAccountInput) ([]domain.SocialAccountInput, error) {
 	if len(accounts) == 0 {
-		return nil, domain.NewValidationError(domain.CodeValidation, "At least one social account is required")
+		return nil, domain.NewValidationError(domain.CodeValidation, "Нужен хотя бы один аккаунт в соцсети")
 	}
 	allowed := make(map[string]struct{}, len(domain.SocialPlatformValues))
 	for _, v := range domain.SocialPlatformValues {
 		allowed[v] = struct{}{}
 	}
+	seen := make(map[string]struct{}, len(accounts))
 	out := make([]domain.SocialAccountInput, len(accounts))
 	for i, a := range accounts {
 		if _, ok := allowed[a.Platform]; !ok {
 			return nil, domain.NewValidationError(domain.CodeValidation,
-				fmt.Sprintf("Unsupported social platform: %s", a.Platform))
+				fmt.Sprintf("Неподдерживаемая соцсеть: %s", a.Platform))
 		}
-		handle := strings.TrimSpace(a.Handle)
-		handle = strings.TrimPrefix(handle, "@")
+		handle := strings.ToLower(strings.TrimLeft(strings.TrimSpace(a.Handle), "@"))
 		if handle == "" {
 			return nil, domain.NewValidationError(domain.CodeValidation,
-				fmt.Sprintf("Empty handle for platform %s", a.Platform))
+				fmt.Sprintf("Пустой handle для соцсети %s", a.Platform))
 		}
+		if !domain.SocialHandleRegex.MatchString(handle) {
+			return nil, domain.NewValidationError(domain.CodeValidation,
+				fmt.Sprintf("Некорректный handle для соцсети %s: допустимы буквы, цифры, точка и подчёркивание", a.Platform))
+		}
+		key := a.Platform + "|" + handle
+		if _, dup := seen[key]; dup {
+			return nil, domain.NewValidationError(domain.CodeValidation,
+				fmt.Sprintf("Дубликат соцсети: %s/%s", a.Platform, handle))
+		}
+		seen[key] = struct{}{}
 		out[i] = domain.SocialAccountInput{Platform: a.Platform, Handle: handle}
 	}
 	return out, nil

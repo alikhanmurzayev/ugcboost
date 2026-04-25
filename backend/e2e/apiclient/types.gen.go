@@ -78,8 +78,10 @@ type AssignManagerResult struct {
 
 // AuditLogEntry defines model for AuditLogEntry.
 type AuditLogEntry struct {
-	Action     string      `json:"action"`
-	ActorId    string      `json:"actorId"`
+	Action string `json:"action"`
+
+	// ActorId Null for system / public actions (e.g. public creator application submit).
+	ActorId    *string     `json:"actorId,omitempty"`
 	ActorRole  string      `json:"actorRole"`
 	CreatedAt  time.Time   `json:"createdAt"`
 	EntityId   *string     `json:"entityId,omitempty"`

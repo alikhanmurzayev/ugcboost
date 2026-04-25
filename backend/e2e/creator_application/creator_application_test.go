@@ -36,10 +36,12 @@ package creator_application_test
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -123,12 +125,18 @@ func TestSubmitCreatorApplicationValidation(t *testing.T) {
 	t.Run("invalid iin format", func(t *testing.T) {
 		t.Parallel()
 		// Raw HTTP bypasses the generated client's pattern validation so the
-		// server's domain check fires instead.
+		// server's domain check fires instead. The error body should still be
+		// a valid ErrorResponse with INVALID_IIN — same contract as every
+		// other 422 in the I/O matrix.
 		body := validRequestMap(testutil.UniqueIIN())
 		body["iin"] = "bad"
 		resp := testutil.PostRaw(t, "/creators/applications", body)
 		defer resp.Body.Close()
 		require.Equal(t, http.StatusUnprocessableEntity, resp.StatusCode)
+
+		var envelope apiclient.ErrorResponse
+		require.NoError(t, json.NewDecoder(resp.Body).Decode(&envelope))
+		require.Equal(t, "INVALID_IIN", envelope.Error.Code)
 	})
 
 	t.Run("invalid iin checksum", func(t *testing.T) {
@@ -146,9 +154,9 @@ func TestSubmitCreatorApplicationValidation(t *testing.T) {
 
 	t.Run("under 18 rejected with UNDER_AGE", func(t *testing.T) {
 		t.Parallel()
-		// Birth 15-05-2010 → creator is 15 years old on 2026-04-20.
-		// Prefix YYMMDD=100515, century=5 (male, 2000s), use our counter for
-		// the serial to keep the test fully isolated.
+		// buildUnder18IIN picks a birth 16 years before now, so this test
+		// stays green regardless of when it runs (a hardcoded 2010 would
+		// break the moment real-world time caught up).
 		iin := buildUnder18IIN()
 		c := testutil.NewAPIClient(t)
 		resp, err := c.SubmitCreatorApplicationWithResponse(context.Background(), validRequest(iin))
@@ -184,16 +192,21 @@ func TestSubmitCreatorApplicationValidation(t *testing.T) {
 
 	t.Run("unsupported social platform via raw http", func(t *testing.T) {
 		t.Parallel()
+		// Handler decodes the body with plain json.NewDecoder (not through
+		// HandleParamError, which only runs on query/path params), so unknown
+		// enum values land in the typed struct and are rejected by the service
+		// in normaliseSocials — deterministically 422 VALIDATION_ERROR.
 		body := validRequestMap(testutil.UniqueIIN())
 		body["socials"] = []map[string]string{
 			{"platform": "facebook", "handle": "aidana"},
 		}
 		resp := testutil.PostRaw(t, "/creators/applications", body)
 		defer resp.Body.Close()
-		// OpenAPI enum validation fires via HandleParamError — returns 400, not 422.
-		require.True(t, resp.StatusCode == http.StatusBadRequest ||
-			resp.StatusCode == http.StatusUnprocessableEntity,
-			"unsupported platform should be rejected with 4xx, got %d", resp.StatusCode)
+		require.Equal(t, http.StatusUnprocessableEntity, resp.StatusCode)
+
+		var envelope apiclient.ErrorResponse
+		require.NoError(t, json.NewDecoder(resp.Body).Decode(&envelope))
+		require.Equal(t, "VALIDATION_ERROR", envelope.Error.Code)
 	})
 }
 
@@ -232,13 +245,20 @@ func flipDigit(r byte) string {
 	return string(r - 1)
 }
 
-// buildUnder18IIN produces a checksum-valid IIN for a creator born
-// 2010-05-15 (about 15 years old against the backend's real-time clock).
+// buildUnder18IIN produces a checksum-valid IIN for a creator who will
+// always be roughly 16 years old against the backend's real-time clock —
+// regardless of when the test runs. Clock-independent: a hardcoded year
+// would stop reproducing under-18 the moment real time caught up.
 func buildUnder18IIN() string {
-	// Delegate to the shared UniqueIIN style: YYMMDD=100515, century=5.
+	birth := time.Now().UTC().AddDate(-16, 0, 0)
+	yy := fmt.Sprintf("%02d", birth.Year()%100)
+	mm := fmt.Sprintf("%02d", int(birth.Month()))
+	dd := fmt.Sprintf("%02d", birth.Day())
+	// Century byte 5 = male, 2000s. Backend accepts both 5 and 6 for 2000s.
+	century := "5"
 	for {
 		serial := testutil.UniqueIIN()[7:11] // reuse the atomic serial; drop the old checksum
-		prefix := "100515" + "5" + serial
+		prefix := yy + mm + dd + century + serial
 		if last, ok := iinControlForTests(prefix); ok {
 			return fmt.Sprintf("%s%d", prefix, last)
 		}

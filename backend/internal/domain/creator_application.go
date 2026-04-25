@@ -1,6 +1,10 @@
 package domain
 
-import "time"
+import (
+	"errors"
+	"regexp"
+	"time"
+)
 
 // CreatorApplicationStatus values stored in creator_applications.status.
 // "Active" statuses are the ones that block a duplicate IIN submission;
@@ -60,6 +64,20 @@ const (
 	// 422 — at least one of the four mandatory consents is missing.
 	CodeMissingConsent = "MISSING_CONSENT"
 )
+
+// ErrCreatorApplicationDuplicate is the sentinel the repository raises when
+// the partial unique index on creator_applications(iin) WHERE status IN
+// ('pending','approved','blocked') rejects an INSERT (concurrent submit lost
+// the race after the service's HasActiveByIIN check). The service converts it
+// into a business error with CodeCreatorApplicationDuplicate.
+var ErrCreatorApplicationDuplicate = errors.New("creator application with this iin is already active")
+
+// SocialHandleRegex is the validation pattern applied to handles after they
+// are trimmed, stripped of leading '@' and lowercased. Current scope (IG/TT)
+// shares the same permissive subset — letters, digits, dot, underscore, up to
+// 30 chars. Extending this regex when a new platform lands must go through
+// Ask First in the spec.
+var SocialHandleRegex = regexp.MustCompile(`^[a-z0-9._]{1,30}$`)
 
 // CreatorApplicationInput is what the service receives after the handler has
 // parsed and lightly validated the HTTP request. It carries the raw consent

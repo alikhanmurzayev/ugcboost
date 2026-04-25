@@ -378,7 +378,8 @@ export interface components {
         };
         AuditLogEntry: {
             id: string;
-            actorId: string;
+            /** @description Null for system / public actions (e.g. public creator application submit). */
+            actorId?: string | null;
             actorRole: string;
             action: string;
             entityType: string;

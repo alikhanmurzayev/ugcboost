@@ -4,14 +4,22 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"strings"
 	"time"
 
 	sq "github.com/Masterminds/squirrel"
 	"github.com/elgris/stom"
+	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/dbutil"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/domain"
 )
+
+// CreatorApplicationsIINActiveIdx mirrors the partial unique index name
+// created by migration 20260420181753_creator_applications.sql. Used to
+// distinguish the "active IIN already present" race from other unique
+// violations that might appear on this table in the future.
+const CreatorApplicationsIINActiveIdx = "creator_applications_iin_active_idx"
 
 // Creator applications table and column names.
 const (
@@ -86,11 +94,23 @@ func (r *creatorApplicationRepository) HasActiveByIIN(ctx context.Context, iin s
 
 // Create inserts a new application row and returns the persisted row with
 // DB-generated fields populated (id, status, created_at, updated_at).
+// Concurrent submits with the same IIN can pass HasActiveByIIN and race on
+// INSERT — the partial unique index fires and pgx returns SQLSTATE 23505. We
+// translate that specific case into domain.ErrCreatorApplicationDuplicate so
+// the service can still answer 409, not 500.
 func (r *creatorApplicationRepository) Create(ctx context.Context, row CreatorApplicationRow) (*CreatorApplicationRow, error) {
 	q := sq.Insert(TableCreatorApplications).
 		SetMap(toMap(row, creatorApplicationInsertMapper)).
 		Suffix(returningClause(creatorApplicationSelectColumns))
-	return dbutil.One[CreatorApplicationRow](ctx, r.db, q)
+	result, err := dbutil.One[CreatorApplicationRow](ctx, r.db, q)
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" && strings.Contains(pgErr.ConstraintName, CreatorApplicationsIINActiveIdx) {
+			return nil, domain.ErrCreatorApplicationDuplicate
+		}
+		return nil, err
+	}
+	return result, nil
 }
 
 // DeleteForTests hard-deletes an application by id. Related rows in

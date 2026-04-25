@@ -314,4 +314,78 @@ func TestCreatorApplicationService_Submit(t *testing.T) {
 			BirthDate:     birth,
 		}, got)
 	})
+
+	t.Run("empty required field rejected before tx", func(t *testing.T) {
+		t.Parallel()
+		// Every required field triggers the same validation path — sampling
+		// one is enough to pin the invariant. Other fields are covered by
+		// inline code review of trimAndValidateRequired.
+		rig := newCreatorServiceRig(t)
+		in := validCreatorInput(t)
+		in.LastName = "   "
+
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.logger)
+		_, err := svc.Submit(context.Background(), in)
+
+		var ve *domain.ValidationError
+		require.ErrorAs(t, err, &ve)
+		require.Equal(t, domain.CodeValidation, ve.Code)
+		require.Contains(t, ve.Message, "last_name")
+	})
+
+	t.Run("duplicate social pair rejected before tx", func(t *testing.T) {
+		t.Parallel()
+		rig := newCreatorServiceRig(t)
+		in := validCreatorInput(t)
+		in.Socials = []domain.SocialAccountInput{
+			{Platform: domain.SocialPlatformInstagram, Handle: "@Aidana"},
+			{Platform: domain.SocialPlatformInstagram, Handle: "aidana"},
+		}
+
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.logger)
+		_, err := svc.Submit(context.Background(), in)
+
+		var ve *domain.ValidationError
+		require.ErrorAs(t, err, &ve)
+		require.Equal(t, domain.CodeValidation, ve.Code)
+		require.Contains(t, ve.Message, "Дубликат")
+	})
+
+	t.Run("invalid handle characters rejected before tx", func(t *testing.T) {
+		t.Parallel()
+		rig := newCreatorServiceRig(t)
+		in := validCreatorInput(t)
+		in.Socials[0].Handle = "aidana user"
+
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.logger)
+		_, err := svc.Submit(context.Background(), in)
+
+		var ve *domain.ValidationError
+		require.ErrorAs(t, err, &ve)
+		require.Equal(t, domain.CodeValidation, ve.Code)
+	})
+
+	t.Run("repo returns duplicate sentinel under race — service answers 409", func(t *testing.T) {
+		t.Parallel()
+		rig := newCreatorServiceRig(t)
+		in := validCreatorInput(t)
+
+		expectTxBegin(rig)
+		expectFactoryWiring(rig)
+		rig.appRepo.EXPECT().HasActiveByIIN(mock.Anything, in.IIN).Return(false, nil)
+		rig.categoryRepo.EXPECT().GetActiveByCodes(mock.Anything, []string{"beauty", "fashion"}).
+			Return([]*repository.CategoryRow{
+				{ID: "c-1", Code: "beauty", Active: true},
+				{ID: "c-2", Code: "fashion", Active: true},
+			}, nil)
+		rig.appRepo.EXPECT().Create(mock.Anything, mock.Anything).
+			Return((*repository.CreatorApplicationRow)(nil), domain.ErrCreatorApplicationDuplicate)
+
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.logger)
+		_, err := svc.Submit(context.Background(), in)
+
+		var be *domain.BusinessError
+		require.ErrorAs(t, err, &be)
+		require.Equal(t, domain.CodeCreatorApplicationDuplicate, be.Code)
+	})
 }
