@@ -10,6 +10,7 @@
     "test": "vitest"
   },
   "dependencies": {
+    "@tailwindcss/vite": "^4.2.2",
     "astro": "^5.7.10"
   },
   "devDependencies": {
