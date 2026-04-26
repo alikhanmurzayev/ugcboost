@@ -36,10 +36,14 @@ export class ApiError extends Error {
   }
 }
 
-// Landing reaches only public endpoints (dictionaries + creator submit), so
-// the client carries no auth middleware and no credentials. Compare with
-// frontend/web/src/api/client.ts: web layers onRequest/onResponse plus a
-// rawClient for refresh; that machinery is intentionally absent here.
-const client = createClient<paths>({ baseUrl: BASE });
+// Landing reaches only public endpoints (dictionaries + creator submit) and
+// carries no JWT auth middleware. credentials:"include" is set so that on
+// staging the CF Access cookie (set when the team logs into the Access app
+// shared with staging-api) is forwarded cross-origin — without it the API
+// host returns a 302 to the Access login page. Compare with
+// frontend/web/src/api/client.ts: web additionally layers onRequest/onResponse
+// plus a rawClient for JWT refresh; that machinery is intentionally absent
+// here.
+const client = createClient<paths>({ baseUrl: BASE, credentials: "include" });
 
 export default client;
