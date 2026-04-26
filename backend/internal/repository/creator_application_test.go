@@ -69,7 +69,7 @@ func TestCreatorApplicationRepository_HasActiveByIIN(t *testing.T) {
 func TestCreatorApplicationRepository_Create(t *testing.T) {
 	t.Parallel()
 
-	const sqlStmt = "INSERT INTO creator_applications (address,birth_date,category_other_text,city,first_name,iin,last_name,middle_name,phone) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING address, birth_date, category_other_text, city, created_at, first_name, id, iin, last_name, middle_name, phone, status, updated_at"
+	const sqlStmt = "INSERT INTO creator_applications (address,birth_date,category_other_text,city,first_name,iin,last_name,middle_name,phone,status) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING address, birth_date, category_other_text, city, created_at, first_name, id, iin, last_name, middle_name, phone, status, updated_at"
 
 	t.Run("success returns persisted row", func(t *testing.T) {
 		t.Parallel()
@@ -83,7 +83,7 @@ func TestCreatorApplicationRepository_Create(t *testing.T) {
 		// scanner which requires the source kind to match the destination kind
 		// (*string), so the address/middle/other columns are sourced as pointers.
 		mock.ExpectQuery(sqlStmt).
-			WithArgs("ул. Абая 1", birth, "Авторские ASMR-видео", "Алматы", "Айдана", "950515312348", "Муратова", "Ивановна", "+77001234567").
+			WithArgs("ул. Абая 1", birth, "Авторские ASMR-видео", "Алматы", "Айдана", "950515312348", "Муратова", "Ивановна", "+77001234567", "pending").
 			WillReturnRows(pgxmock.NewRows([]string{"address", "birth_date", "category_other_text", "city", "created_at", "first_name", "id", "iin", "last_name", "middle_name", "phone", "status", "updated_at"}).
 				AddRow(pointer.ToString("ул. Абая 1"), birth, pointer.ToString("Авторские ASMR-видео"), "Алматы", created, "Айдана", "app-1", "950515312348", "Муратова", pointer.ToString("Ивановна"), "+77001234567", "pending", created))
 
@@ -97,6 +97,7 @@ func TestCreatorApplicationRepository_Create(t *testing.T) {
 			City:              "Алматы",
 			Address:           pointer.ToString("ул. Абая 1"),
 			CategoryOtherText: pointer.ToString("Авторские ASMR-видео"),
+			Status:            "pending",
 		}
 		got, err := repo.Create(context.Background(), row)
 		require.NoError(t, err)
@@ -124,7 +125,7 @@ func TestCreatorApplicationRepository_Create(t *testing.T) {
 		birth := time.Date(1995, 5, 15, 0, 0, 0, 0, time.UTC)
 
 		mock.ExpectQuery(sqlStmt).
-			WithArgs("ул. Абая 1", birth, nil, "Алматы", "Айдана", "950515312348", "Муратова", nil, "+77001234567").
+			WithArgs("ул. Абая 1", birth, nil, "Алматы", "Айдана", "950515312348", "Муратова", nil, "+77001234567", "pending").
 			WillReturnError(&pgconn.PgError{Code: "23505", ConstraintName: CreatorApplicationsIINActiveIdx})
 
 		_, err := repo.Create(context.Background(), CreatorApplicationRow{
@@ -135,6 +136,7 @@ func TestCreatorApplicationRepository_Create(t *testing.T) {
 			Phone:     "+77001234567",
 			City:      "Алматы",
 			Address:   pointer.ToString("ул. Абая 1"),
+			Status:    "pending",
 		})
 		require.ErrorIs(t, err, domain.ErrCreatorApplicationDuplicate)
 	})
@@ -146,7 +148,7 @@ func TestCreatorApplicationRepository_Create(t *testing.T) {
 		birth := time.Date(1995, 5, 15, 0, 0, 0, 0, time.UTC)
 
 		mock.ExpectQuery(sqlStmt).
-			WithArgs("ул. Абая 1", birth, nil, "Алматы", "Айдана", "950515312348", "Муратова", nil, "+77001234567").
+			WithArgs("ул. Абая 1", birth, nil, "Алматы", "Айдана", "950515312348", "Муратова", nil, "+77001234567", "pending").
 			WillReturnError(&pgconn.PgError{Code: "23505", ConstraintName: "some_other_idx"})
 
 		_, err := repo.Create(context.Background(), CreatorApplicationRow{
@@ -157,6 +159,7 @@ func TestCreatorApplicationRepository_Create(t *testing.T) {
 			Phone:     "+77001234567",
 			City:      "Алматы",
 			Address:   pointer.ToString("ул. Абая 1"),
+			Status:    "pending",
 		})
 		require.Error(t, err)
 		require.NotErrorIs(t, err, domain.ErrCreatorApplicationDuplicate)
@@ -172,7 +175,7 @@ func TestCreatorApplicationRepository_Create(t *testing.T) {
 		created := time.Date(2026, 4, 20, 18, 0, 0, 0, time.UTC)
 
 		mock.ExpectQuery(sqlStmt).
-			WithArgs(nil, birth, nil, "Алматы", "Айдана", "950515312348", "Муратова", "Ивановна", "+77001234567").
+			WithArgs(nil, birth, nil, "Алматы", "Айдана", "950515312348", "Муратова", "Ивановна", "+77001234567", "pending").
 			WillReturnRows(pgxmock.NewRows([]string{"address", "birth_date", "category_other_text", "city", "created_at", "first_name", "id", "iin", "last_name", "middle_name", "phone", "status", "updated_at"}).
 				AddRow(nil, birth, nil, "Алматы", created, "Айдана", "app-2", "950515312348", "Муратова", pointer.ToString("Ивановна"), "+77001234567", "pending", created))
 
@@ -184,6 +187,7 @@ func TestCreatorApplicationRepository_Create(t *testing.T) {
 			BirthDate:  birth,
 			Phone:      "+77001234567",
 			City:       "Алматы",
+			Status:     "pending",
 		})
 		require.NoError(t, err)
 		require.Nil(t, got.Address)

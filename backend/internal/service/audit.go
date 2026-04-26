@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/AlekSi/pointer"
+
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/api"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/dbutil"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/domain"
@@ -33,12 +35,10 @@ func writeAudit(ctx context.Context, repo repository.AuditRepo, action, entityTy
 		IPAddress:  middleware.ClientIPFromContext(ctx),
 	}
 	if actorID := middleware.UserIDFromContext(ctx); actorID != "" {
-		id := actorID
-		row.ActorID = &id
+		row.ActorID = pointer.ToString(actorID)
 	}
 	if entityID != "" {
-		id := entityID
-		row.EntityID = &id
+		row.EntityID = pointer.ToString(entityID)
 	}
 	if oldValue != nil {
 		data, err := json.Marshal(oldValue)

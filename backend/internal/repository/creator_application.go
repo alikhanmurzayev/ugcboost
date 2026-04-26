@@ -39,9 +39,10 @@ const (
 	CreatorApplicationColumnUpdatedAt         = "updated_at"
 )
 
-// CreatorApplicationRow maps to the creator_applications table. Status is not
-// tagged for insert — the DB default 'pending' is used and any future status
-// change is handled by dedicated moderation endpoints.
+// CreatorApplicationRow maps to the creator_applications table. Status is
+// passed in by the service layer (no DB DEFAULT after the relax_constraints
+// migration), so it carries an insert tag. Future moderation flows update the
+// column via dedicated endpoints, not via the standard INSERT path.
 type CreatorApplicationRow struct {
 	ID                string    `db:"id"`
 	LastName          string    `db:"last_name"           insert:"last_name"`
@@ -53,7 +54,7 @@ type CreatorApplicationRow struct {
 	City              string    `db:"city"                insert:"city"`
 	Address           *string   `db:"address"             insert:"address"`
 	CategoryOtherText *string   `db:"category_other_text" insert:"category_other_text"`
-	Status            string    `db:"status"`
+	Status            string    `db:"status"              insert:"status"`
 	CreatedAt         time.Time `db:"created_at"`
 	UpdatedAt         time.Time `db:"updated_at"`
 }

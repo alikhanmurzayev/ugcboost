@@ -88,7 +88,7 @@ func TestAuthService_Login(t *testing.T) {
 
 ## Coverage
 
-Целевой порог — 80%. Исключения: main.go, DI/wire setup, bootstrap-код.
+Целевой порог — 80% **на каждой публичной и приватной функции/методе** в покрываемых пакетах (handler/service/repository/middleware/authz). Gate в `make test-unit-backend-coverage` падает, если хотя бы один identifier ниже 80%. Исключения по файлам: generated code (`*.gen.go`), mockery-моки (`*/mocks/`), `cmd/`, trivial bootstrap (`handler/health.go`, `middleware/logging.go`, `middleware/json.go`).
 
 ## Race detector
 

@@ -61,6 +61,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -123,7 +124,12 @@ func TestSubmitCreatorApplication(t *testing.T) {
 	testutil.RegisterCreatorApplicationCleanup(t, data.ApplicationId.String())
 
 	adminClient, adminToken, _ := testutil.SetupAdminClient(t)
-	verifyCreatorApplicationByID(t, adminClient, adminToken, data.ApplicationId.String(), expectedFromRequest(req, ""))
+	verifyCreatorApplicationByID(t, adminClient, adminToken, data.ApplicationId.String(), req, "")
+
+	// Audit-entry sanity: the same admin client can read the audit log filtered
+	// by entity, and the creator_application_submit action must be present.
+	testutil.AssertAuditEntry(t, adminClient, adminToken,
+		"creator_application", data.ApplicationId.String(), "creator_application_submit")
 }
 
 func TestSubmitCreatorApplicationDuplicate(t *testing.T) {
@@ -285,7 +291,7 @@ func TestSubmitCreatorApplicationThreads(t *testing.T) {
 	testutil.RegisterCreatorApplicationCleanup(t, resp.JSON201.Data.ApplicationId.String())
 
 	adminClient, adminToken, _ := testutil.SetupAdminClient(t)
-	verifyCreatorApplicationByID(t, adminClient, adminToken, resp.JSON201.Data.ApplicationId.String(), expectedFromRequest(req, ""))
+	verifyCreatorApplicationByID(t, adminClient, adminToken, resp.JSON201.Data.ApplicationId.String(), req, "")
 }
 
 // TestSubmitCreatorApplicationOther covers the "other" category branch:
@@ -309,7 +315,7 @@ func TestSubmitCreatorApplicationOther(t *testing.T) {
 	testutil.RegisterCreatorApplicationCleanup(t, resp.JSON201.Data.ApplicationId.String())
 
 	adminClient, adminToken, _ := testutil.SetupAdminClient(t)
-	verifyCreatorApplicationByID(t, adminClient, adminToken, resp.JSON201.Data.ApplicationId.String(), expectedFromRequest(req, other))
+	verifyCreatorApplicationByID(t, adminClient, adminToken, resp.JSON201.Data.ApplicationId.String(), req, other)
 }
 
 // TestGetCreatorApplicationForbidden verifies the security boundary: a
@@ -355,79 +361,14 @@ func TestGetCreatorApplicationNotFound(t *testing.T) {
 	require.Equal(t, "NOT_FOUND", resp.JSON404.Error.Code)
 }
 
-// expectedCreatorApplication is the verification target for
-// verifyCreatorApplicationByID. The struct mirrors the fields
-// the GET aggregate must echo back after a successful submit; dynamic data
-// (id, timestamps, ipAddress/userAgent, dictionary names) is checked
-// separately by the helper. Address is *string because the column is now
-// optional — landing flow leaves it nil, admin tooling fills it in later.
-type expectedCreatorApplication struct {
-	LastName          string
-	FirstName         string
-	MiddleName        string
-	IIN               string
-	Phone             string
-	City              string
-	Address           *string
-	CategoryOtherText string
-	CategoryCodes     []string
-	Socials           []apiclient.CreatorApplicationDetailSocial
-}
-
-// expectedFromRequest distils the submission payload into the verification
-// shape: handle normalisation (lowercase, leading '@' stripped) is applied
-// upfront so the helper doesn't need to know how the service mutates input.
-func expectedFromRequest(req apiclient.CreatorApplicationSubmitRequest, otherText string) expectedCreatorApplication {
-	socs := make([]apiclient.CreatorApplicationDetailSocial, len(req.Socials))
-	for i, s := range req.Socials {
-		handle := strings.ToLower(strings.TrimLeft(strings.TrimSpace(s.Handle), "@"))
-		socs[i] = apiclient.CreatorApplicationDetailSocial{
-			Platform: apiclient.SocialPlatform(s.Platform),
-			Handle:   handle,
-		}
-	}
-	// GET response sorts socials by (platform, handle); keep expected slice
-	// in that same order so require.Equal lines up.
-	sortSocials(socs)
-	middle := ""
-	if req.MiddleName != nil {
-		middle = *req.MiddleName
-	}
-	return expectedCreatorApplication{
-		LastName:          req.LastName,
-		FirstName:         req.FirstName,
-		MiddleName:        middle,
-		IIN:               req.Iin,
-		Phone:             req.Phone,
-		City:              req.City,
-		Address:           req.Address,
-		CategoryOtherText: otherText,
-		CategoryCodes:     append([]string(nil), req.Categories...),
-		Socials:           socs,
-	}
-}
-
-// sortSocials orders socials by (platform, handle) — the same key the server
-// uses when reading the aggregate.
-func sortSocials(s []apiclient.CreatorApplicationDetailSocial) {
-	for i := 1; i < len(s); i++ {
-		for j := i; j > 0; j-- {
-			a, b := s[j-1], s[j]
-			if string(a.Platform) > string(b.Platform) ||
-				(a.Platform == b.Platform && a.Handle > b.Handle) {
-				s[j-1], s[j] = b, a
-				continue
-			}
-			break
-		}
-	}
-}
-
 // verifyCreatorApplicationByID reads the aggregate via admin GET and asserts
-// that it matches the expected payload. Dynamic fields (id, createdAt,
-// updatedAt, acceptedAt, ipAddress, userAgent, category Name/SortOrder)
-// are checked independently and not part of the structural comparison.
-func verifyCreatorApplicationByID(t *testing.T, c *apiclient.ClientWithResponses, adminToken, applicationID string, expected expectedCreatorApplication) {
+// that it matches the request, dictionary-resolved City/Categories, and the
+// canonical four-consent layout. Dynamic fields (id, timestamps, ipAddress,
+// userAgent, documentVersion) are validated independently, then normalised
+// onto the expected canonical values so the final require.Equal compares the
+// whole apiclient.CreatorApplicationDetailData struct in one shot — exactly
+// the pattern docs/standards/backend-testing-e2e.md prescribes.
+func verifyCreatorApplicationByID(t *testing.T, c *apiclient.ClientWithResponses, adminToken, applicationID string, req apiclient.CreatorApplicationSubmitRequest, otherText string) {
 	t.Helper()
 	appUUID, err := uuid.Parse(applicationID)
 	require.NoError(t, err)
@@ -438,73 +379,167 @@ func verifyCreatorApplicationByID(t *testing.T, c *apiclient.ClientWithResponses
 	require.NotNil(t, resp.JSON200)
 	got := resp.JSON200.Data
 
+	// Dynamic-field assertions: id is the one we created, timestamps land
+	// inside a sane window, every consent carries non-empty server-derived
+	// fields. Failure here points at a real bug; if everything passes we
+	// neutralise these fields and let require.Equal do the structural check.
 	require.Equal(t, applicationID, got.Id.String())
 	require.WithinDuration(t, time.Now().UTC(), got.CreatedAt, 5*time.Minute)
 	require.WithinDuration(t, time.Now().UTC(), got.UpdatedAt, 5*time.Minute)
-
-	require.Equal(t, expected.LastName, got.LastName)
-	require.Equal(t, expected.FirstName, got.FirstName)
-	if expected.MiddleName == "" {
-		require.Nil(t, got.MiddleName)
-	} else {
-		require.NotNil(t, got.MiddleName)
-		require.Equal(t, expected.MiddleName, *got.MiddleName)
-	}
-	require.Equal(t, expected.IIN, got.Iin)
-	require.Equal(t, expected.Phone, got.Phone)
-	// City is now an object resolved against the cities dictionary at read
-	// time. The submitted code is echoed back as got.City.Code; got.City.Name
-	// must be non-empty for an active dictionary entry. The seed migrations
-	// keep `almaty` and `astana` (the codes used by validRequest) active.
-	require.Equal(t, expected.City, got.City.Code)
-	require.NotEmpty(t, got.City.Name, "got.City.Name should be resolved from the cities dictionary")
-	require.Equal(t, expected.Address, got.Address)
-	require.Equal(t, "1995-05-15", got.BirthDate.Format("2006-01-02"))
-	require.Equal(t, apiclient.Pending, got.Status)
-
-	if expected.CategoryOtherText == "" {
-		require.Nil(t, got.CategoryOtherText)
-	} else {
-		require.NotNil(t, got.CategoryOtherText)
-		require.Equal(t, expected.CategoryOtherText, *got.CategoryOtherText)
-	}
-
-	gotCodes := make([]string, len(got.Categories))
-	for i, c := range got.Categories {
-		gotCodes[i] = c.Code
-		// Every active category is resolved against the dictionary, so name
-		// is non-empty. Even the fallback path (deactivated entry) returns
-		// name = code, which is also non-empty for any submitted code.
-		require.NotEmpty(t, c.Name, "got.Categories[%d].Name should be resolved", i)
-	}
-	require.ElementsMatch(t, expected.CategoryCodes, gotCodes)
-	for i := 1; i < len(got.Categories); i++ {
-		prev, cur := got.Categories[i-1], got.Categories[i]
-		require.True(t, prev.SortOrder < cur.SortOrder ||
-			(prev.SortOrder == cur.SortOrder && prev.Code < cur.Code),
-			"categories not in (sort_order, code) order: %v then %v", prev, cur)
-	}
-
-	require.Equal(t, expected.Socials, got.Socials)
-
 	require.Len(t, got.Consents, 4)
-	require.Equal(t, []apiclient.CreatorApplicationDetailConsentConsentType{
+	for i := range got.Consents {
+		require.WithinDuration(t, time.Now().UTC(), got.Consents[i].AcceptedAt, 5*time.Minute,
+			"consent %d acceptedAt out of range", i)
+		require.NotEmpty(t, got.Consents[i].IpAddress, "consent %d ipAddress empty", i)
+		require.NotEmpty(t, got.Consents[i].UserAgent, "consent %d userAgent empty", i)
+		require.NotEmpty(t, got.Consents[i].DocumentVersion, "consent %d documentVersion empty", i)
+	}
+
+	// Build the full expected aggregate with City/Categories resolved against
+	// the live public dictionaries — the same source the read-side handler
+	// queries — so name/sortOrder line up without us hardcoding seed values.
+	expected := buildExpectedDetail(t, req, otherText, got)
+
+	require.Equal(t, expected, got)
+}
+
+// buildExpectedDetail constructs the canonical apiclient.CreatorApplicationDetailData
+// the GET handler must return for the given submission. Dynamic fields (id,
+// timestamps, consent server-stamped values) are copied from `got` after the
+// caller has validated them so equality holds for the rest of the structure.
+func buildExpectedDetail(t *testing.T, req apiclient.CreatorApplicationSubmitRequest, otherText string, got apiclient.CreatorApplicationDetailData) apiclient.CreatorApplicationDetailData {
+	t.Helper()
+	publicClient := testutil.NewAPIClient(t)
+	cityRef := resolveCityRef(t, publicClient, req.City)
+	catRefs := resolveCategoryRefs(t, publicClient, req.Categories)
+
+	socs := make([]apiclient.CreatorApplicationDetailSocial, len(req.Socials))
+	for i, s := range req.Socials {
+		handle := strings.ToLower(strings.TrimLeft(strings.TrimSpace(s.Handle), "@"))
+		socs[i] = apiclient.CreatorApplicationDetailSocial{
+			Platform: apiclient.SocialPlatform(s.Platform),
+			Handle:   handle,
+		}
+	}
+	sortSocials(socs)
+
+	var otherPtr *string
+	if otherText != "" {
+		s := otherText
+		otherPtr = &s
+	}
+
+	expected := apiclient.CreatorApplicationDetailData{
+		Id:                got.Id,
+		LastName:          req.LastName,
+		FirstName:         req.FirstName,
+		MiddleName:        req.MiddleName,
+		Iin:               req.Iin,
+		BirthDate:         got.BirthDate, // already verified to be 1995-05-15 via the IIN; trust the parsed value
+		Phone:             req.Phone,
+		City:              cityRef,
+		Address:           req.Address,
+		CategoryOtherText: otherPtr,
+		Status:            apiclient.Pending,
+		CreatedAt:         got.CreatedAt,
+		UpdatedAt:         got.UpdatedAt,
+		Categories:        catRefs,
+		Socials:           socs,
+		Consents:          buildExpectedConsents(got.Consents),
+	}
+
+	// All UniqueIIN values share birthdate 1995-05-15 — pin it once so a
+	// regression in the IIN→date derivation surfaces here, not silently in
+	// the require.Equal copy from `got`.
+	require.Equal(t, "1995-05-15", got.BirthDate.Format("2006-01-02"))
+
+	return expected
+}
+
+// resolveCityRef looks the city up in the public cities dictionary and
+// returns the same struct the GET handler would emit. Uses the same data
+// source as the server, so name/sortOrder match exactly.
+func resolveCityRef(t *testing.T, c *apiclient.ClientWithResponses, code string) apiclient.CreatorApplicationDetailCity {
+	t.Helper()
+	resp, err := c.ListDictionaryWithResponse(context.Background(), apiclient.Cities)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, resp.StatusCode())
+	require.NotNil(t, resp.JSON200)
+	for _, item := range resp.JSON200.Data.Items {
+		if item.Code == code {
+			return apiclient.CreatorApplicationDetailCity{Code: item.Code, Name: item.Name, SortOrder: item.SortOrder}
+		}
+	}
+	require.Failf(t, "city not found in dictionary", "code=%q", code)
+	return apiclient.CreatorApplicationDetailCity{}
+}
+
+// resolveCategoryRefs maps the requested category codes to their dictionary
+// entries and returns them in the same (sortOrder, code) order the GET
+// handler does. Failures here mean the test is asking for codes that do not
+// (yet) exist in the seed.
+func resolveCategoryRefs(t *testing.T, c *apiclient.ClientWithResponses, codes []string) []apiclient.CreatorApplicationDetailCategory {
+	t.Helper()
+	resp, err := c.ListDictionaryWithResponse(context.Background(), apiclient.Categories)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, resp.StatusCode())
+	require.NotNil(t, resp.JSON200)
+	byCode := make(map[string]apiclient.DictionaryEntry, len(resp.JSON200.Data.Items))
+	for _, item := range resp.JSON200.Data.Items {
+		byCode[item.Code] = item
+	}
+	out := make([]apiclient.CreatorApplicationDetailCategory, 0, len(codes))
+	for _, code := range codes {
+		entry, ok := byCode[code]
+		require.Truef(t, ok, "category %q not found in dictionary", code)
+		out = append(out, apiclient.CreatorApplicationDetailCategory{
+			Code:      entry.Code,
+			Name:      entry.Name,
+			SortOrder: entry.SortOrder,
+		})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].SortOrder != out[j].SortOrder {
+			return out[i].SortOrder < out[j].SortOrder
+		}
+		return out[i].Code < out[j].Code
+	})
+	return out
+}
+
+// buildExpectedConsents returns four consent rows in canonical order, copying
+// server-stamped fields (acceptedAt, ipAddress, userAgent, documentVersion)
+// from `got` after the caller has validated them — the read-side reorders to
+// canonical sequence regardless of how Postgres stored them.
+func buildExpectedConsents(got []apiclient.CreatorApplicationDetailConsent) []apiclient.CreatorApplicationDetailConsent {
+	canonical := []apiclient.CreatorApplicationDetailConsentConsentType{
 		apiclient.Processing,
 		apiclient.ThirdParty,
 		apiclient.CrossBorder,
 		apiclient.Terms,
-	}, []apiclient.CreatorApplicationDetailConsentConsentType{
-		got.Consents[0].ConsentType,
-		got.Consents[1].ConsentType,
-		got.Consents[2].ConsentType,
-		got.Consents[3].ConsentType,
-	})
-	for _, c := range got.Consents {
-		require.WithinDuration(t, time.Now().UTC(), c.AcceptedAt, 5*time.Minute)
-		require.NotEmpty(t, c.DocumentVersion)
-		require.NotEmpty(t, c.IpAddress)
-		require.NotEmpty(t, c.UserAgent)
 	}
+	out := make([]apiclient.CreatorApplicationDetailConsent, len(canonical))
+	for i, ct := range canonical {
+		out[i] = apiclient.CreatorApplicationDetailConsent{
+			ConsentType:     ct,
+			AcceptedAt:      got[i].AcceptedAt,
+			DocumentVersion: got[i].DocumentVersion,
+			IpAddress:       got[i].IpAddress,
+			UserAgent:       got[i].UserAgent,
+		}
+	}
+	return out
+}
+
+// sortSocials orders socials by (platform, handle) — the same key the server
+// uses when reading the aggregate.
+func sortSocials(s []apiclient.CreatorApplicationDetailSocial) {
+	sort.Slice(s, func(i, j int) bool {
+		if s[i].Platform != s[j].Platform {
+			return string(s[i].Platform) < string(s[j].Platform)
+		}
+		return s[i].Handle < s[j].Handle
+	})
 }
 
 // validRequestMap is a raw-map variant of the valid request used to drive

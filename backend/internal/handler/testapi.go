@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 
 	openapi_types "github.com/oapi-codegen/runtime/types"
@@ -123,7 +124,15 @@ func (h *TestAPIHandler) CleanupEntity(w http.ResponseWriter, r *http.Request) {
 	case testapi.CreatorApplication:
 		deleteErr = h.repos.NewCreatorApplicationRepo(h.pool).DeleteForTests(r.Context(), req.Id)
 	default:
-		respondError(w, r, domain.NewValidationError(domain.CodeValidation, "type must be 'user', 'brand' or 'creator_application'"), h.logger)
+		if !req.Type.Valid() {
+			respondError(w, r, domain.NewValidationError(domain.CodeValidation,
+				fmt.Sprintf("unknown type: %q", req.Type)), h.logger)
+			return
+		}
+		// Defensive: a Valid value the switch above does not handle means the
+		// OpenAPI enum grew but the cleanup dispatch was not extended.
+		respondError(w, r, domain.NewValidationError(domain.CodeValidation,
+			fmt.Sprintf("unsupported type: %q", req.Type)), h.logger)
 		return
 	}
 

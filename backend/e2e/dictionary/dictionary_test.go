@@ -32,14 +32,17 @@ func TestListDictionaryCategories(t *testing.T) {
 	codes := make([]string, 0, len(resp.JSON200.Data.Items))
 	prevSort := -1
 	for _, item := range resp.JSON200.Data.Items {
+		require.NotEmpty(t, item.Code, "category code must be non-empty")
+		require.GreaterOrEqual(t, item.SortOrder, 0, "sort_order must be non-negative")
 		require.GreaterOrEqual(t, item.SortOrder, prevSort, "sort_order must be non-decreasing")
 		prevSort = item.SortOrder
 		codes = append(codes, item.Code)
 	}
-	require.Contains(t, codes, "home_diy", "expected new category 'home_diy'")
-	require.Contains(t, codes, "animals", "expected new category 'animals'")
-	require.Contains(t, codes, "other", "expected new category 'other'")
-	require.NotContains(t, codes, "gaming", "category 'gaming' should be removed")
+	// 'other' is a protected code — submit-схема ссылается на него, удаление
+	// сломает контракт API. Конкретные «обычные» коды (home_diy, gaming, …)
+	// — это часто меняющийся словарь; assertions на их наличие или отсутствие
+	// хрупки и не ловят реальных багов.
+	require.Contains(t, codes, "other", "expected protected category 'other'")
 }
 
 func TestListDictionaryCities(t *testing.T) {

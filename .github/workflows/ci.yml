@@ -66,6 +66,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
+      - name: Verify legal docs are in sync
+        run: make lint-legal
       - run: npm ci -w landing
         working-directory: frontend
       - run: npx tsc --noEmit

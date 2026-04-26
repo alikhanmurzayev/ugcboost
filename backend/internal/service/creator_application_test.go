@@ -88,14 +88,22 @@ func expectTxBegin(rig creatorServiceRig) {
 	rig.pool.EXPECT().Begin(mock.Anything).Return(testTx{}, nil)
 }
 
-// expectFactoryWiring configures the factory calls every TX performs.
+// expectFactoryWiring configures the factory calls every TX performs eagerly
+// at the top of the Submit transaction. The dictionary repo is constructed
+// lazily inside resolveCategoryIDs and is wired separately by tests that
+// reach that code path (see expectDictionaryWiring).
 func expectFactoryWiring(rig creatorServiceRig) {
 	rig.factory.EXPECT().NewCreatorApplicationRepo(mock.Anything).Return(rig.appRepo)
-	rig.factory.EXPECT().NewDictionaryRepo(mock.Anything).Return(rig.dictRepo)
 	rig.factory.EXPECT().NewCreatorApplicationCategoryRepo(mock.Anything).Return(rig.appCategoryRepo)
 	rig.factory.EXPECT().NewCreatorApplicationSocialRepo(mock.Anything).Return(rig.appSocialRepo)
 	rig.factory.EXPECT().NewCreatorApplicationConsentRepo(mock.Anything).Return(rig.appConsentRepo)
 	rig.factory.EXPECT().NewAuditRepo(mock.Anything).Return(rig.auditRepo)
+}
+
+// expectDictionaryWiring registers the lazy NewDictionaryRepo call made by
+// resolveCategoryIDs once the duplicate check has passed.
+func expectDictionaryWiring(rig creatorServiceRig) {
+	rig.factory.EXPECT().NewDictionaryRepo(mock.Anything).Return(rig.dictRepo)
 }
 
 func TestCreatorApplicationService_Submit(t *testing.T) {
@@ -183,6 +191,7 @@ func TestCreatorApplicationService_Submit(t *testing.T) {
 
 		expectTxBegin(rig)
 		expectFactoryWiring(rig)
+		expectDictionaryWiring(rig)
 		rig.appRepo.EXPECT().HasActiveByIIN(mock.Anything, in.IIN).Return(false, nil)
 		rig.dictRepo.EXPECT().GetActiveByCodes(mock.Anything, repository.TableCategories, []string{"beauty", "fashion"}).
 			Return([]*repository.DictionaryEntryRow{
@@ -307,6 +316,7 @@ func TestCreatorApplicationService_Submit(t *testing.T) {
 
 		expectTxBegin(rig)
 		expectFactoryWiring(rig)
+		expectDictionaryWiring(rig)
 		rig.appRepo.EXPECT().HasActiveByIIN(mock.Anything, in.IIN).Return(false, nil)
 		rig.dictRepo.EXPECT().GetActiveByCodes(mock.Anything, repository.TableCategories, []string{"beauty", "mystery"}).
 			Return([]*repository.DictionaryEntryRow{{ID: "c-1", Code: "beauty", Active: true}}, nil)
@@ -326,6 +336,7 @@ func TestCreatorApplicationService_Submit(t *testing.T) {
 
 		expectTxBegin(rig)
 		expectFactoryWiring(rig)
+		expectDictionaryWiring(rig)
 		rig.appRepo.EXPECT().HasActiveByIIN(mock.Anything, in.IIN).Return(false, nil)
 		rig.dictRepo.EXPECT().GetActiveByCodes(mock.Anything, repository.TableCategories, []string{"beauty", "fashion"}).
 			Return([]*repository.DictionaryEntryRow{
@@ -349,6 +360,7 @@ func TestCreatorApplicationService_Submit(t *testing.T) {
 
 		expectTxBegin(rig)
 		expectFactoryWiring(rig)
+		expectDictionaryWiring(rig)
 		rig.appRepo.EXPECT().HasActiveByIIN(mock.Anything, in.IIN).Return(false, nil)
 		rig.dictRepo.EXPECT().GetActiveByCodes(mock.Anything, repository.TableCategories, []string{"beauty", "fashion"}).
 			Return([]*repository.DictionaryEntryRow{
@@ -363,6 +375,7 @@ func TestCreatorApplicationService_Submit(t *testing.T) {
 			BirthDate:  birth,
 			Phone:      "+77001234567",
 			City:       "Алматы",
+			Status:     domain.CreatorApplicationStatusPending,
 		}).Return(&repository.CreatorApplicationRow{
 			ID:         "app-1",
 			LastName:   "Муратова",
@@ -419,6 +432,7 @@ func TestCreatorApplicationService_Submit(t *testing.T) {
 
 		expectTxBegin(rig)
 		expectFactoryWiring(rig)
+		expectDictionaryWiring(rig)
 		rig.appRepo.EXPECT().HasActiveByIIN(mock.Anything, in.IIN).Return(false, nil)
 		rig.dictRepo.EXPECT().GetActiveByCodes(mock.Anything, repository.TableCategories, []string{"beauty", "fashion"}).
 			Return([]*repository.DictionaryEntryRow{
@@ -450,6 +464,7 @@ func TestCreatorApplicationService_Submit(t *testing.T) {
 
 		expectTxBegin(rig)
 		expectFactoryWiring(rig)
+		expectDictionaryWiring(rig)
 		rig.appRepo.EXPECT().HasActiveByIIN(mock.Anything, in.IIN).Return(false, nil)
 		rig.dictRepo.EXPECT().GetActiveByCodes(mock.Anything, repository.TableCategories, []string{"beauty", "fashion"}).
 			Return([]*repository.DictionaryEntryRow{
@@ -481,6 +496,7 @@ func TestCreatorApplicationService_Submit(t *testing.T) {
 
 		expectTxBegin(rig)
 		expectFactoryWiring(rig)
+		expectDictionaryWiring(rig)
 		rig.appRepo.EXPECT().HasActiveByIIN(mock.Anything, in.IIN).Return(false, nil)
 		rig.dictRepo.EXPECT().GetActiveByCodes(mock.Anything, repository.TableCategories, []string{"other"}).
 			Return([]*repository.DictionaryEntryRow{{ID: "c-other", Code: "other", Active: true}}, nil)
@@ -500,20 +516,37 @@ func TestCreatorApplicationService_Submit(t *testing.T) {
 
 	t.Run("empty required field rejected before tx", func(t *testing.T) {
 		t.Parallel()
-		// Every required field triggers the same validation path — sampling
-		// one is enough to pin the invariant. Other fields are covered by
-		// inline code review of trimAndValidateRequired.
-		rig := newCreatorServiceRig(t)
-		in := validCreatorInput(t)
-		in.LastName = "   "
+		// Cover every required-field branch in trimAndValidateRequired so the
+		// per-method coverage gate stays green when the awk filter no longer
+		// excludes lowercase identifiers.
+		cases := []struct {
+			name    string
+			mutate  func(*domain.CreatorApplicationInput)
+			message string
+		}{
+			{"last_name", func(in *domain.CreatorApplicationInput) { in.LastName = "   " }, "last_name"},
+			{"first_name", func(in *domain.CreatorApplicationInput) { in.FirstName = "" }, "first_name"},
+			{"iin", func(in *domain.CreatorApplicationInput) { in.IIN = "  " }, "iin"},
+			{"phone", func(in *domain.CreatorApplicationInput) { in.Phone = "" }, "phone"},
+			{"city", func(in *domain.CreatorApplicationInput) { in.City = "  " }, "city"},
+		}
+		for _, tc := range cases {
+			tc := tc
+			t.Run(tc.name, func(t *testing.T) {
+				t.Parallel()
+				rig := newCreatorServiceRig(t)
+				in := validCreatorInput(t)
+				tc.mutate(&in)
 
-		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.logger)
-		_, err := svc.Submit(context.Background(), in)
+				svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.logger)
+				_, err := svc.Submit(context.Background(), in)
 
-		var ve *domain.ValidationError
-		require.ErrorAs(t, err, &ve)
-		require.Equal(t, domain.CodeValidation, ve.Code)
-		require.Contains(t, ve.Message, "last_name")
+				var ve *domain.ValidationError
+				require.ErrorAs(t, err, &ve)
+				require.Equal(t, domain.CodeValidation, ve.Code)
+				require.Contains(t, ve.Message, tc.message)
+			})
+		}
 	})
 
 	t.Run("duplicate social pair rejected before tx", func(t *testing.T) {
@@ -555,6 +588,7 @@ func TestCreatorApplicationService_Submit(t *testing.T) {
 
 		expectTxBegin(rig)
 		expectFactoryWiring(rig)
+		expectDictionaryWiring(rig)
 		rig.appRepo.EXPECT().HasActiveByIIN(mock.Anything, in.IIN).Return(false, nil)
 		rig.dictRepo.EXPECT().GetActiveByCodes(mock.Anything, repository.TableCategories, []string{"beauty", "fashion"}).
 			Return([]*repository.DictionaryEntryRow{

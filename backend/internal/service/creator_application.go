@@ -52,25 +52,25 @@ func (s *CreatorApplicationService) Submit(ctx context.Context, in domain.Creato
 		return nil, domain.NewValidationError(domain.CodeValidation,
 			fmt.Sprintf("Максимум %d категории", domain.MaxCategoriesPerApplication))
 	}
-	trimmed, err := trimAndValidateRequired(in)
+	trimmed, err := s.trimAndValidateRequired(in)
 	if err != nil {
 		return nil, err
 	}
-	categoryOtherText, err := validateCategoryOtherText(in.CategoryCodes, in.CategoryOtherText)
+	categoryOtherText, err := s.validateCategoryOtherText(in.CategoryCodes, in.CategoryOtherText)
 	if err != nil {
 		return nil, err
 	}
 
 	birth, err := domain.ValidateIIN(trimmed.IIN)
 	if err != nil {
-		return nil, iinErrorToValidation(err)
+		return nil, s.iinErrorToValidation(err)
 	}
 	if err := domain.EnsureAdult(birth, in.Now); err != nil {
 		return nil, domain.NewValidationError(domain.CodeUnderAge,
 			fmt.Sprintf("Возраст менее %d лет", domain.MinCreatorAge))
 	}
 
-	normalisedSocials, err := normaliseSocials(in.Socials)
+	normalisedSocials, err := s.normaliseSocials(in.Socials)
 	if err != nil {
 		return nil, err
 	}
@@ -79,7 +79,6 @@ func (s *CreatorApplicationService) Submit(ctx context.Context, in domain.Creato
 
 	err = dbutil.WithTx(ctx, s.pool, func(tx dbutil.DB) error {
 		appRepo := s.repoFactory.NewCreatorApplicationRepo(tx)
-		dictRepo := s.repoFactory.NewDictionaryRepo(tx)
 		appCategoryRepo := s.repoFactory.NewCreatorApplicationCategoryRepo(tx)
 		appSocialRepo := s.repoFactory.NewCreatorApplicationSocialRepo(tx)
 		appConsentRepo := s.repoFactory.NewCreatorApplicationConsentRepo(tx)
@@ -90,10 +89,10 @@ func (s *CreatorApplicationService) Submit(ctx context.Context, in domain.Creato
 			return fmt.Errorf("check duplicate iin: %w", err)
 		}
 		if hasActive {
-			return duplicateError()
+			return s.duplicateError()
 		}
 
-		categoryIDs, err := resolveCategoryIDs(ctx, dictRepo, in.CategoryCodes)
+		categoryIDs, err := s.resolveCategoryIDs(ctx, tx, in.CategoryCodes)
 		if err != nil {
 			return err
 		}
@@ -108,10 +107,11 @@ func (s *CreatorApplicationService) Submit(ctx context.Context, in domain.Creato
 			City:              trimmed.City,
 			Address:           trimmed.Address,
 			CategoryOtherText: categoryOtherText,
+			Status:            domain.CreatorApplicationStatusPending,
 		})
 		if err != nil {
 			if errors.Is(err, domain.ErrCreatorApplicationDuplicate) {
-				return duplicateError()
+				return s.duplicateError()
 			}
 			return fmt.Errorf("create application: %w", err)
 		}
@@ -139,14 +139,14 @@ func (s *CreatorApplicationService) Submit(ctx context.Context, in domain.Creato
 			return fmt.Errorf("insert socials: %w", err)
 		}
 
-		consentRows := buildConsentRows(appRow.ID, in)
+		consentRows := s.buildConsentRows(appRow.ID, in)
 		if err := appConsentRepo.InsertMany(ctx, consentRows); err != nil {
 			return fmt.Errorf("insert consents: %w", err)
 		}
 
 		if err := writeAudit(ctx, auditRepo,
 			AuditActionCreatorApplicationSubmit, AuditEntityTypeCreatorApplication, appRow.ID,
-			nil, auditNewValue(in, appRow.ID)); err != nil {
+			nil, s.auditNewValue(in, appRow.ID)); err != nil {
 			return fmt.Errorf("write audit: %w", err)
 		}
 
@@ -168,10 +168,11 @@ func (s *CreatorApplicationService) Submit(ctx context.Context, in domain.Creato
 
 // duplicateError is the single canonical 409 instance used both when the
 // service spots an active IIN up front and when the partial unique index
-// catches a concurrent race at INSERT time.
-func duplicateError() error {
+// catches a concurrent race at INSERT time. The message gives the creator
+// an actionable next step instead of leaving them stuck.
+func (s *CreatorApplicationService) duplicateError() error {
 	return domain.NewBusinessError(domain.CodeCreatorApplicationDuplicate,
-		"Заявка по этому ИИН уже находится на рассмотрении или одобрена")
+		"Заявка по этому ИИН уже находится на рассмотрении или одобрена. Дождитесь решения модератора или, если заявка будет отклонена, подайте новую.")
 }
 
 // trimmedCreatorApplicationInput holds the post-trim required-field values so
@@ -192,7 +193,7 @@ type trimmedCreatorApplicationInput struct {
 // and rejects the submission if any of them becomes empty. OpenAPI's
 // minLength:1 lets a single space through, so the post-trim check is the real
 // defence against whitespace-only PII landing in the DB.
-func trimAndValidateRequired(in domain.CreatorApplicationInput) (trimmedCreatorApplicationInput, error) {
+func (s *CreatorApplicationService) trimAndValidateRequired(in domain.CreatorApplicationInput) (trimmedCreatorApplicationInput, error) {
 	out := trimmedCreatorApplicationInput{
 		LastName:  strings.TrimSpace(in.LastName),
 		FirstName: strings.TrimSpace(in.FirstName),
@@ -224,7 +225,7 @@ func trimAndValidateRequired(in domain.CreatorApplicationInput) (trimmedCreatorA
 // category description: required and non-blank when the codes contain "other",
 // trimmed, and capped at 200 runes. Returns the trimmed value (or nil when
 // "other" is absent — the column stays NULL).
-func validateCategoryOtherText(codes []string, raw *string) (*string, error) {
+func (s *CreatorApplicationService) validateCategoryOtherText(codes []string, raw *string) (*string, error) {
 	hasOther := false
 	for _, c := range codes {
 		if strings.TrimSpace(c) == domain.CategoryCodeOther {
@@ -251,27 +252,21 @@ func validateCategoryOtherText(codes []string, raw *string) (*string, error) {
 	return &txt, nil
 }
 
-// iinErrorToValidation maps domain IIN sentinel errors onto user-facing
-// validation errors. Any unknown IIN-related error degrades to the safe
-// INVALID_IIN message — we never leak the internal reason via a raw 500.
-func iinErrorToValidation(err error) error {
-	switch {
-	case errors.Is(err, domain.ErrIINFormat),
-		errors.Is(err, domain.ErrIINChecksum),
-		errors.Is(err, domain.ErrIINCentury),
-		errors.Is(err, domain.ErrIINBirthDate):
-		return domain.NewValidationError(domain.CodeInvalidIIN, "Невалидный ИИН")
-	default:
-		return domain.NewValidationError(domain.CodeInvalidIIN, "Невалидный ИИН")
-	}
+// iinErrorToValidation always returns the safe INVALID_IIN message — we never
+// leak the internal reason via a raw 500. The error parameter is preserved so
+// callers can stay consistent if we later need to differentiate variants.
+func (s *CreatorApplicationService) iinErrorToValidation(_ error) error {
+	return domain.NewValidationError(domain.CodeInvalidIIN, "Невалидный ИИН")
 }
 
 // normaliseSocials enforces the whitelist of platforms and normalises each
 // handle: trim whitespace → strip ALL leading '@' → lowercase → validate
 // against domain.SocialHandleRegex. Duplicates on the same (platform, handle)
 // pair inside one request are rejected up front so we never hit the DB
-// UNIQUE constraint mid-TX.
-func normaliseSocials(accounts []domain.SocialAccountInput) ([]domain.SocialAccountInput, error) {
+// UNIQUE constraint mid-TX. Validation messages reference only the platform
+// (an enum value) — the user-controlled handle never makes it into an error
+// response or, by extension, into stdout logs through respondError.
+func (s *CreatorApplicationService) normaliseSocials(accounts []domain.SocialAccountInput) ([]domain.SocialAccountInput, error) {
 	if len(accounts) == 0 {
 		return nil, domain.NewValidationError(domain.CodeValidation, "Нужен хотя бы один аккаунт в соцсети")
 	}
@@ -298,7 +293,7 @@ func normaliseSocials(accounts []domain.SocialAccountInput) ([]domain.SocialAcco
 		key := a.Platform + "|" + handle
 		if _, dup := seen[key]; dup {
 			return nil, domain.NewValidationError(domain.CodeValidation,
-				fmt.Sprintf("Дубликат соцсети: %s/%s", a.Platform, handle))
+				fmt.Sprintf("Дубликат соцсети: %s", a.Platform))
 		}
 		seen[key] = struct{}{}
 		out[i] = domain.SocialAccountInput{Platform: a.Platform, Handle: handle}
@@ -308,8 +303,10 @@ func normaliseSocials(accounts []domain.SocialAccountInput) ([]domain.SocialAcco
 
 // resolveCategoryIDs maps user-provided category codes to DB ids. Missing or
 // inactive codes surface as UNKNOWN_CATEGORY (422) pointing at the first bad
-// code — one error is enough, we don't need to enumerate every issue.
-func resolveCategoryIDs(ctx context.Context, repo repository.DictionaryRepo, codes []string) ([]string, error) {
+// code — one error is enough, we don't need to enumerate every issue. The repo
+// is built from tx so the lookup runs inside the same transaction as the
+// subsequent writes.
+func (s *CreatorApplicationService) resolveCategoryIDs(ctx context.Context, tx dbutil.DB, codes []string) ([]string, error) {
 	if len(codes) == 0 {
 		return nil, domain.NewValidationError(domain.CodeValidation, "At least one category is required")
 	}
@@ -330,7 +327,7 @@ func resolveCategoryIDs(ctx context.Context, repo repository.DictionaryRepo, cod
 		return nil, domain.NewValidationError(domain.CodeValidation, "At least one category is required")
 	}
 
-	rows, err := repo.GetActiveByCodes(ctx, repository.TableCategories, unique)
+	rows, err := s.repoFactory.NewDictionaryRepo(tx).GetActiveByCodes(ctx, repository.TableCategories, unique)
 	if err != nil {
 		return nil, fmt.Errorf("lookup categories: %w", err)
 	}
@@ -352,7 +349,7 @@ func resolveCategoryIDs(ctx context.Context, repo repository.DictionaryRepo, cod
 
 // buildConsentRows converts the request-level consent data into one repo row
 // per canonical consent type. Document versions follow DocumentVersionFor.
-func buildConsentRows(applicationID string, in domain.CreatorApplicationInput) []repository.CreatorApplicationConsentRow {
+func (s *CreatorApplicationService) buildConsentRows(applicationID string, in domain.CreatorApplicationInput) []repository.CreatorApplicationConsentRow {
 	rows := make([]repository.CreatorApplicationConsentRow, 0, len(domain.ConsentTypeValues))
 	for _, ct := range domain.ConsentTypeValues {
 		rows = append(rows, repository.CreatorApplicationConsentRow{
@@ -370,7 +367,7 @@ func buildConsentRows(applicationID string, in domain.CreatorApplicationInput) [
 // auditNewValue assembles the sanitised payload that goes into audit_logs.
 // Personal data (IIN, names, phone, address, handles) is deliberately absent —
 // administrators reading audit_logs should only see non-PII context.
-func auditNewValue(in domain.CreatorApplicationInput, applicationID string) map[string]any {
+func (s *CreatorApplicationService) auditNewValue(in domain.CreatorApplicationInput, applicationID string) map[string]any {
 	platforms := make([]string, len(in.Socials))
 	for i, a := range in.Socials {
 		platforms[i] = a.Platform
@@ -422,7 +419,7 @@ func (s *CreatorApplicationService) GetByID(ctx context.Context, id string) (*do
 		return nil, fmt.Errorf("list consents: %w", err)
 	}
 
-	return creatorApplicationDetailFromRows(appRow, categoryRows, socialRows, consentRows), nil
+	return s.creatorApplicationDetailFromRows(appRow, categoryRows, socialRows, consentRows), nil
 }
 
 // creatorApplicationDetailFromRows maps the four repo result sets onto the
@@ -433,7 +430,7 @@ func (s *CreatorApplicationService) GetByID(ctx context.Context, id string) (*do
 // how Postgres returned them; missing types are skipped without error so the
 // read side does not fail on legacy or partial data (though POST atomically
 // creates all four).
-func creatorApplicationDetailFromRows(
+func (s *CreatorApplicationService) creatorApplicationDetailFromRows(
 	app *repository.CreatorApplicationRow,
 	categories []string,
 	socials []*repository.CreatorApplicationSocialRow,
