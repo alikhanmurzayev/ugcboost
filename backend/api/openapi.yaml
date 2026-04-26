@@ -516,6 +516,44 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /dictionaries/{type}:
+    get:
+      operationId: listDictionary
+      summary: List entries for a public dictionary (categories, cities)
+      description: |
+        Returns the active entries of the requested dictionary, sorted by
+        sort_order then code. Used by the public landing page to render the
+        category and city pickers. Public endpoint (no authentication).
+      tags: [dictionaries]
+      security: []
+      parameters:
+        - name: type
+          in: path
+          required: true
+          description: Dictionary type to list.
+          schema:
+            type: string
+            enum: [categories, cities]
+      responses:
+        "200":
+          description: Dictionary entries
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DictionaryListResult"
+        "404":
+          description: Unknown dictionary type
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          description: Unexpected error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /creators/applications:
     post:
       operationId: submitCreatorApplication
@@ -550,6 +588,58 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "422":
           description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          description: Unexpected error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /creators/applications/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      operationId: getCreatorApplication
+      summary: Get full creator application aggregate (admin only)
+      description: |
+        Returns the full aggregate of a creator application: main personal
+        fields plus linked categories, social accounts and consents. Used by
+        the moderation UI to review a submitted application. Admin role is
+        required — non-admin callers receive 403 regardless of whether the
+        application exists, so the endpoint never leaks application IDs.
+      tags: [creators]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Application aggregate
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GetCreatorApplicationResult"
+        "401":
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Application not found
           content:
             application/json:
               schema:
@@ -868,10 +958,44 @@ components:
         data:
           $ref: "#/components/schemas/ListAuditLogsData"
 
+    DictionaryEntry:
+      type: object
+      description: Single entry in a public dictionary (category, city, etc.).
+      required: [code, name, sortOrder]
+      properties:
+        code:
+          type: string
+          description: Stable machine-readable identifier (snake_case).
+        name:
+          type: string
+          description: Human-readable label rendered to the user.
+        sortOrder:
+          type: integer
+          description: Sort key — lower values appear first in the UI.
+
+    ListDictionaryData:
+      type: object
+      required: [type, items]
+      properties:
+        type:
+          type: string
+          description: Dictionary type echoed back to the client.
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/DictionaryEntry"
+
+    DictionaryListResult:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: "#/components/schemas/ListDictionaryData"
+
     SocialPlatform:
       type: string
       description: Supported social network for creator accounts (MVP scope).
-      enum: [instagram, tiktok]
+      enum: [instagram, tiktok, threads]
 
     SocialAccountInput:
       type: object
@@ -885,27 +1009,6 @@ components:
           minLength: 1
           maxLength: 128
 
-    ConsentsInput:
-      type: object
-      description: |
-        Four mandatory consents captured separately per FR4 and the legal
-        documents. Every field must be true; otherwise the request is rejected
-        with 422.
-      required: [processing, thirdParty, crossBorder, terms]
-      properties:
-        processing:
-          type: boolean
-          description: Consent to personal data processing.
-        thirdParty:
-          type: boolean
-          description: Consent to personal data transfer to third parties (LiveDune, TrustMe, etc.).
-        crossBorder:
-          type: boolean
-          description: Consent to cross-border personal data transfer.
-        terms:
-          type: boolean
-          description: Acceptance of the user agreement and platform terms.
-
     CreatorApplicationSubmitRequest:
       type: object
       required:
@@ -917,7 +1020,7 @@ components:
         - address
         - categories
         - socials
-        - consents
+        - acceptedAll
       properties:
         lastName:
           type: string
@@ -949,20 +1052,37 @@ components:
           maxLength: 512
         categories:
           type: array
-          description: One or more category codes from the categories catalogue. Must be non-empty.
+          description: |
+            One or more category codes from the categories catalogue. Must be non-empty.
+            Maximum three codes; submissions with more are rejected with 422.
           minItems: 1
           items:
             type: string
             minLength: 1
             maxLength: 64
+        categoryOtherText:
+          type: string
+          nullable: true
+          maxLength: 200
+          description: |
+            Free-text description of the creator's niche when "other" appears in
+            categories. Required when "other" is present (otherwise the request is
+            rejected with 422 VALIDATION_ERROR). Ignored when "other" is absent.
         socials:
           type: array
           description: One or more social accounts. Multiple handles on the same platform are allowed.
           minItems: 1
           items:
             $ref: "#/components/schemas/SocialAccountInput"
-        consents:
-          $ref: "#/components/schemas/ConsentsInput"
+        acceptedAll:
+          type: boolean
+          description: |
+            Single consent flag covering all four canonical consent types
+            (processing / third_party / cross_border / terms). The legal model
+            (privacy-policy.md §9.2) treats acceptance of the Privacy Policy as
+            unconditional consent to all four. Backend writes four rows in
+            creator_application_consents bound to the current document versions.
+            Must be true; otherwise the request is rejected with 422 MISSING_CONSENT.
 
     CreatorApplicationSubmitData:
       type: object
@@ -983,6 +1103,130 @@ components:
       properties:
         data:
           $ref: "#/components/schemas/CreatorApplicationSubmitData"
+
+    CreatorApplicationDetailCategory:
+      type: object
+      required: [code, name, sortOrder]
+      properties:
+        code:
+          type: string
+          description: Stable category code from the categories dictionary.
+        name:
+          type: string
+          description: Display name at the time the read was served.
+        sortOrder:
+          type: integer
+          description: Catalogue ordering hint copied from the dictionary row.
+
+    CreatorApplicationDetailSocial:
+      type: object
+      required: [platform, handle]
+      properties:
+        platform:
+          $ref: "#/components/schemas/SocialPlatform"
+        handle:
+          type: string
+
+    CreatorApplicationDetailConsent:
+      type: object
+      required: [consentType, acceptedAt, documentVersion, ipAddress, userAgent]
+      properties:
+        consentType:
+          type: string
+          enum: [processing, third_party, cross_border, terms]
+          description: Canonical consent type captured at submission time.
+        acceptedAt:
+          type: string
+          format: date-time
+        documentVersion:
+          type: string
+          description: Document version stamp recorded at the moment of consent.
+        ipAddress:
+          type: string
+          description: Client IP recorded at submission (raw stored as-is).
+        userAgent:
+          type: string
+          description: Truncated User-Agent recorded at submission.
+
+    CreatorApplicationDetailData:
+      type: object
+      required:
+        - id
+        - lastName
+        - firstName
+        - iin
+        - birthDate
+        - phone
+        - city
+        - address
+        - status
+        - createdAt
+        - updatedAt
+        - categories
+        - socials
+        - consents
+      properties:
+        id:
+          type: string
+          format: uuid
+        lastName:
+          type: string
+        firstName:
+          type: string
+        middleName:
+          type: string
+          nullable: true
+        iin:
+          type: string
+          description: Kazakhstani individual identification number (12 digits).
+        birthDate:
+          type: string
+          format: date
+          description: Birth date derived from the IIN at submission time.
+        phone:
+          type: string
+        city:
+          type: string
+        address:
+          type: string
+        categoryOtherText:
+          type: string
+          nullable: true
+          description: Free-text niche description when categories include "other".
+        status:
+          type: string
+          enum: [pending, approved, rejected, blocked]
+          description: Moderation status of the application.
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        categories:
+          type: array
+          description: Categories selected by the creator, sorted by sort_order then code.
+          items:
+            $ref: "#/components/schemas/CreatorApplicationDetailCategory"
+        socials:
+          type: array
+          description: Social accounts attached to the application, sorted by platform then handle.
+          items:
+            $ref: "#/components/schemas/CreatorApplicationDetailSocial"
+        consents:
+          type: array
+          description: |
+            Consents in canonical order (processing → third_party → cross_border → terms),
+            independent of the order they appear in the database.
+          items:
+            $ref: "#/components/schemas/CreatorApplicationDetailConsent"
+
+    GetCreatorApplicationResult:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: "#/components/schemas/CreatorApplicationDetailData"
 
   securitySchemes:
     bearerAuth:

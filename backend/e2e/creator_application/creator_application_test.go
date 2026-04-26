@@ -1,5 +1,6 @@
 // Package creator_application — E2E тесты HTTP-поверхности
-// POST /creators/applications (публичная ручка, лендинг Айданы).
+// POST /creators/applications (публичная ручка, лендинг Айданы) и
+// GET /creators/applications/{id} (admin-only ручка модерации).
 //
 // TestSubmitCreatorApplication покрывает happy path подачи заявки. Клиент
 // отправляет полный валидный payload (ФИО + ИИН + соцсети + согласия) и
@@ -8,7 +9,11 @@
 // через /test/cleanup-entity: удаление родительской записи каскадно сносит
 // соцсети, категории и согласия (DELETE CASCADE в миграциях), так что после
 // теста в базе остаётся только audit-запись — её трогать не надо, аудит
-// специально переживает очистку.
+// специально переживает очистку. После 201 тест поднимает админ-клиента
+// и через GET /creators/applications/{id} сверяет, что записанный aggregate
+// действительно содержит все отправленные поля — это превращает happy path
+// в полноценный round-trip и подтверждает, что данные легли во все четыре
+// таблицы.
 //
 // TestSubmitCreatorApplicationDuplicate закрывает инвариант из FR17: по ИИН
 // с активной заявкой (pending) повторная подача отвергается 409
@@ -26,12 +31,29 @@
 // отправляем запрос сырым HTTP через PostRaw, чтобы обойти клиентскую
 // валидацию и дойти до серверной.
 //
+// TestSubmitCreatorApplicationOther и TestSubmitCreatorApplicationThreads
+// проверяют, что специфичные ветки (категория «other» с обязательным
+// categoryOtherText и платформа threads) проходят полный путь записи и
+// потом честно возвращаются админу через GET /creators/applications/{id} —
+// та же сверка aggregate подтверждает, что эти граничные случаи дошли до
+// всех связанных таблиц.
+//
+// TestGetCreatorApplicationForbidden закрывает security-границу: brand_manager,
+// хоть и аутентифицирован, не может прочитать заявку по id (403). Тест
+// специально создаёт реальную заявку, чтобы убедиться: 403 возвращается
+// именно из-за роли, а не из-за отсутствия записи. TestGetCreatorApplicationNotFound
+// — обратный полюс: админ с валидным, но несуществующим UUID получает 404
+// NOT_FOUND. Невалидный формат UUID не проверяем — это ветка
+// HandleParamError, не ветка handler'а; и невалидный формат не покрывается
+// этим слайсом.
+//
 // Все тесты параллельны и используют UniqueIIN для генерации валидного
 // казахстанского ИИН — это защищает partial unique index от коллизий между
 // параллельными прогонами. RegisterCreatorApplicationCleanup опирается на
 // POST /test/cleanup-entity с type=creator_application; cleanup работает
 // при E2E_CLEANUP=true (дефолт), при false — данные остаются для ручного
-// инспекта.
+// инспекта. SetupAdminClient в новых GET-тестах сам регистрирует cleanup
+// для созданного admin'а через user-cleanup helper.
 package creator_application_test
 
 import (
@@ -43,6 +65,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	"github.com/alikhanmurzayev/ugcboost/backend/e2e/apiclient"
@@ -66,12 +89,7 @@ func validRequest(iin string) apiclient.CreatorApplicationSubmitRequest {
 			{Platform: apiclient.Instagram, Handle: "@aidana_" + iin[7:]},
 			{Platform: apiclient.Tiktok, Handle: "aidana_tt_" + iin[7:]},
 		},
-		Consents: apiclient.ConsentsInput{
-			Processing:  true,
-			ThirdParty:  true,
-			CrossBorder: true,
-			Terms:       true,
-		},
+		AcceptedAll: true,
 	}
 }
 
@@ -81,7 +99,8 @@ func TestSubmitCreatorApplication(t *testing.T) {
 	c := testutil.NewAPIClient(t)
 	iin := testutil.UniqueIIN()
 
-	resp, err := c.SubmitCreatorApplicationWithResponse(context.Background(), validRequest(iin))
+	req := validRequest(iin)
+	resp, err := c.SubmitCreatorApplicationWithResponse(context.Background(), req)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusCreated, resp.StatusCode())
 	require.NotNil(t, resp.JSON201)
@@ -94,6 +113,9 @@ func TestSubmitCreatorApplication(t *testing.T) {
 		"telegram bot url must carry the application id as start parameter")
 
 	testutil.RegisterCreatorApplicationCleanup(t, data.ApplicationId.String())
+
+	adminClient, adminToken, _ := testutil.SetupAdminClient(t)
+	verifyCreatorApplicationByID(t, adminClient, adminToken, data.ApplicationId.String(), expectedFromRequest(req, ""))
 }
 
 func TestSubmitCreatorApplicationDuplicate(t *testing.T) {
@@ -152,12 +174,12 @@ func TestSubmitCreatorApplicationValidation(t *testing.T) {
 		require.Equal(t, "INVALID_IIN", resp.JSON422.Error.Code)
 	})
 
-	t.Run("under 18 rejected with UNDER_AGE", func(t *testing.T) {
+	t.Run("under MinCreatorAge rejected with UNDER_AGE", func(t *testing.T) {
 		t.Parallel()
-		// buildUnder18IIN picks a birth 16 years before now, so this test
-		// stays green regardless of when it runs (a hardcoded 2010 would
-		// break the moment real-world time caught up).
-		iin := buildUnder18IIN()
+		// buildUnderageIIN picks a birth (MinCreatorAge-2) years before now, so
+		// this test stays green regardless of when it runs (a hardcoded year
+		// would break the moment real-world time caught up).
+		iin := buildUnderageIIN()
 		c := testutil.NewAPIClient(t)
 		resp, err := c.SubmitCreatorApplicationWithResponse(context.Background(), validRequest(iin))
 		require.NoError(t, err)
@@ -170,12 +192,37 @@ func TestSubmitCreatorApplicationValidation(t *testing.T) {
 		t.Parallel()
 		c := testutil.NewAPIClient(t)
 		req := validRequest(testutil.UniqueIIN())
-		req.Consents.CrossBorder = false
+		req.AcceptedAll = false
 		resp, err := c.SubmitCreatorApplicationWithResponse(context.Background(), req)
 		require.NoError(t, err)
 		require.Equal(t, http.StatusUnprocessableEntity, resp.StatusCode())
 		require.NotNil(t, resp.JSON422)
 		require.Equal(t, "MISSING_CONSENT", resp.JSON422.Error.Code)
+	})
+
+	t.Run("too many categories rejected with VALIDATION_ERROR", func(t *testing.T) {
+		t.Parallel()
+		c := testutil.NewAPIClient(t)
+		req := validRequest(testutil.UniqueIIN())
+		req.Categories = []string{"beauty", "fashion", "food", "fitness"}
+		resp, err := c.SubmitCreatorApplicationWithResponse(context.Background(), req)
+		require.NoError(t, err)
+		require.Equal(t, http.StatusUnprocessableEntity, resp.StatusCode())
+		require.NotNil(t, resp.JSON422)
+		require.Equal(t, "VALIDATION_ERROR", resp.JSON422.Error.Code)
+	})
+
+	t.Run("other category without text rejected", func(t *testing.T) {
+		t.Parallel()
+		c := testutil.NewAPIClient(t)
+		req := validRequest(testutil.UniqueIIN())
+		req.Categories = []string{"beauty", "other"}
+		// CategoryOtherText is left nil — the server must answer 422.
+		resp, err := c.SubmitCreatorApplicationWithResponse(context.Background(), req)
+		require.NoError(t, err)
+		require.Equal(t, http.StatusUnprocessableEntity, resp.StatusCode())
+		require.NotNil(t, resp.JSON422)
+		require.Equal(t, "VALIDATION_ERROR", resp.JSON422.Error.Code)
 	})
 
 	t.Run("unknown category", func(t *testing.T) {
@@ -210,6 +257,238 @@ func TestSubmitCreatorApplicationValidation(t *testing.T) {
 	})
 }
 
+// TestSubmitCreatorApplicationThreads sanity-checks that threads is now an
+// accepted social platform end-to-end (migration + enum + service registry)
+// and that the GET aggregate honours the new platform too.
+func TestSubmitCreatorApplicationThreads(t *testing.T) {
+	t.Parallel()
+
+	c := testutil.NewAPIClient(t)
+	iin := testutil.UniqueIIN()
+	req := validRequest(iin)
+	req.Socials = []apiclient.SocialAccountInput{
+		{Platform: apiclient.Threads, Handle: "aidana_th_" + iin[7:]},
+	}
+
+	resp, err := c.SubmitCreatorApplicationWithResponse(context.Background(), req)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusCreated, resp.StatusCode())
+	require.NotNil(t, resp.JSON201)
+	testutil.RegisterCreatorApplicationCleanup(t, resp.JSON201.Data.ApplicationId.String())
+
+	adminClient, adminToken, _ := testutil.SetupAdminClient(t)
+	verifyCreatorApplicationByID(t, adminClient, adminToken, resp.JSON201.Data.ApplicationId.String(), expectedFromRequest(req, ""))
+}
+
+// TestSubmitCreatorApplicationOther covers the "other" category branch:
+// categoryOtherText is required and must be persisted alongside the
+// application — the GET aggregate sees the trimmed value and the lone
+// "other" code.
+func TestSubmitCreatorApplicationOther(t *testing.T) {
+	t.Parallel()
+
+	c := testutil.NewAPIClient(t)
+	iin := testutil.UniqueIIN()
+	req := validRequest(iin)
+	req.Categories = []string{"other"}
+	other := "Авторские ASMR-видео про винтажные велосипеды"
+	req.CategoryOtherText = &other
+
+	resp, err := c.SubmitCreatorApplicationWithResponse(context.Background(), req)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusCreated, resp.StatusCode())
+	require.NotNil(t, resp.JSON201)
+	testutil.RegisterCreatorApplicationCleanup(t, resp.JSON201.Data.ApplicationId.String())
+
+	adminClient, adminToken, _ := testutil.SetupAdminClient(t)
+	verifyCreatorApplicationByID(t, adminClient, adminToken, resp.JSON201.Data.ApplicationId.String(), expectedFromRequest(req, other))
+}
+
+// TestGetCreatorApplicationForbidden verifies the security boundary: a
+// brand_manager (legitimately authenticated) cannot read a creator
+// application by id. Application is created via the public POST so the
+// 403 is unambiguously about the caller's role — not a missing record.
+func TestGetCreatorApplicationForbidden(t *testing.T) {
+	t.Parallel()
+
+	publicClient := testutil.NewAPIClient(t)
+	iin := testutil.UniqueIIN()
+	submit, err := publicClient.SubmitCreatorApplicationWithResponse(context.Background(), validRequest(iin))
+	require.NoError(t, err)
+	require.Equal(t, http.StatusCreated, submit.StatusCode())
+	require.NotNil(t, submit.JSON201)
+	applicationID := submit.JSON201.Data.ApplicationId
+	testutil.RegisterCreatorApplicationCleanup(t, applicationID.String())
+
+	adminClient, adminToken, _ := testutil.SetupAdminClient(t)
+	brandID := testutil.SetupBrand(t, adminClient, adminToken, "Forbidden Brand "+iin)
+	_, managerToken, _ := testutil.SetupManagerWithLogin(t, adminClient, adminToken, brandID)
+
+	resp, err := adminClient.GetCreatorApplicationWithResponse(context.Background(), applicationID, testutil.WithAuth(managerToken))
+	require.NoError(t, err)
+	require.Equal(t, http.StatusForbidden, resp.StatusCode())
+	require.NotNil(t, resp.JSON403)
+	require.Equal(t, "FORBIDDEN", resp.JSON403.Error.Code)
+}
+
+// TestGetCreatorApplicationNotFound asserts that a syntactically valid UUID
+// that does not match any application returns 404 NOT_FOUND. We deliberately
+// use uuid.New() — pgx would surface a different error class for invalid
+// UUID syntax, which is HandleParamError territory and out of scope.
+func TestGetCreatorApplicationNotFound(t *testing.T) {
+	t.Parallel()
+
+	adminClient, adminToken, _ := testutil.SetupAdminClient(t)
+
+	resp, err := adminClient.GetCreatorApplicationWithResponse(context.Background(), uuid.New(), testutil.WithAuth(adminToken))
+	require.NoError(t, err)
+	require.Equal(t, http.StatusNotFound, resp.StatusCode())
+	require.NotNil(t, resp.JSON404)
+	require.Equal(t, "NOT_FOUND", resp.JSON404.Error.Code)
+}
+
+// expectedCreatorApplication is the verification target for
+// verifyCreatorApplicationByID. The struct mirrors the fields
+// the GET aggregate must echo back after a successful submit; dynamic data
+// (id, timestamps, ipAddress/userAgent, dictionary names) is checked
+// separately by the helper.
+type expectedCreatorApplication struct {
+	LastName          string
+	FirstName         string
+	MiddleName        string
+	IIN               string
+	Phone             string
+	City              string
+	Address           string
+	CategoryOtherText string
+	CategoryCodes     []string
+	Socials           []apiclient.CreatorApplicationDetailSocial
+}
+
+// expectedFromRequest distils the submission payload into the verification
+// shape: handle normalisation (lowercase, leading '@' stripped) is applied
+// upfront so the helper doesn't need to know how the service mutates input.
+func expectedFromRequest(req apiclient.CreatorApplicationSubmitRequest, otherText string) expectedCreatorApplication {
+	socs := make([]apiclient.CreatorApplicationDetailSocial, len(req.Socials))
+	for i, s := range req.Socials {
+		handle := strings.ToLower(strings.TrimLeft(strings.TrimSpace(s.Handle), "@"))
+		socs[i] = apiclient.CreatorApplicationDetailSocial{
+			Platform: apiclient.SocialPlatform(s.Platform),
+			Handle:   handle,
+		}
+	}
+	// GET response sorts socials by (platform, handle); keep expected slice
+	// in that same order so require.Equal lines up.
+	sortSocials(socs)
+	middle := ""
+	if req.MiddleName != nil {
+		middle = *req.MiddleName
+	}
+	return expectedCreatorApplication{
+		LastName:          req.LastName,
+		FirstName:         req.FirstName,
+		MiddleName:        middle,
+		IIN:               req.Iin,
+		Phone:             req.Phone,
+		City:              req.City,
+		Address:           req.Address,
+		CategoryOtherText: otherText,
+		CategoryCodes:     append([]string(nil), req.Categories...),
+		Socials:           socs,
+	}
+}
+
+// sortSocials orders socials by (platform, handle) — the same key the server
+// uses when reading the aggregate.
+func sortSocials(s []apiclient.CreatorApplicationDetailSocial) {
+	for i := 1; i < len(s); i++ {
+		for j := i; j > 0; j-- {
+			a, b := s[j-1], s[j]
+			if string(a.Platform) > string(b.Platform) ||
+				(a.Platform == b.Platform && a.Handle > b.Handle) {
+				s[j-1], s[j] = b, a
+				continue
+			}
+			break
+		}
+	}
+}
+
+// verifyCreatorApplicationByID reads the aggregate via admin GET and asserts
+// that it matches the expected payload. Dynamic fields (id, createdAt,
+// updatedAt, acceptedAt, ipAddress, userAgent, category Name/SortOrder)
+// are checked independently and not part of the structural comparison.
+func verifyCreatorApplicationByID(t *testing.T, c *apiclient.ClientWithResponses, adminToken, applicationID string, expected expectedCreatorApplication) {
+	t.Helper()
+	appUUID, err := uuid.Parse(applicationID)
+	require.NoError(t, err)
+
+	resp, err := c.GetCreatorApplicationWithResponse(context.Background(), appUUID, testutil.WithAuth(adminToken))
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, resp.StatusCode())
+	require.NotNil(t, resp.JSON200)
+	got := resp.JSON200.Data
+
+	require.Equal(t, applicationID, got.Id.String())
+	require.WithinDuration(t, time.Now().UTC(), got.CreatedAt, 5*time.Minute)
+	require.WithinDuration(t, time.Now().UTC(), got.UpdatedAt, 5*time.Minute)
+
+	require.Equal(t, expected.LastName, got.LastName)
+	require.Equal(t, expected.FirstName, got.FirstName)
+	if expected.MiddleName == "" {
+		require.Nil(t, got.MiddleName)
+	} else {
+		require.NotNil(t, got.MiddleName)
+		require.Equal(t, expected.MiddleName, *got.MiddleName)
+	}
+	require.Equal(t, expected.IIN, got.Iin)
+	require.Equal(t, expected.Phone, got.Phone)
+	require.Equal(t, expected.City, got.City)
+	require.Equal(t, expected.Address, got.Address)
+	require.Equal(t, "1995-05-15", got.BirthDate.Format("2006-01-02"))
+	require.Equal(t, apiclient.Pending, got.Status)
+
+	if expected.CategoryOtherText == "" {
+		require.Nil(t, got.CategoryOtherText)
+	} else {
+		require.NotNil(t, got.CategoryOtherText)
+		require.Equal(t, expected.CategoryOtherText, *got.CategoryOtherText)
+	}
+
+	gotCodes := make([]string, len(got.Categories))
+	for i, c := range got.Categories {
+		gotCodes[i] = c.Code
+	}
+	require.ElementsMatch(t, expected.CategoryCodes, gotCodes)
+	for i := 1; i < len(got.Categories); i++ {
+		prev, cur := got.Categories[i-1], got.Categories[i]
+		require.True(t, prev.SortOrder < cur.SortOrder ||
+			(prev.SortOrder == cur.SortOrder && prev.Code < cur.Code),
+			"categories not in (sort_order, code) order: %v then %v", prev, cur)
+	}
+
+	require.Equal(t, expected.Socials, got.Socials)
+
+	require.Len(t, got.Consents, 4)
+	require.Equal(t, []apiclient.CreatorApplicationDetailConsentConsentType{
+		apiclient.Processing,
+		apiclient.ThirdParty,
+		apiclient.CrossBorder,
+		apiclient.Terms,
+	}, []apiclient.CreatorApplicationDetailConsentConsentType{
+		got.Consents[0].ConsentType,
+		got.Consents[1].ConsentType,
+		got.Consents[2].ConsentType,
+		got.Consents[3].ConsentType,
+	})
+	for _, c := range got.Consents {
+		require.WithinDuration(t, time.Now().UTC(), c.AcceptedAt, 5*time.Minute)
+		require.NotEmpty(t, c.DocumentVersion)
+		require.NotEmpty(t, c.IpAddress)
+		require.NotEmpty(t, c.UserAgent)
+	}
+}
+
 // validRequestMap is a raw-map variant of the valid request used to drive
 // PostRaw-based tests that need to send fields the typed client refuses to
 // serialise (empty strings, malformed enums, etc.).
@@ -227,12 +506,7 @@ func validRequestMap(iin string) map[string]any {
 			{"platform": "instagram", "handle": "@aidana_" + iin[7:]},
 			{"platform": "tiktok", "handle": "aidana_tt_" + iin[7:]},
 		},
-		"consents": map[string]bool{
-			"processing":  true,
-			"thirdParty":  true,
-			"crossBorder": true,
-			"terms":       true,
-		},
+		"acceptedAll": true,
 	}
 }
 
@@ -245,24 +519,28 @@ func flipDigit(r byte) string {
 	return string(r - 1)
 }
 
-// buildUnder18IIN produces a checksum-valid IIN for a creator who will
-// always be roughly 16 years old against the backend's real-time clock —
-// regardless of when the test runs. Clock-independent: a hardcoded year
-// would stop reproducing under-18 the moment real time caught up.
-func buildUnder18IIN() string {
-	birth := time.Now().UTC().AddDate(-16, 0, 0)
+// buildUnderageIIN produces a checksum-valid IIN for a creator who will
+// always be a couple of years short of MinCreatorAge against the backend's
+// real-time clock — regardless of when the test runs. Clock-independent:
+// a hardcoded year would stop reproducing under-age the moment real time
+// caught up.
+func buildUnderageIIN() string {
+	const minAge = 21 // mirrors domain.MinCreatorAge
+	birth := time.Now().UTC().AddDate(-(minAge - 2), 0, 0)
 	yy := fmt.Sprintf("%02d", birth.Year()%100)
 	mm := fmt.Sprintf("%02d", int(birth.Month()))
 	dd := fmt.Sprintf("%02d", birth.Day())
-	// Century byte 5 = male, 2000s. Backend accepts both 5 and 6 for 2000s.
-	century := "5"
-	for {
-		serial := testutil.UniqueIIN()[7:11] // reuse the atomic serial; drop the old checksum
-		prefix := yy + mm + dd + century + serial
-		if last, ok := iinControlForTests(prefix); ok {
-			return fmt.Sprintf("%s%d", prefix, last)
+	// Century byte 5/6 → 2000s; pick whichever fits a valid checksum.
+	for _, century := range []string{"5", "6"} {
+		for {
+			serial := testutil.UniqueIIN()[7:11]
+			prefix := yy + mm + dd + century + serial
+			if last, ok := iinControlForTests(prefix); ok {
+				return fmt.Sprintf("%s%d", prefix, last)
+			}
 		}
 	}
+	panic("buildUnderageIIN: failed to find a valid checksum")
 }
 
 // iinControlForTests duplicates the algorithm from testutil.iinControl because

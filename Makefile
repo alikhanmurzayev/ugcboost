@@ -6,7 +6,7 @@
        build-backend build-web build-tma build-landing \
        test-unit-backend test-unit-web test-unit-tma test-unit-landing \
        test-unit-backend-coverage \
-       test-e2e-backend test-e2e-frontend \
+       test-e2e-backend test-e2e-frontend test-e2e-landing \
        lint-backend lint-web lint-tma lint-landing \
        generate-api generate-mocks
 
@@ -141,6 +141,9 @@ test-e2e-backend: start-backend
 
 test-e2e-frontend: start-web
 	cd frontend/web && CI=true BASE_URL=http://localhost:3001 API_URL=http://localhost:8082 npx playwright test
+
+test-e2e-landing: start-landing
+	cd frontend/landing && CI=true BASE_URL=http://localhost:3003 API_URL=http://localhost:8082 npx playwright test
 
 # ── Lint ──────────────────────────────────────────────────────────
 

@@ -2,7 +2,9 @@ package service
 
 import (
 	"context"
+	"database/sql"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -11,38 +13,33 @@ import (
 
 	dbmocks "github.com/alikhanmurzayev/ugcboost/backend/internal/dbutil/mocks"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/domain"
+	logmocks "github.com/alikhanmurzayev/ugcboost/backend/internal/logger/mocks"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/repository"
 	repomocks "github.com/alikhanmurzayev/ugcboost/backend/internal/repository/mocks"
-	logmocks "github.com/alikhanmurzayev/ugcboost/backend/internal/logger/mocks"
 	svcmocks "github.com/alikhanmurzayev/ugcboost/backend/internal/service/mocks"
 )
 
 // validCreatorInput builds an input that passes every precondition so scenarios
 // can selectively invalidate one field to hit a specific branch.
-// IIN 950515312348 encodes 1995-05-15, which is safely over 18 against the
-// fixed "now" used by every test.
+// IIN 950515312348 encodes 1995-05-15. Against the fixed "now" of 2026-04-20
+// the applicant is 30, which clears the 21+ floor with margin.
 func validCreatorInput(t *testing.T) domain.CreatorApplicationInput {
 	t.Helper()
 	middle := "Ивановна"
 	return domain.CreatorApplicationInput{
-		LastName:   "Муратова",
-		FirstName:  "Айдана",
-		MiddleName: &middle,
-		IIN:        "950515312348",
-		Phone:      "+77001234567",
-		City:       "Алматы",
-		Address:    "ул. Абая 1",
+		LastName:      "Муратова",
+		FirstName:     "Айдана",
+		MiddleName:    &middle,
+		IIN:           "950515312348",
+		Phone:         "+77001234567",
+		City:          "Алматы",
+		Address:       "ул. Абая 1",
 		CategoryCodes: []string{"beauty", "fashion"},
 		Socials: []domain.SocialAccountInput{
 			{Platform: domain.SocialPlatformInstagram, Handle: "@aidana"},
 			{Platform: domain.SocialPlatformTikTok, Handle: "aidana_tt"},
 		},
-		Consents: domain.ConsentsInput{
-			Processing:  true,
-			ThirdParty:  true,
-			CrossBorder: true,
-			Terms:       true,
-		},
+		Consents:         domain.ConsentsInput{AcceptedAll: true},
 		IPAddress:        "127.0.0.1",
 		UserAgent:        "ua/1",
 		AgreementVersion: "2026-04-20",
@@ -51,13 +48,14 @@ func validCreatorInput(t *testing.T) domain.CreatorApplicationInput {
 	}
 }
 
-// newCreatorServiceMocks assembles the common mock rig used by every test.
-// Returning them explicitly makes it easy to set expectations per scenario.
+// creatorServiceRig assembles the common mock rig used by every test.
+// dictRepo serves both the category lookup (dictionary GetActiveByCodes call)
+// and stays around for any future dictionary-backed checks.
 type creatorServiceRig struct {
 	pool            *dbmocks.MockPool
 	factory         *svcmocks.MockCreatorApplicationRepoFactory
 	appRepo         *repomocks.MockCreatorApplicationRepo
-	categoryRepo    *repomocks.MockCategoryRepo
+	dictRepo        *repomocks.MockDictionaryRepo
 	appCategoryRepo *repomocks.MockCreatorApplicationCategoryRepo
 	appSocialRepo   *repomocks.MockCreatorApplicationSocialRepo
 	appConsentRepo  *repomocks.MockCreatorApplicationConsentRepo
@@ -71,7 +69,7 @@ func newCreatorServiceRig(t *testing.T) creatorServiceRig {
 		pool:            dbmocks.NewMockPool(t),
 		factory:         svcmocks.NewMockCreatorApplicationRepoFactory(t),
 		appRepo:         repomocks.NewMockCreatorApplicationRepo(t),
-		categoryRepo:    repomocks.NewMockCategoryRepo(t),
+		dictRepo:        repomocks.NewMockDictionaryRepo(t),
 		appCategoryRepo: repomocks.NewMockCreatorApplicationCategoryRepo(t),
 		appSocialRepo:   repomocks.NewMockCreatorApplicationSocialRepo(t),
 		appConsentRepo:  repomocks.NewMockCreatorApplicationConsentRepo(t),
@@ -87,12 +85,9 @@ func expectTxBegin(rig creatorServiceRig) {
 }
 
 // expectFactoryWiring configures the factory calls every TX performs.
-// A test can simply disable the ones it does not need by calling
-// .Return(nil).Maybe() — but since we always exercise every step on happy
-// paths, we expect them in order here.
 func expectFactoryWiring(rig creatorServiceRig) {
 	rig.factory.EXPECT().NewCreatorApplicationRepo(mock.Anything).Return(rig.appRepo)
-	rig.factory.EXPECT().NewCategoryRepo(mock.Anything).Return(rig.categoryRepo)
+	rig.factory.EXPECT().NewDictionaryRepo(mock.Anything).Return(rig.dictRepo)
 	rig.factory.EXPECT().NewCreatorApplicationCategoryRepo(mock.Anything).Return(rig.appCategoryRepo)
 	rig.factory.EXPECT().NewCreatorApplicationSocialRepo(mock.Anything).Return(rig.appSocialRepo)
 	rig.factory.EXPECT().NewCreatorApplicationConsentRepo(mock.Anything).Return(rig.appConsentRepo)
@@ -106,7 +101,7 @@ func TestCreatorApplicationService_Submit(t *testing.T) {
 		t.Parallel()
 		rig := newCreatorServiceRig(t)
 		in := validCreatorInput(t)
-		in.Consents.CrossBorder = false
+		in.Consents.AcceptedAll = false
 
 		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.logger)
 		_, err := svc.Submit(context.Background(), in)
@@ -130,12 +125,12 @@ func TestCreatorApplicationService_Submit(t *testing.T) {
 		require.Equal(t, domain.CodeInvalidIIN, ve.Code)
 	})
 
-	t.Run("under 18 fails before tx", func(t *testing.T) {
+	t.Run("under MinCreatorAge fails before tx", func(t *testing.T) {
 		t.Parallel()
 		rig := newCreatorServiceRig(t)
 		in := validCreatorInput(t)
-		// Shift "now" to just after IIN's birth + 17 years: still 17.
-		in.Now = time.Date(2012, 5, 14, 0, 0, 0, 0, time.UTC)
+		// Birth-day - 1 of MinCreatorAge anniversary: still one day shy.
+		in.Now = time.Date(1995+domain.MinCreatorAge, 5, 14, 0, 0, 0, 0, time.UTC)
 
 		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.logger)
 		_, err := svc.Submit(context.Background(), in)
@@ -171,6 +166,102 @@ func TestCreatorApplicationService_Submit(t *testing.T) {
 		var ve *domain.ValidationError
 		require.ErrorAs(t, err, &ve)
 		require.Equal(t, domain.CodeValidation, ve.Code)
+	})
+
+	t.Run("threads platform accepted", func(t *testing.T) {
+		t.Parallel()
+		rig := newCreatorServiceRig(t)
+		in := validCreatorInput(t)
+		// Switch one entry to threads so we exercise the new platform end-to-end.
+		in.Socials = []domain.SocialAccountInput{
+			{Platform: domain.SocialPlatformThreads, Handle: "aidana"},
+		}
+
+		expectTxBegin(rig)
+		expectFactoryWiring(rig)
+		rig.appRepo.EXPECT().HasActiveByIIN(mock.Anything, in.IIN).Return(false, nil)
+		rig.dictRepo.EXPECT().GetActiveByCodes(mock.Anything, repository.TableCategories, []string{"beauty", "fashion"}).
+			Return([]*repository.DictionaryEntryRow{
+				{ID: "c-1", Code: "beauty", Active: true},
+				{ID: "c-2", Code: "fashion", Active: true},
+			}, nil)
+		rig.appRepo.EXPECT().Create(mock.Anything, mock.Anything).
+			Return(&repository.CreatorApplicationRow{ID: "app-th"}, nil)
+		rig.appCategoryRepo.EXPECT().InsertMany(mock.Anything, mock.Anything).Return(nil)
+		rig.appSocialRepo.EXPECT().InsertMany(mock.Anything, []repository.CreatorApplicationSocialRow{
+			{ApplicationID: "app-th", Platform: "threads", Handle: "aidana"},
+		}).Return(nil)
+		rig.appConsentRepo.EXPECT().InsertMany(mock.Anything, mock.Anything).Return(nil)
+		rig.auditRepo.EXPECT().Create(mock.Anything, mock.Anything).Return(nil)
+		rig.logger.EXPECT().Info(mock.Anything, "creator application submitted", []any{"application_id", "app-th"}).Once()
+
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.logger)
+		_, err := svc.Submit(context.Background(), in)
+		require.NoError(t, err)
+	})
+
+	t.Run("too many categories rejected before tx", func(t *testing.T) {
+		t.Parallel()
+		rig := newCreatorServiceRig(t)
+		in := validCreatorInput(t)
+		in.CategoryCodes = []string{"beauty", "fashion", "food", "fitness"} // 4 > MaxCategoriesPerApplication
+
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.logger)
+		_, err := svc.Submit(context.Background(), in)
+
+		var ve *domain.ValidationError
+		require.ErrorAs(t, err, &ve)
+		require.Equal(t, domain.CodeValidation, ve.Code)
+		require.Contains(t, ve.Message, "Максимум")
+	})
+
+	t.Run("other category without text rejected before tx", func(t *testing.T) {
+		t.Parallel()
+		rig := newCreatorServiceRig(t)
+		in := validCreatorInput(t)
+		in.CategoryCodes = []string{"beauty", "other"}
+		in.CategoryOtherText = nil
+
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.logger)
+		_, err := svc.Submit(context.Background(), in)
+
+		var ve *domain.ValidationError
+		require.ErrorAs(t, err, &ve)
+		require.Equal(t, domain.CodeValidation, ve.Code)
+		require.Contains(t, ve.Message, "«Другое»")
+	})
+
+	t.Run("other category with blank text rejected", func(t *testing.T) {
+		t.Parallel()
+		rig := newCreatorServiceRig(t)
+		in := validCreatorInput(t)
+		blank := "   "
+		in.CategoryCodes = []string{"beauty", "other"}
+		in.CategoryOtherText = &blank
+
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.logger)
+		_, err := svc.Submit(context.Background(), in)
+
+		var ve *domain.ValidationError
+		require.ErrorAs(t, err, &ve)
+		require.Equal(t, domain.CodeValidation, ve.Code)
+	})
+
+	t.Run("other category with too long text rejected", func(t *testing.T) {
+		t.Parallel()
+		rig := newCreatorServiceRig(t)
+		in := validCreatorInput(t)
+		long := strings.Repeat("я", 201)
+		in.CategoryCodes = []string{"beauty", "other"}
+		in.CategoryOtherText = &long
+
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.logger)
+		_, err := svc.Submit(context.Background(), in)
+
+		var ve *domain.ValidationError
+		require.ErrorAs(t, err, &ve)
+		require.Equal(t, domain.CodeValidation, ve.Code)
+		require.Contains(t, ve.Message, "слишком длинный")
 	})
 
 	t.Run("duplicate iin returns 409 business error", func(t *testing.T) {
@@ -213,8 +304,8 @@ func TestCreatorApplicationService_Submit(t *testing.T) {
 		expectTxBegin(rig)
 		expectFactoryWiring(rig)
 		rig.appRepo.EXPECT().HasActiveByIIN(mock.Anything, in.IIN).Return(false, nil)
-		rig.categoryRepo.EXPECT().GetActiveByCodes(mock.Anything, []string{"beauty", "mystery"}).
-			Return([]*repository.CategoryRow{{ID: "c-1", Code: "beauty", Active: true}}, nil)
+		rig.dictRepo.EXPECT().GetActiveByCodes(mock.Anything, repository.TableCategories, []string{"beauty", "mystery"}).
+			Return([]*repository.DictionaryEntryRow{{ID: "c-1", Code: "beauty", Active: true}}, nil)
 
 		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.logger)
 		_, err := svc.Submit(context.Background(), in)
@@ -232,8 +323,8 @@ func TestCreatorApplicationService_Submit(t *testing.T) {
 		expectTxBegin(rig)
 		expectFactoryWiring(rig)
 		rig.appRepo.EXPECT().HasActiveByIIN(mock.Anything, in.IIN).Return(false, nil)
-		rig.categoryRepo.EXPECT().GetActiveByCodes(mock.Anything, []string{"beauty", "fashion"}).
-			Return([]*repository.CategoryRow{
+		rig.dictRepo.EXPECT().GetActiveByCodes(mock.Anything, repository.TableCategories, []string{"beauty", "fashion"}).
+			Return([]*repository.DictionaryEntryRow{
 				{ID: "c-1", Code: "beauty", Active: true},
 				{ID: "c-2", Code: "fashion", Active: true},
 			}, nil)
@@ -256,8 +347,8 @@ func TestCreatorApplicationService_Submit(t *testing.T) {
 		expectTxBegin(rig)
 		expectFactoryWiring(rig)
 		rig.appRepo.EXPECT().HasActiveByIIN(mock.Anything, in.IIN).Return(false, nil)
-		rig.categoryRepo.EXPECT().GetActiveByCodes(mock.Anything, []string{"beauty", "fashion"}).
-			Return([]*repository.CategoryRow{
+		rig.dictRepo.EXPECT().GetActiveByCodes(mock.Anything, repository.TableCategories, []string{"beauty", "fashion"}).
+			Return([]*repository.DictionaryEntryRow{
 				{ID: "c-1", Code: "beauty", Active: true},
 				{ID: "c-2", Code: "fashion", Active: true},
 			}, nil)
@@ -313,6 +404,34 @@ func TestCreatorApplicationService_Submit(t *testing.T) {
 			ApplicationID: "app-1",
 			BirthDate:     birth,
 		}, got)
+	})
+
+	t.Run("success with other category persists trimmed text", func(t *testing.T) {
+		t.Parallel()
+		rig := newCreatorServiceRig(t)
+		in := validCreatorInput(t)
+		in.CategoryCodes = []string{"other"}
+		raw := "  Авторские ASMR-видео про винтажные велосипеды  "
+		in.CategoryOtherText = &raw
+		trimmed := "Авторские ASMR-видео про винтажные велосипеды"
+
+		expectTxBegin(rig)
+		expectFactoryWiring(rig)
+		rig.appRepo.EXPECT().HasActiveByIIN(mock.Anything, in.IIN).Return(false, nil)
+		rig.dictRepo.EXPECT().GetActiveByCodes(mock.Anything, repository.TableCategories, []string{"other"}).
+			Return([]*repository.DictionaryEntryRow{{ID: "c-other", Code: "other", Active: true}}, nil)
+		rig.appRepo.EXPECT().Create(mock.Anything, mock.MatchedBy(func(row repository.CreatorApplicationRow) bool {
+			return row.CategoryOtherText != nil && *row.CategoryOtherText == trimmed
+		})).Return(&repository.CreatorApplicationRow{ID: "app-other"}, nil)
+		rig.appCategoryRepo.EXPECT().InsertMany(mock.Anything, mock.Anything).Return(nil)
+		rig.appSocialRepo.EXPECT().InsertMany(mock.Anything, mock.Anything).Return(nil)
+		rig.appConsentRepo.EXPECT().InsertMany(mock.Anything, mock.Anything).Return(nil)
+		rig.auditRepo.EXPECT().Create(mock.Anything, mock.Anything).Return(nil)
+		rig.logger.EXPECT().Info(mock.Anything, "creator application submitted", []any{"application_id", "app-other"}).Once()
+
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.logger)
+		_, err := svc.Submit(context.Background(), in)
+		require.NoError(t, err)
 	})
 
 	t.Run("empty required field rejected before tx", func(t *testing.T) {
@@ -373,8 +492,8 @@ func TestCreatorApplicationService_Submit(t *testing.T) {
 		expectTxBegin(rig)
 		expectFactoryWiring(rig)
 		rig.appRepo.EXPECT().HasActiveByIIN(mock.Anything, in.IIN).Return(false, nil)
-		rig.categoryRepo.EXPECT().GetActiveByCodes(mock.Anything, []string{"beauty", "fashion"}).
-			Return([]*repository.CategoryRow{
+		rig.dictRepo.EXPECT().GetActiveByCodes(mock.Anything, repository.TableCategories, []string{"beauty", "fashion"}).
+			Return([]*repository.DictionaryEntryRow{
 				{ID: "c-1", Code: "beauty", Active: true},
 				{ID: "c-2", Code: "fashion", Active: true},
 			}, nil)
@@ -387,5 +506,163 @@ func TestCreatorApplicationService_Submit(t *testing.T) {
 		var be *domain.BusinessError
 		require.ErrorAs(t, err, &be)
 		require.Equal(t, domain.CodeCreatorApplicationDuplicate, be.Code)
+	})
+}
+
+func TestCreatorApplicationService_GetByID(t *testing.T) {
+	t.Parallel()
+
+	const appID = "11111111-2222-3333-4444-555555555555"
+
+	t.Run("not found surfaces sql.ErrNoRows untouched", func(t *testing.T) {
+		t.Parallel()
+		rig := newCreatorServiceRig(t)
+		rig.factory.EXPECT().NewCreatorApplicationRepo(mock.Anything).Return(rig.appRepo)
+		rig.appRepo.EXPECT().GetByID(mock.Anything, appID).Return(nil, sql.ErrNoRows)
+
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.logger)
+		_, err := svc.GetByID(context.Background(), appID)
+		require.ErrorIs(t, err, sql.ErrNoRows)
+	})
+
+	t.Run("categories list error wrapped", func(t *testing.T) {
+		t.Parallel()
+		rig := newCreatorServiceRig(t)
+		rig.factory.EXPECT().NewCreatorApplicationRepo(mock.Anything).Return(rig.appRepo)
+		rig.factory.EXPECT().NewCreatorApplicationCategoryRepo(mock.Anything).Return(rig.appCategoryRepo)
+		rig.appRepo.EXPECT().GetByID(mock.Anything, appID).
+			Return(&repository.CreatorApplicationRow{ID: appID}, nil)
+		rig.appCategoryRepo.EXPECT().ListByApplicationID(mock.Anything, appID).
+			Return(nil, errors.New("cat boom"))
+
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.logger)
+		_, err := svc.GetByID(context.Background(), appID)
+		require.ErrorContains(t, err, "list categories")
+		require.ErrorContains(t, err, "cat boom")
+	})
+
+	t.Run("socials list error wrapped", func(t *testing.T) {
+		t.Parallel()
+		rig := newCreatorServiceRig(t)
+		rig.factory.EXPECT().NewCreatorApplicationRepo(mock.Anything).Return(rig.appRepo)
+		rig.factory.EXPECT().NewCreatorApplicationCategoryRepo(mock.Anything).Return(rig.appCategoryRepo)
+		rig.factory.EXPECT().NewCreatorApplicationSocialRepo(mock.Anything).Return(rig.appSocialRepo)
+		rig.appRepo.EXPECT().GetByID(mock.Anything, appID).
+			Return(&repository.CreatorApplicationRow{ID: appID}, nil)
+		rig.appCategoryRepo.EXPECT().ListByApplicationID(mock.Anything, appID).
+			Return(nil, nil)
+		rig.appSocialRepo.EXPECT().ListByApplicationID(mock.Anything, appID).
+			Return(nil, errors.New("soc boom"))
+
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.logger)
+		_, err := svc.GetByID(context.Background(), appID)
+		require.ErrorContains(t, err, "list socials")
+		require.ErrorContains(t, err, "soc boom")
+	})
+
+	t.Run("consents list error wrapped", func(t *testing.T) {
+		t.Parallel()
+		rig := newCreatorServiceRig(t)
+		rig.factory.EXPECT().NewCreatorApplicationRepo(mock.Anything).Return(rig.appRepo)
+		rig.factory.EXPECT().NewCreatorApplicationCategoryRepo(mock.Anything).Return(rig.appCategoryRepo)
+		rig.factory.EXPECT().NewCreatorApplicationSocialRepo(mock.Anything).Return(rig.appSocialRepo)
+		rig.factory.EXPECT().NewCreatorApplicationConsentRepo(mock.Anything).Return(rig.appConsentRepo)
+		rig.appRepo.EXPECT().GetByID(mock.Anything, appID).
+			Return(&repository.CreatorApplicationRow{ID: appID}, nil)
+		rig.appCategoryRepo.EXPECT().ListByApplicationID(mock.Anything, appID).
+			Return(nil, nil)
+		rig.appSocialRepo.EXPECT().ListByApplicationID(mock.Anything, appID).
+			Return(nil, nil)
+		rig.appConsentRepo.EXPECT().ListByApplicationID(mock.Anything, appID).
+			Return(nil, errors.New("con boom"))
+
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.logger)
+		_, err := svc.GetByID(context.Background(), appID)
+		require.ErrorContains(t, err, "list consents")
+		require.ErrorContains(t, err, "con boom")
+	})
+
+	t.Run("success builds aggregate and reorders consents to canonical sequence", func(t *testing.T) {
+		t.Parallel()
+		rig := newCreatorServiceRig(t)
+		middle := "Ивановна"
+		other := "Авторские ASMR"
+		birth := time.Date(1995, 5, 15, 0, 0, 0, 0, time.UTC)
+		created := time.Date(2026, 4, 20, 18, 0, 0, 0, time.UTC)
+		updated := time.Date(2026, 4, 21, 9, 0, 0, 0, time.UTC)
+		acceptedAt := time.Date(2026, 4, 20, 18, 0, 1, 0, time.UTC)
+
+		rig.factory.EXPECT().NewCreatorApplicationRepo(mock.Anything).Return(rig.appRepo)
+		rig.factory.EXPECT().NewCreatorApplicationCategoryRepo(mock.Anything).Return(rig.appCategoryRepo)
+		rig.factory.EXPECT().NewCreatorApplicationSocialRepo(mock.Anything).Return(rig.appSocialRepo)
+		rig.factory.EXPECT().NewCreatorApplicationConsentRepo(mock.Anything).Return(rig.appConsentRepo)
+		rig.appRepo.EXPECT().GetByID(mock.Anything, appID).
+			Return(&repository.CreatorApplicationRow{
+				ID:                appID,
+				LastName:          "Муратова",
+				FirstName:         "Айдана",
+				MiddleName:        &middle,
+				IIN:               "950515312348",
+				BirthDate:         birth,
+				Phone:             "+77001234567",
+				City:              "Алматы",
+				Address:           "ул. Абая 1",
+				CategoryOtherText: &other,
+				Status:            domain.CreatorApplicationStatusPending,
+				CreatedAt:         created,
+				UpdatedAt:         updated,
+			}, nil)
+		rig.appCategoryRepo.EXPECT().ListByApplicationID(mock.Anything, appID).
+			Return([]*repository.CreatorApplicationCategoryDetailRow{
+				{Code: "beauty", Name: "Красота", SortOrder: 10},
+				{Code: "fashion", Name: "Мода", SortOrder: 20},
+			}, nil)
+		rig.appSocialRepo.EXPECT().ListByApplicationID(mock.Anything, appID).
+			Return([]*repository.CreatorApplicationSocialRow{
+				{ApplicationID: appID, Platform: domain.SocialPlatformInstagram, Handle: "aidana"},
+				{ApplicationID: appID, Platform: domain.SocialPlatformTikTok, Handle: "aidana_tt"},
+			}, nil)
+		// Repo returns consents in REVERSE canonical order — service must
+		// re-sort them to (processing → third_party → cross_border → terms).
+		rig.appConsentRepo.EXPECT().ListByApplicationID(mock.Anything, appID).
+			Return([]*repository.CreatorApplicationConsentRow{
+				{ApplicationID: appID, ConsentType: domain.ConsentTypeTerms, AcceptedAt: acceptedAt, DocumentVersion: "agr-1", IPAddress: "127.0.0.1", UserAgent: "ua/1"},
+				{ApplicationID: appID, ConsentType: domain.ConsentTypeCrossBorder, AcceptedAt: acceptedAt, DocumentVersion: "pp-1", IPAddress: "127.0.0.1", UserAgent: "ua/1"},
+				{ApplicationID: appID, ConsentType: domain.ConsentTypeThirdParty, AcceptedAt: acceptedAt, DocumentVersion: "pp-1", IPAddress: "127.0.0.1", UserAgent: "ua/1"},
+				{ApplicationID: appID, ConsentType: domain.ConsentTypeProcessing, AcceptedAt: acceptedAt, DocumentVersion: "pp-1", IPAddress: "127.0.0.1", UserAgent: "ua/1"},
+			}, nil)
+
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.logger)
+		got, err := svc.GetByID(context.Background(), appID)
+		require.NoError(t, err)
+		require.Equal(t, &domain.CreatorApplicationDetail{
+			ID:                appID,
+			LastName:          "Муратова",
+			FirstName:         "Айдана",
+			MiddleName:        &middle,
+			IIN:               "950515312348",
+			BirthDate:         birth,
+			Phone:             "+77001234567",
+			City:              "Алматы",
+			Address:           "ул. Абая 1",
+			CategoryOtherText: &other,
+			Status:            domain.CreatorApplicationStatusPending,
+			CreatedAt:         created,
+			UpdatedAt:         updated,
+			Categories: []domain.CreatorApplicationDetailCategory{
+				{Code: "beauty", Name: "Красота", SortOrder: 10},
+				{Code: "fashion", Name: "Мода", SortOrder: 20},
+			},
+			Socials: []domain.CreatorApplicationDetailSocial{
+				{Platform: domain.SocialPlatformInstagram, Handle: "aidana"},
+				{Platform: domain.SocialPlatformTikTok, Handle: "aidana_tt"},
+			},
+			Consents: []domain.CreatorApplicationDetailConsent{
+				{ConsentType: domain.ConsentTypeProcessing, AcceptedAt: acceptedAt, DocumentVersion: "pp-1", IPAddress: "127.0.0.1", UserAgent: "ua/1"},
+				{ConsentType: domain.ConsentTypeThirdParty, AcceptedAt: acceptedAt, DocumentVersion: "pp-1", IPAddress: "127.0.0.1", UserAgent: "ua/1"},
+				{ConsentType: domain.ConsentTypeCrossBorder, AcceptedAt: acceptedAt, DocumentVersion: "pp-1", IPAddress: "127.0.0.1", UserAgent: "ua/1"},
+				{ConsentType: domain.ConsentTypeTerms, AcceptedAt: acceptedAt, DocumentVersion: "agr-1", IPAddress: "127.0.0.1", UserAgent: "ua/1"},
+			},
+		}, got)
 	})
 }

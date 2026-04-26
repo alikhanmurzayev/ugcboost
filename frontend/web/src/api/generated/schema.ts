@@ -218,6 +218,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/dictionaries/{type}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List entries for a public dictionary (categories, cities)
+         * @description Returns the active entries of the requested dictionary, sorted by
+         *     sort_order then code. Used by the public landing page to render the
+         *     category and city pickers. Public endpoint (no authentication).
+         */
+        get: operations["listDictionary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/creators/applications": {
         parameters: {
             query?: never;
@@ -237,6 +259,32 @@ export interface paths {
          *     application.
          */
         post: operations["submitCreatorApplication"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/creators/applications/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * Get full creator application aggregate (admin only)
+         * @description Returns the full aggregate of a creator application: main personal
+         *     fields plus linked categories, social accounts and consents. Used by
+         *     the moderation UI to review a submitted application. Admin role is
+         *     required — non-admin callers receive 403 regardless of whether the
+         *     application exists, so the endpoint never leaks application IDs.
+         */
+        get: operations["getCreatorApplication"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -399,30 +447,32 @@ export interface components {
         AuditLogsResult: {
             data: components["schemas"]["ListAuditLogsData"];
         };
+        /** @description Single entry in a public dictionary (category, city, etc.). */
+        DictionaryEntry: {
+            /** @description Stable machine-readable identifier (snake_case). */
+            code: string;
+            /** @description Human-readable label rendered to the user. */
+            name: string;
+            /** @description Sort key — lower values appear first in the UI. */
+            sortOrder: number;
+        };
+        ListDictionaryData: {
+            /** @description Dictionary type echoed back to the client. */
+            type: string;
+            items: components["schemas"]["DictionaryEntry"][];
+        };
+        DictionaryListResult: {
+            data: components["schemas"]["ListDictionaryData"];
+        };
         /**
          * @description Supported social network for creator accounts (MVP scope).
          * @enum {string}
          */
-        SocialPlatform: "instagram" | "tiktok";
+        SocialPlatform: "instagram" | "tiktok" | "threads";
         SocialAccountInput: {
             platform: components["schemas"]["SocialPlatform"];
             /** @description Account handle or public identifier on the given platform. */
             handle: string;
-        };
-        /**
-         * @description Four mandatory consents captured separately per FR4 and the legal
-         *     documents. Every field must be true; otherwise the request is rejected
-         *     with 422.
-         */
-        ConsentsInput: {
-            /** @description Consent to personal data processing. */
-            processing: boolean;
-            /** @description Consent to personal data transfer to third parties (LiveDune, TrustMe, etc.). */
-            thirdParty: boolean;
-            /** @description Consent to cross-border personal data transfer. */
-            crossBorder: boolean;
-            /** @description Acceptance of the user agreement and platform terms. */
-            terms: boolean;
         };
         CreatorApplicationSubmitRequest: {
             lastName: string;
@@ -434,11 +484,28 @@ export interface components {
             phone: string;
             city: string;
             address: string;
-            /** @description One or more category codes from the categories catalogue. Must be non-empty. */
+            /**
+             * @description One or more category codes from the categories catalogue. Must be non-empty.
+             *     Maximum three codes; submissions with more are rejected with 422.
+             */
             categories: string[];
+            /**
+             * @description Free-text description of the creator's niche when "other" appears in
+             *     categories. Required when "other" is present (otherwise the request is
+             *     rejected with 422 VALIDATION_ERROR). Ignored when "other" is absent.
+             */
+            categoryOtherText?: string | null;
             /** @description One or more social accounts. Multiple handles on the same platform are allowed. */
             socials: components["schemas"]["SocialAccountInput"][];
-            consents: components["schemas"]["ConsentsInput"];
+            /**
+             * @description Single consent flag covering all four canonical consent types
+             *     (processing / third_party / cross_border / terms). The legal model
+             *     (privacy-policy.md §9.2) treats acceptance of the Privacy Policy as
+             *     unconditional consent to all four. Backend writes four rows in
+             *     creator_application_consents bound to the current document versions.
+             *     Must be true; otherwise the request is rejected with 422 MISSING_CONSENT.
+             */
+            acceptedAll: boolean;
         };
         CreatorApplicationSubmitData: {
             /**
@@ -454,6 +521,73 @@ export interface components {
         };
         CreatorApplicationSubmitResult: {
             data: components["schemas"]["CreatorApplicationSubmitData"];
+        };
+        CreatorApplicationDetailCategory: {
+            /** @description Stable category code from the categories dictionary. */
+            code: string;
+            /** @description Display name at the time the read was served. */
+            name: string;
+            /** @description Catalogue ordering hint copied from the dictionary row. */
+            sortOrder: number;
+        };
+        CreatorApplicationDetailSocial: {
+            platform: components["schemas"]["SocialPlatform"];
+            handle: string;
+        };
+        CreatorApplicationDetailConsent: {
+            /**
+             * @description Canonical consent type captured at submission time.
+             * @enum {string}
+             */
+            consentType: "processing" | "third_party" | "cross_border" | "terms";
+            /** Format: date-time */
+            acceptedAt: string;
+            /** @description Document version stamp recorded at the moment of consent. */
+            documentVersion: string;
+            /** @description Client IP recorded at submission (raw stored as-is). */
+            ipAddress: string;
+            /** @description Truncated User-Agent recorded at submission. */
+            userAgent: string;
+        };
+        CreatorApplicationDetailData: {
+            /** Format: uuid */
+            id: string;
+            lastName: string;
+            firstName: string;
+            middleName?: string | null;
+            /** @description Kazakhstani individual identification number (12 digits). */
+            iin: string;
+            /**
+             * Format: date
+             * @description Birth date derived from the IIN at submission time.
+             */
+            birthDate: string;
+            phone: string;
+            city: string;
+            address: string;
+            /** @description Free-text niche description when categories include "other". */
+            categoryOtherText?: string | null;
+            /**
+             * @description Moderation status of the application.
+             * @enum {string}
+             */
+            status: "pending" | "approved" | "rejected" | "blocked";
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+            /** @description Categories selected by the creator, sorted by sort_order then code. */
+            categories: components["schemas"]["CreatorApplicationDetailCategory"][];
+            /** @description Social accounts attached to the application, sorted by platform then handle. */
+            socials: components["schemas"]["CreatorApplicationDetailSocial"][];
+            /**
+             * @description Consents in canonical order (processing → third_party → cross_border → terms),
+             *     independent of the order they appear in the database.
+             */
+            consents: components["schemas"]["CreatorApplicationDetailConsent"][];
+        };
+        GetCreatorApplicationResult: {
+            data: components["schemas"]["CreatorApplicationDetailData"];
         };
     };
     responses: never;
@@ -1100,6 +1234,47 @@ export interface operations {
             };
         };
     };
+    listDictionary: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Dictionary type to list. */
+                type: "categories" | "cities";
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Dictionary entries */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DictionaryListResult"];
+                };
+            };
+            /** @description Unknown dictionary type */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unexpected error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
     submitCreatorApplication: {
         parameters: {
             query?: never;
@@ -1133,6 +1308,64 @@ export interface operations {
             };
             /** @description Validation error */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unexpected error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getCreatorApplication: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Application aggregate */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GetCreatorApplicationResult"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Application not found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

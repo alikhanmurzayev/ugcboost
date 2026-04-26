@@ -38,6 +38,74 @@ func (_m *MockCreatorApplicationService) EXPECT() *MockCreatorApplicationService
 	return &MockCreatorApplicationService_Expecter{mock: &_m.Mock}
 }
 
+// GetByID provides a mock function for the type MockCreatorApplicationService
+func (_mock *MockCreatorApplicationService) GetByID(ctx context.Context, id string) (*domain.CreatorApplicationDetail, error) {
+	ret := _mock.Called(ctx, id)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetByID")
+	}
+
+	var r0 *domain.CreatorApplicationDetail
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) (*domain.CreatorApplicationDetail, error)); ok {
+		return returnFunc(ctx, id)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) *domain.CreatorApplicationDetail); ok {
+		r0 = returnFunc(ctx, id)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*domain.CreatorApplicationDetail)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string) error); ok {
+		r1 = returnFunc(ctx, id)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockCreatorApplicationService_GetByID_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetByID'
+type MockCreatorApplicationService_GetByID_Call struct {
+	*mock.Call
+}
+
+// GetByID is a helper method to define mock.On call
+//   - ctx context.Context
+//   - id string
+func (_e *MockCreatorApplicationService_Expecter) GetByID(ctx interface{}, id interface{}) *MockCreatorApplicationService_GetByID_Call {
+	return &MockCreatorApplicationService_GetByID_Call{Call: _e.mock.On("GetByID", ctx, id)}
+}
+
+func (_c *MockCreatorApplicationService_GetByID_Call) Run(run func(ctx context.Context, id string)) *MockCreatorApplicationService_GetByID_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockCreatorApplicationService_GetByID_Call) Return(creatorApplicationDetail *domain.CreatorApplicationDetail, err error) *MockCreatorApplicationService_GetByID_Call {
+	_c.Call.Return(creatorApplicationDetail, err)
+	return _c
+}
+
+func (_c *MockCreatorApplicationService_GetByID_Call) RunAndReturn(run func(ctx context.Context, id string) (*domain.CreatorApplicationDetail, error)) *MockCreatorApplicationService_GetByID_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Submit provides a mock function for the type MockCreatorApplicationService
 func (_mock *MockCreatorApplicationService) Submit(ctx context.Context, in domain.CreatorApplicationInput) (*domain.CreatorApplicationSubmission, error) {
 	ret := _mock.Called(ctx, in)

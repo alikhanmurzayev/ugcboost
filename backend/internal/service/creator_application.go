@@ -16,7 +16,7 @@ import (
 // Each method matches a constructor on repository.RepoFactory.
 type CreatorApplicationRepoFactory interface {
 	NewCreatorApplicationRepo(db dbutil.DB) repository.CreatorApplicationRepo
-	NewCategoryRepo(db dbutil.DB) repository.CategoryRepo
+	NewDictionaryRepo(db dbutil.DB) repository.DictionaryRepo
 	NewCreatorApplicationCategoryRepo(db dbutil.DB) repository.CreatorApplicationCategoryRepo
 	NewCreatorApplicationSocialRepo(db dbutil.DB) repository.CreatorApplicationSocialRepo
 	NewCreatorApplicationConsentRepo(db dbutil.DB) repository.CreatorApplicationConsentRepo
@@ -37,17 +37,26 @@ func NewCreatorApplicationService(pool dbutil.Pool, repoFactory CreatorApplicati
 }
 
 // Submit persists one application together with its related rows atomically.
-// The IIN and the mandatory consents are checked before any write: duplicates
-// yield CodeCreatorApplicationDuplicate (409) and validation errors yield
-// granular 422 codes (INVALID_IIN / UNDER_AGE / MISSING_CONSENT /
+// The IIN, the consent flag and category limits are checked before any write:
+// duplicates yield CodeCreatorApplicationDuplicate (409) and validation errors
+// yield granular 422 codes (INVALID_IIN / UNDER_AGE / MISSING_CONSENT /
 // UNKNOWN_CATEGORY / VALIDATION_ERROR). Nothing about the personal data lands
 // in stdout-логах приложения — only the generated application id is logged on
 // success. Audit_logs may carry PII per the spec (administrator-read only).
 func (s *CreatorApplicationService) Submit(ctx context.Context, in domain.CreatorApplicationInput) (*domain.CreatorApplicationSubmission, error) {
-	if err := requireAllConsents(in.Consents); err != nil {
-		return nil, err
+	if !in.Consents.AcceptedAll {
+		return nil, domain.NewValidationError(domain.CodeMissingConsent,
+			"Требуется согласие со всеми условиями")
+	}
+	if len(in.CategoryCodes) > domain.MaxCategoriesPerApplication {
+		return nil, domain.NewValidationError(domain.CodeValidation,
+			fmt.Sprintf("Максимум %d категории", domain.MaxCategoriesPerApplication))
 	}
 	trimmed, err := trimAndValidateRequired(in)
+	if err != nil {
+		return nil, err
+	}
+	categoryOtherText, err := validateCategoryOtherText(in.CategoryCodes, in.CategoryOtherText)
 	if err != nil {
 		return nil, err
 	}
@@ -57,7 +66,8 @@ func (s *CreatorApplicationService) Submit(ctx context.Context, in domain.Creato
 		return nil, iinErrorToValidation(err)
 	}
 	if err := domain.EnsureAdult(birth, in.Now); err != nil {
-		return nil, domain.NewValidationError(domain.CodeUnderAge, "Возраст менее 18 лет")
+		return nil, domain.NewValidationError(domain.CodeUnderAge,
+			fmt.Sprintf("Возраст менее %d лет", domain.MinCreatorAge))
 	}
 
 	normalisedSocials, err := normaliseSocials(in.Socials)
@@ -69,7 +79,7 @@ func (s *CreatorApplicationService) Submit(ctx context.Context, in domain.Creato
 
 	err = dbutil.WithTx(ctx, s.pool, func(tx dbutil.DB) error {
 		appRepo := s.repoFactory.NewCreatorApplicationRepo(tx)
-		categoryRepo := s.repoFactory.NewCategoryRepo(tx)
+		dictRepo := s.repoFactory.NewDictionaryRepo(tx)
 		appCategoryRepo := s.repoFactory.NewCreatorApplicationCategoryRepo(tx)
 		appSocialRepo := s.repoFactory.NewCreatorApplicationSocialRepo(tx)
 		appConsentRepo := s.repoFactory.NewCreatorApplicationConsentRepo(tx)
@@ -83,20 +93,21 @@ func (s *CreatorApplicationService) Submit(ctx context.Context, in domain.Creato
 			return duplicateError()
 		}
 
-		categoryIDs, err := resolveCategoryIDs(ctx, categoryRepo, in.CategoryCodes)
+		categoryIDs, err := resolveCategoryIDs(ctx, dictRepo, in.CategoryCodes)
 		if err != nil {
 			return err
 		}
 
 		appRow, err := appRepo.Create(ctx, repository.CreatorApplicationRow{
-			LastName:   trimmed.LastName,
-			FirstName:  trimmed.FirstName,
-			MiddleName: trimOptional(in.MiddleName),
-			IIN:        trimmed.IIN,
-			BirthDate:  birth,
-			Phone:      trimmed.Phone,
-			City:       trimmed.City,
-			Address:    trimmed.Address,
+			LastName:          trimmed.LastName,
+			FirstName:         trimmed.FirstName,
+			MiddleName:        trimOptional(in.MiddleName),
+			IIN:               trimmed.IIN,
+			BirthDate:         birth,
+			Phone:             trimmed.Phone,
+			City:              trimmed.City,
+			Address:           trimmed.Address,
+			CategoryOtherText: categoryOtherText,
 		})
 		if err != nil {
 			if errors.Is(err, domain.ErrCreatorApplicationDuplicate) {
@@ -208,36 +219,35 @@ func trimAndValidateRequired(in domain.CreatorApplicationInput) (trimmedCreatorA
 	return out, nil
 }
 
-// requireAllConsents rejects the submission if any of the four mandatory
-// consents is not explicitly true. The friendly Russian labels match the spec
-// I/O matrix and avoid leaking internal enum values like "third_party" into
-// user-facing text.
-func requireAllConsents(c domain.ConsentsInput) error {
-	values := c.AsMap()
-	for _, name := range domain.ConsentTypeValues {
-		if !values[name] {
-			return domain.NewValidationError(domain.CodeMissingConsent,
-				fmt.Sprintf("Требуется согласие: %s", consentLabelRU(name)))
+// validateCategoryOtherText enforces the contract for the free-text "other"
+// category description: required and non-blank when the codes contain "other",
+// trimmed, and capped at 200 runes. Returns the trimmed value (or nil when
+// "other" is absent — the column stays NULL).
+func validateCategoryOtherText(codes []string, raw *string) (*string, error) {
+	hasOther := false
+	for _, c := range codes {
+		if strings.TrimSpace(c) == domain.CategoryCodeOther {
+			hasOther = true
+			break
 		}
 	}
-	return nil
-}
-
-// consentLabelRU maps the canonical consent type onto a user-friendly Russian
-// label used in error messages — the machine code stays internal.
-func consentLabelRU(consentType string) string {
-	switch consentType {
-	case domain.ConsentTypeProcessing:
-		return "обработка персональных данных"
-	case domain.ConsentTypeThirdParty:
-		return "передача данных третьим лицам"
-	case domain.ConsentTypeCrossBorder:
-		return "трансграничная передача данных"
-	case domain.ConsentTypeTerms:
-		return "пользовательское соглашение"
-	default:
-		return consentType
+	if !hasOther {
+		return nil, nil
 	}
+	missing := domain.NewValidationError(domain.CodeValidation,
+		"Укажите название категории в поле «Другое»")
+	if raw == nil {
+		return nil, missing
+	}
+	txt := strings.TrimSpace(*raw)
+	if txt == "" {
+		return nil, missing
+	}
+	if len([]rune(txt)) > 200 {
+		return nil, domain.NewValidationError(domain.CodeValidation,
+			"Текст категории «Другое» слишком длинный (макс. 200 символов)")
+	}
+	return &txt, nil
 }
 
 // iinErrorToValidation maps domain IIN sentinel errors onto user-facing
@@ -298,7 +308,7 @@ func normaliseSocials(accounts []domain.SocialAccountInput) ([]domain.SocialAcco
 // resolveCategoryIDs maps user-provided category codes to DB ids. Missing or
 // inactive codes surface as UNKNOWN_CATEGORY (422) pointing at the first bad
 // code — one error is enough, we don't need to enumerate every issue.
-func resolveCategoryIDs(ctx context.Context, repo repository.CategoryRepo, codes []string) ([]string, error) {
+func resolveCategoryIDs(ctx context.Context, repo repository.DictionaryRepo, codes []string) ([]string, error) {
 	if len(codes) == 0 {
 		return nil, domain.NewValidationError(domain.CodeValidation, "At least one category is required")
 	}
@@ -319,7 +329,7 @@ func resolveCategoryIDs(ctx context.Context, repo repository.CategoryRepo, codes
 		return nil, domain.NewValidationError(domain.CodeValidation, "At least one category is required")
 	}
 
-	rows, err := repo.GetActiveByCodes(ctx, unique)
+	rows, err := repo.GetActiveByCodes(ctx, repository.TableCategories, unique)
 	if err != nil {
 		return nil, fmt.Errorf("lookup categories: %w", err)
 	}
@@ -383,4 +393,100 @@ func trimOptional(s *string) *string {
 		return nil
 	}
 	return &trimmed
+}
+
+// GetByID assembles the full read aggregate for an application: main row +
+// categories + socials + consents. All four queries run read-only against the
+// pool — no transaction is needed because nothing changes here. sql.ErrNoRows
+// from the main lookup is returned as-is (already wrapped by dbutil through
+// %w) so the handler can map it to 404 via errors.Is.
+func (s *CreatorApplicationService) GetByID(ctx context.Context, id string) (*domain.CreatorApplicationDetail, error) {
+	appRow, err := s.repoFactory.NewCreatorApplicationRepo(s.pool).GetByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	categoryRows, err := s.repoFactory.NewCreatorApplicationCategoryRepo(s.pool).ListByApplicationID(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("list categories: %w", err)
+	}
+
+	socialRows, err := s.repoFactory.NewCreatorApplicationSocialRepo(s.pool).ListByApplicationID(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("list socials: %w", err)
+	}
+
+	consentRows, err := s.repoFactory.NewCreatorApplicationConsentRepo(s.pool).ListByApplicationID(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("list consents: %w", err)
+	}
+
+	return creatorApplicationDetailFromRows(appRow, categoryRows, socialRows, consentRows), nil
+}
+
+// creatorApplicationDetailFromRows maps the four repo result sets onto the
+// domain aggregate. Consents are reordered in-memory by canonical
+// ConsentTypeValues so the response is deterministic regardless of how Postgres
+// returned them; missing types are skipped without error so the read side does
+// not fail on legacy or partial data (though POST atomically creates all four).
+func creatorApplicationDetailFromRows(
+	app *repository.CreatorApplicationRow,
+	categories []*repository.CreatorApplicationCategoryDetailRow,
+	socials []*repository.CreatorApplicationSocialRow,
+	consents []*repository.CreatorApplicationConsentRow,
+) *domain.CreatorApplicationDetail {
+	cats := make([]domain.CreatorApplicationDetailCategory, len(categories))
+	for i, c := range categories {
+		cats[i] = domain.CreatorApplicationDetailCategory{
+			Code:      c.Code,
+			Name:      c.Name,
+			SortOrder: c.SortOrder,
+		}
+	}
+
+	socs := make([]domain.CreatorApplicationDetailSocial, len(socials))
+	for i, s := range socials {
+		socs[i] = domain.CreatorApplicationDetailSocial{
+			Platform: s.Platform,
+			Handle:   s.Handle,
+		}
+	}
+
+	byType := make(map[string]*repository.CreatorApplicationConsentRow, len(consents))
+	for _, c := range consents {
+		byType[c.ConsentType] = c
+	}
+	cons := make([]domain.CreatorApplicationDetailConsent, 0, len(domain.ConsentTypeValues))
+	for _, ct := range domain.ConsentTypeValues {
+		c, ok := byType[ct]
+		if !ok {
+			continue
+		}
+		cons = append(cons, domain.CreatorApplicationDetailConsent{
+			ConsentType:     c.ConsentType,
+			AcceptedAt:      c.AcceptedAt,
+			DocumentVersion: c.DocumentVersion,
+			IPAddress:       c.IPAddress,
+			UserAgent:       c.UserAgent,
+		})
+	}
+
+	return &domain.CreatorApplicationDetail{
+		ID:                app.ID,
+		LastName:          app.LastName,
+		FirstName:         app.FirstName,
+		MiddleName:        app.MiddleName,
+		IIN:               app.IIN,
+		BirthDate:         app.BirthDate,
+		Phone:             app.Phone,
+		City:              app.City,
+		Address:           app.Address,
+		CategoryOtherText: app.CategoryOtherText,
+		Status:            app.Status,
+		CreatedAt:         app.CreatedAt,
+		UpdatedAt:         app.UpdatedAt,
+		Categories:        cats,
+		Socials:           socs,
+		Consents:          cons,
+	}
 }

@@ -41,6 +41,7 @@ type AuthzService interface {
 	CanAssignManager(ctx context.Context, brandID string) error
 	CanRemoveManager(ctx context.Context, brandID, userID string) error
 	CanListAuditLogs(ctx context.Context) error
+	CanViewCreatorApplication(ctx context.Context) error
 }
 
 // AuditLogService is the interface Server needs from the audit service.
@@ -49,9 +50,17 @@ type AuditLogService interface {
 }
 
 // CreatorApplicationService is the interface Server needs from the creator
-// application service (public submission flow from the landing page).
+// application service (public submission flow from the landing page plus the
+// admin-only read aggregate used by the moderation UI).
 type CreatorApplicationService interface {
 	Submit(ctx context.Context, in domain.CreatorApplicationInput) (*domain.CreatorApplicationSubmission, error)
+	GetByID(ctx context.Context, id string) (*domain.CreatorApplicationDetail, error)
+}
+
+// DictionaryService is the interface Server needs to serve public dictionaries
+// (categories, cities) on the landing page.
+type DictionaryService interface {
+	List(ctx context.Context, t domain.DictionaryType) ([]domain.DictionaryEntry, error)
 }
 
 // ServerConfig bundles configuration values the handler layer needs. Keeping
@@ -71,6 +80,7 @@ type Server struct {
 	authzService              AuthzService
 	auditService              AuditLogService
 	creatorApplicationService CreatorApplicationService
+	dictionaryService         DictionaryService
 	version                   string
 	cookieSecure              bool
 	telegramBotUsername       string
@@ -88,6 +98,7 @@ func NewServer(
 	authz AuthzService,
 	audit AuditLogService,
 	creatorApps CreatorApplicationService,
+	dict DictionaryService,
 	cfg ServerConfig,
 	log logger.Logger,
 ) *Server {
@@ -97,6 +108,7 @@ func NewServer(
 		authzService:              authz,
 		auditService:              audit,
 		creatorApplicationService: creatorApps,
+		dictionaryService:         dict,
 		version:                   cfg.Version,
 		cookieSecure:              cfg.CookieSecure,
 		telegramBotUsername:       cfg.TelegramBotUsername,

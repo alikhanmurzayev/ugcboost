@@ -188,3 +188,49 @@ Adversarial code review PR #19 branch `alikhan/creator-application-submit` — 3
 - [x] [Review][Defer] Validation order information-disclosure oracle (IIN/age/category) [`service/creator_application.go:45-85`] — deferred, rate-limit на reverse-proxy.
 - [x] [Review][Defer] Handler test `Submit` использует `MatchedBy` partial вместо exact-args [`handler/creator_application_test.go:101-113`] — deferred, cosmetic; основные поля проверяются.
 - [x] [Review][Defer] OpenAPI `minLength:1` пропускает `" "` [`api/openapi.yaml:289-316`] — dismissed as subsumed by patch "Empty/whitespace-only required fields".
+
+## Sync with landing 2026-04-25
+
+После анализа PR #20 (`aidana/landing-efw`) и `/interview`-сессии приняты следующие изменения контракта. Полный план реализации — `_bmad-output/implementation-artifacts/sync-with-landing-plan.md`.
+
+### Изменения контракта
+
+1. **Consents API упрощены до одного флага.** `ConsentsInput` (4 поля: processing/thirdParty/crossBorder/terms) → одно поле `acceptedAll: bool` в `CreatorApplicationCreate`. Бэк по-прежнему пишет 4 ряда в `creator_application_consents` (юр. база — `legal/privacy-policy.md` п.9.2: акцепт Политики покрывает все 4 типа). При `acceptedAll=false` → 422 `MISSING_CONSENT`.
+
+2. **CategoryOtherText.** Новое поле `categoryOtherText: string|null` (max 200 chars). Required если в `categories` присутствует код `other`. При выборе `other` без текста или с пустым текстом → 422 `VALIDATION_ERROR` "Укажите название категории в поле «Другое»". Хранится в `creator_applications.category_other_text TEXT NULL`.
+
+3. **MaxCategoriesPerApplication = 3.** Лимит на бэке (`domain.MaxCategoriesPerApplication`). При >3 → 422 `VALIDATION_ERROR`.
+
+4. **MinCreatorAge поднят с 18 до 21.** Бизнес-фильтр EFW. Сообщение "Возраст менее 21 года". Legal min остаётся 18 для будущих воронок (если понадобятся — выносить в Config).
+
+5. **SocialPlatform += `threads`.** Миграция `ALTER TYPE social_platform ADD VALUE 'threads'`. Handle-regex тот же (`^[a-z0-9._]{1,30}$`). `domain.SocialPlatformThreads` константа.
+
+6. **Categories sync.** Миграция: DELETE `gaming` (не на лендинге), INSERT `home_diy` / `animals` / `other`, UPDATE имён под формат лендинга (`Бьюти` → `Бьюти (макияж, уход)`, `Мода` → `Мода / Стиль` и т.д.). Добавлена колонка `sort_order INT NOT NULL DEFAULT 0` для порядка в UI.
+
+7. **Cities — новая таблица.** `cities (id, code, name, active, sort_order, created_at)` + сид (17 городов с лендинга). Sort_order: top-3 метро (Алматы=10, Астана=20, Шымкент=30), остальное по алфавиту с шагом 100.
+
+8. **Dictionary system.** Новый публичный endpoint `GET /dictionaries/{type}` (type ∈ {categories, cities}) → `{data: {type, items: [{code, name, sortOrder}]}}`. Лендинг тянет categories и cities при загрузке формы. Реализация: общий `DictionaryEntryRow` + `DictionaryRepo` с параметром `table`, маппинг type→table в `service.DictionaryService` через константы `repository.TableX`. Подробности дизайна — в `sync-with-landing-plan.md` шаги 3.3-3.6.
+
+### Удалено из API
+
+- `ConsentsInput.{Processing, ThirdParty, CrossBorder, Terms}` — заменено на `acceptedAll: bool`.
+
+### Добавлено в API
+
+- `CreatorApplicationCreate.acceptedAll: bool` (required)
+- `CreatorApplicationCreate.categoryOtherText: string|null` (maxLength 200)
+- `SocialPlatform.threads` (enum value)
+- `GET /dictionaries/{type}` + `DictionaryEntry` + `ListDictionaryData` + `DictionaryListResult`
+
+### Сопутствующие изменения на бэке
+
+- `domain.SocialPlatformValues += SocialPlatformThreads`
+- `domain.MinCreatorAge = 21` (поднят с 18)
+- `domain.MaxCategoriesPerApplication = 3` (новая константа)
+- Удалены `repository.CategoryRepo` / `CategoryRow` / `categoryRepository` и моки — заменены на `DictionaryRepo`
+- `service.CreatorApplicationService` рефакторен: `NewDictionaryRepo` вместо `NewCategoryRepo`, `requireAllConsents/AsMap/consentLabelRU` удалены, добавлены валидации MaxCategories и categoryOtherText.
+
+### Сопутствующие изменения на лендинге
+
+- `content.ts`: убраны hardcoded `categories` и `cities` (тянутся из API).
+- `index.astro`: 1 чекбокс согласий вместо 2; `<input type="text" placeholder="@username">` вместо `type="url"`; `middleName` без `required`; submit делает реальный fetch к `POST /api/v1/creators/applications`; success-screen использует `data.telegram_bot_url` (при пустом — показывается без CTA-кнопки).

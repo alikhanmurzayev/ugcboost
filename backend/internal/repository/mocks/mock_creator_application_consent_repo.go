@@ -94,3 +94,71 @@ func (_c *MockCreatorApplicationConsentRepo_InsertMany_Call) RunAndReturn(run fu
 	_c.Call.Return(run)
 	return _c
 }
+
+// ListByApplicationID provides a mock function for the type MockCreatorApplicationConsentRepo
+func (_mock *MockCreatorApplicationConsentRepo) ListByApplicationID(ctx context.Context, applicationID string) ([]*repository.CreatorApplicationConsentRow, error) {
+	ret := _mock.Called(ctx, applicationID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ListByApplicationID")
+	}
+
+	var r0 []*repository.CreatorApplicationConsentRow
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) ([]*repository.CreatorApplicationConsentRow, error)); ok {
+		return returnFunc(ctx, applicationID)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) []*repository.CreatorApplicationConsentRow); ok {
+		r0 = returnFunc(ctx, applicationID)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]*repository.CreatorApplicationConsentRow)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string) error); ok {
+		r1 = returnFunc(ctx, applicationID)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockCreatorApplicationConsentRepo_ListByApplicationID_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ListByApplicationID'
+type MockCreatorApplicationConsentRepo_ListByApplicationID_Call struct {
+	*mock.Call
+}
+
+// ListByApplicationID is a helper method to define mock.On call
+//   - ctx context.Context
+//   - applicationID string
+func (_e *MockCreatorApplicationConsentRepo_Expecter) ListByApplicationID(ctx interface{}, applicationID interface{}) *MockCreatorApplicationConsentRepo_ListByApplicationID_Call {
+	return &MockCreatorApplicationConsentRepo_ListByApplicationID_Call{Call: _e.mock.On("ListByApplicationID", ctx, applicationID)}
+}
+
+func (_c *MockCreatorApplicationConsentRepo_ListByApplicationID_Call) Run(run func(ctx context.Context, applicationID string)) *MockCreatorApplicationConsentRepo_ListByApplicationID_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockCreatorApplicationConsentRepo_ListByApplicationID_Call) Return(creatorApplicationConsentRows []*repository.CreatorApplicationConsentRow, err error) *MockCreatorApplicationConsentRepo_ListByApplicationID_Call {
+	_c.Call.Return(creatorApplicationConsentRows, err)
+	return _c
+}
+
+func (_c *MockCreatorApplicationConsentRepo_ListByApplicationID_Call) RunAndReturn(run func(ctx context.Context, applicationID string) ([]*repository.CreatorApplicationConsentRow, error)) *MockCreatorApplicationConsentRepo_ListByApplicationID_Call {
+	_c.Call.Return(run)
+	return _c
+}

@@ -18,9 +18,58 @@ const (
 	BearerAuthScopes = "bearerAuth.Scopes"
 )
 
+// Defines values for CreatorApplicationDetailConsentConsentType.
+const (
+	CrossBorder CreatorApplicationDetailConsentConsentType = "cross_border"
+	Processing  CreatorApplicationDetailConsentConsentType = "processing"
+	Terms       CreatorApplicationDetailConsentConsentType = "terms"
+	ThirdParty  CreatorApplicationDetailConsentConsentType = "third_party"
+)
+
+// Valid indicates whether the value is a known member of the CreatorApplicationDetailConsentConsentType enum.
+func (e CreatorApplicationDetailConsentConsentType) Valid() bool {
+	switch e {
+	case CrossBorder:
+		return true
+	case Processing:
+		return true
+	case Terms:
+		return true
+	case ThirdParty:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CreatorApplicationDetailDataStatus.
+const (
+	Approved CreatorApplicationDetailDataStatus = "approved"
+	Blocked  CreatorApplicationDetailDataStatus = "blocked"
+	Pending  CreatorApplicationDetailDataStatus = "pending"
+	Rejected CreatorApplicationDetailDataStatus = "rejected"
+)
+
+// Valid indicates whether the value is a known member of the CreatorApplicationDetailDataStatus enum.
+func (e CreatorApplicationDetailDataStatus) Valid() bool {
+	switch e {
+	case Approved:
+		return true
+	case Blocked:
+		return true
+	case Pending:
+		return true
+	case Rejected:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for SocialPlatform.
 const (
 	Instagram SocialPlatform = "instagram"
+	Threads   SocialPlatform = "threads"
 	Tiktok    SocialPlatform = "tiktok"
 )
 
@@ -28,6 +77,8 @@ const (
 func (e SocialPlatform) Valid() bool {
 	switch e {
 	case Instagram:
+		return true
+	case Threads:
 		return true
 	case Tiktok:
 		return true
@@ -48,6 +99,24 @@ func (e UserRole) Valid() bool {
 	case Admin:
 		return true
 	case BrandManager:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ListDictionaryParamsType.
+const (
+	Categories ListDictionaryParamsType = "categories"
+	Cities     ListDictionaryParamsType = "cities"
+)
+
+// Valid indicates whether the value is a known member of the ListDictionaryParamsType enum.
+func (e ListDictionaryParamsType) Valid() bool {
+	switch e {
+	case Categories:
+		return true
+	case Cities:
 		return true
 	default:
 		return false
@@ -136,27 +205,88 @@ type BrandResult struct {
 	Data Brand `json:"data"`
 }
 
-// ConsentsInput Four mandatory consents captured separately per FR4 and the legal
-// documents. Every field must be true; otherwise the request is rejected
-// with 422.
-type ConsentsInput struct {
-	// CrossBorder Consent to cross-border personal data transfer.
-	CrossBorder bool `json:"crossBorder"`
-
-	// Processing Consent to personal data processing.
-	Processing bool `json:"processing"`
-
-	// Terms Acceptance of the user agreement and platform terms.
-	Terms bool `json:"terms"`
-
-	// ThirdParty Consent to personal data transfer to third parties (LiveDune, TrustMe, etc.).
-	ThirdParty bool `json:"thirdParty"`
-}
-
 // CreateBrandRequest defines model for CreateBrandRequest.
 type CreateBrandRequest struct {
 	LogoUrl *string `json:"logoUrl,omitempty"`
 	Name    string  `json:"name"`
+}
+
+// CreatorApplicationDetailCategory defines model for CreatorApplicationDetailCategory.
+type CreatorApplicationDetailCategory struct {
+	// Code Stable category code from the categories dictionary.
+	Code string `json:"code"`
+
+	// Name Display name at the time the read was served.
+	Name string `json:"name"`
+
+	// SortOrder Catalogue ordering hint copied from the dictionary row.
+	SortOrder int `json:"sortOrder"`
+}
+
+// CreatorApplicationDetailConsent defines model for CreatorApplicationDetailConsent.
+type CreatorApplicationDetailConsent struct {
+	AcceptedAt time.Time `json:"acceptedAt"`
+
+	// ConsentType Canonical consent type captured at submission time.
+	ConsentType CreatorApplicationDetailConsentConsentType `json:"consentType"`
+
+	// DocumentVersion Document version stamp recorded at the moment of consent.
+	DocumentVersion string `json:"documentVersion"`
+
+	// IpAddress Client IP recorded at submission (raw stored as-is).
+	IpAddress string `json:"ipAddress"`
+
+	// UserAgent Truncated User-Agent recorded at submission.
+	UserAgent string `json:"userAgent"`
+}
+
+// CreatorApplicationDetailConsentConsentType Canonical consent type captured at submission time.
+type CreatorApplicationDetailConsentConsentType string
+
+// CreatorApplicationDetailData defines model for CreatorApplicationDetailData.
+type CreatorApplicationDetailData struct {
+	Address string `json:"address"`
+
+	// BirthDate Birth date derived from the IIN at submission time.
+	BirthDate openapi_types.Date `json:"birthDate"`
+
+	// Categories Categories selected by the creator, sorted by sort_order then code.
+	Categories []CreatorApplicationDetailCategory `json:"categories"`
+
+	// CategoryOtherText Free-text niche description when categories include "other".
+	CategoryOtherText *string `json:"categoryOtherText,omitempty"`
+	City              string  `json:"city"`
+
+	// Consents Consents in canonical order (processing → third_party → cross_border → terms),
+	// independent of the order they appear in the database.
+	Consents  []CreatorApplicationDetailConsent `json:"consents"`
+	CreatedAt time.Time                         `json:"createdAt"`
+	FirstName string                            `json:"firstName"`
+	Id        openapi_types.UUID                `json:"id"`
+
+	// Iin Kazakhstani individual identification number (12 digits).
+	Iin        string  `json:"iin"`
+	LastName   string  `json:"lastName"`
+	MiddleName *string `json:"middleName,omitempty"`
+	Phone      string  `json:"phone"`
+
+	// Socials Social accounts attached to the application, sorted by platform then handle.
+	Socials []CreatorApplicationDetailSocial `json:"socials"`
+
+	// Status Moderation status of the application.
+	Status    CreatorApplicationDetailDataStatus `json:"status"`
+	UpdatedAt time.Time                          `json:"updatedAt"`
+}
+
+// CreatorApplicationDetailDataStatus Moderation status of the application.
+type CreatorApplicationDetailDataStatus string
+
+// CreatorApplicationDetailSocial defines model for CreatorApplicationDetailSocial.
+type CreatorApplicationDetailSocial struct {
+	Handle string `json:"handle"`
+
+	// Platform Supported social network for creator accounts (MVP scope).
+	Platform SocialPlatform `json:"platform"`
 }
 
 // CreatorApplicationSubmitData defines model for CreatorApplicationSubmitData.
@@ -170,17 +300,25 @@ type CreatorApplicationSubmitData struct {
 
 // CreatorApplicationSubmitRequest defines model for CreatorApplicationSubmitRequest.
 type CreatorApplicationSubmitRequest struct {
-	Address string `json:"address"`
+	// AcceptedAll Single consent flag covering all four canonical consent types
+	// (processing / third_party / cross_border / terms). The legal model
+	// (privacy-policy.md §9.2) treats acceptance of the Privacy Policy as
+	// unconditional consent to all four. Backend writes four rows in
+	// creator_application_consents bound to the current document versions.
+	// Must be true; otherwise the request is rejected with 422 MISSING_CONSENT.
+	AcceptedAll bool   `json:"acceptedAll"`
+	Address     string `json:"address"`
 
 	// Categories One or more category codes from the categories catalogue. Must be non-empty.
+	// Maximum three codes; submissions with more are rejected with 422.
 	Categories []string `json:"categories"`
-	City       string   `json:"city"`
 
-	// Consents Four mandatory consents captured separately per FR4 and the legal
-	// documents. Every field must be true; otherwise the request is rejected
-	// with 422.
-	Consents  ConsentsInput `json:"consents"`
-	FirstName string        `json:"firstName"`
+	// CategoryOtherText Free-text description of the creator's niche when "other" appears in
+	// categories. Required when "other" is present (otherwise the request is
+	// rejected with 422 VALIDATION_ERROR). Ignored when "other" is absent.
+	CategoryOtherText *string `json:"categoryOtherText,omitempty"`
+	City              string  `json:"city"`
+	FirstName         string  `json:"firstName"`
 
 	// Iin Kazakhstani individual identification number (12 digits).
 	Iin      string `json:"iin"`
@@ -199,6 +337,23 @@ type CreatorApplicationSubmitResult struct {
 	Data CreatorApplicationSubmitData `json:"data"`
 }
 
+// DictionaryEntry Single entry in a public dictionary (category, city, etc.).
+type DictionaryEntry struct {
+	// Code Stable machine-readable identifier (snake_case).
+	Code string `json:"code"`
+
+	// Name Human-readable label rendered to the user.
+	Name string `json:"name"`
+
+	// SortOrder Sort key — lower values appear first in the UI.
+	SortOrder int `json:"sortOrder"`
+}
+
+// DictionaryListResult defines model for DictionaryListResult.
+type DictionaryListResult struct {
+	Data ListDictionaryData `json:"data"`
+}
+
 // ErrorResponse defines model for ErrorResponse.
 type ErrorResponse struct {
 	Error APIError `json:"error"`
@@ -207,6 +362,11 @@ type ErrorResponse struct {
 // GetBrandResult defines model for GetBrandResult.
 type GetBrandResult struct {
 	Data BrandDetailData `json:"data"`
+}
+
+// GetCreatorApplicationResult defines model for GetCreatorApplicationResult.
+type GetCreatorApplicationResult struct {
+	Data CreatorApplicationDetailData `json:"data"`
 }
 
 // HealthResponse defines model for HealthResponse.
@@ -231,6 +391,14 @@ type ListBrandsData struct {
 // ListBrandsResult defines model for ListBrandsResult.
 type ListBrandsResult struct {
 	Data ListBrandsData `json:"data"`
+}
+
+// ListDictionaryData defines model for ListDictionaryData.
+type ListDictionaryData struct {
+	Items []DictionaryEntry `json:"items"`
+
+	// Type Dictionary type echoed back to the client.
+	Type string `json:"type"`
 }
 
 // LoginData defines model for LoginData.
@@ -323,6 +491,9 @@ type ListAuditLogsParams struct {
 	PerPage    *int       `form:"per_page,omitempty" json:"per_page,omitempty"`
 }
 
+// ListDictionaryParamsType defines parameters for ListDictionary.
+type ListDictionaryParamsType string
+
 // LoginJSONRequestBody defines body for Login for application/json ContentType.
 type LoginJSONRequestBody = LoginRequest
 
@@ -391,6 +562,12 @@ type ServerInterface interface {
 	// Submit a creator application from the public landing page
 	// (POST /creators/applications)
 	SubmitCreatorApplication(w http.ResponseWriter, r *http.Request)
+	// Get full creator application aggregate (admin only)
+	// (GET /creators/applications/{id})
+	GetCreatorApplication(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+	// List entries for a public dictionary (categories, cities)
+	// (GET /dictionaries/{type})
+	ListDictionary(w http.ResponseWriter, r *http.Request, pType ListDictionaryParamsType)
 	// Health check
 	// (GET /healthz)
 	HealthCheck(w http.ResponseWriter, r *http.Request)
@@ -487,6 +664,18 @@ func (_ Unimplemented) RemoveManager(w http.ResponseWriter, r *http.Request, bra
 // Submit a creator application from the public landing page
 // (POST /creators/applications)
 func (_ Unimplemented) SubmitCreatorApplication(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Get full creator application aggregate (admin only)
+// (GET /creators/applications/{id})
+func (_ Unimplemented) GetCreatorApplication(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// List entries for a public dictionary (categories, cities)
+// (GET /dictionaries/{type})
+func (_ Unimplemented) ListDictionary(w http.ResponseWriter, r *http.Request, pType ListDictionaryParamsType) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -908,6 +1097,62 @@ func (siw *ServerInterfaceWrapper) SubmitCreatorApplication(w http.ResponseWrite
 	handler.ServeHTTP(w, r)
 }
 
+// GetCreatorApplication operation middleware
+func (siw *ServerInterfaceWrapper) GetCreatorApplication(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetCreatorApplication(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListDictionary operation middleware
+func (siw *ServerInterfaceWrapper) ListDictionary(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "type" -------------
+	var pType ListDictionaryParamsType
+
+	err = runtime.BindStyledParameterWithOptions("simple", "type", chi.URLParam(r, "type"), &pType, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "type", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListDictionary(w, r, pType)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // HealthCheck operation middleware
 func (siw *ServerInterfaceWrapper) HealthCheck(w http.ResponseWriter, r *http.Request) {
 
@@ -1079,6 +1324,12 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/creators/applications", wrapper.SubmitCreatorApplication)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/creators/applications/{id}", wrapper.GetCreatorApplication)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/dictionaries/{type}", wrapper.ListDictionary)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/healthz", wrapper.HealthCheck)

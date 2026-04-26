@@ -31,11 +31,23 @@ var CreatorApplicationActiveStatuses = []string{
 const (
 	SocialPlatformInstagram = "instagram"
 	SocialPlatformTikTok    = "tiktok"
+	SocialPlatformThreads   = "threads"
 )
 
 // SocialPlatformValues is the canonical list of accepted platforms.
 // Used by services/handlers when iterating and by tests for coverage.
-var SocialPlatformValues = []string{SocialPlatformInstagram, SocialPlatformTikTok}
+var SocialPlatformValues = []string{SocialPlatformInstagram, SocialPlatformTikTok, SocialPlatformThreads}
+
+// MaxCategoriesPerApplication caps how many category codes a creator may
+// pick on the landing form. The landing UI enforces this client-side; the
+// service rejects anything over the limit with 422 VALIDATION_ERROR so a
+// non-browser client cannot bypass it.
+const MaxCategoriesPerApplication = 3
+
+// CategoryCodeOther is the category code that triggers the free-text
+// "categoryOtherText" field on the submission DTO. When this code is in the
+// selected categories, categoryOtherText becomes required.
+const CategoryCodeOther = "other"
 
 // ConsentType values stored in creator_application_consents.consent_type.
 // Each application MUST record exactly one row per type (FR4).
@@ -84,21 +96,22 @@ var SocialHandleRegex = regexp.MustCompile(`^[a-z0-9._]{1,30}$`)
 // metadata (IP, User-Agent, document versions) so the service can persist a
 // faithful audit trail without ever touching net/http.
 type CreatorApplicationInput struct {
-	LastName         string
-	FirstName        string
-	MiddleName       *string
-	IIN              string
-	Phone            string
-	City             string
-	Address          string
-	CategoryCodes    []string
-	Socials          []SocialAccountInput
-	Consents         ConsentsInput
-	IPAddress        string
-	UserAgent        string
-	AgreementVersion string
-	PrivacyVersion   string
-	Now              time.Time
+	LastName          string
+	FirstName         string
+	MiddleName        *string
+	IIN               string
+	Phone             string
+	City              string
+	Address           string
+	CategoryCodes     []string
+	CategoryOtherText *string
+	Socials           []SocialAccountInput
+	Consents          ConsentsInput
+	IPAddress         string
+	UserAgent         string
+	AgreementVersion  string
+	PrivacyVersion    string
+	Now               time.Time
 }
 
 // SocialAccountInput is one validated handle on a known platform.
@@ -107,31 +120,70 @@ type SocialAccountInput struct {
 	Handle   string
 }
 
-// ConsentsInput captures the four mandatory acceptance flags. Service layer
-// rejects the request if any field is false.
+// ConsentsInput captures the single "accepted everything" flag the landing
+// form sends. The legal model (privacy-policy.md §9.2) treats acceptance of
+// the Privacy Policy as unconditional consent for processing, third-party
+// transfer, cross-border transfer and the user agreement, so a single flag
+// from the client is enough — the service still writes one row per consent
+// type into creator_application_consents.
 type ConsentsInput struct {
-	Processing  bool
-	ThirdParty  bool
-	CrossBorder bool
-	Terms       bool
-}
-
-// AsMap returns the consents keyed by their canonical type string in the
-// order defined by ConsentTypeValues. Services iterate this map to write
-// one consent row per type.
-func (c ConsentsInput) AsMap() map[string]bool {
-	return map[string]bool{
-		ConsentTypeProcessing:  c.Processing,
-		ConsentTypeThirdParty:  c.ThirdParty,
-		ConsentTypeCrossBorder: c.CrossBorder,
-		ConsentTypeTerms:       c.Terms,
-	}
+	AcceptedAll bool
 }
 
 // CreatorApplicationSubmission is what the service returns to the handler.
 type CreatorApplicationSubmission struct {
 	ApplicationID string
 	BirthDate     time.Time
+}
+
+// CreatorApplicationDetail is the full read aggregate returned by the
+// admin-only GET /creators/applications/{id} endpoint. It bundles the main
+// application row with its three associated collections so the handler can
+// shape one self-contained response — no extra round trips needed.
+type CreatorApplicationDetail struct {
+	ID                string
+	LastName          string
+	FirstName         string
+	MiddleName        *string
+	IIN               string
+	BirthDate         time.Time
+	Phone             string
+	City              string
+	Address           string
+	CategoryOtherText *string
+	Status            string
+	CreatedAt         time.Time
+	UpdatedAt         time.Time
+	Categories        []CreatorApplicationDetailCategory
+	Socials           []CreatorApplicationDetailSocial
+	Consents          []CreatorApplicationDetailConsent
+}
+
+// CreatorApplicationDetailCategory is one category attached to an application,
+// joined against the categories dictionary so the response carries the
+// human-readable name and the catalogue ordering hint.
+type CreatorApplicationDetailCategory struct {
+	Code      string
+	Name      string
+	SortOrder int
+}
+
+// CreatorApplicationDetailSocial is one social account attached to the
+// application — exactly what was persisted at submit time.
+type CreatorApplicationDetailSocial struct {
+	Platform string
+	Handle   string
+}
+
+// CreatorApplicationDetailConsent is one consent record persisted at submit
+// time. The handler returns these in canonical ConsentTypeValues order so
+// admins always see them in the same sequence regardless of DB ordering.
+type CreatorApplicationDetailConsent struct {
+	ConsentType     string
+	AcceptedAt      time.Time
+	DocumentVersion string
+	IPAddress       string
+	UserAgent       string
 }
 
 // DocumentVersionFor returns the document version stamp recorded against the

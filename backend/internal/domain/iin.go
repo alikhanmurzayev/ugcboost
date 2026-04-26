@@ -20,12 +20,13 @@ var (
 	ErrIINChecksum   = errors.New("iin checksum is invalid")
 	ErrIINCentury    = errors.New("iin century code is invalid")
 	ErrIINBirthDate  = errors.New("iin encodes an invalid birth date")
-	ErrIINUnderAge18 = errors.New("applicant is under 18")
+	ErrIINUnderAge = errors.New("applicant is younger than MinCreatorAge")
 )
 
-// MinCreatorAge is the minimum age required to submit a creator application
-// (FR3). Anything stricter (alcohol campaigns etc.) is checked downstream.
-const MinCreatorAge = 18
+// MinCreatorAge is the minimum age required to submit a creator application.
+// Originally 18 per FR3; raised to 21 on 2026-04-25 as the EFW business filter
+// (anything stricter — alcohol campaigns etc. — stays downstream).
+const MinCreatorAge = 21
 
 // ValidateIIN verifies a Kazakhstani IIN: exactly 12 digits, a valid control
 // checksum per the two-pass Republic of Kazakhstan algorithm, a recognisable
@@ -83,11 +84,11 @@ func AgeYearsOn(birth, now time.Time) int {
 	return years
 }
 
-// EnsureAdult returns ErrIINUnderAge18 if the person born on birth would be
+// EnsureAdult returns ErrIINUnderAge if the person born on birth would be
 // younger than MinCreatorAge at the given moment.
 func EnsureAdult(birth, now time.Time) error {
 	if AgeYearsOn(birth, now) < MinCreatorAge {
-		return ErrIINUnderAge18
+		return ErrIINUnderAge
 	}
 	return nil
 }

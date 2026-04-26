@@ -27,9 +27,11 @@ func (f *RepoFactory) NewAuditRepo(db dbutil.DB) AuditRepo {
 	return &auditRepository{db: db}
 }
 
-// NewCategoryRepo creates a category repository bound to the given DB.
-func (f *RepoFactory) NewCategoryRepo(db dbutil.DB) CategoryRepo {
-	return &categoryRepository{db: db}
+// NewDictionaryRepo creates a dictionary repository bound to the given DB.
+// One repo serves every public dictionary (categories, cities, etc.); the
+// service layer chooses the underlying table by passing it as a parameter.
+func (f *RepoFactory) NewDictionaryRepo(db dbutil.DB) DictionaryRepo {
+	return &dictionaryRepository{db: db}
 }
 
 // NewCreatorApplicationRepo creates a creator application repository bound to the given DB.

@@ -3,6 +3,8 @@ package handler
 import (
 	"bytes"
 	"context"
+	"database/sql"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -11,6 +13,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
+	openapi_types "github.com/oapi-codegen/runtime/types"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
@@ -38,18 +41,13 @@ func validRequest() api.CreatorApplicationSubmitRequest {
 			{Platform: api.Instagram, Handle: "@aidana"},
 			{Platform: api.Tiktok, Handle: "aidana_tt"},
 		},
-		Consents: api.ConsentsInput{
-			Processing:  true,
-			ThirdParty:  true,
-			CrossBorder: true,
-			Terms:       true,
-		},
+		AcceptedAll: true,
 	}
 }
 
 func serverWithCreator(t *testing.T, creator CreatorApplicationService, log *logmocks.MockLogger) *Server {
 	t.Helper()
-	return NewServer(nil, nil, nil, nil, creator, ServerConfig{
+	return NewServer(nil, nil, nil, nil, creator, nil, ServerConfig{
 		Version:               "test-version",
 		TelegramBotUsername:   "ugcboost_test_bot",
 		LegalAgreementVersion: "2026-04-20",
@@ -146,9 +144,7 @@ func TestServer_SubmitCreatorApplication(t *testing.T) {
 				{Platform: "instagram", Handle: "@aidana"},
 				{Platform: "tiktok", Handle: "aidana_tt"},
 			},
-			Consents: domain.ConsentsInput{
-				Processing: true, ThirdParty: true, CrossBorder: true, Terms: true,
-			},
+			Consents:         domain.ConsentsInput{AcceptedAll: true},
 			IPAddress:        "203.0.113.7",
 			UserAgent:        "go-test/1",
 			AgreementVersion: "2026-04-20",
@@ -209,7 +205,7 @@ func TestServer_SubmitCreatorApplication(t *testing.T) {
 
 		// Simulate a misconfigured env: slashes and spaces should be escaped
 		// rather than corrupting the URL path.
-		server := NewServer(nil, nil, nil, nil, creator, ServerConfig{
+		server := NewServer(nil, nil, nil, nil, creator, nil, ServerConfig{
 			Version:               "test-version",
 			TelegramBotUsername:   "bad name/bot",
 			LegalAgreementVersion: "2026-04-20",
@@ -235,4 +231,139 @@ func newTestRouterWithClientIP(t *testing.T, s *Server) chi.Router {
 		ErrorHandlerFunc: HandleParamError(logmocks.NewMockLogger(t)),
 	})
 	return r
+}
+
+func serverWithAuthzAndCreator(t *testing.T, authz AuthzService, creator CreatorApplicationService, log *logmocks.MockLogger) *Server {
+	t.Helper()
+	return NewServer(nil, nil, authz, nil, creator, nil, ServerConfig{
+		Version: "test-version",
+	}, log)
+}
+
+func TestServer_GetCreatorApplication(t *testing.T) {
+	t.Parallel()
+
+	const appPath = "/creators/applications/11111111-2222-3333-4444-555555555555"
+
+	t.Run("forbidden for manager", func(t *testing.T) {
+		t.Parallel()
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanViewCreatorApplication(mock.Anything).Return(domain.ErrForbidden)
+
+		router := newTestRouter(t, serverWithAuthzAndCreator(t, authz, nil, logmocks.NewMockLogger(t)))
+		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodGet, appPath, nil)
+		require.Equal(t, http.StatusForbidden, w.Code)
+		require.Equal(t, domain.CodeForbidden, resp.Error.Code)
+	})
+
+	t.Run("not found maps sql.ErrNoRows to 404", func(t *testing.T) {
+		t.Parallel()
+		appID := uuid.MustParse("11111111-2222-3333-4444-555555555555")
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanViewCreatorApplication(mock.Anything).Return(nil)
+		creator := mocks.NewMockCreatorApplicationService(t)
+		creator.EXPECT().GetByID(mock.Anything, appID.String()).
+			Return(nil, sql.ErrNoRows)
+
+		router := newTestRouter(t, serverWithAuthzAndCreator(t, authz, creator, logmocks.NewMockLogger(t)))
+		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodGet, appPath, nil)
+		require.Equal(t, http.StatusNotFound, w.Code)
+		require.Equal(t, domain.CodeNotFound, resp.Error.Code)
+	})
+
+	t.Run("service error returns 500", func(t *testing.T) {
+		t.Parallel()
+		appID := uuid.MustParse("11111111-2222-3333-4444-555555555555")
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanViewCreatorApplication(mock.Anything).Return(nil)
+		creator := mocks.NewMockCreatorApplicationService(t)
+		creator.EXPECT().GetByID(mock.Anything, appID.String()).
+			Return(nil, errors.New("db down"))
+
+		log := logmocks.NewMockLogger(t)
+		expectHandlerUnexpectedErrorLog(log, appPath)
+		router := newTestRouter(t, serverWithAuthzAndCreator(t, authz, creator, log))
+		w, _ := doJSON[api.ErrorResponse](t, router, http.MethodGet, appPath, nil)
+		require.Equal(t, http.StatusInternalServerError, w.Code)
+	})
+
+	t.Run("success returns full aggregate", func(t *testing.T) {
+		t.Parallel()
+		appID := uuid.MustParse("11111111-2222-3333-4444-555555555555")
+		middle := "Ивановна"
+		other := "Авторские ASMR"
+		birth := time.Date(1995, 5, 15, 0, 0, 0, 0, time.UTC)
+		created := time.Date(2026, 4, 20, 18, 0, 0, 0, time.UTC)
+		updated := time.Date(2026, 4, 21, 9, 0, 0, 0, time.UTC)
+		acceptedAt := time.Date(2026, 4, 20, 18, 0, 1, 0, time.UTC)
+
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanViewCreatorApplication(mock.Anything).Return(nil)
+		creator := mocks.NewMockCreatorApplicationService(t)
+		creator.EXPECT().GetByID(mock.Anything, appID.String()).
+			Return(&domain.CreatorApplicationDetail{
+				ID:                appID.String(),
+				LastName:          "Муратова",
+				FirstName:         "Айдана",
+				MiddleName:        &middle,
+				IIN:               "950515312348",
+				BirthDate:         birth,
+				Phone:             "+77001234567",
+				City:              "Алматы",
+				Address:           "ул. Абая 1",
+				CategoryOtherText: &other,
+				Status:            domain.CreatorApplicationStatusPending,
+				CreatedAt:         created,
+				UpdatedAt:         updated,
+				Categories: []domain.CreatorApplicationDetailCategory{
+					{Code: "beauty", Name: "Красота", SortOrder: 10},
+					{Code: "fashion", Name: "Мода", SortOrder: 20},
+				},
+				Socials: []domain.CreatorApplicationDetailSocial{
+					{Platform: domain.SocialPlatformInstagram, Handle: "aidana"},
+					{Platform: domain.SocialPlatformTikTok, Handle: "aidana_tt"},
+				},
+				Consents: []domain.CreatorApplicationDetailConsent{
+					{ConsentType: domain.ConsentTypeProcessing, AcceptedAt: acceptedAt, DocumentVersion: "2026-04-20", IPAddress: "127.0.0.1", UserAgent: "ua/1"},
+					{ConsentType: domain.ConsentTypeThirdParty, AcceptedAt: acceptedAt, DocumentVersion: "2026-04-20", IPAddress: "127.0.0.1", UserAgent: "ua/1"},
+					{ConsentType: domain.ConsentTypeCrossBorder, AcceptedAt: acceptedAt, DocumentVersion: "2026-04-20", IPAddress: "127.0.0.1", UserAgent: "ua/1"},
+					{ConsentType: domain.ConsentTypeTerms, AcceptedAt: acceptedAt, DocumentVersion: "2026-04-20", IPAddress: "127.0.0.1", UserAgent: "ua/1"},
+				},
+			}, nil)
+
+		router := newTestRouter(t, serverWithAuthzAndCreator(t, authz, creator, logmocks.NewMockLogger(t)))
+		w, resp := doJSON[api.GetCreatorApplicationResult](t, router, http.MethodGet, appPath, nil)
+		require.Equal(t, http.StatusOK, w.Code)
+		require.Equal(t, api.GetCreatorApplicationResult{
+			Data: api.CreatorApplicationDetailData{
+				Id:                appID,
+				LastName:          "Муратова",
+				FirstName:         "Айдана",
+				MiddleName:        &middle,
+				Iin:               "950515312348",
+				BirthDate:         openapi_types.Date{Time: birth},
+				Phone:             "+77001234567",
+				City:              "Алматы",
+				Address:           "ул. Абая 1",
+				CategoryOtherText: &other,
+				Status:            api.Pending,
+				CreatedAt:         created,
+				UpdatedAt:         updated,
+				Categories: []api.CreatorApplicationDetailCategory{
+					{Code: "beauty", Name: "Красота", SortOrder: 10},
+					{Code: "fashion", Name: "Мода", SortOrder: 20},
+				},
+				Socials: []api.CreatorApplicationDetailSocial{
+					{Platform: api.Instagram, Handle: "aidana"},
+					{Platform: api.Tiktok, Handle: "aidana_tt"},
+				},
+				Consents: []api.CreatorApplicationDetailConsent{
+					{ConsentType: api.Processing, AcceptedAt: acceptedAt, DocumentVersion: "2026-04-20", IpAddress: "127.0.0.1", UserAgent: "ua/1"},
+					{ConsentType: api.ThirdParty, AcceptedAt: acceptedAt, DocumentVersion: "2026-04-20", IpAddress: "127.0.0.1", UserAgent: "ua/1"},
+					{ConsentType: api.CrossBorder, AcceptedAt: acceptedAt, DocumentVersion: "2026-04-20", IpAddress: "127.0.0.1", UserAgent: "ua/1"},
+					{ConsentType: api.Terms, AcceptedAt: acceptedAt, DocumentVersion: "2026-04-20", IpAddress: "127.0.0.1", UserAgent: "ua/1"},
+				},
+			},
+		}, resp)
+	})
 }

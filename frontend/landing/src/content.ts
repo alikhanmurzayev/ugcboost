@@ -171,46 +171,22 @@ export const steps = {
     "Подача заявки не гарантирует отбор. Результат рассмотрения присылаем в Telegram-боте.",
 };
 
+// Cities and categories live on the backend (GET /dictionaries/{type}) — the
+// landing fetches them on load so brand can edit the catalogue with a single
+// migration. Socials stay hardcoded: each value requires backend code (handle
+// regex, future LiveDune integration), it isn't a simple lookup.
 export const formBlock = {
   title: "Присоединяйся к UGC boost",
   subtitle:
     "Ближайшая возможность — EURASIAN FASHION WEEK 13–14 мая в Алматы.\nДальше — новые коллаборации с брендами на платформе.",
   submitLabel: "Отправить заявку",
-  cities: [
-    "Алматы",
-    "Астана",
-    "Шымкент",
-    "Караганда",
-    "Актобе",
-    "Тараз",
-    "Павлодар",
-    "Усть-Каменогорск",
-    "Семей",
-    "Атырау",
-    "Костанай",
-    "Кызылорда",
-    "Уральск",
-    "Петропавловск",
-    "Актау",
-    "Темиртау",
-    "Туркестан",
-    "Другой",
-  ],
-  categories: [
-    "Мода / Стиль",
-    "Бьюти (макияж, уход)",
-    "Лайфстайл",
-    "Еда / Рестораны",
-    "Путешествия",
-    "Фитнес / Здоровье / ЗОЖ",
-    "Мама и дети / Семья",
-    "Авто",
-    "Тех / Гаджеты",
-    "Дом / Интерьер / DIY",
-    "Животные",
-    "Другое",
-  ],
   socials: ["Instagram", "TikTok", "Threads"],
+  // Map UI labels → backend social_platform enum values.
+  socialPlatformCodes: {
+    Instagram: "instagram",
+    TikTok: "tiktok",
+    Threads: "threads",
+  } as Record<string, string>,
 };
 
 export const faq = {
@@ -248,9 +224,12 @@ export const footer = {
   copyright: "© 2026 UGC boost",
 };
 
+// botLink is now resolved from the API response (data.telegramBotUrl) — keep
+// the labels here. If the backend returns an empty URL we hide the CTA rather
+// than substitute a fallback (env validation on backend boot makes that case
+// effectively unreachable).
 export const successScreen = {
   title: "Заявка отправлена",
   text: "Следующий шаг — Telegram-бот. Переходи прямо сейчас, чтобы не пропустить результаты отбора и получить доступ к платформе.",
   cta: "Перейти в Telegram-бот →",
-  botLink: "https://t.me/ugcboost_bot",
 };

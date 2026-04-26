@@ -30,6 +30,7 @@ type CreatorApplicationSocialRow struct {
 }
 
 var (
+	creatorApplicationSocialSelectColumns = sortColumns(stom.MustNewStom(CreatorApplicationSocialRow{}).SetTag(string(tagSelect)).TagValues())
 	creatorApplicationSocialInsertMapper  = stom.MustNewStom(CreatorApplicationSocialRow{}).SetTag(string(tagInsert))
 	creatorApplicationSocialInsertColumns = sortColumns(creatorApplicationSocialInsertMapper.TagValues())
 )
@@ -38,6 +39,7 @@ var (
 // application. Multiple handles on the same platform are legal per domain rules.
 type CreatorApplicationSocialRepo interface {
 	InsertMany(ctx context.Context, rows []CreatorApplicationSocialRow) error
+	ListByApplicationID(ctx context.Context, applicationID string) ([]*CreatorApplicationSocialRow, error)
 }
 
 type creatorApplicationSocialRepository struct {
@@ -56,4 +58,14 @@ func (r *creatorApplicationSocialRepository) InsertMany(ctx context.Context, row
 	}
 	_, err := dbutil.Exec(ctx, r.db, qb)
 	return err
+}
+
+// ListByApplicationID returns every social account row tied to the given
+// application, sorted by (platform, handle) so the response is deterministic.
+func (r *creatorApplicationSocialRepository) ListByApplicationID(ctx context.Context, applicationID string) ([]*CreatorApplicationSocialRow, error) {
+	q := sq.Select(creatorApplicationSocialSelectColumns...).
+		From(TableCreatorApplicationSocials).
+		Where(sq.Eq{CreatorApplicationSocialColumnApplicationID: applicationID}).
+		OrderBy(CreatorApplicationSocialColumnPlatform+" ASC", CreatorApplicationSocialColumnHandle+" ASC")
+	return dbutil.Many[CreatorApplicationSocialRow](ctx, r.db, q)
 }

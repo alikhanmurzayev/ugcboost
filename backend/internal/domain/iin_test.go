@@ -130,17 +130,17 @@ func TestAgeYearsOn(t *testing.T) {
 func TestEnsureAdult(t *testing.T) {
 	t.Parallel()
 
-	t.Run("under 18 by one day", func(t *testing.T) {
+	t.Run("under MinCreatorAge by one day", func(t *testing.T) {
 		t.Parallel()
-		birth := time.Date(2008, time.April, 21, 0, 0, 0, 0, time.UTC)
+		birth := time.Date(2005, time.April, 21, 0, 0, 0, 0, time.UTC)
 		now := time.Date(2026, time.April, 20, 0, 0, 0, 0, time.UTC)
 		err := EnsureAdult(birth, now)
-		require.ErrorIs(t, err, ErrIINUnderAge18)
+		require.ErrorIs(t, err, ErrIINUnderAge)
 	})
 
-	t.Run("exactly 18 today", func(t *testing.T) {
+	t.Run("exactly MinCreatorAge today", func(t *testing.T) {
 		t.Parallel()
-		birth := time.Date(2008, time.April, 20, 0, 0, 0, 0, time.UTC)
+		birth := time.Date(2005, time.April, 20, 0, 0, 0, 0, time.UTC)
 		now := time.Date(2026, time.April, 20, 0, 0, 0, 0, time.UTC)
 		require.NoError(t, EnsureAdult(birth, now))
 	})
@@ -160,5 +160,5 @@ func TestSentinels(t *testing.T) {
 	require.False(t, errors.Is(ErrIINFormat, ErrIINChecksum))
 	require.False(t, errors.Is(ErrIINChecksum, ErrIINBirthDate))
 	require.False(t, errors.Is(ErrIINBirthDate, ErrIINCentury))
-	require.False(t, errors.Is(ErrIINCentury, ErrIINUnderAge18))
+	require.False(t, errors.Is(ErrIINCentury, ErrIINUnderAge))
 }

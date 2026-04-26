@@ -23,37 +23,39 @@ const CreatorApplicationsIINActiveIdx = "creator_applications_iin_active_idx"
 
 // Creator applications table and column names.
 const (
-	TableCreatorApplications            = "creator_applications"
-	CreatorApplicationColumnID          = "id"
-	CreatorApplicationColumnLastName    = "last_name"
-	CreatorApplicationColumnFirstName   = "first_name"
-	CreatorApplicationColumnMiddleName  = "middle_name"
-	CreatorApplicationColumnIIN         = "iin"
-	CreatorApplicationColumnBirthDate   = "birth_date"
-	CreatorApplicationColumnPhone       = "phone"
-	CreatorApplicationColumnCity        = "city"
-	CreatorApplicationColumnAddress     = "address"
-	CreatorApplicationColumnStatus      = "status"
-	CreatorApplicationColumnCreatedAt   = "created_at"
-	CreatorApplicationColumnUpdatedAt   = "updated_at"
+	TableCreatorApplications                  = "creator_applications"
+	CreatorApplicationColumnID                = "id"
+	CreatorApplicationColumnLastName          = "last_name"
+	CreatorApplicationColumnFirstName         = "first_name"
+	CreatorApplicationColumnMiddleName        = "middle_name"
+	CreatorApplicationColumnIIN               = "iin"
+	CreatorApplicationColumnBirthDate         = "birth_date"
+	CreatorApplicationColumnPhone             = "phone"
+	CreatorApplicationColumnCity              = "city"
+	CreatorApplicationColumnAddress           = "address"
+	CreatorApplicationColumnCategoryOtherText = "category_other_text"
+	CreatorApplicationColumnStatus            = "status"
+	CreatorApplicationColumnCreatedAt         = "created_at"
+	CreatorApplicationColumnUpdatedAt         = "updated_at"
 )
 
 // CreatorApplicationRow maps to the creator_applications table. Status is not
 // tagged for insert — the DB default 'pending' is used and any future status
 // change is handled by dedicated moderation endpoints.
 type CreatorApplicationRow struct {
-	ID         string    `db:"id"`
-	LastName   string    `db:"last_name"   insert:"last_name"`
-	FirstName  string    `db:"first_name"  insert:"first_name"`
-	MiddleName *string   `db:"middle_name" insert:"middle_name"`
-	IIN        string    `db:"iin"         insert:"iin"`
-	BirthDate  time.Time `db:"birth_date"  insert:"birth_date"`
-	Phone      string    `db:"phone"       insert:"phone"`
-	City       string    `db:"city"        insert:"city"`
-	Address    string    `db:"address"     insert:"address"`
-	Status     string    `db:"status"`
-	CreatedAt  time.Time `db:"created_at"`
-	UpdatedAt  time.Time `db:"updated_at"`
+	ID                string    `db:"id"`
+	LastName          string    `db:"last_name"           insert:"last_name"`
+	FirstName         string    `db:"first_name"          insert:"first_name"`
+	MiddleName        *string   `db:"middle_name"         insert:"middle_name"`
+	IIN               string    `db:"iin"                 insert:"iin"`
+	BirthDate         time.Time `db:"birth_date"          insert:"birth_date"`
+	Phone             string    `db:"phone"               insert:"phone"`
+	City              string    `db:"city"                insert:"city"`
+	Address           string    `db:"address"             insert:"address"`
+	CategoryOtherText *string   `db:"category_other_text" insert:"category_other_text"`
+	Status            string    `db:"status"`
+	CreatedAt         time.Time `db:"created_at"`
+	UpdatedAt         time.Time `db:"updated_at"`
 }
 
 var (
@@ -66,6 +68,7 @@ var (
 type CreatorApplicationRepo interface {
 	HasActiveByIIN(ctx context.Context, iin string) (bool, error)
 	Create(ctx context.Context, row CreatorApplicationRow) (*CreatorApplicationRow, error)
+	GetByID(ctx context.Context, id string) (*CreatorApplicationRow, error)
 	DeleteForTests(ctx context.Context, id string) error
 }
 
@@ -111,6 +114,16 @@ func (r *creatorApplicationRepository) Create(ctx context.Context, row CreatorAp
 		return nil, err
 	}
 	return result, nil
+}
+
+// GetByID returns the application row by id. dbutil.One propagates the
+// underlying sql.ErrNoRows (wrapped) when the row is missing, which the
+// service forwards untouched so the handler can map it to 404 via errors.Is.
+func (r *creatorApplicationRepository) GetByID(ctx context.Context, id string) (*CreatorApplicationRow, error) {
+	q := sq.Select(creatorApplicationSelectColumns...).
+		From(TableCreatorApplications).
+		Where(sq.Eq{CreatorApplicationColumnID: id})
+	return dbutil.One[CreatorApplicationRow](ctx, r.db, q)
 }
 
 // DeleteForTests hard-deletes an application by id. Related rows in

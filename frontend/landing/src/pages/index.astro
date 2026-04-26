@@ -9,6 +9,7 @@ import {
   formBlock,
   faq,
   footer,
+  successScreen,
 } from "../content";
 ---
 
@@ -21,6 +22,8 @@ import {
       rel="stylesheet"
       href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Archivo+Black&display=swap"
     />
+    <!-- Runtime config (apiUrl) injected by deploy. Must load before form scripts. -->
+    <script is:inline src="/config.js"></script>
     <style>
       body {
         font-family: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
@@ -370,6 +373,7 @@ import {
 
         <form
           id="application-form"
+          data-testid="application-form"
           class="mt-8 space-y-5 rounded-2xl border-2 border-neutral-950 bg-white p-5 text-neutral-950 shadow-[6px_6px_0_0_#0a0a0a] md:mt-12 md:rounded-3xl md:p-10 md:shadow-[10px_10px_0_0_#0a0a0a]"
         >
           <div class="grid gap-4 md:grid-cols-3">
@@ -379,6 +383,7 @@ import {
                 required
                 type="text"
                 name="lastName"
+                data-testid="last-name-input"
                 class="mt-1.5 w-full border-b-2 border-neutral-950 bg-transparent py-2 text-base outline-none focus:border-pink-500 md:mt-2"
               />
             </label>
@@ -388,15 +393,16 @@ import {
                 required
                 type="text"
                 name="firstName"
+                data-testid="first-name-input"
                 class="mt-1.5 w-full border-b-2 border-neutral-950 bg-transparent py-2 text-base outline-none focus:border-pink-500 md:mt-2"
               />
             </label>
             <label class="block">
-              <span class="text-[11px] font-bold uppercase tracking-wider md:text-sm">Отчество *</span>
+              <span class="text-[11px] font-bold uppercase tracking-wider md:text-sm">Отчество</span>
               <input
-                required
                 type="text"
                 name="middleName"
+                data-testid="middle-name-input"
                 class="mt-1.5 w-full border-b-2 border-neutral-950 bg-transparent py-2 text-base outline-none focus:border-pink-500 md:mt-2"
               />
             </label>
@@ -410,6 +416,7 @@ import {
               required
               type="tel"
               name="phone"
+              data-testid="phone-input"
               placeholder="+7 (___) ___-__-__"
               class="mt-1.5 w-full border-b-2 border-neutral-950 bg-transparent py-2 text-base outline-none focus:border-pink-500 md:mt-2"
             />
@@ -424,9 +431,10 @@ import {
               required
               type="text"
               name="iin"
+              data-testid="iin-input"
               inputmode="numeric"
-              pattern="\d{12}"
               maxlength="12"
+              minlength="12"
               placeholder="____________"
               class="mt-1.5 w-full border-b-2 border-neutral-950 bg-transparent py-2 text-base outline-none focus:border-pink-500 md:mt-2"
             />
@@ -439,11 +447,12 @@ import {
             <span class="text-[11px] font-bold uppercase tracking-wider md:text-sm">Город проживания *</span>
             <select
               required
+              id="city-select"
+              data-testid="city-select"
               name="city"
               class="mt-1.5 w-full border-b-2 border-neutral-950 bg-transparent py-2 text-base outline-none focus:border-pink-500 md:mt-2"
             >
-              <option value="">Выбери город</option>
-              {formBlock.cities.map((c) => <option value={c}>{c}</option>)}
+              <option value="">Загрузка городов…</option>
             </select>
           </label>
 
@@ -459,14 +468,16 @@ import {
                         type="checkbox"
                         class="social-checkbox h-4 w-4 accent-pink-500"
                         data-social={s}
+                        data-testid={`social-checkbox-${s.toLowerCase()}`}
                       />
                       <span>{s}</span>
                     </label>
                     <input
-                      type="url"
-                      placeholder={`Ссылка на ${s}`}
+                      type="text"
+                      placeholder={`@username в ${s}`}
                       disabled
                       data-social-input={s}
+                      data-testid={`social-input-${s.toLowerCase()}`}
                       class="hidden flex-1 border-b-2 border-neutral-950 bg-transparent py-2 text-base outline-none transition focus:border-pink-500 md:text-sm"
                     />
                   </div>
@@ -477,25 +488,16 @@ import {
 
           <fieldset>
             <legend class="text-[11px] font-bold uppercase tracking-wider md:text-sm">Категория блога (до 3) *</legend>
-            <div class="mt-3 flex flex-wrap gap-2">
-              {
-                formBlock.categories.map((c) => (
-                  <label class="inline-flex cursor-pointer items-center gap-2 rounded-full border-2 border-neutral-950 bg-white px-3 py-1.5 text-xs font-semibold transition hover:bg-pink-50 has-[:checked]:bg-pink-400 has-[:checked]:text-white md:px-4 md:py-2 md:text-sm">
-                    <input
-                      type="checkbox"
-                      class={`category-checkbox hidden ${c === "Другое" ? "category-other" : ""}`}
-                      value={c}
-                    />
-                    <span>{c}</span>
-                  </label>
-                ))
-              }
+            <div id="category-options" class="mt-3 flex flex-wrap gap-2">
+              <span class="text-xs text-neutral-500">Загрузка категорий…</span>
             </div>
             <input
               id="category-other-input"
+              data-testid="category-other-input"
               type="text"
-              name="categoryOther"
+              name="categoryOtherText"
               placeholder="Укажи категорию"
+              maxlength="200"
               disabled
               class="mt-3 hidden w-full border-b-2 border-neutral-950 bg-transparent py-2 text-base outline-none focus:border-pink-500 disabled:cursor-not-allowed"
             />
@@ -503,37 +505,35 @@ import {
 
           <div class="space-y-3 border-t-2 border-neutral-950 pt-5 md:pt-6">
             <label class="flex items-start gap-3">
-              <input required type="checkbox" class="mt-1 h-4 w-4 accent-pink-500" />
+              <input required id="consent-all" data-testid="consent-all" name="acceptedAll" type="checkbox" class="mt-1 h-4 w-4 accent-pink-500" />
               <span class="text-sm">
-                Я принимаю условия{" "}
+                Я принимаю{" "}
                 <a
                   href="/legal/user-agreement"
                   target="_blank"
                   rel="noopener noreferrer"
                   class="font-bold underline"
                 >
-                  Пользовательского соглашения
-                </a>
-              </span>
-            </label>
-            <label class="flex items-start gap-3">
-              <input required type="checkbox" class="mt-1 h-4 w-4 accent-pink-500" />
-              <span class="text-sm">
-                Даю согласие на обработку персональных данных в соответствии с{" "}
+                  Пользовательское соглашение
+                </a>{" "}
+                и даю согласие на обработку персональных данных, включая трансграничную передачу и передачу третьим лицам, в соответствии с{" "}
                 <a
                   href="/legal/privacy-policy"
                   target="_blank"
                   rel="noopener noreferrer"
                   class="font-bold underline"
                 >
-                  Политикой
+                  Политикой конфиденциальности
                 </a>
               </span>
             </label>
           </div>
 
+          <p id="form-error" data-testid="form-error" class="hidden text-sm font-semibold text-red-600"></p>
+
           <button
             type="submit"
+            data-testid="submit-button"
             class="shimmer-btn display w-full rounded-full bg-pink-400 px-6 py-4 text-sm uppercase tracking-wider text-white transition hover:bg-pink-500 md:px-10 md:py-5 md:text-base"
           >
             <span>{formBlock.submitLabel}</span>
@@ -617,14 +617,42 @@ import {
       </div>
     </footer>
 
-    <script>
-      document.querySelectorAll<HTMLInputElement>(".social-checkbox").forEach((cb) => {
+    <!-- Success screen, hidden until submit succeeds. -->
+    <section
+      id="success-screen"
+      data-testid="success-screen"
+      class="fixed inset-0 z-50 hidden items-center justify-center bg-pink-500 p-6 text-white"
+    >
+      <div class="max-w-md text-center">
+        <h2 class="display text-3xl uppercase leading-tight md:text-5xl">{successScreen.title}</h2>
+        <p class="mt-4 text-base text-white/90 md:text-lg">{successScreen.text}</p>
+        <a
+          id="success-cta"
+          data-testid="success-cta"
+          href="#"
+          class="display mt-6 inline-block rounded-full bg-neutral-950 px-6 py-3 text-sm uppercase tracking-wider text-white hover:bg-neutral-800 md:px-10 md:py-4 md:text-base"
+        >
+          {successScreen.cta}
+        </a>
+      </div>
+    </section>
+
+    <script
+      define:vars={{
+        socialCodeMap: formBlock.socialPlatformCodes,
+        otherCategoryCode: "other",
+        maxCategories: 3,
+      }}
+    >
+      const config = window.__RUNTIME_CONFIG__ ?? {};
+      const apiUrl = (config.apiUrl ?? "").replace(/\/$/, "");
+
+      // Wire the social checkboxes (toggle the matching handle input).
+      document.querySelectorAll(".social-checkbox").forEach((cb) => {
         cb.addEventListener("change", () => {
           const name = cb.dataset.social;
           if (!name) return;
-          const input = document.querySelector<HTMLInputElement>(
-            `[data-social-input="${name}"]`,
-          );
+          const input = document.querySelector(`[data-social-input="${name}"]`);
           if (!input) return;
           if (cb.checked) {
             input.classList.remove("hidden");
@@ -640,34 +668,176 @@ import {
         });
       });
 
-      const categoryBoxes = document.querySelectorAll<HTMLInputElement>(".category-checkbox");
-      const otherInput = document.getElementById("category-other-input") as HTMLInputElement | null;
-      categoryBoxes.forEach((cb) => {
-        cb.addEventListener("change", () => {
-          const checked = Array.from(categoryBoxes).filter((c) => c.checked);
-          categoryBoxes.forEach((c) => {
-            if (!c.checked && checked.length >= 3) c.disabled = true;
-            else c.disabled = false;
-          });
+      const categoryContainer = document.getElementById("category-options");
+      const otherInput = document.getElementById("category-other-input");
+      const citySelect = document.getElementById("city-select");
+      const formError = document.getElementById("form-error");
 
-          if (cb.classList.contains("category-other") && otherInput) {
-            if (cb.checked) {
-              otherInput.classList.remove("hidden");
-              otherInput.disabled = false;
-              otherInput.required = true;
-            } else {
-              otherInput.classList.add("hidden");
-              otherInput.disabled = true;
-              otherInput.required = false;
-              otherInput.value = "";
+      function showFormError(msg) {
+        if (!formError) return;
+        formError.textContent = msg;
+        formError.classList.remove("hidden");
+      }
+      function clearFormError() {
+        if (!formError) return;
+        formError.textContent = "";
+        formError.classList.add("hidden");
+      }
+
+      function wireCategoryCheckboxes() {
+        const boxes = document.querySelectorAll(".category-checkbox");
+        boxes.forEach((cb) => {
+          cb.addEventListener("change", () => {
+            const checked = Array.from(boxes).filter((c) => c.checked);
+            boxes.forEach((c) => {
+              c.disabled = !c.checked && checked.length >= maxCategories;
+            });
+            if (cb.value === otherCategoryCode && otherInput) {
+              if (cb.checked) {
+                otherInput.classList.remove("hidden");
+                otherInput.disabled = false;
+                otherInput.required = true;
+              } else {
+                otherInput.classList.add("hidden");
+                otherInput.disabled = true;
+                otherInput.required = false;
+                otherInput.value = "";
+              }
             }
-          }
+          });
         });
-      });
+      }
 
-      document.getElementById("application-form")?.addEventListener("submit", (e) => {
+      async function loadDictionary(type) {
+        const res = await fetch(`${apiUrl}/dictionaries/${type}`);
+        if (!res.ok) throw new Error(`dictionaries/${type} returned ${res.status}`);
+        const body = await res.json();
+        return body?.data?.items ?? [];
+      }
+
+      async function bootDictionaries() {
+        try {
+          const [cities, categories] = await Promise.all([
+            loadDictionary("cities"),
+            loadDictionary("categories"),
+          ]);
+          if (citySelect) {
+            citySelect.innerHTML =
+              '<option value="">Выбери город</option>' +
+              cities.map((c) => `<option value="${c.code}">${c.name}</option>`).join("");
+          }
+          if (categoryContainer) {
+            categoryContainer.innerHTML = categories
+              .map(
+                (c) => `
+                <label data-testid="category-label-${c.code}" class="inline-flex cursor-pointer items-center gap-2 rounded-full border-2 border-neutral-950 bg-white px-3 py-1.5 text-xs font-semibold transition hover:bg-pink-50 has-[:checked]:bg-pink-400 has-[:checked]:text-white md:px-4 md:py-2 md:text-sm">
+                  <input type="checkbox" class="category-checkbox hidden" data-testid="category-checkbox-${c.code}" value="${c.code}" />
+                  <span>${c.name}</span>
+                </label>`,
+              )
+              .join("");
+            wireCategoryCheckboxes();
+          }
+        } catch (err) {
+          console.error(err);
+          showFormError("Не удалось загрузить справочники. Попробуйте обновить страницу.");
+        }
+      }
+      bootDictionaries();
+
+      function collectFormData(form) {
+        const fd = new FormData(form);
+        const middleNameRaw = fd.get("middleName");
+        const middleName = typeof middleNameRaw === "string" && middleNameRaw.trim() !== ""
+          ? middleNameRaw.trim()
+          : null;
+
+        const categories = Array.from(
+          document.querySelectorAll(".category-checkbox:checked"),
+        ).map((c) => c.value);
+
+        const otherTextRaw = fd.get("categoryOtherText");
+        const categoryOtherText =
+          categories.includes(otherCategoryCode) && typeof otherTextRaw === "string"
+            ? otherTextRaw.trim()
+            : null;
+
+        const socials = Array.from(document.querySelectorAll(".social-checkbox:checked"))
+          .map((cb) => {
+            const name = cb.dataset.social;
+            const code = name ? socialCodeMap[name] : null;
+            const input = name
+              ? document.querySelector(`[data-social-input="${name}"]`)
+              : null;
+            const handle = input ? input.value.trim() : "";
+            return code && handle ? { platform: code, handle } : null;
+          })
+          .filter(Boolean);
+
+        return {
+          lastName: String(fd.get("lastName") ?? "").trim(),
+          firstName: String(fd.get("firstName") ?? "").trim(),
+          middleName,
+          iin: String(fd.get("iin") ?? "").trim(),
+          phone: String(fd.get("phone") ?? "").trim(),
+          city: String(fd.get("city") ?? "").trim(),
+          // The legal/business address is collected on a later step in the bot;
+          // for the landing form we send the city as a placeholder so the
+          // server's required field stays satisfied.
+          address: String(fd.get("city") ?? "").trim(),
+          categories,
+          categoryOtherText,
+          socials,
+          acceptedAll: fd.get("acceptedAll") === "on",
+        };
+      }
+
+      function showSuccess(botUrl) {
+        const screen = document.getElementById("success-screen");
+        const cta = document.getElementById("success-cta");
+        if (cta) {
+          if (typeof botUrl === "string" && botUrl.length > 0) {
+            cta.setAttribute("href", botUrl);
+            cta.classList.remove("hidden");
+          } else {
+            // Empty botUrl is unexpected (backend env-checks at boot). Hide the
+            // CTA rather than guess a URL — Q5 in sync-with-landing-plan.md.
+            cta.classList.add("hidden");
+          }
+        }
+        if (screen) {
+          screen.classList.remove("hidden");
+          screen.classList.add("flex");
+        }
+      }
+
+      const form = document.getElementById("application-form");
+      form?.addEventListener("submit", async (e) => {
         e.preventDefault();
-        alert("Заявка отправлена (демо)\n\nВ проде тут успех-экран с CTA в Telegram-бот.");
+        clearFormError();
+        const submitBtn = form.querySelector('button[type="submit"]');
+        if (submitBtn) submitBtn.setAttribute("disabled", "true");
+
+        try {
+          const payload = collectFormData(form);
+          const res = await fetch(`${apiUrl}/creators/applications`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+          const body = await res.json().catch(() => ({}));
+          if (res.ok) {
+            showSuccess(body?.data?.telegramBotUrl);
+          } else {
+            const msg = body?.error?.message ?? "Не удалось отправить заявку";
+            showFormError(msg);
+          }
+        } catch (err) {
+          console.error(err);
+          showFormError("Сеть недоступна. Попробуйте позже.");
+        } finally {
+          if (submitBtn) submitBtn.removeAttribute("disabled");
+        }
       });
     </script>
   </body>

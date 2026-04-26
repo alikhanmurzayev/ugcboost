@@ -68,46 +68,49 @@ func TestCreatorApplicationRepository_HasActiveByIIN(t *testing.T) {
 func TestCreatorApplicationRepository_Create(t *testing.T) {
 	t.Parallel()
 
-	const sqlStmt = "INSERT INTO creator_applications (address,birth_date,city,first_name,iin,last_name,middle_name,phone) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING address, birth_date, city, created_at, first_name, id, iin, last_name, middle_name, phone, status, updated_at"
+	const sqlStmt = "INSERT INTO creator_applications (address,birth_date,category_other_text,city,first_name,iin,last_name,middle_name,phone) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING address, birth_date, category_other_text, city, created_at, first_name, id, iin, last_name, middle_name, phone, status, updated_at"
 
 	t.Run("success returns persisted row", func(t *testing.T) {
 		t.Parallel()
 		mock := newPgxmock(t)
 		repo := &creatorApplicationRepository{db: mock}
 		middle := "Ивановна"
+		other := "Авторские ASMR-видео"
 		birth := time.Date(1995, 5, 15, 0, 0, 0, 0, time.UTC)
 		created := time.Date(2026, 4, 20, 18, 0, 0, 0, time.UTC)
 
 		mock.ExpectQuery(sqlStmt).
-			WithArgs("ул. Абая 1", birth, "Алматы", "Айдана", "950515312348", "Муратова", "Ивановна", "+77001234567").
-			WillReturnRows(pgxmock.NewRows([]string{"address", "birth_date", "city", "created_at", "first_name", "id", "iin", "last_name", "middle_name", "phone", "status", "updated_at"}).
-				AddRow("ул. Абая 1", birth, "Алматы", created, "Айдана", "app-1", "950515312348", "Муратова", &middle, "+77001234567", "pending", created))
+			WithArgs("ул. Абая 1", birth, "Авторские ASMR-видео", "Алматы", "Айдана", "950515312348", "Муратова", "Ивановна", "+77001234567").
+			WillReturnRows(pgxmock.NewRows([]string{"address", "birth_date", "category_other_text", "city", "created_at", "first_name", "id", "iin", "last_name", "middle_name", "phone", "status", "updated_at"}).
+				AddRow("ул. Абая 1", birth, &other, "Алматы", created, "Айдана", "app-1", "950515312348", "Муратова", &middle, "+77001234567", "pending", created))
 
 		row := CreatorApplicationRow{
-			LastName:   "Муратова",
-			FirstName:  "Айдана",
-			MiddleName: &middle,
-			IIN:        "950515312348",
-			BirthDate:  birth,
-			Phone:      "+77001234567",
-			City:       "Алматы",
-			Address:    "ул. Абая 1",
+			LastName:          "Муратова",
+			FirstName:         "Айдана",
+			MiddleName:        &middle,
+			IIN:               "950515312348",
+			BirthDate:         birth,
+			Phone:             "+77001234567",
+			City:              "Алматы",
+			Address:           "ул. Абая 1",
+			CategoryOtherText: &other,
 		}
 		got, err := repo.Create(context.Background(), row)
 		require.NoError(t, err)
 		require.Equal(t, &CreatorApplicationRow{
-			ID:         "app-1",
-			LastName:   "Муратова",
-			FirstName:  "Айдана",
-			MiddleName: &middle,
-			IIN:        "950515312348",
-			BirthDate:  birth,
-			Phone:      "+77001234567",
-			City:       "Алматы",
-			Address:    "ул. Абая 1",
-			Status:     "pending",
-			CreatedAt:  created,
-			UpdatedAt:  created,
+			ID:                "app-1",
+			LastName:          "Муратова",
+			FirstName:         "Айдана",
+			MiddleName:        &middle,
+			IIN:               "950515312348",
+			BirthDate:         birth,
+			Phone:             "+77001234567",
+			City:              "Алматы",
+			Address:           "ул. Абая 1",
+			CategoryOtherText: &other,
+			Status:            "pending",
+			CreatedAt:         created,
+			UpdatedAt:         created,
 		}, got)
 	})
 
@@ -118,7 +121,7 @@ func TestCreatorApplicationRepository_Create(t *testing.T) {
 		birth := time.Date(1995, 5, 15, 0, 0, 0, 0, time.UTC)
 
 		mock.ExpectQuery(sqlStmt).
-			WithArgs("ул. Абая 1", birth, "Алматы", "Айдана", "950515312348", "Муратова", nil, "+77001234567").
+			WithArgs("ул. Абая 1", birth, nil, "Алматы", "Айдана", "950515312348", "Муратова", nil, "+77001234567").
 			WillReturnError(&pgconn.PgError{Code: "23505", ConstraintName: CreatorApplicationsIINActiveIdx})
 
 		_, err := repo.Create(context.Background(), CreatorApplicationRow{
@@ -140,7 +143,7 @@ func TestCreatorApplicationRepository_Create(t *testing.T) {
 		birth := time.Date(1995, 5, 15, 0, 0, 0, 0, time.UTC)
 
 		mock.ExpectQuery(sqlStmt).
-			WithArgs("ул. Абая 1", birth, "Алматы", "Айдана", "950515312348", "Муратова", nil, "+77001234567").
+			WithArgs("ул. Абая 1", birth, nil, "Алматы", "Айдана", "950515312348", "Муратова", nil, "+77001234567").
 			WillReturnError(&pgconn.PgError{Code: "23505", ConstraintName: "some_other_idx"})
 
 		_, err := repo.Create(context.Background(), CreatorApplicationRow{
@@ -154,6 +157,72 @@ func TestCreatorApplicationRepository_Create(t *testing.T) {
 		})
 		require.Error(t, err)
 		require.NotErrorIs(t, err, domain.ErrCreatorApplicationDuplicate)
+	})
+}
+
+func TestCreatorApplicationRepository_GetByID(t *testing.T) {
+	t.Parallel()
+
+	const sqlStmt = "SELECT address, birth_date, category_other_text, city, created_at, first_name, id, iin, last_name, middle_name, phone, status, updated_at FROM creator_applications WHERE id = $1"
+
+	t.Run("success maps row to struct", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &creatorApplicationRepository{db: mock}
+		middle := "Ивановна"
+		other := "Авторские ASMR"
+		birth := time.Date(1995, 5, 15, 0, 0, 0, 0, time.UTC)
+		created := time.Date(2026, 4, 20, 18, 0, 0, 0, time.UTC)
+		updated := time.Date(2026, 4, 21, 9, 0, 0, 0, time.UTC)
+
+		mock.ExpectQuery(sqlStmt).
+			WithArgs("app-1").
+			WillReturnRows(pgxmock.NewRows([]string{"address", "birth_date", "category_other_text", "city", "created_at", "first_name", "id", "iin", "last_name", "middle_name", "phone", "status", "updated_at"}).
+				AddRow("ул. Абая 1", birth, &other, "Алматы", created, "Айдана", "app-1", "950515312348", "Муратова", &middle, "+77001234567", "pending", updated))
+
+		got, err := repo.GetByID(context.Background(), "app-1")
+		require.NoError(t, err)
+		require.Equal(t, &CreatorApplicationRow{
+			ID:                "app-1",
+			LastName:          "Муратова",
+			FirstName:         "Айдана",
+			MiddleName:        &middle,
+			IIN:               "950515312348",
+			BirthDate:         birth,
+			Phone:             "+77001234567",
+			City:              "Алматы",
+			Address:           "ул. Абая 1",
+			CategoryOtherText: &other,
+			Status:            "pending",
+			CreatedAt:         created,
+			UpdatedAt:         updated,
+		}, got)
+	})
+
+	t.Run("propagates sql.ErrNoRows", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &creatorApplicationRepository{db: mock}
+
+		mock.ExpectQuery(sqlStmt).
+			WithArgs("missing").
+			WillReturnError(pgx.ErrNoRows)
+
+		_, err := repo.GetByID(context.Background(), "missing")
+		require.ErrorIs(t, err, sql.ErrNoRows)
+	})
+
+	t.Run("propagates other errors", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &creatorApplicationRepository{db: mock}
+
+		mock.ExpectQuery(sqlStmt).
+			WithArgs("app-1").
+			WillReturnError(errors.New("db down"))
+
+		_, err := repo.GetByID(context.Background(), "app-1")
+		require.ErrorContains(t, err, "db down")
 	})
 }
 

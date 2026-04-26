@@ -42,12 +42,12 @@ func TestRepoFactory(t *testing.T) {
 		require.Same(t, db, concrete.db)
 	})
 
-	t.Run("NewCategoryRepo returns CategoryRepo bound to db", func(t *testing.T) {
+	t.Run("NewDictionaryRepo returns DictionaryRepo bound to db", func(t *testing.T) {
 		t.Parallel()
-		repo := factory.NewCategoryRepo(db)
+		repo := factory.NewDictionaryRepo(db)
 		require.NotNil(t, repo)
-		concrete, ok := repo.(*categoryRepository)
-		require.True(t, ok, "factory returns *categoryRepository")
+		concrete, ok := repo.(*dictionaryRepository)
+		require.True(t, ok, "factory returns *dictionaryRepository")
 		require.Same(t, db, concrete.db)
 	})
 

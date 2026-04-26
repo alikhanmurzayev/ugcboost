@@ -36,6 +36,7 @@ type CreatorApplicationConsentRow struct {
 }
 
 var (
+	creatorApplicationConsentSelectColumns = sortColumns(stom.MustNewStom(CreatorApplicationConsentRow{}).SetTag(string(tagSelect)).TagValues())
 	creatorApplicationConsentInsertMapper  = stom.MustNewStom(CreatorApplicationConsentRow{}).SetTag(string(tagInsert))
 	creatorApplicationConsentInsertColumns = sortColumns(creatorApplicationConsentInsertMapper.TagValues())
 )
@@ -44,6 +45,7 @@ var (
 // application) captured at submission time.
 type CreatorApplicationConsentRepo interface {
 	InsertMany(ctx context.Context, rows []CreatorApplicationConsentRow) error
+	ListByApplicationID(ctx context.Context, applicationID string) ([]*CreatorApplicationConsentRow, error)
 }
 
 type creatorApplicationConsentRepository struct {
@@ -62,4 +64,14 @@ func (r *creatorApplicationConsentRepository) InsertMany(ctx context.Context, ro
 	}
 	_, err := dbutil.Exec(ctx, r.db, qb)
 	return err
+}
+
+// ListByApplicationID returns every consent row tied to the given application.
+// No DB-level ORDER BY: the service places the rows in canonical
+// ConsentTypeValues order in memory, so the SQL ordering would be wasted work.
+func (r *creatorApplicationConsentRepository) ListByApplicationID(ctx context.Context, applicationID string) ([]*CreatorApplicationConsentRow, error) {
+	q := sq.Select(creatorApplicationConsentSelectColumns...).
+		From(TableCreatorApplicationConsents).
+		Where(sq.Eq{CreatorApplicationConsentColumnApplicationID: applicationID})
+	return dbutil.Many[CreatorApplicationConsentRow](ctx, r.db, q)
 }

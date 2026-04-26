@@ -32,10 +32,20 @@ var (
 	creatorApplicationCategoryInsertColumns = sortColumns(creatorApplicationCategoryInsertMapper.TagValues())
 )
 
+// CreatorApplicationCategoryDetailRow carries the join-projected category
+// fields used by the read aggregate. Sort order is preserved by the SQL ORDER
+// BY clause; the row itself only describes the category, not the link row.
+type CreatorApplicationCategoryDetailRow struct {
+	Code      string `db:"code"`
+	Name      string `db:"name"`
+	SortOrder int    `db:"sort_order"`
+}
+
 // CreatorApplicationCategoryRepo batches the M:N link rows between an
 // application and its selected categories.
 type CreatorApplicationCategoryRepo interface {
 	InsertMany(ctx context.Context, rows []CreatorApplicationCategoryRow) error
+	ListByApplicationID(ctx context.Context, applicationID string) ([]*CreatorApplicationCategoryDetailRow, error)
 }
 
 type creatorApplicationCategoryRepository struct {
@@ -54,4 +64,22 @@ func (r *creatorApplicationCategoryRepository) InsertMany(ctx context.Context, r
 	}
 	_, err := dbutil.Exec(ctx, r.db, qb)
 	return err
+}
+
+// ListByApplicationID returns the categories linked to an application joined
+// against the categories dictionary, sorted by (sort_order, code) so the
+// response is deterministic. We deliberately do NOT filter by c.active —
+// historical applications must still surface a category that has since been
+// deactivated.
+func (r *creatorApplicationCategoryRepository) ListByApplicationID(ctx context.Context, applicationID string) ([]*CreatorApplicationCategoryDetailRow, error) {
+	q := sq.Select(
+		"c."+DictionaryColumnCode,
+		"c."+DictionaryColumnName,
+		"c."+DictionaryColumnSortOrder,
+	).
+		From(TableCreatorApplicationCategories+" cac").
+		Join(TableCategories+" c ON c."+DictionaryColumnID+" = cac."+CreatorApplicationCategoryColumnCategoryID).
+		Where(sq.Eq{"cac." + CreatorApplicationCategoryColumnApplicationID: applicationID}).
+		OrderBy("c."+DictionaryColumnSortOrder+" ASC", "c."+DictionaryColumnCode+" ASC")
+	return dbutil.Many[CreatorApplicationCategoryDetailRow](ctx, r.db, q)
 }
