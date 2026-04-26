@@ -73,7 +73,11 @@ import (
 )
 
 // validRequest builds a request body that satisfies every server-side check
-// except for the uniqueness of the IIN, which the caller decides.
+// except for the uniqueness of the IIN, which the caller decides. City is a
+// dictionary code ("almaty") rather than the human-readable label so the GET
+// aggregate's dictionary resolution returns a populated name; sending a raw
+// label would still pass the submit validation but would force the read path
+// onto the deactivated-code fallback in every successful test.
 func validRequest(iin string) apiclient.CreatorApplicationSubmitRequest {
 	middle := "Ивановна"
 	return apiclient.CreatorApplicationSubmitRequest{
@@ -82,7 +86,7 @@ func validRequest(iin string) apiclient.CreatorApplicationSubmitRequest {
 		MiddleName: &middle,
 		Iin:        iin,
 		Phone:      "+77001234567",
-		City:       "Алматы",
+		City:       "almaty",
 		Address:    "ул. Абая 1",
 		Categories: []string{"beauty", "fashion"},
 		Socials: []apiclient.SocialAccountInput{
@@ -133,7 +137,7 @@ func TestSubmitCreatorApplicationDuplicate(t *testing.T) {
 
 	// Mutate the second request so nothing accidentally passes because of
 	// identical content — only the IIN must be the same.
-	req.City = "Астана"
+	req.City = "astana"
 	second, err := c.SubmitCreatorApplicationWithResponse(context.Background(), req)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusConflict, second.StatusCode())
@@ -443,7 +447,12 @@ func verifyCreatorApplicationByID(t *testing.T, c *apiclient.ClientWithResponses
 	}
 	require.Equal(t, expected.IIN, got.Iin)
 	require.Equal(t, expected.Phone, got.Phone)
-	require.Equal(t, expected.City, got.City)
+	// City is now an object resolved against the cities dictionary at read
+	// time. The submitted code is echoed back as got.City.Code; got.City.Name
+	// must be non-empty for an active dictionary entry. The seed migrations
+	// keep `almaty` and `astana` (the codes used by validRequest) active.
+	require.Equal(t, expected.City, got.City.Code)
+	require.NotEmpty(t, got.City.Name, "got.City.Name should be resolved from the cities dictionary")
 	require.Equal(t, expected.Address, got.Address)
 	require.Equal(t, "1995-05-15", got.BirthDate.Format("2006-01-02"))
 	require.Equal(t, apiclient.Pending, got.Status)
@@ -458,6 +467,10 @@ func verifyCreatorApplicationByID(t *testing.T, c *apiclient.ClientWithResponses
 	gotCodes := make([]string, len(got.Categories))
 	for i, c := range got.Categories {
 		gotCodes[i] = c.Code
+		// Every active category is resolved against the dictionary, so name
+		// is non-empty. Even the fallback path (deactivated entry) returns
+		// name = code, which is also non-empty for any submitted code.
+		require.NotEmpty(t, c.Name, "got.Categories[%d].Name should be resolved", i)
 	}
 	require.ElementsMatch(t, expected.CategoryCodes, gotCodes)
 	for i := 1; i < len(got.Categories); i++ {

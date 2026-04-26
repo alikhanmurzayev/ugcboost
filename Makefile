@@ -173,6 +173,7 @@ generate-api:
 		backend/api/openapi-test.yaml
 	cd frontend/web && npx openapi-typescript ../../backend/api/openapi.yaml -o src/api/generated/schema.ts
 	cd frontend/tma && npx openapi-typescript ../../backend/api/openapi.yaml -o src/api/generated/schema.ts
+	cd frontend/landing && npx openapi-typescript ../../backend/api/openapi.yaml -o src/api/generated/schema.ts
 	oapi-codegen -package apiclient -generate types \
 		-o backend/e2e/apiclient/types.gen.go backend/api/openapi.yaml
 	oapi-codegen -package apiclient -generate client \

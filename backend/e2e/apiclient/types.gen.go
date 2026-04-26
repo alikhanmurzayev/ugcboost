@@ -218,6 +218,18 @@ type CreatorApplicationDetailCategory struct {
 	SortOrder int `json:"sortOrder"`
 }
 
+// CreatorApplicationDetailCity defines model for CreatorApplicationDetailCity.
+type CreatorApplicationDetailCity struct {
+	// Code Stable city code from the cities dictionary (or the raw stored value when the dictionary entry has been deactivated).
+	Code string `json:"code"`
+
+	// Name Display name resolved against the dictionary at read time. Falls back to the code when the dictionary entry no longer exists.
+	Name string `json:"name"`
+
+	// SortOrder Catalogue ordering hint from the dictionary row. Falls back to 0 for deactivated/unknown codes.
+	SortOrder int `json:"sortOrder"`
+}
+
 // CreatorApplicationDetailConsent defines model for CreatorApplicationDetailConsent.
 type CreatorApplicationDetailConsent struct {
 	AcceptedAt time.Time `json:"acceptedAt"`
@@ -249,8 +261,8 @@ type CreatorApplicationDetailData struct {
 	Categories []CreatorApplicationDetailCategory `json:"categories"`
 
 	// CategoryOtherText Free-text niche description when categories include "other".
-	CategoryOtherText *string `json:"categoryOtherText,omitempty"`
-	City              string  `json:"city"`
+	CategoryOtherText *string                      `json:"categoryOtherText,omitempty"`
+	City              CreatorApplicationDetailCity `json:"city"`
 
 	// Consents Consents in canonical order (processing → third_party → cross_border → terms),
 	// independent of the order they appear in the database.

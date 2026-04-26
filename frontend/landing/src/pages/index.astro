@@ -638,21 +638,49 @@ import {
     </section>
 
     <script
-      define:vars={{
+      is:inline
+      type="application/json"
+      id="form-config"
+      set:html={JSON.stringify({
         socialCodeMap: formBlock.socialPlatformCodes,
         otherCategoryCode: "other",
         maxCategories: 3,
-      }}
-    >
-      const config = window.__RUNTIME_CONFIG__ ?? {};
-      const apiUrl = (config.apiUrl ?? "").replace(/\/$/, "");
+      })}
+    ></script>
+
+    <script>
+      import { listDictionary } from "../api/dictionaries";
+      import {
+        submitCreatorApplication,
+        type CreatorApplicationSubmitRequest,
+      } from "../api/creator-applications";
+      import { ApiError } from "../api/client";
+
+      // Form-time constants flow from Astro frontmatter via the JSON island
+      // above — Astro renders them at build time, this module reads them at
+      // runtime. `define:vars` would have skipped Vite module processing and
+      // broken the imports above, so this dance is the only way to stay both
+      // typed and configurable from .astro frontmatter.
+      const configEl = document.getElementById("form-config");
+      const formConfig = configEl?.textContent
+        ? (JSON.parse(configEl.textContent) as {
+            socialCodeMap: Record<string, string>;
+            otherCategoryCode: string;
+            maxCategories: number;
+          })
+        : { socialCodeMap: {}, otherCategoryCode: "other", maxCategories: 3 };
+      const socialCodeMap = formConfig.socialCodeMap;
+      const otherCategoryCode = formConfig.otherCategoryCode;
+      const maxCategories = formConfig.maxCategories;
 
       // Wire the social checkboxes (toggle the matching handle input).
-      document.querySelectorAll(".social-checkbox").forEach((cb) => {
+      document.querySelectorAll<HTMLInputElement>(".social-checkbox").forEach((cb) => {
         cb.addEventListener("change", () => {
           const name = cb.dataset.social;
           if (!name) return;
-          const input = document.querySelector(`[data-social-input="${name}"]`);
+          const input = document.querySelector<HTMLInputElement>(
+            `[data-social-input="${name}"]`,
+          );
           if (!input) return;
           if (cb.checked) {
             input.classList.remove("hidden");
@@ -669,23 +697,25 @@ import {
       });
 
       const categoryContainer = document.getElementById("category-options");
-      const otherInput = document.getElementById("category-other-input");
+      const otherInput = document.getElementById(
+        "category-other-input",
+      ) as HTMLInputElement | null;
       const citySelect = document.getElementById("city-select");
       const formError = document.getElementById("form-error");
 
-      function showFormError(msg) {
+      function showFormError(msg: string): void {
         if (!formError) return;
         formError.textContent = msg;
         formError.classList.remove("hidden");
       }
-      function clearFormError() {
+      function clearFormError(): void {
         if (!formError) return;
         formError.textContent = "";
         formError.classList.add("hidden");
       }
 
-      function wireCategoryCheckboxes() {
-        const boxes = document.querySelectorAll(".category-checkbox");
+      function wireCategoryCheckboxes(): void {
+        const boxes = document.querySelectorAll<HTMLInputElement>(".category-checkbox");
         boxes.forEach((cb) => {
           cb.addEventListener("change", () => {
             const checked = Array.from(boxes).filter((c) => c.checked);
@@ -708,18 +738,11 @@ import {
         });
       }
 
-      async function loadDictionary(type) {
-        const res = await fetch(`${apiUrl}/dictionaries/${type}`);
-        if (!res.ok) throw new Error(`dictionaries/${type} returned ${res.status}`);
-        const body = await res.json();
-        return body?.data?.items ?? [];
-      }
-
-      async function bootDictionaries() {
+      async function bootDictionaries(): Promise<void> {
         try {
           const [cities, categories] = await Promise.all([
-            loadDictionary("cities"),
-            loadDictionary("categories"),
+            listDictionary("cities"),
+            listDictionary("categories"),
           ]);
           if (citySelect) {
             citySelect.innerHTML =
@@ -745,34 +768,37 @@ import {
       }
       bootDictionaries();
 
-      function collectFormData(form) {
+      function collectFormData(form: HTMLFormElement): CreatorApplicationSubmitRequest {
         const fd = new FormData(form);
         const middleNameRaw = fd.get("middleName");
-        const middleName = typeof middleNameRaw === "string" && middleNameRaw.trim() !== ""
-          ? middleNameRaw.trim()
-          : null;
+        const middleName =
+          typeof middleNameRaw === "string" && middleNameRaw.trim() !== ""
+            ? middleNameRaw.trim()
+            : undefined;
 
         const categories = Array.from(
-          document.querySelectorAll(".category-checkbox:checked"),
+          document.querySelectorAll<HTMLInputElement>(".category-checkbox:checked"),
         ).map((c) => c.value);
 
         const otherTextRaw = fd.get("categoryOtherText");
         const categoryOtherText =
           categories.includes(otherCategoryCode) && typeof otherTextRaw === "string"
             ? otherTextRaw.trim()
-            : null;
+            : undefined;
 
-        const socials = Array.from(document.querySelectorAll(".social-checkbox:checked"))
+        const socials = Array.from(
+          document.querySelectorAll<HTMLInputElement>(".social-checkbox:checked"),
+        )
           .map((cb) => {
             const name = cb.dataset.social;
             const code = name ? socialCodeMap[name] : null;
             const input = name
-              ? document.querySelector(`[data-social-input="${name}"]`)
+              ? document.querySelector<HTMLInputElement>(`[data-social-input="${name}"]`)
               : null;
             const handle = input ? input.value.trim() : "";
             return code && handle ? { platform: code, handle } : null;
           })
-          .filter(Boolean);
+          .filter((s): s is { platform: string; handle: string } => s !== null);
 
         return {
           lastName: String(fd.get("lastName") ?? "").trim(),
@@ -787,12 +813,12 @@ import {
           address: String(fd.get("city") ?? "").trim(),
           categories,
           categoryOtherText,
-          socials,
+          socials: socials as CreatorApplicationSubmitRequest["socials"],
           acceptedAll: fd.get("acceptedAll") === "on",
         };
       }
 
-      function showSuccess(botUrl) {
+      function showSuccess(botUrl: string | undefined): void {
         const screen = document.getElementById("success-screen");
         const cta = document.getElementById("success-cta");
         if (cta) {
@@ -811,30 +837,24 @@ import {
         }
       }
 
-      const form = document.getElementById("application-form");
+      const form = document.getElementById("application-form") as HTMLFormElement | null;
       form?.addEventListener("submit", async (e) => {
         e.preventDefault();
         clearFormError();
-        const submitBtn = form.querySelector('button[type="submit"]');
+        const submitBtn = form.querySelector<HTMLButtonElement>('button[type="submit"]');
         if (submitBtn) submitBtn.setAttribute("disabled", "true");
 
         try {
           const payload = collectFormData(form);
-          const res = await fetch(`${apiUrl}/creators/applications`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload),
-          });
-          const body = await res.json().catch(() => ({}));
-          if (res.ok) {
-            showSuccess(body?.data?.telegramBotUrl);
-          } else {
-            const msg = body?.error?.message ?? "Не удалось отправить заявку";
-            showFormError(msg);
-          }
+          const result = await submitCreatorApplication(payload);
+          showSuccess(result.telegramBotUrl);
         } catch (err) {
-          console.error(err);
-          showFormError("Сеть недоступна. Попробуйте позже.");
+          if (err instanceof ApiError) {
+            showFormError(err.serverMessage || "Не удалось отправить заявку");
+          } else {
+            console.error(err);
+            showFormError("Сеть недоступна. Попробуйте позже.");
+          }
         } finally {
           if (submitBtn) submitBtn.removeAttribute("disabled");
         }

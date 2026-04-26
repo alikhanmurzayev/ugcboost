@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/url"
+	"slices"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -105,41 +107,87 @@ func apiSocialsToDomain(in []api.SocialAccountInput) []domain.SocialAccountInput
 // the application exists. The bearer-token check itself happens upstream in the
 // AuthFromScopes middleware (driven by the OpenAPI security clause), so a
 // missing/invalid token never reaches this handler. sql.ErrNoRows from the
-// service is mapped to 404 NOT_FOUND by respondError. The handler deliberately
+// service is mapped to 404 NOT_FOUND by respondError. After the service layer
+// returns the raw aggregate (codes only), the handler hydrates categories and
+// city against the active dictionary so the JSON payload carries human-readable
+// names; deactivated codes degrade to a `{code, name: code, sortOrder: 0}`
+// fallback so historical applications stay readable. The handler deliberately
 // logs nothing about the response body — every persisted field is PII-bearing
 // (iin, names, phone, address) and must not surface in stdout логах приложения
 // per docs/standards/security.md.
 func (s *Server) GetCreatorApplication(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
-	if err := s.authzService.CanViewCreatorApplication(r.Context()); err != nil {
+	ctx := r.Context()
+	if err := s.authzService.CanViewCreatorApplication(ctx); err != nil {
 		respondError(w, r, err, s.logger)
 		return
 	}
 
-	detail, err := s.creatorApplicationService.GetByID(r.Context(), id.String())
+	detail, err := s.creatorApplicationService.GetByID(ctx, id.String())
+	if err != nil {
+		respondError(w, r, err, s.logger)
+		return
+	}
+
+	categoryEntries, err := s.dictionaryService.List(ctx, domain.DictionaryTypeCategories)
+	if err != nil {
+		respondError(w, r, err, s.logger)
+		return
+	}
+	cityEntries, err := s.dictionaryService.List(ctx, domain.DictionaryTypeCities)
 	if err != nil {
 		respondError(w, r, err, s.logger)
 		return
 	}
 
 	respondJSON(w, r, http.StatusOK, api.GetCreatorApplicationResult{
-		Data: domainCreatorApplicationDetailToAPI(id, detail),
+		Data: domainCreatorApplicationDetailToAPI(
+			id,
+			detail,
+			indexDictionaryByCode(categoryEntries),
+			indexDictionaryByCode(cityEntries),
+		),
 	}, s.logger)
+}
+
+// indexDictionaryByCode builds a code-keyed lookup over a freshly-fetched
+// dictionary so the maptter can answer per-code reads in O(1). Each public
+// dictionary is small (≲100 entries) and the GET aggregate is admin-only and
+// low-traffic, so building this map per request is cheap — caching is
+// deliberately out of scope.
+func indexDictionaryByCode(entries []domain.DictionaryEntry) map[string]domain.DictionaryEntry {
+	m := make(map[string]domain.DictionaryEntry, len(entries))
+	for _, e := range entries {
+		m[e.Code] = e
+	}
+	return m
 }
 
 // domainCreatorApplicationDetailToAPI maps the domain aggregate onto the
 // generated response struct. Status, platform and consent_type cast directly —
 // OpenAPI enums and domain string constants share the same canonical values by
-// construction. The path-level UUID is reused as the response id; the DB-level
-// id string is the same value but only available as plain string in domain.
-func domainCreatorApplicationDetailToAPI(id openapi_types.UUID, d *domain.CreatorApplicationDetail) api.CreatorApplicationDetailData {
+// construction. Categories and city are resolved against the active
+// dictionary; codes that no longer exist (deactivated entries, legacy data)
+// degrade to `{code, name: code, sortOrder: 0}` so the response stays
+// well-formed instead of failing the whole read. Categories are sorted
+// in-memory by (sortOrder, code) to keep the response deterministic
+// independent of repo-side ordering.
+func domainCreatorApplicationDetailToAPI(
+	id openapi_types.UUID,
+	d *domain.CreatorApplicationDetail,
+	categoriesByCode map[string]domain.DictionaryEntry,
+	cityByCode map[string]domain.DictionaryEntry,
+) api.CreatorApplicationDetailData {
 	cats := make([]api.CreatorApplicationDetailCategory, len(d.Categories))
-	for i, c := range d.Categories {
-		cats[i] = api.CreatorApplicationDetailCategory{
-			Code:      c.Code,
-			Name:      c.Name,
-			SortOrder: c.SortOrder,
-		}
+	for i, code := range d.Categories {
+		cats[i] = resolveCategory(code, categoriesByCode)
 	}
+	slices.SortFunc(cats, func(a, b api.CreatorApplicationDetailCategory) int {
+		if a.SortOrder != b.SortOrder {
+			return a.SortOrder - b.SortOrder
+		}
+		return strings.Compare(a.Code, b.Code)
+	})
+
 	socs := make([]api.CreatorApplicationDetailSocial, len(d.Socials))
 	for i, sc := range d.Socials {
 		socs[i] = api.CreatorApplicationDetailSocial{
@@ -165,7 +213,7 @@ func domainCreatorApplicationDetailToAPI(id openapi_types.UUID, d *domain.Creato
 		Iin:               d.IIN,
 		BirthDate:         openapi_types.Date{Time: d.BirthDate},
 		Phone:             d.Phone,
-		City:              d.City,
+		City:              resolveCity(d.City, cityByCode),
 		Address:           d.Address,
 		CategoryOtherText: d.CategoryOtherText,
 		Status:            api.CreatorApplicationDetailDataStatus(d.Status),
@@ -177,3 +225,31 @@ func domainCreatorApplicationDetailToAPI(id openapi_types.UUID, d *domain.Creato
 	}
 }
 
+// resolveCategory looks up a category code in the dictionary index and falls
+// back to a code-only stub when the entry has been deactivated. The stub
+// keeps the JSON shape identical so admins still see something meaningful
+// instead of getting a 500 when a creator's historical category was retired.
+func resolveCategory(code string, byCode map[string]domain.DictionaryEntry) api.CreatorApplicationDetailCategory {
+	if entry, ok := byCode[code]; ok {
+		return api.CreatorApplicationDetailCategory{
+			Code:      entry.Code,
+			Name:      entry.Name,
+			SortOrder: entry.SortOrder,
+		}
+	}
+	return api.CreatorApplicationDetailCategory{Code: code, Name: code, SortOrder: 0}
+}
+
+// resolveCity mirrors resolveCategory for the single city stored against the
+// application. Same fallback rule: a city that has been removed from the
+// dictionary still surfaces under its raw code so the read does not fail.
+func resolveCity(code string, byCode map[string]domain.DictionaryEntry) api.CreatorApplicationDetailCity {
+	if entry, ok := byCode[code]; ok {
+		return api.CreatorApplicationDetailCity{
+			Code:      entry.Code,
+			Name:      entry.Name,
+			SortOrder: entry.SortOrder,
+		}
+	}
+	return api.CreatorApplicationDetailCity{Code: code, Name: code, SortOrder: 0}
+}

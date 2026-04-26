@@ -96,23 +96,23 @@ func (_c *MockCreatorApplicationCategoryRepo_InsertMany_Call) RunAndReturn(run f
 }
 
 // ListByApplicationID provides a mock function for the type MockCreatorApplicationCategoryRepo
-func (_mock *MockCreatorApplicationCategoryRepo) ListByApplicationID(ctx context.Context, applicationID string) ([]*repository.CreatorApplicationCategoryDetailRow, error) {
+func (_mock *MockCreatorApplicationCategoryRepo) ListByApplicationID(ctx context.Context, applicationID string) ([]string, error) {
 	ret := _mock.Called(ctx, applicationID)
 
 	if len(ret) == 0 {
 		panic("no return value specified for ListByApplicationID")
 	}
 
-	var r0 []*repository.CreatorApplicationCategoryDetailRow
+	var r0 []string
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string) ([]*repository.CreatorApplicationCategoryDetailRow, error)); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) ([]string, error)); ok {
 		return returnFunc(ctx, applicationID)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string) []*repository.CreatorApplicationCategoryDetailRow); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) []string); ok {
 		r0 = returnFunc(ctx, applicationID)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).([]*repository.CreatorApplicationCategoryDetailRow)
+			r0 = ret.Get(0).([]string)
 		}
 	}
 	if returnFunc, ok := ret.Get(1).(func(context.Context, string) error); ok {
@@ -153,12 +153,12 @@ func (_c *MockCreatorApplicationCategoryRepo_ListByApplicationID_Call) Run(run f
 	return _c
 }
 
-func (_c *MockCreatorApplicationCategoryRepo_ListByApplicationID_Call) Return(creatorApplicationCategoryDetailRows []*repository.CreatorApplicationCategoryDetailRow, err error) *MockCreatorApplicationCategoryRepo_ListByApplicationID_Call {
-	_c.Call.Return(creatorApplicationCategoryDetailRows, err)
+func (_c *MockCreatorApplicationCategoryRepo_ListByApplicationID_Call) Return(strings []string, err error) *MockCreatorApplicationCategoryRepo_ListByApplicationID_Call {
+	_c.Call.Return(strings, err)
 	return _c
 }
 
-func (_c *MockCreatorApplicationCategoryRepo_ListByApplicationID_Call) RunAndReturn(run func(ctx context.Context, applicationID string) ([]*repository.CreatorApplicationCategoryDetailRow, error)) *MockCreatorApplicationCategoryRepo_ListByApplicationID_Call {
+func (_c *MockCreatorApplicationCategoryRepo_ListByApplicationID_Call) RunAndReturn(run func(ctx context.Context, applicationID string) ([]string, error)) *MockCreatorApplicationCategoryRepo_ListByApplicationID_Call {
 	_c.Call.Return(run)
 	return _c
 }

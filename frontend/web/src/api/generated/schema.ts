@@ -530,6 +530,14 @@ export interface components {
             /** @description Catalogue ordering hint copied from the dictionary row. */
             sortOrder: number;
         };
+        CreatorApplicationDetailCity: {
+            /** @description Stable city code from the cities dictionary (or the raw stored value when the dictionary entry has been deactivated). */
+            code: string;
+            /** @description Display name resolved against the dictionary at read time. Falls back to the code when the dictionary entry no longer exists. */
+            name: string;
+            /** @description Catalogue ordering hint from the dictionary row. Falls back to 0 for deactivated/unknown codes. */
+            sortOrder: number;
+        };
         CreatorApplicationDetailSocial: {
             platform: components["schemas"]["SocialPlatform"];
             handle: string;
@@ -563,7 +571,7 @@ export interface components {
              */
             birthDate: string;
             phone: string;
-            city: string;
+            city: components["schemas"]["CreatorApplicationDetailCity"];
             address: string;
             /** @description Free-text niche description when categories include "other". */
             categoryOtherText?: string | null;

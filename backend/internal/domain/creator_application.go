@@ -140,6 +140,11 @@ type CreatorApplicationSubmission struct {
 // admin-only GET /creators/applications/{id} endpoint. It bundles the main
 // application row with its three associated collections so the handler can
 // shape one self-contained response — no extra round trips needed.
+//
+// Categories and City carry only the raw codes stored in the database — the
+// handler layer resolves them against DictionaryService at read time. Keeping
+// the domain free of human-readable names means service/repo do not depend on
+// the dictionary cache and stay one source of truth: data, not presentation.
 type CreatorApplicationDetail struct {
 	ID                string
 	LastName          string
@@ -154,18 +159,9 @@ type CreatorApplicationDetail struct {
 	Status            string
 	CreatedAt         time.Time
 	UpdatedAt         time.Time
-	Categories        []CreatorApplicationDetailCategory
+	Categories        []string
 	Socials           []CreatorApplicationDetailSocial
 	Consents          []CreatorApplicationDetailConsent
-}
-
-// CreatorApplicationDetailCategory is one category attached to an application,
-// joined against the categories dictionary so the response carries the
-// human-readable name and the catalogue ordering hint.
-type CreatorApplicationDetailCategory struct {
-	Code      string
-	Name      string
-	SortOrder int
 }
 
 // CreatorApplicationDetailSocial is one social account attached to the

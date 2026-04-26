@@ -59,29 +59,28 @@ func TestCreatorApplicationCategoryRepository_InsertMany(t *testing.T) {
 func TestCreatorApplicationCategoryRepository_ListByApplicationID(t *testing.T) {
 	t.Parallel()
 
-	// Strict literal — ensures the JOIN against categories and the
-	// (sort_order, code) ordering stay glued to the read aggregate's contract.
-	// squirrel renders Join() as plain "JOIN" (not "INNER JOIN"), which is
-	// equivalent in Postgres.
-	const sqlStmt = "SELECT c.code, c.name, c.sort_order FROM creator_application_categories cac JOIN categories c ON c.id = cac.category_id WHERE cac.application_id = $1 ORDER BY c.sort_order ASC, c.code ASC"
+	// Strict literal — ensures the JOIN against categories stays in place
+	// (without it the link table only carries category_id, not the code) and
+	// the (sort_order, code) ordering survives. The handler still re-sorts
+	// in-memory after dictionary resolution, but the repo keeps a stable order
+	// so debugging the raw query remains predictable. squirrel renders Join()
+	// as plain "JOIN" (not "INNER JOIN"), which is equivalent in Postgres.
+	const sqlStmt = "SELECT c.code FROM creator_application_categories cac JOIN categories c ON c.id = cac.category_id WHERE cac.application_id = $1 ORDER BY c.sort_order ASC, c.code ASC"
 
-	t.Run("success maps rows in DB order", func(t *testing.T) {
+	t.Run("success returns codes in DB order", func(t *testing.T) {
 		t.Parallel()
 		mock := newPgxmock(t)
 		repo := &creatorApplicationCategoryRepository{db: mock}
 
 		mock.ExpectQuery(sqlStmt).
 			WithArgs("app-1").
-			WillReturnRows(pgxmock.NewRows([]string{"code", "name", "sort_order"}).
-				AddRow("beauty", "Красота", 10).
-				AddRow("fashion", "Мода", 20))
+			WillReturnRows(pgxmock.NewRows([]string{"code"}).
+				AddRow("beauty").
+				AddRow("fashion"))
 
 		got, err := repo.ListByApplicationID(context.Background(), "app-1")
 		require.NoError(t, err)
-		require.Equal(t, []*CreatorApplicationCategoryDetailRow{
-			{Code: "beauty", Name: "Красота", SortOrder: 10},
-			{Code: "fashion", Name: "Мода", SortOrder: 20},
-		}, got)
+		require.Equal(t, []string{"beauty", "fashion"}, got)
 	})
 
 	t.Run("empty result", func(t *testing.T) {
@@ -91,7 +90,7 @@ func TestCreatorApplicationCategoryRepository_ListByApplicationID(t *testing.T) 
 
 		mock.ExpectQuery(sqlStmt).
 			WithArgs("app-empty").
-			WillReturnRows(pgxmock.NewRows([]string{"code", "name", "sort_order"}))
+			WillReturnRows(pgxmock.NewRows([]string{"code"}))
 
 		got, err := repo.ListByApplicationID(context.Background(), "app-empty")
 		require.NoError(t, err)

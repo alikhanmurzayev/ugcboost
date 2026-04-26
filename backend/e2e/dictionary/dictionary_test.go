@@ -57,3 +57,23 @@ func TestListDictionaryCities(t *testing.T) {
 	require.Equal(t, "astana", items[1].Code, "Астана should be second by sort_order")
 	require.Equal(t, "shymkent", items[2].Code, "Шымкент should be third by sort_order")
 }
+
+// TestListDictionaryUnknownType locks the security/UX invariant that an
+// unknown dictionary type degrades to 404 NOT_FOUND, never 500. oapi-codegen
+// leaves the path-enum untyped at the wrapper level, so the value reaches the
+// handler/service and is mapped onto domain.ErrNotFound through
+// domain.ErrDictionaryUnknownType — the public response stays a clean 404 so
+// scanners cannot fingerprint missing dictionaries via 5xx leaks.
+func TestListDictionaryUnknownType(t *testing.T) {
+	t.Parallel()
+
+	c := testutil.NewAPIClient(t)
+	resp, err := c.ListDictionaryWithResponse(
+		context.Background(),
+		apiclient.ListDictionaryParamsType("unicorns"),
+	)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusNotFound, resp.StatusCode())
+	require.NotNil(t, resp.JSON404)
+	require.Equal(t, "NOT_FOUND", resp.JSON404.Error.Code)
+}

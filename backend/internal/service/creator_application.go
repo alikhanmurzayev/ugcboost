@@ -425,24 +425,20 @@ func (s *CreatorApplicationService) GetByID(ctx context.Context, id string) (*do
 }
 
 // creatorApplicationDetailFromRows maps the four repo result sets onto the
-// domain aggregate. Consents are reordered in-memory by canonical
-// ConsentTypeValues so the response is deterministic regardless of how Postgres
-// returned them; missing types are skipped without error so the read side does
-// not fail on legacy or partial data (though POST atomically creates all four).
+// domain aggregate. Categories arrive as plain codes — name/sortOrder are
+// resolved by the handler against DictionaryService at presentation time,
+// so the service layer stays code-only. Consents are reordered in-memory by
+// canonical ConsentTypeValues so the response is deterministic regardless of
+// how Postgres returned them; missing types are skipped without error so the
+// read side does not fail on legacy or partial data (though POST atomically
+// creates all four).
 func creatorApplicationDetailFromRows(
 	app *repository.CreatorApplicationRow,
-	categories []*repository.CreatorApplicationCategoryDetailRow,
+	categories []string,
 	socials []*repository.CreatorApplicationSocialRow,
 	consents []*repository.CreatorApplicationConsentRow,
 ) *domain.CreatorApplicationDetail {
-	cats := make([]domain.CreatorApplicationDetailCategory, len(categories))
-	for i, c := range categories {
-		cats[i] = domain.CreatorApplicationDetailCategory{
-			Code:      c.Code,
-			Name:      c.Name,
-			SortOrder: c.SortOrder,
-		}
-	}
+	cats := append([]string(nil), categories...)
 
 	socs := make([]domain.CreatorApplicationDetailSocial, len(socials))
 	for i, s := range socials {

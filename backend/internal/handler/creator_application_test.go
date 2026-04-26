@@ -233,9 +233,9 @@ func newTestRouterWithClientIP(t *testing.T, s *Server) chi.Router {
 	return r
 }
 
-func serverWithAuthzAndCreator(t *testing.T, authz AuthzService, creator CreatorApplicationService, log *logmocks.MockLogger) *Server {
+func serverWithAuthzAndCreatorAndDict(t *testing.T, authz AuthzService, creator CreatorApplicationService, dict DictionaryService, log *logmocks.MockLogger) *Server {
 	t.Helper()
-	return NewServer(nil, nil, authz, nil, creator, nil, ServerConfig{
+	return NewServer(nil, nil, authz, nil, creator, dict, ServerConfig{
 		Version: "test-version",
 	}, log)
 }
@@ -250,7 +250,7 @@ func TestServer_GetCreatorApplication(t *testing.T) {
 		authz := mocks.NewMockAuthzService(t)
 		authz.EXPECT().CanViewCreatorApplication(mock.Anything).Return(domain.ErrForbidden)
 
-		router := newTestRouter(t, serverWithAuthzAndCreator(t, authz, nil, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, serverWithAuthzAndCreatorAndDict(t, authz, nil, nil, logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodGet, appPath, nil)
 		require.Equal(t, http.StatusForbidden, w.Code)
 		require.Equal(t, domain.CodeForbidden, resp.Error.Code)
@@ -265,7 +265,9 @@ func TestServer_GetCreatorApplication(t *testing.T) {
 		creator.EXPECT().GetByID(mock.Anything, appID.String()).
 			Return(nil, sql.ErrNoRows)
 
-		router := newTestRouter(t, serverWithAuthzAndCreator(t, authz, creator, logmocks.NewMockLogger(t)))
+		// Dictionary service is not consulted on the not-found path: respondError
+		// short-circuits before the maptter runs, so dict stays nil.
+		router := newTestRouter(t, serverWithAuthzAndCreatorAndDict(t, authz, creator, nil, logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodGet, appPath, nil)
 		require.Equal(t, http.StatusNotFound, w.Code)
 		require.Equal(t, domain.CodeNotFound, resp.Error.Code)
@@ -282,7 +284,46 @@ func TestServer_GetCreatorApplication(t *testing.T) {
 
 		log := logmocks.NewMockLogger(t)
 		expectHandlerUnexpectedErrorLog(log, appPath)
-		router := newTestRouter(t, serverWithAuthzAndCreator(t, authz, creator, log))
+		router := newTestRouter(t, serverWithAuthzAndCreatorAndDict(t, authz, creator, nil, log))
+		w, _ := doJSON[api.ErrorResponse](t, router, http.MethodGet, appPath, nil)
+		require.Equal(t, http.StatusInternalServerError, w.Code)
+	})
+
+	t.Run("dictionary categories error returns 500", func(t *testing.T) {
+		t.Parallel()
+		appID := uuid.MustParse("11111111-2222-3333-4444-555555555555")
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanViewCreatorApplication(mock.Anything).Return(nil)
+		creator := mocks.NewMockCreatorApplicationService(t)
+		creator.EXPECT().GetByID(mock.Anything, appID.String()).
+			Return(&domain.CreatorApplicationDetail{ID: appID.String()}, nil)
+		dict := mocks.NewMockDictionaryService(t)
+		dict.EXPECT().List(mock.Anything, domain.DictionaryTypeCategories).
+			Return(nil, errors.New("dict down"))
+
+		log := logmocks.NewMockLogger(t)
+		expectHandlerUnexpectedErrorLog(log, appPath)
+		router := newTestRouter(t, serverWithAuthzAndCreatorAndDict(t, authz, creator, dict, log))
+		w, _ := doJSON[api.ErrorResponse](t, router, http.MethodGet, appPath, nil)
+		require.Equal(t, http.StatusInternalServerError, w.Code)
+	})
+
+	t.Run("dictionary cities error returns 500", func(t *testing.T) {
+		t.Parallel()
+		appID := uuid.MustParse("11111111-2222-3333-4444-555555555555")
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanViewCreatorApplication(mock.Anything).Return(nil)
+		creator := mocks.NewMockCreatorApplicationService(t)
+		creator.EXPECT().GetByID(mock.Anything, appID.String()).
+			Return(&domain.CreatorApplicationDetail{ID: appID.String()}, nil)
+		dict := mocks.NewMockDictionaryService(t)
+		dict.EXPECT().List(mock.Anything, domain.DictionaryTypeCategories).Return(nil, nil)
+		dict.EXPECT().List(mock.Anything, domain.DictionaryTypeCities).
+			Return(nil, errors.New("dict down"))
+
+		log := logmocks.NewMockLogger(t)
+		expectHandlerUnexpectedErrorLog(log, appPath)
+		router := newTestRouter(t, serverWithAuthzAndCreatorAndDict(t, authz, creator, dict, log))
 		w, _ := doJSON[api.ErrorResponse](t, router, http.MethodGet, appPath, nil)
 		require.Equal(t, http.StatusInternalServerError, w.Code)
 	})
@@ -309,16 +350,16 @@ func TestServer_GetCreatorApplication(t *testing.T) {
 				IIN:               "950515312348",
 				BirthDate:         birth,
 				Phone:             "+77001234567",
-				City:              "Алматы",
+				City:              "almaty",
 				Address:           "ул. Абая 1",
 				CategoryOtherText: &other,
 				Status:            domain.CreatorApplicationStatusPending,
 				CreatedAt:         created,
 				UpdatedAt:         updated,
-				Categories: []domain.CreatorApplicationDetailCategory{
-					{Code: "beauty", Name: "Красота", SortOrder: 10},
-					{Code: "fashion", Name: "Мода", SortOrder: 20},
-				},
+				// Domain returns codes in arbitrary order — the handler sorts
+				// by (sortOrder, code) after dictionary resolution. Pass them
+				// reversed to lock that contract.
+				Categories: []string{"fashion", "beauty"},
 				Socials: []domain.CreatorApplicationDetailSocial{
 					{Platform: domain.SocialPlatformInstagram, Handle: "aidana"},
 					{Platform: domain.SocialPlatformTikTok, Handle: "aidana_tt"},
@@ -330,8 +371,20 @@ func TestServer_GetCreatorApplication(t *testing.T) {
 					{ConsentType: domain.ConsentTypeTerms, AcceptedAt: acceptedAt, DocumentVersion: "2026-04-20", IPAddress: "127.0.0.1", UserAgent: "ua/1"},
 				},
 			}, nil)
+		dict := mocks.NewMockDictionaryService(t)
+		dict.EXPECT().List(mock.Anything, domain.DictionaryTypeCategories).
+			Return([]domain.DictionaryEntry{
+				{Code: "beauty", Name: "Красота", SortOrder: 10},
+				{Code: "fashion", Name: "Мода", SortOrder: 20},
+				{Code: "food", Name: "Еда", SortOrder: 30},
+			}, nil)
+		dict.EXPECT().List(mock.Anything, domain.DictionaryTypeCities).
+			Return([]domain.DictionaryEntry{
+				{Code: "almaty", Name: "Алматы", SortOrder: 100},
+				{Code: "astana", Name: "Астана", SortOrder: 200},
+			}, nil)
 
-		router := newTestRouter(t, serverWithAuthzAndCreator(t, authz, creator, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, serverWithAuthzAndCreatorAndDict(t, authz, creator, dict, logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.GetCreatorApplicationResult](t, router, http.MethodGet, appPath, nil)
 		require.Equal(t, http.StatusOK, w.Code)
 		require.Equal(t, api.GetCreatorApplicationResult{
@@ -343,7 +396,7 @@ func TestServer_GetCreatorApplication(t *testing.T) {
 				Iin:               "950515312348",
 				BirthDate:         openapi_types.Date{Time: birth},
 				Phone:             "+77001234567",
-				City:              "Алматы",
+				City:              api.CreatorApplicationDetailCity{Code: "almaty", Name: "Алматы", SortOrder: 100},
 				Address:           "ул. Абая 1",
 				CategoryOtherText: &other,
 				Status:            api.Pending,
@@ -365,5 +418,57 @@ func TestServer_GetCreatorApplication(t *testing.T) {
 				},
 			},
 		}, resp)
+	})
+
+	t.Run("deactivated category and city fall back to code", func(t *testing.T) {
+		t.Parallel()
+		appID := uuid.MustParse("11111111-2222-3333-4444-555555555555")
+		birth := time.Date(1995, 5, 15, 0, 0, 0, 0, time.UTC)
+		created := time.Date(2026, 4, 20, 18, 0, 0, 0, time.UTC)
+
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanViewCreatorApplication(mock.Anything).Return(nil)
+		creator := mocks.NewMockCreatorApplicationService(t)
+		creator.EXPECT().GetByID(mock.Anything, appID.String()).
+			Return(&domain.CreatorApplicationDetail{
+				ID:         appID.String(),
+				LastName:   "Муратова",
+				FirstName:  "Айдана",
+				IIN:        "950515312348",
+				BirthDate:  birth,
+				Phone:      "+77001234567",
+				City:       "atyrau", // not present in the active dictionary below
+				Address:    "ул. Абая 1",
+				Status:     domain.CreatorApplicationStatusPending,
+				CreatedAt:  created,
+				UpdatedAt:  created,
+				Categories: []string{"beauty", "vintage_asmr"}, // vintage_asmr deactivated
+				Socials:    nil,
+				Consents:   nil,
+			}, nil)
+		dict := mocks.NewMockDictionaryService(t)
+		dict.EXPECT().List(mock.Anything, domain.DictionaryTypeCategories).
+			Return([]domain.DictionaryEntry{
+				{Code: "beauty", Name: "Красота", SortOrder: 10},
+			}, nil)
+		dict.EXPECT().List(mock.Anything, domain.DictionaryTypeCities).
+			Return([]domain.DictionaryEntry{
+				{Code: "almaty", Name: "Алматы", SortOrder: 100},
+			}, nil)
+
+		router := newTestRouter(t, serverWithAuthzAndCreatorAndDict(t, authz, creator, dict, logmocks.NewMockLogger(t)))
+		w, resp := doJSON[api.GetCreatorApplicationResult](t, router, http.MethodGet, appPath, nil)
+		require.Equal(t, http.StatusOK, w.Code)
+		// Deactivated categories surface as {code, name: code, sortOrder: 0};
+		// the active "beauty" still resolves correctly. After the in-memory
+		// sort by (sortOrder, code), the deactivated entry (sortOrder 0) wins
+		// over "beauty" (sortOrder 10) — vintage_asmr comes first.
+		require.Equal(t, []api.CreatorApplicationDetailCategory{
+			{Code: "vintage_asmr", Name: "vintage_asmr", SortOrder: 0},
+			{Code: "beauty", Name: "Красота", SortOrder: 10},
+		}, resp.Data.Categories)
+		require.Equal(t, api.CreatorApplicationDetailCity{
+			Code: "atyrau", Name: "atyrau", SortOrder: 0,
+		}, resp.Data.City)
 	})
 }

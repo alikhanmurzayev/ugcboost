@@ -2,10 +2,10 @@
  * Shared E2E helpers for browser tests across web / tma / landing.
  *
  * Each function is a thin HTTP wrapper around the backend test endpoints
- * (POST /test/*) or a deterministic input generator (validIIN / uniqueIIN).
- * Algorithms that mirror backend domain logic (IIN checksum, age math) are
- * duplicated here on purpose — frontend e2e is an isolated module and must
- * not import Go code.
+ * (POST /test/*) or a deterministic input generator
+ * (generateValidIIN / uniqueIIN / underageIIN). Algorithms that mirror
+ * backend domain logic (IIN checksum, age math) are duplicated here on
+ * purpose — frontend e2e is an isolated module and must not import Go code.
  */
 import type { APIRequestContext } from "@playwright/test";
 

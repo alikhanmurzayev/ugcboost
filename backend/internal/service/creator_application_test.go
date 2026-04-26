@@ -613,10 +613,7 @@ func TestCreatorApplicationService_GetByID(t *testing.T) {
 				UpdatedAt:         updated,
 			}, nil)
 		rig.appCategoryRepo.EXPECT().ListByApplicationID(mock.Anything, appID).
-			Return([]*repository.CreatorApplicationCategoryDetailRow{
-				{Code: "beauty", Name: "Красота", SortOrder: 10},
-				{Code: "fashion", Name: "Мода", SortOrder: 20},
-			}, nil)
+			Return([]string{"beauty", "fashion"}, nil)
 		rig.appSocialRepo.EXPECT().ListByApplicationID(mock.Anything, appID).
 			Return([]*repository.CreatorApplicationSocialRow{
 				{ApplicationID: appID, Platform: domain.SocialPlatformInstagram, Handle: "aidana"},
@@ -649,10 +646,7 @@ func TestCreatorApplicationService_GetByID(t *testing.T) {
 			Status:            domain.CreatorApplicationStatusPending,
 			CreatedAt:         created,
 			UpdatedAt:         updated,
-			Categories: []domain.CreatorApplicationDetailCategory{
-				{Code: "beauty", Name: "Красота", SortOrder: 10},
-				{Code: "fashion", Name: "Мода", SortOrder: 20},
-			},
+			Categories: []string{"beauty", "fashion"},
 			Socials: []domain.CreatorApplicationDetailSocial{
 				{Platform: domain.SocialPlatformInstagram, Handle: "aidana"},
 				{Platform: domain.SocialPlatformTikTok, Handle: "aidana_tt"},
