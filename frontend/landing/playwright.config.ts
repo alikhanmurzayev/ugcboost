@@ -12,6 +12,16 @@ export default defineConfig({
     headless: true,
     screenshot: "only-on-failure",
     trace: "retain-on-failure",
+    // On staging, both the landing host and staging-api sit behind CF Access.
+    // Forwarding the service-token headers on every request (page navigation +
+    // XHR from the page) lets Playwright punch through Access without a user
+    // session. Mirrors frontend/web/playwright.config.ts.
+    extraHTTPHeaders: process.env.CF_ACCESS_CLIENT_ID
+      ? {
+          "CF-Access-Client-Id": process.env.CF_ACCESS_CLIENT_ID,
+          "CF-Access-Client-Secret": process.env.CF_ACCESS_CLIENT_SECRET ?? "",
+        }
+      : undefined,
   },
   projects: [
     {
