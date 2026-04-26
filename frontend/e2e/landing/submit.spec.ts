@@ -67,16 +67,25 @@ async function fillRequiredFields(page: Page, iin: string): Promise<void> {
 }
 
 // waitForDictionaries blocks the test until the cities select and the
-// category container have rendered their API-driven options. Both sit on
-// the DOM with placeholder text "Загрузка…" until the fetch resolves.
+// category container have rendered their API-driven options. Loosened from
+// "wait for category-checkbox-beauty" to "wait for any real option / any
+// category checkbox" so the test is resilient to seed-data changes — beauty
+// is no longer a load-bearing fixture.
 async function waitForDictionaries(page: Page): Promise<void> {
-  // Cities: placeholder "Выбери город" appears once the dropdown is filled.
-  await expect(page.getByTestId("city-select")).toContainText("Выбери город");
-  // Categories: at least the Beauty option becomes available — proxy for
-  // "the API returned at least the seeded list".
-  await expect(page.getByTestId("category-checkbox-beauty")).toBeAttached({
-    timeout: 10_000,
-  });
+  // Cities: count > 1 — the first <option> is the "Выбери город" placeholder,
+  // so anything beyond that proves at least one city was rendered.
+  await expect
+    .poll(async () => page.getByTestId("city-select").locator("option").count(), {
+      timeout: 10_000,
+    })
+    .toBeGreaterThan(1);
+  // Categories: at least one category checkbox has been attached. Picks up
+  // any category code without baking a specific one into the test.
+  await expect
+    .poll(async () => page.locator(".category-checkbox").count(), {
+      timeout: 10_000,
+    })
+    .toBeGreaterThan(0);
 }
 
 // extractApplicationIdFromBotUrl pulls the application uuid out of the
@@ -97,6 +106,20 @@ test.describe("Landing submission flow", () => {
     page.on("requestfailed", (req) =>
       console.log("[requestfailed]", req.url(), req.failure()?.errorText),
     );
+  });
+
+  test("0. Dictionaries — селекты непустые после загрузки", async ({ page }) => {
+    // Smoke test that pins the contract between the API and the form: cities
+    // dropdown carries real options, categories renders at least one
+    // checkbox. Placed first so a regression here fails fast and obviously,
+    // before any submit flow runs.
+    await page.goto("/");
+    await waitForDictionaries(page);
+
+    const cityCount = await page.getByTestId("city-select").locator("option").count();
+    expect(cityCount).toBeGreaterThan(1);
+    const categoryCount = await page.locator(".category-checkbox").count();
+    expect(categoryCount).toBeGreaterThan(0);
   });
 
   test("1. Golden path — fills the form, sees success screen with telegram CTA", async ({

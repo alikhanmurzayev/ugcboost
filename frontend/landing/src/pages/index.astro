@@ -435,6 +435,7 @@ import {
               inputmode="numeric"
               maxlength="12"
               minlength="12"
+              pattern="[0-9]{12}"
               placeholder="____________"
               class="mt-1.5 w-full border-b-2 border-neutral-950 bg-transparent py-2 text-base outline-none focus:border-pink-500 md:mt-2"
             />
@@ -673,6 +674,151 @@ import {
       const otherCategoryCode = formConfig.otherCategoryCode;
       const maxCategories = formConfig.maxCategories;
 
+      // === Phone mask: +7 (XXX) XXX-XX-XX ===
+      // Strict KZ format. The "+7" prefix is fixed; any leading 7 or 8 in the
+      // user's input is consumed. formatPhoneInput drives the visible value as
+      // the user types/pastes; normalizePhoneForSubmit produces the canonical
+      // wire format ("+7XXXXXXXXXX") right before the API call.
+      function formatPhoneInput(raw: string): string {
+        const digits = raw.replace(/\D/g, "");
+        let body = digits;
+        if (body.length > 0 && (body[0] === "7" || body[0] === "8")) {
+          body = body.slice(1);
+        }
+        body = body.slice(0, 10);
+        if (body.length === 0) return "+7 ";
+        if (body.length <= 3) return `+7 (${body}`;
+        if (body.length <= 6) return `+7 (${body.slice(0, 3)}) ${body.slice(3)}`;
+        if (body.length <= 8)
+          return `+7 (${body.slice(0, 3)}) ${body.slice(3, 6)}-${body.slice(6)}`;
+        return `+7 (${body.slice(0, 3)}) ${body.slice(3, 6)}-${body.slice(6, 8)}-${body.slice(8, 10)}`;
+      }
+
+      function normalizePhoneForSubmit(raw: string): string {
+        const digits = raw.replace(/\D/g, "");
+        let body = digits;
+        if (body.length > 0 && (body[0] === "7" || body[0] === "8")) {
+          body = body.slice(1);
+        }
+        if (body.length !== 10) return raw.trim();
+        return "+7" + body;
+      }
+
+      // === IIN sanitiser: digits only, capped at 12 ===
+      function sanitiseIIN(raw: string): string {
+        return raw.replace(/\D/g, "").slice(0, 12);
+      }
+
+      // === Social handle normalization ===
+      // strip the platform-specific URL prefix → strip trailing path/query →
+      // strip leading '@' → trim → lowercase. Mirrors the server-side
+      // domain.SocialHandleRegex normalization so the user sees the value
+      // they're actually sending.
+      const SOCIAL_URL_PREFIX: Record<string, RegExp> = {
+        instagram: /^https?:\/\/(?:www\.)?instagram\.com\//i,
+        tiktok: /^https?:\/\/(?:www\.)?tiktok\.com\//i,
+        threads: /^https?:\/\/(?:www\.)?threads\.net\//i,
+      };
+
+      function normalizeSocialHandle(raw: string, code: string): string {
+        let s = raw.trim();
+        const prefix = SOCIAL_URL_PREFIX[code];
+        if (prefix) s = s.replace(prefix, "");
+        const tailIdx = s.search(/[/?#]/);
+        if (tailIdx >= 0) s = s.slice(0, tailIdx);
+        s = s.replace(/^@+/, "").trim();
+        return s.toLowerCase();
+      }
+
+      // === DOM refs ===
+      const phoneInput = document.querySelector<HTMLInputElement>(
+        '[data-testid="phone-input"]',
+      );
+      const iinInput = document.querySelector<HTMLInputElement>(
+        '[data-testid="iin-input"]',
+      );
+      const categoryContainer = document.getElementById("category-options");
+      const otherInput = document.getElementById(
+        "category-other-input",
+      ) as HTMLInputElement | null;
+      const citySelect = document.getElementById("city-select");
+      const formError = document.getElementById("form-error");
+      const form = document.getElementById("application-form") as HTMLFormElement | null;
+      const submitBtn = form?.querySelector<HTMLButtonElement>('button[type="submit"]') ?? null;
+      const submitLabel = submitBtn?.querySelector<HTMLSpanElement>("span") ?? null;
+      const originalSubmitLabel = submitLabel?.textContent ?? "";
+
+      // Boot/submit state. `dictionariesError` latches on permanent failure so
+      // every subsequent submit is short-circuited with the same message — the
+      // creator must reload the page to recover.
+      let dictionariesReady = false;
+      let dictionariesError = false;
+      let submitting = false;
+
+      function setSubmitButtonState(state: "loading" | "ready" | "error" | "submitting"): void {
+        if (!submitBtn || !submitLabel) return;
+        switch (state) {
+          case "loading":
+            submitBtn.disabled = true;
+            submitLabel.textContent = "Загрузка…";
+            break;
+          case "ready":
+            submitBtn.disabled = false;
+            submitLabel.textContent = originalSubmitLabel;
+            break;
+          case "error":
+            submitBtn.disabled = true;
+            submitLabel.textContent = "Перезагрузите страницу";
+            break;
+          case "submitting":
+            submitBtn.disabled = true;
+            submitLabel.textContent = "Отправка…";
+            break;
+        }
+      }
+
+      // Lock submit until bootDictionaries finishes — without categories/cities
+      // the form payload would be missing required fields.
+      setSubmitButtonState("loading");
+
+      function showFormError(msg: string): void {
+        if (!formError) return;
+        formError.textContent = msg;
+        formError.classList.remove("hidden");
+      }
+      function clearFormError(): void {
+        if (!formError) return;
+        formError.textContent = "";
+        formError.classList.add("hidden");
+      }
+
+      // === Wire phone mask ===
+      if (phoneInput) {
+        phoneInput.addEventListener("input", () => {
+          const formatted = formatPhoneInput(phoneInput.value);
+          if (formatted !== phoneInput.value) {
+            phoneInput.value = formatted;
+            phoneInput.setSelectionRange(formatted.length, formatted.length);
+          }
+        });
+        phoneInput.addEventListener("focus", () => {
+          if (phoneInput.value.trim() === "") phoneInput.value = "+7 ";
+        });
+        phoneInput.addEventListener("blur", () => {
+          // If the user only kept the prefix, clear the field so the
+          // placeholder reappears and validation flags it as missing.
+          if (phoneInput.value.trim() === "+7") phoneInput.value = "";
+        });
+      }
+
+      // === Wire IIN digits-only filter ===
+      if (iinInput) {
+        iinInput.addEventListener("input", () => {
+          const filtered = sanitiseIIN(iinInput.value);
+          if (filtered !== iinInput.value) iinInput.value = filtered;
+        });
+      }
+
       // Wire the social checkboxes (toggle the matching handle input).
       document.querySelectorAll<HTMLInputElement>(".social-checkbox").forEach((cb) => {
         cb.addEventListener("change", () => {
@@ -696,23 +842,19 @@ import {
         });
       });
 
-      const categoryContainer = document.getElementById("category-options");
-      const otherInput = document.getElementById(
-        "category-other-input",
-      ) as HTMLInputElement | null;
-      const citySelect = document.getElementById("city-select");
-      const formError = document.getElementById("form-error");
-
-      function showFormError(msg: string): void {
-        if (!formError) return;
-        formError.textContent = msg;
-        formError.classList.remove("hidden");
-      }
-      function clearFormError(): void {
-        if (!formError) return;
-        formError.textContent = "";
-        formError.classList.add("hidden");
-      }
+      // === Normalize social handle on blur ===
+      // Visible feedback for the user — they see what the server will receive.
+      // The same normalization is applied again at submit time as a safety net.
+      document
+        .querySelectorAll<HTMLInputElement>("[data-social-input]")
+        .forEach((input) => {
+          input.addEventListener("blur", () => {
+            const name = input.dataset.socialInput;
+            const code = name ? socialCodeMap[name] : null;
+            if (!code) return;
+            input.value = normalizeSocialHandle(input.value, code);
+          });
+        });
 
       function wireCategoryCheckboxes(): void {
         const boxes = document.querySelectorAll<HTMLInputElement>(".category-checkbox");
@@ -761,9 +903,15 @@ import {
               .join("");
             wireCategoryCheckboxes();
           }
+          dictionariesReady = true;
+          setSubmitButtonState("ready");
         } catch (err) {
           console.error(err);
-          showFormError("Не удалось загрузить справочники. Попробуйте обновить страницу.");
+          dictionariesError = true;
+          setSubmitButtonState("error");
+          showFormError(
+            "Не удалось загрузить справочники. Перезагрузи страницу — без них отправить заявку не получится.",
+          );
         }
       }
       bootDictionaries();
@@ -795,7 +943,7 @@ import {
             const input = name
               ? document.querySelector<HTMLInputElement>(`[data-social-input="${name}"]`)
               : null;
-            const handle = input ? input.value.trim() : "";
+            const handle = input && code ? normalizeSocialHandle(input.value, code) : "";
             return code && handle ? { platform: code, handle } : null;
           })
           .filter((s): s is { platform: string; handle: string } => s !== null);
@@ -804,13 +952,12 @@ import {
           lastName: String(fd.get("lastName") ?? "").trim(),
           firstName: String(fd.get("firstName") ?? "").trim(),
           middleName,
-          iin: String(fd.get("iin") ?? "").trim(),
-          phone: String(fd.get("phone") ?? "").trim(),
+          iin: sanitiseIIN(String(fd.get("iin") ?? "")),
+          phone: normalizePhoneForSubmit(String(fd.get("phone") ?? "")),
           city: String(fd.get("city") ?? "").trim(),
-          // The legal/business address is collected on a later step in the bot;
-          // for the landing form we send the city as a placeholder so the
-          // server's required field stays satisfied.
-          address: String(fd.get("city") ?? "").trim(),
+          // address is intentionally omitted — the column is nullable, the bot
+          // captures the legal address on a later step. Sending undefined keeps
+          // the field absent from the JSON body.
           categories,
           categoryOtherText,
           socials: socials as CreatorApplicationSubmitRequest["socials"],
@@ -837,26 +984,48 @@ import {
         }
       }
 
-      const form = document.getElementById("application-form") as HTMLFormElement | null;
       form?.addEventListener("submit", async (e) => {
         e.preventDefault();
+        // Re-entry guard — the `submitting` flag is the source of truth. The
+        // button's `disabled` attribute is for UX but a fast double-click can
+        // still fire two events, so we belt-and-braces it here.
+        if (submitting) return;
+        if (dictionariesError) {
+          showFormError(
+            "Справочники не загрузились. Перезагрузи страницу — без них отправить заявку не получится.",
+          );
+          return;
+        }
+        if (!dictionariesReady) {
+          showFormError("Подожди, справочники ещё загружаются…");
+          return;
+        }
+
         clearFormError();
-        const submitBtn = form.querySelector<HTMLButtonElement>('button[type="submit"]');
-        if (submitBtn) submitBtn.setAttribute("disabled", "true");
+        const payload = collectFormData(form);
+
+        if (payload.socials.length === 0) {
+          showFormError("Укажи хотя бы один аккаунт в соцсети.");
+          return;
+        }
+
+        submitting = true;
+        setSubmitButtonState("submitting");
 
         try {
-          const payload = collectFormData(form);
           const result = await submitCreatorApplication(payload);
           showSuccess(result.telegramBotUrl);
+          // Success screen takes over the viewport — leave the button alone.
         } catch (err) {
           if (err instanceof ApiError) {
             showFormError(err.serverMessage || "Не удалось отправить заявку");
           } else {
             console.error(err);
-            showFormError("Сеть недоступна. Попробуйте позже.");
+            showFormError("Сеть недоступна. Попробуй позже.");
           }
+          setSubmitButtonState("ready");
         } finally {
-          if (submitBtn) submitBtn.removeAttribute("disabled");
+          submitting = false;
         }
       });
     </script>
