@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/AlekSi/pointer"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
@@ -45,8 +46,8 @@ func TestServer_ListAuditLogs(t *testing.T) {
 		audit.EXPECT().List(mock.Anything, domain.AuditFilter{}, 1, 20).
 			Return([]*domain.AuditLog{
 				{
-					ID: "al-1", ActorID: strptr("u-1"), ActorRole: "admin", Action: "login",
-					EntityType: "user", EntityID: strptr("u-1"),
+					ID: "al-1", ActorID: pointer.ToString("u-1"), ActorRole: "admin", Action: "login",
+					EntityType: "user", EntityID: pointer.ToString("u-1"),
 					IPAddress: "127.0.0.1", CreatedAt: created,
 				},
 			}, int64(1), nil)
@@ -58,8 +59,8 @@ func TestServer_ListAuditLogs(t *testing.T) {
 			Data: api.ListAuditLogsData{
 				Logs: []api.AuditLogEntry{
 					{
-						Id: "al-1", ActorId: strptr("u-1"), ActorRole: "admin", Action: "login",
-						EntityType: "user", EntityId: strptr("u-1"),
+						Id: "al-1", ActorId: pointer.ToString("u-1"), ActorRole: "admin", Action: "login",
+						EntityType: "user", EntityId: pointer.ToString("u-1"),
 						OldValue: nil, NewValue: nil,
 						IpAddress: "127.0.0.1", CreatedAt: created,
 					},
@@ -92,8 +93,8 @@ func TestServer_ListAuditLogs(t *testing.T) {
 		audit.EXPECT().List(mock.Anything, expectedFilter, 2, 50).
 			Return([]*domain.AuditLog{
 				{
-					ID: "al-2", ActorID: strptr("u-1"), ActorRole: "admin", Action: "brand_update",
-					EntityType: "brand", EntityID: strptr("e-1"),
+					ID: "al-2", ActorID: pointer.ToString("u-1"), ActorRole: "admin", Action: "brand_update",
+					EntityType: "brand", EntityID: pointer.ToString("e-1"),
 					OldValue: oldPayload, NewValue: newPayload,
 					IPAddress: "127.0.0.1", CreatedAt: created,
 				},
@@ -108,8 +109,8 @@ func TestServer_ListAuditLogs(t *testing.T) {
 			Data: api.ListAuditLogsData{
 				Logs: []api.AuditLogEntry{
 					{
-						Id: "al-2", ActorId: strptr("u-1"), ActorRole: "admin", Action: "brand_update",
-						EntityType: "brand", EntityId: strptr("e-1"),
+						Id: "al-2", ActorId: pointer.ToString("u-1"), ActorRole: "admin", Action: "brand_update",
+						EntityType: "brand", EntityId: pointer.ToString("e-1"),
 						OldValue: map[string]any{"name": "Old"},
 						NewValue: map[string]any{"name": "Acme"},
 						IpAddress: "127.0.0.1", CreatedAt: created,
@@ -216,4 +217,3 @@ func TestRawJSONToAny(t *testing.T) {
 	})
 }
 
-func strptr(s string) *string { return &s }

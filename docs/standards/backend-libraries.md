@@ -12,7 +12,36 @@
 
 Перед написанием любого утилитарного кода — проверить, есть ли готовое решение (Awesome Go, pkg.go.dev, npm). Если есть подходящая библиотека с активной поддержкой — использовать её. Если нет — написать своё, но обосновать почему (в комментарии или PR-описании): нет аналога, аналоги заброшены, аналог тянет неприемлемый транзитивный граф, и т.п.
 
-Кастомные хелперы для стандартных задач (парсинг env vars, graceful shutdown, перехват SQL в тестах и т.п.) — не писать. Ошибки парсинга/валидации — не игнорировать молча: невалидный конфиг = приложение не стартует.
+Кастомные хелперы для стандартных задач (парсинг env vars, graceful shutdown, перехват SQL в тестах, обёртки `&v` для оптиональных полей и т.п.) — не писать. Ошибки парсинга/валидации — не игнорировать молча: невалидный конфиг = приложение не стартует.
+
+## Каноничный реестр библиотек
+
+Список того, что мы уже выбрали для каждой повторяющейся задачи. Перед написанием своего хелпера — проверь, нет ли пункта в этом списке. Если задача новая — после первого использования внеси сюда библиотеку, с которой будем жить дальше. Список пополняется.
+
+| Задача | Библиотека | Пример использования |
+|---|---|---|
+| Создание `*T` из значения (поинтеры для опциональных полей) | `github.com/AlekSi/pointer` | `pointer.ToString("...")`, `pointer.ToInt64(42)`, `pointer.ToTime(t)`, `pointer.GetString(p)` для безопасного дереференса |
+| Конфиг из env | `github.com/caarlos0/env/v11` | `env.Parse(&cfg)` с тегами `env:"NAME,required"` |
+| `.env`-файлы в local-окружении | `github.com/joho/godotenv` | в `cmd/api` до `env.Parse` |
+| HTTP-роутер | `github.com/go-chi/chi/v5` | через сгенерированный `api.HandlerFromMux` |
+| OpenAPI codegen (Go) | `github.com/oapi-codegen/oapi-codegen` | таргет `make generate-api` |
+| Postgres-драйвер и пул | `github.com/jackc/pgx/v5` | через `dbutil.DB`/`dbutil.Pool` |
+| SQL-builder | `github.com/Masterminds/squirrel` | `sq.Select(...)`, `sq.Insert(...)` |
+| Маппинг struct→map по тегам (для INSERT) | `github.com/elgris/stom` | через хелперы `toMap`, `insertEntities` в `repository` |
+| JWT | `github.com/golang-jwt/jwt/v5` | в `service.tokenService` |
+| Хеширование паролей | `golang.org/x/crypto/bcrypt` | в `service.passwordHasher` |
+| Cron | `github.com/robfig/cron/v3` | для периодических задач |
+| Тестовые ассерты + моки | `github.com/stretchr/testify` (`require`, `mock`) | везде в unit/E2E |
+| Кодогенерация моков | `github.com/vektra/mockery` | таргет `make generate-mocks` |
+| Pgx-моки в unit-тестах репозиториев | `github.com/pashagolub/pgxmock/v4` | в `*_test.go` репозиториев |
+| Случайные значения (уникальные ID, токены, test-фикстуры) | `crypto/rand` (stdlib) | `cryptorand.Read(b[:])` + `hex.EncodeToString(b[:])` |
+
+### Правила работы с реестром
+
+- **Поинтеры — всегда через `AlekSi/pointer`.** Кастомные `func ptrTo[T]`, `func strptr` и инлайн `local := "..."; ...; &local` для одноразового pointer'а — не писать. Используем `pointer.ToString`, `pointer.ToInt`, `pointer.ToBool`, `pointer.ToTime` и т.п. Для безопасного дереференса — `pointer.GetString(p)` (вернёт zero value, если nil).
+- **Случайность — `crypto/rand`, `math/rand` запрещён.** Любые недетерминированные случайные значения (уникальные id для тестов, токены, jitter для backoff'а и т.п.) — через `crypto/rand`. `math/rand` и `math/rand/v2` забанены в `golangci.yml` через depguard: «псевдорандом без явного seed» — источник flake'ов (мы уже наступили на это в `e2e/testutil/seed.go`, где две параллельные test-пакета получали одинаковый `runID` и валились на `users_email_unique`). Если действительно нужен **детерминированный** seeded PRNG (fuzz, property-based test с воспроизводимым seed) — вернуть `math/rand/v2` в этом конкретном файле через `//nolint:depguard` с комментарием почему детерминированность здесь корректна.
+- **Перед добавлением новой библиотеки** — обсуждать в PR. Если в реестре уже есть библиотека для смежной задачи и её достаточно — расширяем её использование, не добавляем вторую.
+- **Удаляя зависимость** — обновить реестр тем же PR'ом.
 
 ## Бизнес-логика
 
