@@ -730,6 +730,33 @@ import {
         return s.toLowerCase();
       }
 
+      // Whitelist for the on-input mask. Mirrors the server-side
+      // SocialHandleRegex character class so the user can never type a value
+      // the server would refuse. Capitalisation is allowed during typing and
+      // lowercased on blur — typing how-you-write-it feels natural even
+      // though the wire format is lowercase.
+      const SOCIAL_HANDLE_ALLOWED = /[a-zA-Z0-9._]/;
+
+      // formatSocialHandleInput is the on-keystroke equivalent of the phone
+      // mask: it locks a single "@" prefix at the start, eats any character
+      // outside the allowed class, and collapses pasted URLs to the bare
+      // handle in one keystroke. Always returns a string starting with "@";
+      // the focus/blur listeners decide whether to keep that "@" or hand the
+      // field back to its placeholder when the user leaves it empty.
+      function formatSocialHandleInput(raw: string, code: string): string {
+        let s = raw;
+        const prefix = SOCIAL_URL_PREFIX[code];
+        if (prefix) s = s.replace(prefix, "");
+        const tailIdx = s.search(/[/?#]/);
+        if (tailIdx >= 0) s = s.slice(0, tailIdx);
+        s = s.replace(/^@+/, "");
+        let filtered = "";
+        for (const ch of s) {
+          if (SOCIAL_HANDLE_ALLOWED.test(ch)) filtered += ch;
+        }
+        return "@" + filtered.slice(0, 30);
+      }
+
       // === DOM refs ===
       const phoneInput = document.querySelector<HTMLInputElement>(
         '[data-testid="phone-input"]',
@@ -842,17 +869,42 @@ import {
         });
       });
 
-      // === Normalize social handle on blur ===
-      // Visible feedback for the user — they see what the server will receive.
-      // The same normalization is applied again at submit time as a safety net.
+      // === Wire social handle mask ===
+      // Locks an "@" prefix in the input (analogous to phone "+7 ") and
+      // filters keystrokes to the server's allowed character class. Pasted
+      // URLs collapse to the bare handle. On blur the value is lowercased
+      // and re-prefixed with "@" so the user sees exactly what the server
+      // will receive; an empty/sentinel-only field clears so the placeholder
+      // reappears and HTML5 required-validation flags it as missing.
       document
         .querySelectorAll<HTMLInputElement>("[data-social-input]")
         .forEach((input) => {
+          const name = input.dataset.socialInput;
+          const code = name ? socialCodeMap[name] : null;
+          if (!code) return;
+
+          input.addEventListener("input", () => {
+            const formatted = formatSocialHandleInput(input.value, code);
+            if (formatted !== input.value) {
+              input.value = formatted;
+              input.setSelectionRange(formatted.length, formatted.length);
+            }
+          });
+
+          input.addEventListener("focus", () => {
+            if (input.value.trim() === "") {
+              input.value = "@";
+              input.setSelectionRange(1, 1);
+            }
+          });
+
           input.addEventListener("blur", () => {
-            const name = input.dataset.socialInput;
-            const code = name ? socialCodeMap[name] : null;
-            if (!code) return;
-            input.value = normalizeSocialHandle(input.value, code);
+            if (input.value.trim() === "@") {
+              input.value = "";
+              return;
+            }
+            const normalized = normalizeSocialHandle(input.value, code);
+            input.value = normalized === "" ? "" : "@" + normalized;
           });
         });
 
