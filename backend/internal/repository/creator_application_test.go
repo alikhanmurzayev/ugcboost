@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/AlekSi/pointer"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/pashagolub/pgxmock/v4"
@@ -74,26 +75,28 @@ func TestCreatorApplicationRepository_Create(t *testing.T) {
 		t.Parallel()
 		mock := newPgxmock(t)
 		repo := &creatorApplicationRepository{db: mock}
-		middle := "Ивановна"
-		other := "Авторские ASMR-видео"
 		birth := time.Date(1995, 5, 15, 0, 0, 0, 0, time.UTC)
 		created := time.Date(2026, 4, 20, 18, 0, 0, 0, time.UTC)
 
+		// pgx/stom dereferences *string before binding to the SQL parameter, so
+		// WithArgs receives the raw string. AddRow goes through the dbutil
+		// scanner which requires the source kind to match the destination kind
+		// (*string), so the address/middle/other columns are sourced as pointers.
 		mock.ExpectQuery(sqlStmt).
 			WithArgs("ул. Абая 1", birth, "Авторские ASMR-видео", "Алматы", "Айдана", "950515312348", "Муратова", "Ивановна", "+77001234567").
 			WillReturnRows(pgxmock.NewRows([]string{"address", "birth_date", "category_other_text", "city", "created_at", "first_name", "id", "iin", "last_name", "middle_name", "phone", "status", "updated_at"}).
-				AddRow("ул. Абая 1", birth, &other, "Алматы", created, "Айдана", "app-1", "950515312348", "Муратова", &middle, "+77001234567", "pending", created))
+				AddRow(pointer.ToString("ул. Абая 1"), birth, pointer.ToString("Авторские ASMR-видео"), "Алматы", created, "Айдана", "app-1", "950515312348", "Муратова", pointer.ToString("Ивановна"), "+77001234567", "pending", created))
 
 		row := CreatorApplicationRow{
 			LastName:          "Муратова",
 			FirstName:         "Айдана",
-			MiddleName:        &middle,
+			MiddleName:        pointer.ToString("Ивановна"),
 			IIN:               "950515312348",
 			BirthDate:         birth,
 			Phone:             "+77001234567",
 			City:              "Алматы",
-			Address:           "ул. Абая 1",
-			CategoryOtherText: &other,
+			Address:           pointer.ToString("ул. Абая 1"),
+			CategoryOtherText: pointer.ToString("Авторские ASMR-видео"),
 		}
 		got, err := repo.Create(context.Background(), row)
 		require.NoError(t, err)
@@ -101,13 +104,13 @@ func TestCreatorApplicationRepository_Create(t *testing.T) {
 			ID:                "app-1",
 			LastName:          "Муратова",
 			FirstName:         "Айдана",
-			MiddleName:        &middle,
+			MiddleName:        pointer.ToString("Ивановна"),
 			IIN:               "950515312348",
 			BirthDate:         birth,
 			Phone:             "+77001234567",
 			City:              "Алматы",
-			Address:           "ул. Абая 1",
-			CategoryOtherText: &other,
+			Address:           pointer.ToString("ул. Абая 1"),
+			CategoryOtherText: pointer.ToString("Авторские ASMR-видео"),
 			Status:            "pending",
 			CreatedAt:         created,
 			UpdatedAt:         created,
@@ -131,7 +134,7 @@ func TestCreatorApplicationRepository_Create(t *testing.T) {
 			BirthDate: birth,
 			Phone:     "+77001234567",
 			City:      "Алматы",
-			Address:   "ул. Абая 1",
+			Address:   pointer.ToString("ул. Абая 1"),
 		})
 		require.ErrorIs(t, err, domain.ErrCreatorApplicationDuplicate)
 	})
@@ -153,10 +156,37 @@ func TestCreatorApplicationRepository_Create(t *testing.T) {
 			BirthDate: birth,
 			Phone:     "+77001234567",
 			City:      "Алматы",
-			Address:   "ул. Абая 1",
+			Address:   pointer.ToString("ул. Абая 1"),
 		})
 		require.Error(t, err)
 		require.NotErrorIs(t, err, domain.ErrCreatorApplicationDuplicate)
+	})
+
+	t.Run("address omitted — repo passes nil to insert and reads it back", func(t *testing.T) {
+		t.Parallel()
+		// Landing form does not collect an address; the row hits the DB with
+		// NULL and pgxmock surfaces it as a nil pointer when scanning back.
+		mock := newPgxmock(t)
+		repo := &creatorApplicationRepository{db: mock}
+		birth := time.Date(1995, 5, 15, 0, 0, 0, 0, time.UTC)
+		created := time.Date(2026, 4, 20, 18, 0, 0, 0, time.UTC)
+
+		mock.ExpectQuery(sqlStmt).
+			WithArgs(nil, birth, nil, "Алматы", "Айдана", "950515312348", "Муратова", "Ивановна", "+77001234567").
+			WillReturnRows(pgxmock.NewRows([]string{"address", "birth_date", "category_other_text", "city", "created_at", "first_name", "id", "iin", "last_name", "middle_name", "phone", "status", "updated_at"}).
+				AddRow(nil, birth, nil, "Алматы", created, "Айдана", "app-2", "950515312348", "Муратова", pointer.ToString("Ивановна"), "+77001234567", "pending", created))
+
+		got, err := repo.Create(context.Background(), CreatorApplicationRow{
+			LastName:   "Муратова",
+			FirstName:  "Айдана",
+			MiddleName: pointer.ToString("Ивановна"),
+			IIN:        "950515312348",
+			BirthDate:  birth,
+			Phone:      "+77001234567",
+			City:       "Алматы",
+		})
+		require.NoError(t, err)
+		require.Nil(t, got.Address)
 	})
 }
 
@@ -169,8 +199,6 @@ func TestCreatorApplicationRepository_GetByID(t *testing.T) {
 		t.Parallel()
 		mock := newPgxmock(t)
 		repo := &creatorApplicationRepository{db: mock}
-		middle := "Ивановна"
-		other := "Авторские ASMR"
 		birth := time.Date(1995, 5, 15, 0, 0, 0, 0, time.UTC)
 		created := time.Date(2026, 4, 20, 18, 0, 0, 0, time.UTC)
 		updated := time.Date(2026, 4, 21, 9, 0, 0, 0, time.UTC)
@@ -178,7 +206,7 @@ func TestCreatorApplicationRepository_GetByID(t *testing.T) {
 		mock.ExpectQuery(sqlStmt).
 			WithArgs("app-1").
 			WillReturnRows(pgxmock.NewRows([]string{"address", "birth_date", "category_other_text", "city", "created_at", "first_name", "id", "iin", "last_name", "middle_name", "phone", "status", "updated_at"}).
-				AddRow("ул. Абая 1", birth, &other, "Алматы", created, "Айдана", "app-1", "950515312348", "Муратова", &middle, "+77001234567", "pending", updated))
+				AddRow(pointer.ToString("ул. Абая 1"), birth, pointer.ToString("Авторские ASMR"), "Алматы", created, "Айдана", "app-1", "950515312348", "Муратова", pointer.ToString("Ивановна"), "+77001234567", "pending", updated))
 
 		got, err := repo.GetByID(context.Background(), "app-1")
 		require.NoError(t, err)
@@ -186,13 +214,13 @@ func TestCreatorApplicationRepository_GetByID(t *testing.T) {
 			ID:                "app-1",
 			LastName:          "Муратова",
 			FirstName:         "Айдана",
-			MiddleName:        &middle,
+			MiddleName:        pointer.ToString("Ивановна"),
 			IIN:               "950515312348",
 			BirthDate:         birth,
 			Phone:             "+77001234567",
 			City:              "Алматы",
-			Address:           "ул. Абая 1",
-			CategoryOtherText: &other,
+			Address:           pointer.ToString("ул. Абая 1"),
+			CategoryOtherText: pointer.ToString("Авторские ASMR"),
 			Status:            "pending",
 			CreatedAt:         created,
 			UpdatedAt:         updated,

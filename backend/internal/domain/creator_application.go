@@ -102,7 +102,7 @@ type CreatorApplicationInput struct {
 	IIN               string
 	Phone             string
 	City              string
-	Address           string
+	Address           *string
 	CategoryCodes     []string
 	CategoryOtherText *string
 	Socials           []SocialAccountInput
@@ -154,7 +154,7 @@ type CreatorApplicationDetail struct {
 	BirthDate         time.Time
 	Phone             string
 	City              string
-	Address           string
+	Address           *string
 	CategoryOtherText *string
 	Status            string
 	CreatedAt         time.Time

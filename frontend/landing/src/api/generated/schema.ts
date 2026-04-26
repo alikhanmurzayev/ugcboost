@@ -483,7 +483,11 @@ export interface components {
             iin: string;
             phone: string;
             city: string;
-            address: string;
+            /**
+             * @description Optional legal/postal address. Empty on the landing form (the bot
+             *     collects it later); admins may patch it via moderation tooling.
+             */
+            address?: string | null;
             /**
              * @description One or more category codes from the categories catalogue. Must be non-empty.
              *     Maximum three codes; submissions with more are rejected with 422.
@@ -572,7 +576,7 @@ export interface components {
             birthDate: string;
             phone: string;
             city: components["schemas"]["CreatorApplicationDetailCity"];
-            address: string;
+            address?: string | null;
             /** @description Free-text niche description when categories include "other". */
             categoryOtherText?: string | null;
             /**

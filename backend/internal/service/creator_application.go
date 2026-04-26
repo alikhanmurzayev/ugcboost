@@ -176,13 +176,16 @@ func duplicateError() error {
 
 // trimmedCreatorApplicationInput holds the post-trim required-field values so
 // the service can both validate and reuse them without re-running TrimSpace.
+// Address is optional: if the input pointer is nil or trims to empty, the
+// trimmed value is nil and the column stays NULL — the bot/admin collects the
+// real legal address later.
 type trimmedCreatorApplicationInput struct {
 	LastName  string
 	FirstName string
 	IIN       string
 	Phone     string
 	City      string
-	Address   string
+	Address   *string
 }
 
 // trimAndValidateRequired trims whitespace from every mandatory string field
@@ -196,7 +199,7 @@ func trimAndValidateRequired(in domain.CreatorApplicationInput) (trimmedCreatorA
 		IIN:       strings.TrimSpace(in.IIN),
 		Phone:     strings.TrimSpace(in.Phone),
 		City:      strings.TrimSpace(in.City),
-		Address:   strings.TrimSpace(in.Address),
+		Address:   trimOptional(in.Address),
 	}
 	missing := func(name string) error {
 		return domain.NewValidationError(domain.CodeValidation,
@@ -213,8 +216,6 @@ func trimAndValidateRequired(in domain.CreatorApplicationInput) (trimmedCreatorA
 		return out, missing("phone")
 	case out.City == "":
 		return out, missing("city")
-	case out.Address == "":
-		return out, missing("address")
 	}
 	return out, nil
 }

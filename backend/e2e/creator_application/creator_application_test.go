@@ -78,6 +78,11 @@ import (
 // aggregate's dictionary resolution returns a populated name; sending a raw
 // label would still pass the submit validation but would force the read path
 // onto the deactivated-code fallback in every successful test.
+//
+// Address is intentionally left nil — the landing form does not collect a
+// legal address, the column is nullable, and the GET aggregate must echo nil
+// back. Tests that need to verify non-nil address round-trip set it
+// explicitly.
 func validRequest(iin string) apiclient.CreatorApplicationSubmitRequest {
 	middle := "Ивановна"
 	return apiclient.CreatorApplicationSubmitRequest{
@@ -87,7 +92,6 @@ func validRequest(iin string) apiclient.CreatorApplicationSubmitRequest {
 		Iin:        iin,
 		Phone:      "+77001234567",
 		City:       "almaty",
-		Address:    "ул. Абая 1",
 		Categories: []string{"beauty", "fashion"},
 		Socials: []apiclient.SocialAccountInput{
 			{Platform: apiclient.Instagram, Handle: "@aidana_" + iin[7:]},
@@ -355,7 +359,8 @@ func TestGetCreatorApplicationNotFound(t *testing.T) {
 // verifyCreatorApplicationByID. The struct mirrors the fields
 // the GET aggregate must echo back after a successful submit; dynamic data
 // (id, timestamps, ipAddress/userAgent, dictionary names) is checked
-// separately by the helper.
+// separately by the helper. Address is *string because the column is now
+// optional — landing flow leaves it nil, admin tooling fills it in later.
 type expectedCreatorApplication struct {
 	LastName          string
 	FirstName         string
@@ -363,7 +368,7 @@ type expectedCreatorApplication struct {
 	IIN               string
 	Phone             string
 	City              string
-	Address           string
+	Address           *string
 	CategoryOtherText string
 	CategoryCodes     []string
 	Socials           []apiclient.CreatorApplicationDetailSocial
@@ -513,7 +518,6 @@ func validRequestMap(iin string) map[string]any {
 		"iin":        iin,
 		"phone":      "+77001234567",
 		"city":       "Алматы",
-		"address":    "ул. Абая 1",
 		"categories": []string{"beauty", "fashion"},
 		"socials": []map[string]string{
 			{"platform": "instagram", "handle": "@aidana_" + iin[7:]},

@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/AlekSi/pointer"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	openapi_types "github.com/oapi-codegen/runtime/types"
@@ -25,17 +26,19 @@ import (
 )
 
 // validRequest returns a payload that the handler will accept end-to-end so
-// scenarios can mutate one field to hit a specific branch.
+// scenarios can mutate one field to hit a specific branch. Address is set as
+// a pointer so the "every request field forwards verbatim" success test can
+// assert non-nil pass-through; scenarios that need the field absent override
+// it with nil before sending.
 func validRequest() api.CreatorApplicationSubmitRequest {
-	middle := "Ивановна"
 	return api.CreatorApplicationSubmitRequest{
 		LastName:   "Муратова",
 		FirstName:  "Айдана",
-		MiddleName: &middle,
+		MiddleName: pointer.ToString("Ивановна"),
 		Iin:        "950515312348",
 		Phone:      "+77001234567",
 		City:       "Алматы",
-		Address:    "ул. Абая 1",
+		Address:    pointer.ToString("ул. Абая 1"),
 		Categories: []string{"beauty", "fashion"},
 		Socials: []api.SocialAccountInput{
 			{Platform: api.Instagram, Handle: "@aidana"},
@@ -134,11 +137,11 @@ func TestServer_SubmitCreatorApplication(t *testing.T) {
 		require.Equal(t, domain.CreatorApplicationInput{
 			LastName:         "Муратова",
 			FirstName:        "Айдана",
-			MiddleName:       strptr("Ивановна"),
+			MiddleName:       pointer.ToString("Ивановна"),
 			IIN:              "950515312348",
 			Phone:            "+77001234567",
 			City:             "Алматы",
-			Address:          "ул. Абая 1",
+			Address:          pointer.ToString("ул. Абая 1"),
 			CategoryCodes:    []string{"beauty", "fashion"},
 			Socials: []domain.SocialAccountInput{
 				{Platform: "instagram", Handle: "@aidana"},
@@ -150,6 +153,33 @@ func TestServer_SubmitCreatorApplication(t *testing.T) {
 			AgreementVersion: "2026-04-20",
 			PrivacyVersion:   "2026-04-20",
 		}, captured)
+	})
+
+	t.Run("address absent — handler forwards nil pointer to service", func(t *testing.T) {
+		t.Parallel()
+		// Landing form does not collect a legal address. Verify the handler
+		// passes the optional pointer through unchanged so the service sees
+		// nil and the row column stays NULL.
+		appID := uuid.MustParse("44444444-5555-6666-7777-888888888888")
+		creator := mocks.NewMockCreatorApplicationService(t)
+		var captured domain.CreatorApplicationInput
+		creator.EXPECT().Submit(mock.Anything, mock.Anything).
+			Run(func(_ context.Context, in domain.CreatorApplicationInput) {
+				captured = in
+			}).
+			Return(&domain.CreatorApplicationSubmission{
+				ApplicationID: appID.String(),
+				BirthDate:     time.Date(1995, 5, 15, 0, 0, 0, 0, time.UTC),
+			}, nil)
+
+		req := validRequest()
+		req.Address = nil
+
+		router := newTestRouter(t, serverWithCreator(t, creator, logmocks.NewMockLogger(t)))
+		w, _ := doJSON[api.CreatorApplicationSubmitResult](t, router, http.MethodPost, "/creators/applications", req)
+
+		require.Equal(t, http.StatusCreated, w.Code)
+		require.Nil(t, captured.Address)
 	})
 
 	t.Run("oversized user agent is truncated", func(t *testing.T) {
@@ -331,8 +361,6 @@ func TestServer_GetCreatorApplication(t *testing.T) {
 	t.Run("success returns full aggregate", func(t *testing.T) {
 		t.Parallel()
 		appID := uuid.MustParse("11111111-2222-3333-4444-555555555555")
-		middle := "Ивановна"
-		other := "Авторские ASMR"
 		birth := time.Date(1995, 5, 15, 0, 0, 0, 0, time.UTC)
 		created := time.Date(2026, 4, 20, 18, 0, 0, 0, time.UTC)
 		updated := time.Date(2026, 4, 21, 9, 0, 0, 0, time.UTC)
@@ -346,13 +374,13 @@ func TestServer_GetCreatorApplication(t *testing.T) {
 				ID:                appID.String(),
 				LastName:          "Муратова",
 				FirstName:         "Айдана",
-				MiddleName:        &middle,
+				MiddleName:        pointer.ToString("Ивановна"),
 				IIN:               "950515312348",
 				BirthDate:         birth,
 				Phone:             "+77001234567",
 				City:              "almaty",
-				Address:           "ул. Абая 1",
-				CategoryOtherText: &other,
+				Address:           pointer.ToString("ул. Абая 1"),
+				CategoryOtherText: pointer.ToString("Авторские ASMR"),
 				Status:            domain.CreatorApplicationStatusPending,
 				CreatedAt:         created,
 				UpdatedAt:         updated,
@@ -392,13 +420,13 @@ func TestServer_GetCreatorApplication(t *testing.T) {
 				Id:                appID,
 				LastName:          "Муратова",
 				FirstName:         "Айдана",
-				MiddleName:        &middle,
+				MiddleName:        pointer.ToString("Ивановна"),
 				Iin:               "950515312348",
 				BirthDate:         openapi_types.Date{Time: birth},
 				Phone:             "+77001234567",
 				City:              api.CreatorApplicationDetailCity{Code: "almaty", Name: "Алматы", SortOrder: 100},
-				Address:           "ул. Абая 1",
-				CategoryOtherText: &other,
+				Address:           pointer.ToString("ул. Абая 1"),
+				CategoryOtherText: pointer.ToString("Авторские ASMR"),
 				Status:            api.Pending,
 				CreatedAt:         created,
 				UpdatedAt:         updated,
@@ -438,7 +466,7 @@ func TestServer_GetCreatorApplication(t *testing.T) {
 				BirthDate:  birth,
 				Phone:      "+77001234567",
 				City:       "atyrau", // not present in the active dictionary below
-				Address:    "ул. Абая 1",
+				Address:    pointer.ToString("ул. Абая 1"),
 				Status:     domain.CreatorApplicationStatusPending,
 				CreatedAt:  created,
 				UpdatedAt:  created,

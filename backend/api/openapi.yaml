@@ -1017,7 +1017,6 @@ components:
         - iin
         - phone
         - city
-        - address
         - categories
         - socials
         - acceptedAll
@@ -1048,8 +1047,11 @@ components:
           maxLength: 128
         address:
           type: string
-          minLength: 1
+          nullable: true
           maxLength: 512
+          description: |
+            Optional legal/postal address. Empty on the landing form (the bot
+            collects it later); admins may patch it via moderation tooling.
         categories:
           type: array
           description: |
@@ -1172,7 +1174,6 @@ components:
         - birthDate
         - phone
         - city
-        - address
         - status
         - createdAt
         - updatedAt
@@ -1203,6 +1204,7 @@ components:
           $ref: "#/components/schemas/CreatorApplicationDetailCity"
         address:
           type: string
+          nullable: true
         categoryOtherText:
           type: string
           nullable: true

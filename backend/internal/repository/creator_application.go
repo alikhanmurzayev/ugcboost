@@ -51,7 +51,7 @@ type CreatorApplicationRow struct {
 	BirthDate         time.Time `db:"birth_date"          insert:"birth_date"`
 	Phone             string    `db:"phone"               insert:"phone"`
 	City              string    `db:"city"                insert:"city"`
-	Address           string    `db:"address"             insert:"address"`
+	Address           *string   `db:"address"             insert:"address"`
 	CategoryOtherText *string   `db:"category_other_text" insert:"category_other_text"`
 	Status            string    `db:"status"`
 	CreatedAt         time.Time `db:"created_at"`

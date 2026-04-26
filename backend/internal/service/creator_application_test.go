@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/AlekSi/pointer"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
@@ -23,17 +24,20 @@ import (
 // can selectively invalidate one field to hit a specific branch.
 // IIN 950515312348 encodes 1995-05-15. Against the fixed "now" of 2026-04-20
 // the applicant is 30, which clears the 21+ floor with margin.
+//
+// Address is intentionally left nil — the landing flow does not collect a
+// legal address (the bot/admin captures it after approval), so the canonical
+// "valid input" reflects that. Tests that need a non-nil address set it
+// explicitly.
 func validCreatorInput(t *testing.T) domain.CreatorApplicationInput {
 	t.Helper()
-	middle := "Ивановна"
 	return domain.CreatorApplicationInput{
 		LastName:      "Муратова",
 		FirstName:     "Айдана",
-		MiddleName:    &middle,
+		MiddleName:    pointer.ToString("Ивановна"),
 		IIN:           "950515312348",
 		Phone:         "+77001234567",
 		City:          "Алматы",
-		Address:       "ул. Абая 1",
 		CategoryCodes: []string{"beauty", "fashion"},
 		Socials: []domain.SocialAccountInput{
 			{Platform: domain.SocialPlatformInstagram, Handle: "@aidana"},
@@ -342,7 +346,6 @@ func TestCreatorApplicationService_Submit(t *testing.T) {
 		in := validCreatorInput(t)
 		birth := time.Date(1995, 5, 15, 0, 0, 0, 0, time.UTC)
 		created := time.Date(2026, 4, 20, 18, 0, 0, 0, time.UTC)
-		middle := "Ивановна"
 
 		expectTxBegin(rig)
 		expectFactoryWiring(rig)
@@ -355,22 +358,20 @@ func TestCreatorApplicationService_Submit(t *testing.T) {
 		rig.appRepo.EXPECT().Create(mock.Anything, repository.CreatorApplicationRow{
 			LastName:   "Муратова",
 			FirstName:  "Айдана",
-			MiddleName: &middle,
+			MiddleName: pointer.ToString("Ивановна"),
 			IIN:        "950515312348",
 			BirthDate:  birth,
 			Phone:      "+77001234567",
 			City:       "Алматы",
-			Address:    "ул. Абая 1",
 		}).Return(&repository.CreatorApplicationRow{
 			ID:         "app-1",
 			LastName:   "Муратова",
 			FirstName:  "Айдана",
-			MiddleName: &middle,
+			MiddleName: pointer.ToString("Ивановна"),
 			IIN:        "950515312348",
 			BirthDate:  birth,
 			Phone:      "+77001234567",
 			City:       "Алматы",
-			Address:    "ул. Абая 1",
 			Status:     "pending",
 			CreatedAt:  created,
 			UpdatedAt:  created,
@@ -404,6 +405,69 @@ func TestCreatorApplicationService_Submit(t *testing.T) {
 			ApplicationID: "app-1",
 			BirthDate:     birth,
 		}, got)
+	})
+
+	t.Run("address provided — propagated to repo as pointer", func(t *testing.T) {
+		t.Parallel()
+		// Default validCreatorInput leaves Address nil (landing form does not
+		// collect it). This scenario flips it on to lock the contract that a
+		// non-nil pointer reaches the row verbatim — bot/admin will eventually
+		// patch the same column once the legal address is captured.
+		rig := newCreatorServiceRig(t)
+		in := validCreatorInput(t)
+		in.Address = pointer.ToString("ул. Абая 1")
+
+		expectTxBegin(rig)
+		expectFactoryWiring(rig)
+		rig.appRepo.EXPECT().HasActiveByIIN(mock.Anything, in.IIN).Return(false, nil)
+		rig.dictRepo.EXPECT().GetActiveByCodes(mock.Anything, repository.TableCategories, []string{"beauty", "fashion"}).
+			Return([]*repository.DictionaryEntryRow{
+				{ID: "c-1", Code: "beauty", Active: true},
+				{ID: "c-2", Code: "fashion", Active: true},
+			}, nil)
+		rig.appRepo.EXPECT().Create(mock.Anything, mock.MatchedBy(func(row repository.CreatorApplicationRow) bool {
+			return row.Address != nil && *row.Address == "ул. Абая 1"
+		})).Return(&repository.CreatorApplicationRow{ID: "app-addr"}, nil)
+		rig.appCategoryRepo.EXPECT().InsertMany(mock.Anything, mock.Anything).Return(nil)
+		rig.appSocialRepo.EXPECT().InsertMany(mock.Anything, mock.Anything).Return(nil)
+		rig.appConsentRepo.EXPECT().InsertMany(mock.Anything, mock.Anything).Return(nil)
+		rig.auditRepo.EXPECT().Create(mock.Anything, mock.Anything).Return(nil)
+		rig.logger.EXPECT().Info(mock.Anything, "creator application submitted", []any{"application_id", "app-addr"}).Once()
+
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.logger)
+		_, err := svc.Submit(context.Background(), in)
+		require.NoError(t, err)
+	})
+
+	t.Run("address whitespace-only trims to nil", func(t *testing.T) {
+		t.Parallel()
+		// Whitespace input from the wire must collapse to NULL, not be persisted
+		// as a blank string — the column is now nullable, and "  " in the DB
+		// would lie about whether the address was actually captured.
+		rig := newCreatorServiceRig(t)
+		in := validCreatorInput(t)
+		in.Address = pointer.ToString("   ")
+
+		expectTxBegin(rig)
+		expectFactoryWiring(rig)
+		rig.appRepo.EXPECT().HasActiveByIIN(mock.Anything, in.IIN).Return(false, nil)
+		rig.dictRepo.EXPECT().GetActiveByCodes(mock.Anything, repository.TableCategories, []string{"beauty", "fashion"}).
+			Return([]*repository.DictionaryEntryRow{
+				{ID: "c-1", Code: "beauty", Active: true},
+				{ID: "c-2", Code: "fashion", Active: true},
+			}, nil)
+		rig.appRepo.EXPECT().Create(mock.Anything, mock.MatchedBy(func(row repository.CreatorApplicationRow) bool {
+			return row.Address == nil
+		})).Return(&repository.CreatorApplicationRow{ID: "app-blank"}, nil)
+		rig.appCategoryRepo.EXPECT().InsertMany(mock.Anything, mock.Anything).Return(nil)
+		rig.appSocialRepo.EXPECT().InsertMany(mock.Anything, mock.Anything).Return(nil)
+		rig.appConsentRepo.EXPECT().InsertMany(mock.Anything, mock.Anything).Return(nil)
+		rig.auditRepo.EXPECT().Create(mock.Anything, mock.Anything).Return(nil)
+		rig.logger.EXPECT().Info(mock.Anything, "creator application submitted", []any{"application_id", "app-blank"}).Once()
+
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.logger)
+		_, err := svc.Submit(context.Background(), in)
+		require.NoError(t, err)
 	})
 
 	t.Run("success with other category persists trimmed text", func(t *testing.T) {
@@ -585,8 +649,6 @@ func TestCreatorApplicationService_GetByID(t *testing.T) {
 	t.Run("success builds aggregate and reorders consents to canonical sequence", func(t *testing.T) {
 		t.Parallel()
 		rig := newCreatorServiceRig(t)
-		middle := "Ивановна"
-		other := "Авторские ASMR"
 		birth := time.Date(1995, 5, 15, 0, 0, 0, 0, time.UTC)
 		created := time.Date(2026, 4, 20, 18, 0, 0, 0, time.UTC)
 		updated := time.Date(2026, 4, 21, 9, 0, 0, 0, time.UTC)
@@ -601,13 +663,13 @@ func TestCreatorApplicationService_GetByID(t *testing.T) {
 				ID:                appID,
 				LastName:          "Муратова",
 				FirstName:         "Айдана",
-				MiddleName:        &middle,
+				MiddleName:        pointer.ToString("Ивановна"),
 				IIN:               "950515312348",
 				BirthDate:         birth,
 				Phone:             "+77001234567",
 				City:              "Алматы",
-				Address:           "ул. Абая 1",
-				CategoryOtherText: &other,
+				Address:           pointer.ToString("ул. Абая 1"),
+				CategoryOtherText: pointer.ToString("Авторские ASMR"),
 				Status:            domain.CreatorApplicationStatusPending,
 				CreatedAt:         created,
 				UpdatedAt:         updated,
@@ -636,13 +698,13 @@ func TestCreatorApplicationService_GetByID(t *testing.T) {
 			ID:                appID,
 			LastName:          "Муратова",
 			FirstName:         "Айдана",
-			MiddleName:        &middle,
+			MiddleName:        pointer.ToString("Ивановна"),
 			IIN:               "950515312348",
 			BirthDate:         birth,
 			Phone:             "+77001234567",
 			City:              "Алматы",
-			Address:           "ул. Абая 1",
-			CategoryOtherText: &other,
+			Address:           pointer.ToString("ул. Абая 1"),
+			CategoryOtherText: pointer.ToString("Авторские ASMR"),
 			Status:            domain.CreatorApplicationStatusPending,
 			CreatedAt:         created,
 			UpdatedAt:         updated,

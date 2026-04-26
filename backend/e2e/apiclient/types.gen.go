@@ -252,7 +252,7 @@ type CreatorApplicationDetailConsentConsentType string
 
 // CreatorApplicationDetailData defines model for CreatorApplicationDetailData.
 type CreatorApplicationDetailData struct {
-	Address string `json:"address"`
+	Address *string `json:"address,omitempty"`
 
 	// BirthDate Birth date derived from the IIN at submission time.
 	BirthDate openapi_types.Date `json:"birthDate"`
@@ -313,8 +313,11 @@ type CreatorApplicationSubmitRequest struct {
 	// unconditional consent to all four. Backend writes four rows in
 	// creator_application_consents bound to the current document versions.
 	// Must be true; otherwise the request is rejected with 422 MISSING_CONSENT.
-	AcceptedAll bool   `json:"acceptedAll"`
-	Address     string `json:"address"`
+	AcceptedAll bool `json:"acceptedAll"`
+
+	// Address Optional legal/postal address. Empty on the landing form (the bot
+	// collects it later); admins may patch it via moderation tooling.
+	Address *string `json:"address,omitempty"`
 
 	// Categories One or more category codes from the categories catalogue. Must be non-empty.
 	// Maximum three codes; submissions with more are rejected with 422.
