@@ -1,0 +1,124 @@
+@page {
+  size: A4;
+  margin: 2cm 2cm 2.5cm 2cm;
+}
+
+body {
+  font-family: "Georgia", "Times New Roman", serif;
+  font-size: 11pt;
+  line-height: 1.55;
+  color: #1a1a1a;
+  max-width: 100%;
+  margin: 0;
+  padding: 0;
+  text-align: justify;
+  hyphens: auto;
+}
+
+h1 {
+  font-family: "Helvetica", "Arial", sans-serif;
+  font-size: 18pt;
+  font-weight: 700;
+  color: #000;
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  margin: 0 0 0.5em 0;
+  padding: 0 0 0.4em 0;
+  border-bottom: 2px solid #000;
+  page-break-after: avoid;
+  hyphens: none;
+}
+
+h2 {
+  font-family: "Helvetica", "Arial", sans-serif;
+  font-size: 13pt;
+  font-weight: 700;
+  color: #000;
+  text-transform: uppercase;
+  margin: 1.8em 0 0.7em 0;
+  padding: 0.3em 0 0.3em 0.5em;
+  border-left: 4px solid #c8102e;
+  background: #f7f7f7;
+  page-break-after: avoid;
+  hyphens: none;
+}
+
+h3 {
+  font-family: "Helvetica", "Arial", sans-serif;
+  font-size: 11.5pt;
+  font-weight: 700;
+  color: #c8102e;
+  margin: 1.2em 0 0.4em 0;
+  page-break-after: avoid;
+  hyphens: none;
+}
+
+p {
+  margin: 0.5em 0;
+}
+
+strong {
+  font-weight: 700;
+  color: #000;
+}
+
+em {
+  font-style: italic;
+}
+
+ul, ol {
+  margin: 0.5em 0;
+  padding-left: 1.4em;
+}
+
+li {
+  margin: 0.25em 0;
+}
+
+hr {
+  border: none;
+  border-top: 1px solid #ccc;
+  margin: 1.5em 0;
+}
+
+.preamble {
+  text-align: center;
+  margin-bottom: 1.5em;
+  page-break-after: avoid;
+}
+
+.preamble-meta {
+  text-align: center;
+  margin: 0.4em 0;
+  font-size: 10.5pt;
+  color: #444;
+}
+
+.signatures {
+  margin-top: 2em;
+  page-break-before: auto;
+}
+
+.signature-block {
+  margin: 1em 0;
+  padding: 0.8em 1em;
+  background: #fafafa;
+  border-left: 3px solid #999;
+}
+
+/* Avoid orphan headings */
+h1, h2, h3 {
+  break-after: avoid-page;
+}
+
+/* Break tightly */
+p, li {
+  orphans: 3;
+  widows: 3;
+}
+
+/* Header marker for sections */
+.section-divider {
+  page-break-before: auto;
+}

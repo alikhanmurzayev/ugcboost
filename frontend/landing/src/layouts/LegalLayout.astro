@@ -1,0 +1,130 @@
+---
+import "../styles/global.css";
+import { footer } from "../content";
+
+const { frontmatter } = Astro.props;
+---
+
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{frontmatter.title} — UGC boost</title>
+    <link
+      rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Archivo+Black&display=swap"
+    />
+    <style is:global>
+      body {
+        font-family: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+      }
+      .display {
+        font-family: "Archivo Black", "Space Grotesk", sans-serif;
+        letter-spacing: -0.03em;
+      }
+      .legal-content {
+        color: #d4d4d4;
+        line-height: 1.7;
+      }
+      .legal-content h1 {
+        font-family: "Archivo Black", "Space Grotesk", sans-serif;
+        letter-spacing: -0.03em;
+        text-transform: uppercase;
+        font-size: 2rem;
+        line-height: 1.1;
+        color: #ffffff;
+        margin-top: 0;
+        margin-bottom: 2rem;
+      }
+      @media (min-width: 768px) {
+        .legal-content h1 {
+          font-size: 3rem;
+        }
+      }
+      .legal-content h2 {
+        font-family: "Archivo Black", "Space Grotesk", sans-serif;
+        letter-spacing: -0.03em;
+        text-transform: uppercase;
+        font-size: 1.25rem;
+        line-height: 1.2;
+        color: #f472b6;
+        margin-top: 3rem;
+        margin-bottom: 1rem;
+      }
+      @media (min-width: 768px) {
+        .legal-content h2 {
+          font-size: 1.5rem;
+        }
+      }
+      .legal-content h3 {
+        font-weight: 600;
+        font-size: 1.05rem;
+        color: #ffffff;
+        margin-top: 2rem;
+        margin-bottom: 0.75rem;
+      }
+      .legal-content p {
+        margin: 0.85rem 0;
+        font-size: 0.95rem;
+      }
+      .legal-content ul,
+      .legal-content ol {
+        margin: 0.85rem 0;
+        padding-left: 1.5rem;
+      }
+      .legal-content li {
+        margin: 0.4rem 0;
+        font-size: 0.95rem;
+      }
+      .legal-content strong {
+        color: #ffffff;
+        font-weight: 600;
+      }
+      .legal-content a {
+        color: #f472b6;
+        text-decoration: underline;
+        text-underline-offset: 2px;
+      }
+      .legal-content a:hover {
+        color: #ec4899;
+      }
+      .legal-content hr {
+        border: none;
+        border-top: 1px solid rgba(255, 255, 255, 0.1);
+        margin: 2.5rem 0;
+      }
+    </style>
+  </head>
+  <body class="bg-neutral-950 text-white antialiased">
+    <header class="sticky top-0 z-50 border-b border-white/10 bg-neutral-950/90 backdrop-blur">
+      <div class="mx-auto flex max-w-5xl items-center justify-between px-4 py-3 md:px-6 md:py-4">
+        <a href="/" class="flex items-center">
+          <img
+            src="/logos/ugc-boost-white.png"
+            alt="UGC boost"
+            class="h-10 w-auto md:h-12"
+          />
+        </a>
+        <a
+          href="/"
+          class="text-xs font-bold uppercase tracking-wider text-neutral-400 transition hover:text-pink-400 md:text-sm"
+        >
+          ← На главную
+        </a>
+      </div>
+    </header>
+
+    <main class="mx-auto max-w-3xl px-4 py-12 md:px-6 md:py-20">
+      <article class="legal-content">
+        <slot />
+      </article>
+    </main>
+
+    <footer class="border-t border-white/10 bg-neutral-950">
+      <div class="mx-auto max-w-5xl px-4 py-8 text-xs text-neutral-500 md:px-6 md:py-10">
+        <p>{footer.legalEntity}</p>
+        <p class="mt-1">{footer.copyright}</p>
+      </div>
+    </footer>
+  </body>
+</html>
