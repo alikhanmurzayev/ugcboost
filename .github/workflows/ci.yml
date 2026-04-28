@@ -199,6 +199,12 @@ jobs:
           tags: |
             ${{ env.IMAGE_PREFIX }}/${{ matrix.image }}:staging
             ${{ env.IMAGE_PREFIX }}/${{ matrix.image }}:${{ steps.tags.outputs.sha }}
+      - name: Tag :production (only on push to main)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          docker buildx imagetools create \
+            -t ${{ env.IMAGE_PREFIX }}/${{ matrix.image }}:production \
+            ${{ env.IMAGE_PREFIX }}/${{ matrix.image }}:${{ steps.tags.outputs.sha }}
 
   # ── Stage 2: Isolated E2E (parallel with stage 3) ──────────────
 
@@ -372,6 +378,58 @@ jobs:
             -H "CF-Access-Client-Id: ${{ secrets.CF_ACCESS_CLIENT_ID }}" \
             -H "CF-Access-Client-Secret: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}" \
             https://staging-api.ugcboost.kz/healthz
+
+  # ── Stage 3 (prod): Migrate + Deploy to Production ─────────────
+  # Запускается только на push в main (после merge PR). Миграции идут
+  # ПЕРЕД deploy: сначала схема БД, потом сервисы — иначе backend
+  # стартует на устаревшей схеме и валится.
+
+  migrate-production:
+    name: Migrate Production DB
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs:
+      [lint-backend, lint-web, lint-tma, lint-landing,
+       test-unit-backend, test-unit-web, test-unit-tma, test-unit-landing,
+       build-and-push-images]
+    steps:
+      - name: Run migrations via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ vars.PROD_HOST }}
+          username: deploy
+          key: ${{ secrets.PROD_DEPLOY_SSH_KEY }}
+          port: 2222
+          script: |
+            echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            docker pull ${{ env.IMAGE_PREFIX }}/backend:production
+            docker run --rm --network=dokploy-network \
+              --entrypoint goose \
+              ${{ env.IMAGE_PREFIX }}/backend:production \
+              -dir /migrations postgres "${{ secrets.PROD_DATABASE_URL }}" up
+
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: [migrate-production]
+    steps:
+      - name: Trigger Dokploy webhooks via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ vars.PROD_HOST }}
+          username: deploy
+          key: ${{ secrets.PROD_DEPLOY_SSH_KEY }}
+          port: 2222
+          script: |
+            curl -sSf -X POST "${{ secrets.DOKPLOY_WEBHOOK_PROD_BACKEND }}"
+            curl -sSf -X POST "${{ secrets.DOKPLOY_WEBHOOK_PROD_WEB }}"
+            curl -sSf -X POST "${{ secrets.DOKPLOY_WEBHOOK_PROD_TMA }}"
+            curl -sSf -X POST "${{ secrets.DOKPLOY_WEBHOOK_PROD_LANDING }}"
+      - name: Health check
+        run: |
+          curl -sSf --retry 10 --retry-delay 5 --retry-all-errors \
+            https://api.ugcboost.kz/healthz
 
   # ── Stage 4: Staging E2E (needs stage 3) ───────────────────────
 
