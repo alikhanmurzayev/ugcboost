@@ -132,16 +132,20 @@ func TestEnsureAdult(t *testing.T) {
 
 	t.Run("under MinCreatorAge by one day", func(t *testing.T) {
 		t.Parallel()
-		birth := time.Date(2005, time.April, 21, 0, 0, 0, 0, time.UTC)
+		// Birth is one day past the MinCreatorAge anniversary aligned with
+		// `now`, so the applicant is one day shy of MinCreatorAge.
 		now := time.Date(2026, time.April, 20, 0, 0, 0, 0, time.UTC)
+		birth := now.AddDate(-MinCreatorAge, 0, 1)
 		err := EnsureAdult(birth, now)
 		require.ErrorIs(t, err, ErrIINUnderAge)
 	})
 
 	t.Run("exactly MinCreatorAge today", func(t *testing.T) {
 		t.Parallel()
-		birth := time.Date(2005, time.April, 20, 0, 0, 0, 0, time.UTC)
+		// Anniversary lands on `now`, so the applicant turns MinCreatorAge
+		// exactly today.
 		now := time.Date(2026, time.April, 20, 0, 0, 0, 0, time.UTC)
+		birth := now.AddDate(-MinCreatorAge, 0, 0)
 		require.NoError(t, EnsureAdult(birth, now))
 	})
 

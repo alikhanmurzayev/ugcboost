@@ -12,7 +12,7 @@ import type { APIRequestContext } from "@playwright/test";
 // MinCreatorAge mirrors domain.MinCreatorAge in the backend. Bumping the
 // backend constant means bumping this one too — the underage helper relies
 // on it.
-export const MIN_CREATOR_AGE = 21;
+export const MIN_CREATOR_AGE = 18;
 
 // generateValidIIN returns a checksum-valid Kazakhstani IIN for the given
 // birth date. The serial is randomised, so two calls on the same date give
