@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/AlekSi/pointer"
+
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/api"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/dbutil"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/domain"
@@ -23,18 +25,20 @@ func contextWithActor(ctx context.Context, userID, role string) context.Context 
 // writeAudit appends a single audit record using the supplied tx-bound repo.
 // Actor data (user id, role, ip) is pulled from the request context so that
 // every service call-site stays consistent. EntityID may be empty ("") for
-// events that do not target a specific entity.
+// events that do not target a specific entity. ActorID is nil when the
+// request has no authenticated user (public endpoints).
 func writeAudit(ctx context.Context, repo repository.AuditRepo, action, entityType, entityID string, oldValue, newValue any) error {
 	row := repository.AuditLogRow{
-		ActorID:    middleware.UserIDFromContext(ctx),
 		ActorRole:  string(middleware.RoleFromContext(ctx)),
 		Action:     action,
 		EntityType: entityType,
 		IPAddress:  middleware.ClientIPFromContext(ctx),
 	}
+	if actorID := middleware.UserIDFromContext(ctx); actorID != "" {
+		row.ActorID = pointer.ToString(actorID)
+	}
 	if entityID != "" {
-		id := entityID
-		row.EntityID = &id
+		row.EntityID = pointer.ToString(entityID)
 	}
 	if oldValue != nil {
 		data, err := json.Marshal(oldValue)

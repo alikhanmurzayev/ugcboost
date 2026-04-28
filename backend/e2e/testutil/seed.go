@@ -2,8 +2,9 @@ package testutil
 
 import (
 	"context"
+	cryptorand "crypto/rand"
+	"encoding/hex"
 	"fmt"
-	"math/rand"
 	"net/http"
 	"sync/atomic"
 	"testing"
@@ -18,8 +19,26 @@ import (
 
 var (
 	counter uint64
-	runID   = fmt.Sprintf("%d%04d", time.Now().Unix(), rand.Intn(10000))
+	runID   = newRunID()
 )
+
+// newRunID builds a per-process identifier for the current test run. Each
+// e2e package compiles into its own binary, so when `go test ./...` fans out
+// in parallel several runIDs are computed in the same second; the 64 random
+// bits from crypto/rand make collisions on the test fixtures (emails, IINs)
+// astronomically unlikely. The Unix timestamp prefix stays for debugging —
+// it's nice to be able to tell at a glance when a particular run started.
+func newRunID() string {
+	var b [8]byte
+	if _, err := cryptorand.Read(b[:]); err != nil {
+		// crypto/rand.Read is documented as never failing on the platforms we
+		// support. If the OS entropy source ever does fail, abort the run
+		// rather than silently fall back to a weaker source — the whole point
+		// of the migration off math/rand is to stop colliding under load.
+		panic(fmt.Sprintf("crypto/rand.Read: %v", err))
+	}
+	return fmt.Sprintf("%d%s", time.Now().Unix(), hex.EncodeToString(b[:]))
+}
 
 // UniqueEmail generates a unique email for test isolation.
 func UniqueEmail(prefix string) string {

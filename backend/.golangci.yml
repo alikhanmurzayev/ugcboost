@@ -2,7 +2,25 @@ version: "2"
 
 linters:
   enable:
+    - depguard
     - errorlint
     - gocritic
     - nilerr
     - paralleltest
+
+  settings:
+    depguard:
+      # Ban math/rand{,v2}: deterministic-without-explicit-seed is the
+      # antipattern that bit us when two parallel test packages rolled the
+      # same Intn(10000) and collided on users_email_unique. Default rule:
+      # use crypto/rand for unique IDs / non-deterministic randomness.
+      # If genuine seeded determinism is required (e.g. fuzz/property test
+      # with a known seed), bring the package back with a one-line nolint
+      # justifying why a deterministic PRNG is correct here.
+      rules:
+        no-insecure-rand:
+          deny:
+            - pkg: "math/rand"
+              desc: "use crypto/rand for non-deterministic randomness; for seeded determinism allow with //nolint:depguard and a comment"
+            - pkg: "math/rand/v2"
+              desc: "use crypto/rand for non-deterministic randomness; for seeded determinism allow with //nolint:depguard and a comment"

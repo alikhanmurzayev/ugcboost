@@ -57,6 +57,17 @@ type Config struct {
 	EmailMock    bool `env:"EMAIL_MOCK" envDefault:"false"`
 	StorageMock  bool `env:"STORAGE_MOCK" envDefault:"false"`
 
+	// Telegram bot — used when assembling deep-link returned to creators
+	// after a public application is accepted (https://t.me/<username>?start=<application_id>).
+	// Different bot per environment.
+	TelegramBotUsername string `env:"TELEGRAM_BOT_USERNAME,required"`
+
+	// Versions of the legal documents the user accepts at submission time.
+	// Stored alongside each consent row so that a future audit can show
+	// exactly which revision was in force.
+	LegalAgreementVersion string `env:"LEGAL_AGREEMENT_VERSION,required"`
+	LegalPrivacyVersion   string `env:"LEGAL_PRIVACY_VERSION,required"`
+
 	// Derived (not from env vars)
 	CookieSecure        bool `env:"-"`
 	EnableTestEndpoints bool `env:"-"`

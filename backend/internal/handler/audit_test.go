@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/AlekSi/pointer"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
@@ -29,7 +30,7 @@ func TestServer_ListAuditLogs(t *testing.T) {
 		authz := mocks.NewMockAuthzService(t)
 		authz.EXPECT().CanListAuditLogs(mock.Anything).Return(domain.ErrForbidden)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, "test-version", false, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, ServerConfig{Version: "test-version"},logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodGet, "/audit-logs", nil)
 		require.Equal(t, http.StatusForbidden, w.Code)
 		require.Equal(t, domain.CodeForbidden, resp.Error.Code)
@@ -45,21 +46,21 @@ func TestServer_ListAuditLogs(t *testing.T) {
 		audit.EXPECT().List(mock.Anything, domain.AuditFilter{}, 1, 20).
 			Return([]*domain.AuditLog{
 				{
-					ID: "al-1", ActorID: "u-1", ActorRole: "admin", Action: "login",
-					EntityType: "user", EntityID: strptr("u-1"),
+					ID: "al-1", ActorID: pointer.ToString("u-1"), ActorRole: "admin", Action: "login",
+					EntityType: "user", EntityID: pointer.ToString("u-1"),
 					IPAddress: "127.0.0.1", CreatedAt: created,
 				},
 			}, int64(1), nil)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, audit, "test-version", false, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, nil, authz, audit, nil, nil, ServerConfig{Version: "test-version"},logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.AuditLogsResult](t, router, http.MethodGet, "/audit-logs", nil)
 		require.Equal(t, http.StatusOK, w.Code)
 		require.Equal(t, api.AuditLogsResult{
 			Data: api.ListAuditLogsData{
 				Logs: []api.AuditLogEntry{
 					{
-						Id: "al-1", ActorId: "u-1", ActorRole: "admin", Action: "login",
-						EntityType: "user", EntityId: strptr("u-1"),
+						Id: "al-1", ActorId: pointer.ToString("u-1"), ActorRole: "admin", Action: "login",
+						EntityType: "user", EntityId: pointer.ToString("u-1"),
 						OldValue: nil, NewValue: nil,
 						IpAddress: "127.0.0.1", CreatedAt: created,
 					},
@@ -92,14 +93,14 @@ func TestServer_ListAuditLogs(t *testing.T) {
 		audit.EXPECT().List(mock.Anything, expectedFilter, 2, 50).
 			Return([]*domain.AuditLog{
 				{
-					ID: "al-2", ActorID: "u-1", ActorRole: "admin", Action: "brand_update",
-					EntityType: "brand", EntityID: strptr("e-1"),
+					ID: "al-2", ActorID: pointer.ToString("u-1"), ActorRole: "admin", Action: "brand_update",
+					EntityType: "brand", EntityID: pointer.ToString("e-1"),
 					OldValue: oldPayload, NewValue: newPayload,
 					IPAddress: "127.0.0.1", CreatedAt: created,
 				},
 			}, int64(1), nil)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, audit, "test-version", false, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, nil, authz, audit, nil, nil, ServerConfig{Version: "test-version"},logmocks.NewMockLogger(t)))
 		url := "/audit-logs?actor_id=u-1&entity_type=brand&entity_id=e-1&action=brand_update" +
 			"&date_from=2026-01-01T00:00:00Z&date_to=2026-12-31T23:59:59Z&page=2&per_page=50"
 		w, resp := doJSON[api.AuditLogsResult](t, router, http.MethodGet, url, nil)
@@ -108,8 +109,8 @@ func TestServer_ListAuditLogs(t *testing.T) {
 			Data: api.ListAuditLogsData{
 				Logs: []api.AuditLogEntry{
 					{
-						Id: "al-2", ActorId: "u-1", ActorRole: "admin", Action: "brand_update",
-						EntityType: "brand", EntityId: strptr("e-1"),
+						Id: "al-2", ActorId: pointer.ToString("u-1"), ActorRole: "admin", Action: "brand_update",
+						EntityType: "brand", EntityId: pointer.ToString("e-1"),
 						OldValue: map[string]any{"name": "Old"},
 						NewValue: map[string]any{"name": "Acme"},
 						IpAddress: "127.0.0.1", CreatedAt: created,
@@ -128,7 +129,7 @@ func TestServer_ListAuditLogs(t *testing.T) {
 		audit.EXPECT().List(mock.Anything, domain.AuditFilter{}, 1, 20).
 			Return([]*domain.AuditLog{}, int64(0), nil)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, audit, "test-version", false, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, nil, authz, audit, nil, nil, ServerConfig{Version: "test-version"},logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.AuditLogsResult](t, router, http.MethodGet, "/audit-logs", nil)
 		require.Equal(t, http.StatusOK, w.Code)
 		require.Equal(t, api.AuditLogsResult{
@@ -151,7 +152,7 @@ func TestServer_ListAuditLogs(t *testing.T) {
 		log := logmocks.NewMockLogger(t)
 		expectHandlerUnexpectedErrorLog(log, "/audit-logs")
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, audit, "test-version", false, log))
+		router := newTestRouter(t, NewServer(nil, nil, authz, audit, nil, nil, ServerConfig{Version: "test-version"},log))
 		w, _ := doJSON[api.ErrorResponse](t, router, http.MethodGet, "/audit-logs", nil)
 		require.Equal(t, http.StatusInternalServerError, w.Code)
 	})
@@ -172,7 +173,7 @@ func TestHandleParamError(t *testing.T) {
 }
 
 func newServerForRawJSON(log *logmocks.MockLogger) *Server {
-	return NewServer(nil, nil, nil, nil, "test-version", false, log)
+	return NewServer(nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"},log)
 }
 
 func TestRawJSONToAny(t *testing.T) {
@@ -216,4 +217,3 @@ func TestRawJSONToAny(t *testing.T) {
 	})
 }
 
-func strptr(s string) *string { return &s }

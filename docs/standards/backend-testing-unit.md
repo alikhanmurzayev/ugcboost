@@ -1,4 +1,4 @@
-# Unit-тесты бэкенда [REQUIRED]
+# Unit-тесты бэкенда
 
 ## Нейминг
 
@@ -75,6 +75,7 @@ func TestAuthService_Login(t *testing.T) {
 - Сырой JSON в тестах запрещён — request body и response body через типизированные структуры кодогенерации. Query params — строкой в URL
 - HTTP status code проверяется всегда
 - Заголовки и cookies проверяются где релевантно (например, auth flow — refresh token cookie)
+- Middleware-derived поля в domain-input (IP, UserAgent, AgreementVersion из `context.WithValue`) — проверяются через **captured-input**: захват аргумента service-call через `mock.Run(func(args mock.Arguments) { ... })` + ассерт что нужное поле прокинулось из middleware-context в domain-input. Без захвата ассерт пропустит ошибку маппинга context → domain
 
 ### Middleware
 - Формируем handler chain: `middleware(okHandler)`, где `okHandler` — простой handler возвращающий 200
@@ -88,7 +89,7 @@ func TestAuthService_Login(t *testing.T) {
 
 ## Coverage
 
-Целевой порог — 80%. Исключения: main.go, DI/wire setup, bootstrap-код.
+Целевой порог — 80% **на каждой публичной и приватной функции/методе** в покрываемых пакетах (handler/service/repository/middleware/authz). Gate в `make test-unit-backend-coverage` падает, если хотя бы один identifier ниже 80%. Исключения по файлам: generated code (`*.gen.go`), mockery-моки (`*/mocks/`), `cmd/`, trivial bootstrap (`handler/health.go`, `middleware/logging.go`, `middleware/json.go`).
 
 ## Race detector
 
@@ -97,3 +98,16 @@ func TestAuthService_Login(t *testing.T) {
 ## Комментарии
 
 Общий комментарий в начале файла не нужен — unit-тесты выразительны сами по себе. Точечные комментарии допустимы для неочевидной логики или нестандартных трюков.
+
+## Что ревьюить
+
+- [blocker] `t.Parallel()` отсутствует в `Test*` или `t.Run`.
+- [blocker] Coverage gate отключён или фильтрует часть поверхности (например, `$$2 ~ /^[A-Z]/` режет lowercase).
+- [blocker] `-race` отключён в make-таргете или в CI.
+- [major] Ручной мок (вместо mockery).
+- [major] Не проверены точные аргументы в mock expectations (`mock.Anything` для аргумента с конкретным значением).
+- [major] Динамическое поле сравнивается через `require.Equal` без `WithinDuration` / отдельной проверки + подмены.
+- [major] JSON-поле сравнивается через `require.Equal` (вместо `JSONEq` — порядок ключей `json.Marshal` не детерминирован).
+- [major] Captured-input проверка не сделана для middleware-derived полей (IP, UserAgent, AgreementVersion из context).
+- [major] Один мок переиспользуется между `t.Run` (вместо нового на каждый сценарий).
+- [major] Имя теста не `Test{Struct}_{Method}`.

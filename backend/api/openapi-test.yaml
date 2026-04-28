@@ -151,7 +151,7 @@ components:
       properties:
         type:
           type: string
-          enum: [user, brand]
+          enum: [user, brand, creator_application]
         id:
           type: string
 

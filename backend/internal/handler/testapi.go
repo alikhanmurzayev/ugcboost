@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 
 	openapi_types "github.com/oapi-codegen/runtime/types"
@@ -33,6 +34,7 @@ type TestAPIAuthService interface {
 type TestAPICleanupRepoFactory interface {
 	NewUserRepo(db dbutil.DB) repository.UserRepo
 	NewBrandRepo(db dbutil.DB) repository.BrandRepo
+	NewCreatorApplicationRepo(db dbutil.DB) repository.CreatorApplicationRepo
 }
 
 // TestAPIHandler provides test-only endpoints that back openapi-test.yaml.
@@ -119,8 +121,18 @@ func (h *TestAPIHandler) CleanupEntity(w http.ResponseWriter, r *http.Request) {
 		})
 	case testapi.Brand:
 		deleteErr = h.repos.NewBrandRepo(h.pool).Delete(r.Context(), req.Id)
+	case testapi.CreatorApplication:
+		deleteErr = h.repos.NewCreatorApplicationRepo(h.pool).DeleteForTests(r.Context(), req.Id)
 	default:
-		respondError(w, r, domain.NewValidationError(domain.CodeValidation, "type must be 'user' or 'brand'"), h.logger)
+		if !req.Type.Valid() {
+			respondError(w, r, domain.NewValidationError(domain.CodeValidation,
+				fmt.Sprintf("unknown type: %q", req.Type)), h.logger)
+			return
+		}
+		// Defensive: a Valid value the switch above does not handle means the
+		// OpenAPI enum grew but the cleanup dispatch was not extended.
+		respondError(w, r, domain.NewValidationError(domain.CodeValidation,
+			fmt.Sprintf("unsupported type: %q", req.Type)), h.logger)
 		return
 	}
 

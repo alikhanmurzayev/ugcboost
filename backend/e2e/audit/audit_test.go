@@ -52,7 +52,7 @@ func TestAuditLogFiltering(t *testing.T) {
 		require.Equal(t, http.StatusOK, resp.StatusCode())
 		require.NotNil(t, resp.JSON200)
 
-		require.True(t, containsAction(resp.JSON200.Data.Logs, "brand_create"),
+		require.True(t, testutil.ContainsAction(resp.JSON200.Data.Logs, "brand_create"),
 			"brand_create audit entry must be present for the new brand")
 		for _, log := range resp.JSON200.Data.Logs {
 			require.Equal(t, "brand", log.EntityType)
@@ -141,16 +141,6 @@ func TestAuditLogAccess(t *testing.T) {
 		require.NotNil(t, resp.JSON403)
 		require.Equal(t, "FORBIDDEN", resp.JSON403.Error.Code)
 	})
-}
-
-// containsAction scans a list of audit entries for the given action string.
-func containsAction(logs []apiclient.AuditLogEntry, action string) bool {
-	for _, l := range logs {
-		if l.Action == action {
-			return true
-		}
-	}
-	return false
 }
 
 // adminUserID resolves the current admin's user ID via GET /auth/me. Tests

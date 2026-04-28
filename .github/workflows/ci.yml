@@ -66,6 +66,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
+      - name: Verify legal docs are in sync
+        run: make lint-legal
       - run: npm ci -w landing
         working-directory: frontend
       - run: npx tsc --noEmit
@@ -197,6 +199,12 @@ jobs:
           tags: |
             ${{ env.IMAGE_PREFIX }}/${{ matrix.image }}:staging
             ${{ env.IMAGE_PREFIX }}/${{ matrix.image }}:${{ steps.tags.outputs.sha }}
+      - name: Tag :production (only on push to main)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          docker buildx imagetools create \
+            -t ${{ env.IMAGE_PREFIX }}/${{ matrix.image }}:production \
+            ${{ env.IMAGE_PREFIX }}/${{ matrix.image }}:${{ steps.tags.outputs.sha }}
 
   # ── Stage 2: Isolated E2E (parallel with stage 3) ──────────────
 
@@ -268,6 +276,50 @@ jobs:
         with:
           name: playwright-report
           path: frontend/web/playwright-report/
+      - name: Dump logs on failure
+        if: failure()
+        run: docker compose -f docker-compose.ci.isolated.yml logs
+      - name: Teardown
+        if: always()
+        run: docker compose -f docker-compose.ci.isolated.yml down
+
+  test-e2e-landing:
+    name: E2E Landing
+    runs-on: ubuntu-latest
+    needs:
+      [lint-backend, lint-web, lint-tma, lint-landing,
+       test-unit-backend, test-unit-web, test-unit-tma, test-unit-landing,
+       build-and-push-images]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - run: npm ci -w landing
+        working-directory: frontend
+      - run: npx playwright install chromium
+        working-directory: frontend/landing
+      - name: Start services
+        run: |
+          IMAGE_PREFIX=${{ env.IMAGE_PREFIX }} IMAGE_TAG=staging \
+            docker compose -f docker-compose.ci.isolated.yml up -d --wait
+      - name: Run browser E2E
+        working-directory: frontend/landing
+        run: CI=true npx playwright test
+        env:
+          BASE_URL: http://localhost:3003
+          API_URL: http://localhost:8082
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-landing
+          path: frontend/landing/playwright-report/
       - name: Dump logs on failure
         if: failure()
         run: docker compose -f docker-compose.ci.isolated.yml logs
@@ -373,3 +425,31 @@ jobs:
         with:
           name: playwright-report-staging
           path: frontend/web/playwright-report/
+
+  test-staging-landing:
+    name: Staging E2E Landing
+    runs-on: ubuntu-latest
+    needs: [migrate-staging, deploy-staging]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - run: npm ci -w landing
+        working-directory: frontend
+      - run: npx playwright install chromium
+        working-directory: frontend/landing
+      - name: Run browser E2E against staging
+        working-directory: frontend/landing
+        run: CI=true npx playwright test
+        env:
+          BASE_URL: https://staging.ugcboost.kz
+          API_URL: https://staging-api.ugcboost.kz
+          CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-staging-landing
+          path: frontend/landing/playwright-report/

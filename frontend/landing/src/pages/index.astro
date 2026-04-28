@@ -9,6 +9,7 @@ import {
   formBlock,
   faq,
   footer,
+  successScreen,
 } from "../content";
 ---
 
@@ -21,6 +22,8 @@ import {
       rel="stylesheet"
       href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Archivo+Black&display=swap"
     />
+    <!-- Runtime config (apiUrl) injected by deploy. Must load before form scripts. -->
+    <script is:inline src="/config.js"></script>
     <style>
       body {
         font-family: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
@@ -370,6 +373,7 @@ import {
 
         <form
           id="application-form"
+          data-testid="application-form"
           class="mt-8 space-y-5 rounded-2xl border-2 border-neutral-950 bg-white p-5 text-neutral-950 shadow-[6px_6px_0_0_#0a0a0a] md:mt-12 md:rounded-3xl md:p-10 md:shadow-[10px_10px_0_0_#0a0a0a]"
         >
           <div class="grid gap-4 md:grid-cols-3">
@@ -379,6 +383,7 @@ import {
                 required
                 type="text"
                 name="lastName"
+                data-testid="last-name-input"
                 class="mt-1.5 w-full border-b-2 border-neutral-950 bg-transparent py-2 text-base outline-none focus:border-pink-500 md:mt-2"
               />
             </label>
@@ -388,15 +393,16 @@ import {
                 required
                 type="text"
                 name="firstName"
+                data-testid="first-name-input"
                 class="mt-1.5 w-full border-b-2 border-neutral-950 bg-transparent py-2 text-base outline-none focus:border-pink-500 md:mt-2"
               />
             </label>
             <label class="block">
-              <span class="text-[11px] font-bold uppercase tracking-wider md:text-sm">Отчество *</span>
+              <span class="text-[11px] font-bold uppercase tracking-wider md:text-sm">Отчество</span>
               <input
-                required
                 type="text"
                 name="middleName"
+                data-testid="middle-name-input"
                 class="mt-1.5 w-full border-b-2 border-neutral-950 bg-transparent py-2 text-base outline-none focus:border-pink-500 md:mt-2"
               />
             </label>
@@ -410,6 +416,7 @@ import {
               required
               type="tel"
               name="phone"
+              data-testid="phone-input"
               placeholder="+7 (___) ___-__-__"
               class="mt-1.5 w-full border-b-2 border-neutral-950 bg-transparent py-2 text-base outline-none focus:border-pink-500 md:mt-2"
             />
@@ -424,9 +431,11 @@ import {
               required
               type="text"
               name="iin"
+              data-testid="iin-input"
               inputmode="numeric"
-              pattern="\d{12}"
               maxlength="12"
+              minlength="12"
+              pattern="[0-9]{12}"
               placeholder="____________"
               class="mt-1.5 w-full border-b-2 border-neutral-950 bg-transparent py-2 text-base outline-none focus:border-pink-500 md:mt-2"
             />
@@ -439,11 +448,12 @@ import {
             <span class="text-[11px] font-bold uppercase tracking-wider md:text-sm">Город проживания *</span>
             <select
               required
+              id="city-select"
+              data-testid="city-select"
               name="city"
               class="mt-1.5 w-full border-b-2 border-neutral-950 bg-transparent py-2 text-base outline-none focus:border-pink-500 md:mt-2"
             >
-              <option value="">Выбери город</option>
-              {formBlock.cities.map((c) => <option value={c}>{c}</option>)}
+              <option value="">Загрузка городов…</option>
             </select>
           </label>
 
@@ -459,14 +469,16 @@ import {
                         type="checkbox"
                         class="social-checkbox h-4 w-4 accent-pink-500"
                         data-social={s}
+                        data-testid={`social-checkbox-${s.toLowerCase()}`}
                       />
                       <span>{s}</span>
                     </label>
                     <input
-                      type="url"
-                      placeholder={`Ссылка на ${s}`}
+                      type="text"
+                      placeholder={`@username в ${s}`}
                       disabled
                       data-social-input={s}
+                      data-testid={`social-input-${s.toLowerCase()}`}
                       class="hidden flex-1 border-b-2 border-neutral-950 bg-transparent py-2 text-base outline-none transition focus:border-pink-500 md:text-sm"
                     />
                   </div>
@@ -477,25 +489,16 @@ import {
 
           <fieldset>
             <legend class="text-[11px] font-bold uppercase tracking-wider md:text-sm">Категория блога (до 3) *</legend>
-            <div class="mt-3 flex flex-wrap gap-2">
-              {
-                formBlock.categories.map((c) => (
-                  <label class="inline-flex cursor-pointer items-center gap-2 rounded-full border-2 border-neutral-950 bg-white px-3 py-1.5 text-xs font-semibold transition hover:bg-pink-50 has-[:checked]:bg-pink-400 has-[:checked]:text-white md:px-4 md:py-2 md:text-sm">
-                    <input
-                      type="checkbox"
-                      class={`category-checkbox hidden ${c === "Другое" ? "category-other" : ""}`}
-                      value={c}
-                    />
-                    <span>{c}</span>
-                  </label>
-                ))
-              }
+            <div id="category-options" class="mt-3 flex flex-wrap gap-2">
+              <span class="text-xs text-neutral-500">Загрузка категорий…</span>
             </div>
             <input
               id="category-other-input"
+              data-testid="category-other-input"
               type="text"
-              name="categoryOther"
+              name="categoryOtherText"
               placeholder="Укажи категорию"
+              maxlength="200"
               disabled
               class="mt-3 hidden w-full border-b-2 border-neutral-950 bg-transparent py-2 text-base outline-none focus:border-pink-500 disabled:cursor-not-allowed"
             />
@@ -503,37 +506,35 @@ import {
 
           <div class="space-y-3 border-t-2 border-neutral-950 pt-5 md:pt-6">
             <label class="flex items-start gap-3">
-              <input required type="checkbox" class="mt-1 h-4 w-4 accent-pink-500" />
+              <input required id="consent-all" data-testid="consent-all" name="acceptedAll" type="checkbox" class="mt-1 h-4 w-4 accent-pink-500" />
               <span class="text-sm">
-                Я принимаю условия{" "}
+                Я принимаю{" "}
                 <a
                   href="/legal/user-agreement"
                   target="_blank"
                   rel="noopener noreferrer"
                   class="font-bold underline"
                 >
-                  Пользовательского соглашения
-                </a>
-              </span>
-            </label>
-            <label class="flex items-start gap-3">
-              <input required type="checkbox" class="mt-1 h-4 w-4 accent-pink-500" />
-              <span class="text-sm">
-                Даю согласие на обработку персональных данных в соответствии с{" "}
+                  Пользовательское соглашение
+                </a>{" "}
+                и даю согласие на обработку персональных данных, включая трансграничную передачу и передачу третьим лицам, в соответствии с{" "}
                 <a
                   href="/legal/privacy-policy"
                   target="_blank"
                   rel="noopener noreferrer"
                   class="font-bold underline"
                 >
-                  Политикой
+                  Политикой конфиденциальности
                 </a>
               </span>
             </label>
           </div>
 
+          <p id="form-error" data-testid="form-error" class="hidden text-sm font-semibold text-red-600"></p>
+
           <button
             type="submit"
+            data-testid="submit-button"
             class="shimmer-btn display w-full rounded-full bg-pink-400 px-6 py-4 text-sm uppercase tracking-wider text-white transition hover:bg-pink-500 md:px-10 md:py-5 md:text-base"
           >
             <span>{formBlock.submitLabel}</span>
@@ -617,7 +618,235 @@ import {
       </div>
     </footer>
 
+    <!-- Success screen, hidden until submit succeeds. -->
+    <section
+      id="success-screen"
+      data-testid="success-screen"
+      class="fixed inset-0 z-50 hidden items-center justify-center bg-pink-500 p-6 text-white"
+    >
+      <div class="max-w-md text-center">
+        <h2 class="display text-3xl uppercase leading-tight md:text-5xl">{successScreen.title}</h2>
+        <p class="mt-4 text-base text-white/90 md:text-lg">{successScreen.text}</p>
+        <a
+          id="success-cta"
+          data-testid="success-cta"
+          href="#"
+          class="display mt-6 inline-block rounded-full bg-neutral-950 px-6 py-3 text-sm uppercase tracking-wider text-white hover:bg-neutral-800 md:px-10 md:py-4 md:text-base"
+        >
+          {successScreen.cta}
+        </a>
+      </div>
+    </section>
+
+    <script
+      is:inline
+      type="application/json"
+      id="form-config"
+      set:html={JSON.stringify({
+        socialCodeMap: formBlock.socialPlatformCodes,
+        otherCategoryCode: "other",
+        maxCategories: 3,
+      })}
+    ></script>
+
     <script>
+      import { listDictionary } from "../api/dictionaries";
+      import {
+        submitCreatorApplication,
+        type CreatorApplicationSubmitRequest,
+      } from "../api/creator-applications";
+      import { ApiError } from "../api/client";
+
+      // Form-time constants flow from Astro frontmatter via the JSON island
+      // above — Astro renders them at build time, this module reads them at
+      // runtime. `define:vars` would have skipped Vite module processing and
+      // broken the imports above, so this dance is the only way to stay both
+      // typed and configurable from .astro frontmatter.
+      const configEl = document.getElementById("form-config");
+      const formConfig = configEl?.textContent
+        ? (JSON.parse(configEl.textContent) as {
+            socialCodeMap: Record<string, string>;
+            otherCategoryCode: string;
+            maxCategories: number;
+          })
+        : { socialCodeMap: {}, otherCategoryCode: "other", maxCategories: 3 };
+      const socialCodeMap = formConfig.socialCodeMap;
+      const otherCategoryCode = formConfig.otherCategoryCode;
+      const maxCategories = formConfig.maxCategories;
+
+      // === Phone mask: +7 (XXX) XXX-XX-XX ===
+      // Strict KZ format. The "+7" prefix is fixed; any leading 7 or 8 in the
+      // user's input is consumed. formatPhoneInput drives the visible value as
+      // the user types/pastes; normalizePhoneForSubmit produces the canonical
+      // wire format ("+7XXXXXXXXXX") right before the API call.
+      function formatPhoneInput(raw: string): string {
+        const digits = raw.replace(/\D/g, "");
+        let body = digits;
+        if (body.length > 0 && (body[0] === "7" || body[0] === "8")) {
+          body = body.slice(1);
+        }
+        body = body.slice(0, 10);
+        if (body.length === 0) return "+7 ";
+        if (body.length <= 3) return `+7 (${body}`;
+        if (body.length <= 6) return `+7 (${body.slice(0, 3)}) ${body.slice(3)}`;
+        if (body.length <= 8)
+          return `+7 (${body.slice(0, 3)}) ${body.slice(3, 6)}-${body.slice(6)}`;
+        return `+7 (${body.slice(0, 3)}) ${body.slice(3, 6)}-${body.slice(6, 8)}-${body.slice(8, 10)}`;
+      }
+
+      function normalizePhoneForSubmit(raw: string): string {
+        const digits = raw.replace(/\D/g, "");
+        let body = digits;
+        if (body.length > 0 && (body[0] === "7" || body[0] === "8")) {
+          body = body.slice(1);
+        }
+        if (body.length !== 10) return raw.trim();
+        return "+7" + body;
+      }
+
+      // === IIN sanitiser: digits only, capped at 12 ===
+      function sanitiseIIN(raw: string): string {
+        return raw.replace(/\D/g, "").slice(0, 12);
+      }
+
+      // === Social handle normalization ===
+      // strip the platform-specific URL prefix → strip trailing path/query →
+      // strip leading '@' → trim → lowercase. Mirrors the server-side
+      // domain.SocialHandleRegex normalization so the user sees the value
+      // they're actually sending.
+      const SOCIAL_URL_PREFIX: Record<string, RegExp> = {
+        instagram: /^https?:\/\/(?:www\.)?instagram\.com\//i,
+        tiktok: /^https?:\/\/(?:www\.)?tiktok\.com\//i,
+        threads: /^https?:\/\/(?:www\.)?threads\.net\//i,
+      };
+
+      function normalizeSocialHandle(raw: string, code: string): string {
+        let s = raw.trim();
+        const prefix = SOCIAL_URL_PREFIX[code];
+        if (prefix) s = s.replace(prefix, "");
+        const tailIdx = s.search(/[/?#]/);
+        if (tailIdx >= 0) s = s.slice(0, tailIdx);
+        s = s.replace(/^@+/, "").trim();
+        return s.toLowerCase();
+      }
+
+      // Whitelist for the on-input mask. Mirrors the server-side
+      // SocialHandleRegex character class so the user can never type a value
+      // the server would refuse. Capitalisation is allowed during typing and
+      // lowercased on blur — typing how-you-write-it feels natural even
+      // though the wire format is lowercase.
+      const SOCIAL_HANDLE_ALLOWED = /[a-zA-Z0-9._]/;
+
+      // formatSocialHandleInput is the on-keystroke equivalent of the phone
+      // mask: it locks a single "@" prefix at the start, eats any character
+      // outside the allowed class, and collapses pasted URLs to the bare
+      // handle in one keystroke. Always returns a string starting with "@";
+      // the focus/blur listeners decide whether to keep that "@" or hand the
+      // field back to its placeholder when the user leaves it empty.
+      function formatSocialHandleInput(raw: string, code: string): string {
+        let s = raw;
+        const prefix = SOCIAL_URL_PREFIX[code];
+        if (prefix) s = s.replace(prefix, "");
+        const tailIdx = s.search(/[/?#]/);
+        if (tailIdx >= 0) s = s.slice(0, tailIdx);
+        s = s.replace(/^@+/, "");
+        let filtered = "";
+        for (const ch of s) {
+          if (SOCIAL_HANDLE_ALLOWED.test(ch)) filtered += ch;
+        }
+        return "@" + filtered.slice(0, 30);
+      }
+
+      // === DOM refs ===
+      const phoneInput = document.querySelector<HTMLInputElement>(
+        '[data-testid="phone-input"]',
+      );
+      const iinInput = document.querySelector<HTMLInputElement>(
+        '[data-testid="iin-input"]',
+      );
+      const categoryContainer = document.getElementById("category-options");
+      const otherInput = document.getElementById(
+        "category-other-input",
+      ) as HTMLInputElement | null;
+      const citySelect = document.getElementById("city-select");
+      const formError = document.getElementById("form-error");
+      const form = document.getElementById("application-form") as HTMLFormElement | null;
+      const submitBtn = form?.querySelector<HTMLButtonElement>('button[type="submit"]') ?? null;
+      const submitLabel = submitBtn?.querySelector<HTMLSpanElement>("span") ?? null;
+      const originalSubmitLabel = submitLabel?.textContent ?? "";
+
+      // Boot/submit state. `dictionariesError` latches on permanent failure so
+      // every subsequent submit is short-circuited with the same message — the
+      // creator must reload the page to recover.
+      let dictionariesReady = false;
+      let dictionariesError = false;
+      let submitting = false;
+
+      function setSubmitButtonState(state: "loading" | "ready" | "error" | "submitting"): void {
+        if (!submitBtn || !submitLabel) return;
+        switch (state) {
+          case "loading":
+            submitBtn.disabled = true;
+            submitLabel.textContent = "Загрузка…";
+            break;
+          case "ready":
+            submitBtn.disabled = false;
+            submitLabel.textContent = originalSubmitLabel;
+            break;
+          case "error":
+            submitBtn.disabled = true;
+            submitLabel.textContent = "Перезагрузите страницу";
+            break;
+          case "submitting":
+            submitBtn.disabled = true;
+            submitLabel.textContent = "Отправка…";
+            break;
+        }
+      }
+
+      // Lock submit until bootDictionaries finishes — without categories/cities
+      // the form payload would be missing required fields.
+      setSubmitButtonState("loading");
+
+      function showFormError(msg: string): void {
+        if (!formError) return;
+        formError.textContent = msg;
+        formError.classList.remove("hidden");
+      }
+      function clearFormError(): void {
+        if (!formError) return;
+        formError.textContent = "";
+        formError.classList.add("hidden");
+      }
+
+      // === Wire phone mask ===
+      if (phoneInput) {
+        phoneInput.addEventListener("input", () => {
+          const formatted = formatPhoneInput(phoneInput.value);
+          if (formatted !== phoneInput.value) {
+            phoneInput.value = formatted;
+            phoneInput.setSelectionRange(formatted.length, formatted.length);
+          }
+        });
+        phoneInput.addEventListener("focus", () => {
+          if (phoneInput.value.trim() === "") phoneInput.value = "+7 ";
+        });
+        phoneInput.addEventListener("blur", () => {
+          // If the user only kept the prefix, clear the field so the
+          // placeholder reappears and validation flags it as missing.
+          if (phoneInput.value.trim() === "+7") phoneInput.value = "";
+        });
+      }
+
+      // === Wire IIN digits-only filter ===
+      if (iinInput) {
+        iinInput.addEventListener("input", () => {
+          const filtered = sanitiseIIN(iinInput.value);
+          if (filtered !== iinInput.value) iinInput.value = filtered;
+        });
+      }
+
+      // Wire the social checkboxes (toggle the matching handle input).
       document.querySelectorAll<HTMLInputElement>(".social-checkbox").forEach((cb) => {
         cb.addEventListener("change", () => {
           const name = cb.dataset.social;
@@ -640,34 +869,216 @@ import {
         });
       });
 
-      const categoryBoxes = document.querySelectorAll<HTMLInputElement>(".category-checkbox");
-      const otherInput = document.getElementById("category-other-input") as HTMLInputElement | null;
-      categoryBoxes.forEach((cb) => {
-        cb.addEventListener("change", () => {
-          const checked = Array.from(categoryBoxes).filter((c) => c.checked);
-          categoryBoxes.forEach((c) => {
-            if (!c.checked && checked.length >= 3) c.disabled = true;
-            else c.disabled = false;
+      // === Wire social handle mask ===
+      // Locks an "@" prefix in the input (analogous to phone "+7 ") and
+      // filters keystrokes to the server's allowed character class. Pasted
+      // URLs collapse to the bare handle. On blur the value is lowercased
+      // and re-prefixed with "@" so the user sees exactly what the server
+      // will receive; an empty/sentinel-only field clears so the placeholder
+      // reappears and HTML5 required-validation flags it as missing.
+      document
+        .querySelectorAll<HTMLInputElement>("[data-social-input]")
+        .forEach((input) => {
+          const name = input.dataset.socialInput;
+          const code = name ? socialCodeMap[name] : null;
+          if (!code) return;
+
+          input.addEventListener("input", () => {
+            const formatted = formatSocialHandleInput(input.value, code);
+            if (formatted !== input.value) {
+              input.value = formatted;
+              input.setSelectionRange(formatted.length, formatted.length);
+            }
           });
 
-          if (cb.classList.contains("category-other") && otherInput) {
-            if (cb.checked) {
-              otherInput.classList.remove("hidden");
-              otherInput.disabled = false;
-              otherInput.required = true;
-            } else {
-              otherInput.classList.add("hidden");
-              otherInput.disabled = true;
-              otherInput.required = false;
-              otherInput.value = "";
+          input.addEventListener("focus", () => {
+            if (input.value.trim() === "") {
+              input.value = "@";
+              input.setSelectionRange(1, 1);
             }
-          }
-        });
-      });
+          });
 
-      document.getElementById("application-form")?.addEventListener("submit", (e) => {
+          input.addEventListener("blur", () => {
+            if (input.value.trim() === "@") {
+              input.value = "";
+              return;
+            }
+            const normalized = normalizeSocialHandle(input.value, code);
+            input.value = normalized === "" ? "" : "@" + normalized;
+          });
+        });
+
+      function wireCategoryCheckboxes(): void {
+        const boxes = document.querySelectorAll<HTMLInputElement>(".category-checkbox");
+        boxes.forEach((cb) => {
+          cb.addEventListener("change", () => {
+            const checked = Array.from(boxes).filter((c) => c.checked);
+            boxes.forEach((c) => {
+              c.disabled = !c.checked && checked.length >= maxCategories;
+            });
+            if (cb.value === otherCategoryCode && otherInput) {
+              if (cb.checked) {
+                otherInput.classList.remove("hidden");
+                otherInput.disabled = false;
+                otherInput.required = true;
+              } else {
+                otherInput.classList.add("hidden");
+                otherInput.disabled = true;
+                otherInput.required = false;
+                otherInput.value = "";
+              }
+            }
+          });
+        });
+      }
+
+      async function bootDictionaries(): Promise<void> {
+        try {
+          const [cities, categories] = await Promise.all([
+            listDictionary("cities"),
+            listDictionary("categories"),
+          ]);
+          if (citySelect) {
+            citySelect.innerHTML =
+              '<option value="">Выбери город</option>' +
+              cities.map((c) => `<option value="${c.code}">${c.name}</option>`).join("");
+          }
+          if (categoryContainer) {
+            categoryContainer.innerHTML = categories
+              .map(
+                (c) => `
+                <label data-testid="category-label-${c.code}" class="inline-flex cursor-pointer items-center gap-2 rounded-full border-2 border-neutral-950 bg-white px-3 py-1.5 text-xs font-semibold transition hover:bg-pink-50 has-[:checked]:bg-pink-400 has-[:checked]:text-white md:px-4 md:py-2 md:text-sm">
+                  <input type="checkbox" class="category-checkbox hidden" data-testid="category-checkbox-${c.code}" value="${c.code}" />
+                  <span>${c.name}</span>
+                </label>`,
+              )
+              .join("");
+            wireCategoryCheckboxes();
+          }
+          dictionariesReady = true;
+          setSubmitButtonState("ready");
+        } catch (err) {
+          console.error(err);
+          dictionariesError = true;
+          setSubmitButtonState("error");
+          showFormError(
+            "Не удалось загрузить справочники. Перезагрузи страницу — без них отправить заявку не получится.",
+          );
+        }
+      }
+      bootDictionaries();
+
+      function collectFormData(form: HTMLFormElement): CreatorApplicationSubmitRequest {
+        const fd = new FormData(form);
+        const middleNameRaw = fd.get("middleName");
+        const middleName =
+          typeof middleNameRaw === "string" && middleNameRaw.trim() !== ""
+            ? middleNameRaw.trim()
+            : undefined;
+
+        const categories = Array.from(
+          document.querySelectorAll<HTMLInputElement>(".category-checkbox:checked"),
+        ).map((c) => c.value);
+
+        const otherTextRaw = fd.get("categoryOtherText");
+        const categoryOtherText =
+          categories.includes(otherCategoryCode) && typeof otherTextRaw === "string"
+            ? otherTextRaw.trim()
+            : undefined;
+
+        const socials = Array.from(
+          document.querySelectorAll<HTMLInputElement>(".social-checkbox:checked"),
+        )
+          .map((cb) => {
+            const name = cb.dataset.social;
+            const code = name ? socialCodeMap[name] : null;
+            const input = name
+              ? document.querySelector<HTMLInputElement>(`[data-social-input="${name}"]`)
+              : null;
+            const handle = input && code ? normalizeSocialHandle(input.value, code) : "";
+            return code && handle ? { platform: code, handle } : null;
+          })
+          .filter((s): s is { platform: string; handle: string } => s !== null);
+
+        return {
+          lastName: String(fd.get("lastName") ?? "").trim(),
+          firstName: String(fd.get("firstName") ?? "").trim(),
+          middleName,
+          iin: sanitiseIIN(String(fd.get("iin") ?? "")),
+          phone: normalizePhoneForSubmit(String(fd.get("phone") ?? "")),
+          city: String(fd.get("city") ?? "").trim(),
+          // address is intentionally omitted — the column is nullable, the bot
+          // captures the legal address on a later step. Sending undefined keeps
+          // the field absent from the JSON body.
+          categories,
+          categoryOtherText,
+          socials: socials as CreatorApplicationSubmitRequest["socials"],
+          acceptedAll: fd.get("acceptedAll") === "on",
+        };
+      }
+
+      function showSuccess(botUrl: string | undefined): void {
+        const screen = document.getElementById("success-screen");
+        const cta = document.getElementById("success-cta");
+        if (cta) {
+          if (typeof botUrl === "string" && botUrl.length > 0) {
+            cta.setAttribute("href", botUrl);
+            cta.classList.remove("hidden");
+          } else {
+            // Empty botUrl is unexpected (backend env-checks at boot). Hide the
+            // CTA rather than guess a URL — Q5 in sync-with-landing-plan.md.
+            cta.classList.add("hidden");
+          }
+        }
+        if (screen) {
+          screen.classList.remove("hidden");
+          screen.classList.add("flex");
+        }
+      }
+
+      form?.addEventListener("submit", async (e) => {
         e.preventDefault();
-        alert("Заявка отправлена (демо)\n\nВ проде тут успех-экран с CTA в Telegram-бот.");
+        // Re-entry guard — the `submitting` flag is the source of truth. The
+        // button's `disabled` attribute is for UX but a fast double-click can
+        // still fire two events, so we belt-and-braces it here.
+        if (submitting) return;
+        if (dictionariesError) {
+          showFormError(
+            "Справочники не загрузились. Перезагрузи страницу — без них отправить заявку не получится.",
+          );
+          return;
+        }
+        if (!dictionariesReady) {
+          showFormError("Подожди, справочники ещё загружаются…");
+          return;
+        }
+
+        clearFormError();
+        const payload = collectFormData(form);
+
+        if (payload.socials.length === 0) {
+          showFormError("Укажи хотя бы один аккаунт в соцсети.");
+          return;
+        }
+
+        submitting = true;
+        setSubmitButtonState("submitting");
+
+        try {
+          const result = await submitCreatorApplication(payload);
+          showSuccess(result.telegramBotUrl);
+          // Success screen takes over the viewport — leave the button alone.
+        } catch (err) {
+          if (err instanceof ApiError) {
+            showFormError(err.serverMessage || "Не удалось отправить заявку");
+          } else {
+            console.error(err);
+            showFormError("Сеть недоступна. Попробуй позже.");
+          }
+          setSubmitButtonState("ready");
+        } finally {
+          submitting = false;
+        }
       });
     </script>
   </body>

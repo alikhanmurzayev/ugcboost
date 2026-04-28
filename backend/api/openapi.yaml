@@ -516,6 +516,141 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /dictionaries/{type}:
+    get:
+      operationId: listDictionary
+      summary: List entries for a public dictionary (categories, cities)
+      description: |
+        Returns the active entries of the requested dictionary, sorted by
+        sort_order then code. Used by the public landing page to render the
+        category and city pickers. Public endpoint (no authentication).
+      tags: [dictionaries]
+      security: []
+      parameters:
+        - name: type
+          in: path
+          required: true
+          description: Dictionary type to list.
+          schema:
+            type: string
+            enum: [categories, cities]
+      responses:
+        "200":
+          description: Dictionary entries
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DictionaryListResult"
+        "404":
+          description: Unknown dictionary type
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          description: Unexpected error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /creators/applications:
+    post:
+      operationId: submitCreatorApplication
+      summary: Submit a creator application from the public landing page
+      description: |
+        Public endpoint (no authentication). Accepts creator personal data,
+        social accounts, selected categories and four mandatory consents, then
+        atomically stores the application, its related rows and an audit entry
+        inside a single DB transaction. Returns the new application id and a
+        Telegram deep-link the creator must open to bind their TG user to the
+        application.
+      tags: [creators]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatorApplicationSubmitRequest"
+      responses:
+        "201":
+          description: Application accepted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreatorApplicationSubmitResult"
+        "409":
+          description: Active application for this IIN already exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          description: Unexpected error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /creators/applications/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      operationId: getCreatorApplication
+      summary: Get full creator application aggregate (admin only)
+      description: |
+        Returns the full aggregate of a creator application: main personal
+        fields plus linked categories, social accounts and consents. Used by
+        the moderation UI to review a submitted application. Admin role is
+        required — non-admin callers receive 403 regardless of whether the
+        application exists, so the endpoint never leaks application IDs.
+      tags: [creators]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Application aggregate
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GetCreatorApplicationResult"
+        "401":
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Application not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          description: Unexpected error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
 components:
   schemas:
     HealthResponse:
@@ -777,12 +912,14 @@ components:
 
     AuditLogEntry:
       type: object
-      required: [id, actorId, actorRole, action, entityType, ipAddress, createdAt]
+      required: [id, actorRole, action, entityType, ipAddress, createdAt]
       properties:
         id:
           type: string
         actorId:
           type: string
+          nullable: true
+          description: Null for system / public actions (e.g. public creator application submit).
         actorRole:
           type: string
         action:
@@ -820,6 +957,292 @@ components:
       properties:
         data:
           $ref: "#/components/schemas/ListAuditLogsData"
+
+    DictionaryEntry:
+      type: object
+      description: Single entry in a public dictionary (category, city, etc.).
+      required: [code, name, sortOrder]
+      properties:
+        code:
+          type: string
+          description: Stable machine-readable identifier (snake_case).
+        name:
+          type: string
+          description: Human-readable label rendered to the user.
+        sortOrder:
+          type: integer
+          description: Sort key — lower values appear first in the UI.
+
+    ListDictionaryData:
+      type: object
+      required: [type, items]
+      properties:
+        type:
+          type: string
+          description: Dictionary type echoed back to the client.
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/DictionaryEntry"
+
+    DictionaryListResult:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: "#/components/schemas/ListDictionaryData"
+
+    SocialPlatform:
+      type: string
+      description: Supported social network for creator accounts (MVP scope).
+      enum: [instagram, tiktok, threads]
+
+    SocialAccountInput:
+      type: object
+      required: [platform, handle]
+      properties:
+        platform:
+          $ref: "#/components/schemas/SocialPlatform"
+        handle:
+          type: string
+          description: Account handle or public identifier on the given platform.
+          minLength: 1
+          maxLength: 128
+
+    CreatorApplicationSubmitRequest:
+      type: object
+      required:
+        - lastName
+        - firstName
+        - iin
+        - phone
+        - city
+        - categories
+        - socials
+        - acceptedAll
+      properties:
+        lastName:
+          type: string
+          minLength: 1
+          maxLength: 128
+        firstName:
+          type: string
+          minLength: 1
+          maxLength: 128
+        middleName:
+          type: string
+          maxLength: 128
+          description: Optional patronymic (not every applicant has one).
+        iin:
+          type: string
+          description: Kazakhstani individual identification number (12 digits).
+          pattern: "^[0-9]{12}$"
+        phone:
+          type: string
+          minLength: 1
+          maxLength: 32
+        city:
+          type: string
+          minLength: 1
+          maxLength: 128
+        address:
+          type: string
+          nullable: true
+          maxLength: 512
+          description: |
+            Optional legal/postal address. Empty on the landing form (the bot
+            collects it later); admins may patch it via moderation tooling.
+        categories:
+          type: array
+          description: |
+            One or more category codes from the categories catalogue. Must be non-empty.
+            Maximum three codes; submissions with more are rejected with 422.
+          minItems: 1
+          items:
+            type: string
+            minLength: 1
+            maxLength: 64
+        categoryOtherText:
+          type: string
+          nullable: true
+          maxLength: 200
+          description: |
+            Free-text description of the creator's niche when "other" appears in
+            categories. Required when "other" is present (otherwise the request is
+            rejected with 422 VALIDATION_ERROR). Ignored when "other" is absent.
+        socials:
+          type: array
+          description: One or more social accounts. Multiple handles on the same platform are allowed.
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/SocialAccountInput"
+        acceptedAll:
+          type: boolean
+          description: |
+            Single consent flag covering all four canonical consent types
+            (processing / third_party / cross_border / terms). The legal model
+            (privacy-policy.md §9.2) treats acceptance of the Privacy Policy as
+            unconditional consent to all four. Backend writes four rows in
+            creator_application_consents bound to the current document versions.
+            Must be true; otherwise the request is rejected with 422 MISSING_CONSENT.
+
+    CreatorApplicationSubmitData:
+      type: object
+      required: [applicationId, telegramBotUrl]
+      properties:
+        applicationId:
+          type: string
+          format: uuid
+          description: UUID of the newly created application (also embedded into the bot deep-link).
+        telegramBotUrl:
+          type: string
+          format: uri
+          description: Deep-link to the Telegram bot carrying application id as start parameter.
+
+    CreatorApplicationSubmitResult:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: "#/components/schemas/CreatorApplicationSubmitData"
+
+    CreatorApplicationDetailCategory:
+      type: object
+      required: [code, name, sortOrder]
+      properties:
+        code:
+          type: string
+          description: Stable category code from the categories dictionary.
+        name:
+          type: string
+          description: Display name at the time the read was served.
+        sortOrder:
+          type: integer
+          description: Catalogue ordering hint copied from the dictionary row.
+
+    CreatorApplicationDetailCity:
+      type: object
+      required: [code, name, sortOrder]
+      properties:
+        code:
+          type: string
+          description: Stable city code from the cities dictionary (or the raw stored value when the dictionary entry has been deactivated).
+        name:
+          type: string
+          description: Display name resolved against the dictionary at read time. Falls back to the code when the dictionary entry no longer exists.
+        sortOrder:
+          type: integer
+          description: Catalogue ordering hint from the dictionary row. Falls back to 0 for deactivated/unknown codes.
+
+    CreatorApplicationDetailSocial:
+      type: object
+      required: [platform, handle]
+      properties:
+        platform:
+          $ref: "#/components/schemas/SocialPlatform"
+        handle:
+          type: string
+
+    CreatorApplicationDetailConsent:
+      type: object
+      required: [consentType, acceptedAt, documentVersion, ipAddress, userAgent]
+      properties:
+        consentType:
+          type: string
+          enum: [processing, third_party, cross_border, terms]
+          description: Canonical consent type captured at submission time.
+        acceptedAt:
+          type: string
+          format: date-time
+        documentVersion:
+          type: string
+          description: Document version stamp recorded at the moment of consent.
+        ipAddress:
+          type: string
+          description: Client IP recorded at submission (raw stored as-is).
+        userAgent:
+          type: string
+          description: Truncated User-Agent recorded at submission.
+
+    CreatorApplicationDetailData:
+      type: object
+      required:
+        - id
+        - lastName
+        - firstName
+        - iin
+        - birthDate
+        - phone
+        - city
+        - status
+        - createdAt
+        - updatedAt
+        - categories
+        - socials
+        - consents
+      properties:
+        id:
+          type: string
+          format: uuid
+        lastName:
+          type: string
+        firstName:
+          type: string
+        middleName:
+          type: string
+          nullable: true
+        iin:
+          type: string
+          description: Kazakhstani individual identification number (12 digits).
+        birthDate:
+          type: string
+          format: date
+          description: Birth date derived from the IIN at submission time.
+        phone:
+          type: string
+        city:
+          $ref: "#/components/schemas/CreatorApplicationDetailCity"
+        address:
+          type: string
+          nullable: true
+        categoryOtherText:
+          type: string
+          nullable: true
+          description: Free-text niche description when categories include "other".
+        status:
+          type: string
+          enum: [pending, approved, rejected, blocked]
+          description: Moderation status of the application.
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        categories:
+          type: array
+          description: Categories selected by the creator, sorted by sort_order then code.
+          items:
+            $ref: "#/components/schemas/CreatorApplicationDetailCategory"
+        socials:
+          type: array
+          description: Social accounts attached to the application, sorted by platform then handle.
+          items:
+            $ref: "#/components/schemas/CreatorApplicationDetailSocial"
+        consents:
+          type: array
+          description: |
+            Consents in canonical order (processing → third_party → cross_border → terms),
+            independent of the order they appear in the database.
+          items:
+            $ref: "#/components/schemas/CreatorApplicationDetailConsent"
+
+    GetCreatorApplicationResult:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: "#/components/schemas/CreatorApplicationDetailData"
 
   securitySchemes:
     bearerAuth:

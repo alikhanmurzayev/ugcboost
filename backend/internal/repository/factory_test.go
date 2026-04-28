@@ -41,6 +41,51 @@ func TestRepoFactory(t *testing.T) {
 		require.True(t, ok, "factory returns *auditRepository")
 		require.Same(t, db, concrete.db)
 	})
+
+	t.Run("NewDictionaryRepo returns DictionaryRepo bound to db", func(t *testing.T) {
+		t.Parallel()
+		repo := factory.NewDictionaryRepo(db)
+		require.NotNil(t, repo)
+		concrete, ok := repo.(*dictionaryRepository)
+		require.True(t, ok, "factory returns *dictionaryRepository")
+		require.Same(t, db, concrete.db)
+	})
+
+	t.Run("NewCreatorApplicationRepo returns repo bound to db", func(t *testing.T) {
+		t.Parallel()
+		repo := factory.NewCreatorApplicationRepo(db)
+		require.NotNil(t, repo)
+		concrete, ok := repo.(*creatorApplicationRepository)
+		require.True(t, ok, "factory returns *creatorApplicationRepository")
+		require.Same(t, db, concrete.db)
+	})
+
+	t.Run("NewCreatorApplicationCategoryRepo returns repo bound to db", func(t *testing.T) {
+		t.Parallel()
+		repo := factory.NewCreatorApplicationCategoryRepo(db)
+		require.NotNil(t, repo)
+		concrete, ok := repo.(*creatorApplicationCategoryRepository)
+		require.True(t, ok, "factory returns *creatorApplicationCategoryRepository")
+		require.Same(t, db, concrete.db)
+	})
+
+	t.Run("NewCreatorApplicationSocialRepo returns repo bound to db", func(t *testing.T) {
+		t.Parallel()
+		repo := factory.NewCreatorApplicationSocialRepo(db)
+		require.NotNil(t, repo)
+		concrete, ok := repo.(*creatorApplicationSocialRepository)
+		require.True(t, ok, "factory returns *creatorApplicationSocialRepository")
+		require.Same(t, db, concrete.db)
+	})
+
+	t.Run("NewCreatorApplicationConsentRepo returns repo bound to db", func(t *testing.T) {
+		t.Parallel()
+		repo := factory.NewCreatorApplicationConsentRepo(db)
+		require.NotNil(t, repo)
+		concrete, ok := repo.(*creatorApplicationConsentRepository)
+		require.True(t, ok, "factory returns *creatorApplicationConsentRepository")
+		require.Same(t, db, concrete.db)
+	})
 }
 
 // pgxmockPool returns a pgxmock pool without any expectation assertions —

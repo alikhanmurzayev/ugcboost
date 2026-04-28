@@ -6,8 +6,9 @@
        build-backend build-web build-tma build-landing \
        test-unit-backend test-unit-web test-unit-tma test-unit-landing \
        test-unit-backend-coverage \
-       test-e2e-backend test-e2e-frontend \
-       lint-backend lint-web lint-tma lint-landing \
+       test-e2e-backend test-e2e-frontend test-e2e-landing \
+       lint-backend lint-web lint-tma lint-landing lint-legal \
+       sync-legal \
        generate-api generate-mocks
 
 # ── Build-time version stamping ───────────────────────────────────
@@ -121,8 +122,7 @@ test-unit-backend-coverage:
 			&& $$1 !~ /\/mocks\// \
 			&& $$1 !~ /\/cmd\// \
 			&& $$1 !~ /\/handler\/health\.go:/ \
-			&& $$1 !~ /\/middleware\/(logging|json)\.go:/ \
-			&& $$2 ~ /^[A-Z]/ { \
+			&& $$1 !~ /\/middleware\/(logging|json)\.go:/ { \
 				pct = $$NF; gsub(/%/, "", pct); \
 				if (pct + 0 < 80.0) { printf "FAIL %s %s %s%%\n", $$1, $$2, pct; fail=1 } \
 			} END { exit fail ? 1 : 0 }'
@@ -142,6 +142,9 @@ test-e2e-backend: start-backend
 test-e2e-frontend: start-web
 	cd frontend/web && CI=true BASE_URL=http://localhost:3001 API_URL=http://localhost:8082 npx playwright test
 
+test-e2e-landing: start-landing
+	cd frontend/landing && CI=true BASE_URL=http://localhost:3003 API_URL=http://localhost:8082 npx playwright test
+
 # ── Lint ──────────────────────────────────────────────────────────
 
 lint-backend:
@@ -155,9 +158,28 @@ lint-tma:
 	cd frontend/tma && npx tsc --noEmit
 	cd frontend/tma && npx eslint src/
 
-lint-landing:
+lint-landing: lint-legal
 	cd frontend/landing && npx tsc --noEmit
 	cd frontend/landing && npx eslint src/
+
+# ── Legal docs sync ──────────────────────────────────────────────
+# legal-documents/ — source of truth. The landing carries copies under
+# frontend/landing/src/pages/legal/ that must be kept identical via
+# `make sync-legal`. CI verifies the invariant via `make lint-legal`.
+
+sync-legal:
+	cp 'legal-documents/ПОЛИТИКА ОБРАБОТКИ ПЕРСОНАЛЬНЫХ ДАННЫХ UGCBOOST.md' \
+	   frontend/landing/src/pages/legal/privacy-policy.md
+	cp 'legal-documents/ПОЛЬЗОВАТЕЛЬСКОЕ СОГЛАШЕНИЕ UGCBOOST.md' \
+	   frontend/landing/src/pages/legal/user-agreement.md
+
+lint-legal:
+	@diff -q 'legal-documents/ПОЛИТИКА ОБРАБОТКИ ПЕРСОНАЛЬНЫХ ДАННЫХ UGCBOOST.md' \
+	   frontend/landing/src/pages/legal/privacy-policy.md > /dev/null \
+	   || (echo 'privacy-policy.md диверговал от legal-documents — выполни make sync-legal' && exit 1)
+	@diff -q 'legal-documents/ПОЛЬЗОВАТЕЛЬСКОЕ СОГЛАШЕНИЕ UGCBOOST.md' \
+	   frontend/landing/src/pages/legal/user-agreement.md > /dev/null \
+	   || (echo 'user-agreement.md диверговал от legal-documents — выполни make sync-legal' && exit 1)
 
 # ── Code generation ──────────────────────────────────────────────
 
@@ -170,6 +192,7 @@ generate-api:
 		backend/api/openapi-test.yaml
 	cd frontend/web && npx openapi-typescript ../../backend/api/openapi.yaml -o src/api/generated/schema.ts
 	cd frontend/tma && npx openapi-typescript ../../backend/api/openapi.yaml -o src/api/generated/schema.ts
+	cd frontend/landing && npx openapi-typescript ../../backend/api/openapi.yaml -o src/api/generated/schema.ts
 	oapi-codegen -package apiclient -generate types \
 		-o backend/e2e/apiclient/types.gen.go backend/api/openapi.yaml
 	oapi-codegen -package apiclient -generate client \

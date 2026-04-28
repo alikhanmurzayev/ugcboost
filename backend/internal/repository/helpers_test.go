@@ -3,7 +3,9 @@ package repository
 import (
 	"testing"
 
+	"github.com/elgris/stom"
 	"github.com/pashagolub/pgxmock/v4"
+	"github.com/stretchr/testify/require"
 )
 
 // newPgxmock creates a pgxmock pool wired to satisfy dbutil.DB with strict
@@ -24,3 +26,16 @@ func newPgxmock(t *testing.T) pgxmock.PgxPoolIface {
 	})
 	return mock
 }
+
+func TestToMap_PanicsOnUnmappableValue(t *testing.T) {
+	t.Parallel()
+	// stom.ToMap requires a struct (or pointer to one). Passing a non-struct
+	// triggers an error which toMap intentionally upgrades to a panic — the
+	// repo layer is the only caller and a misuse there is a programming bug,
+	// not a runtime failure mode.
+	st := stom.MustNewStom(BrandRow{}).SetTag(string(tagInsert))
+	require.Panics(t, func() {
+		toMap(42, st)
+	})
+}
+
