@@ -1,0 +1,30 @@
+name: Deploy Production
+
+# Manual-only — Run workflow в Actions UI.
+# Триггерит Dokploy webhooks для всех 4 сервисов, потом healthcheck на api.
+# ВАЖНО: запускать ПОСЛЕ Migrate Production, чтобы схема БД соответствовала коду.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Dokploy webhooks via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ vars.PROD_HOST }}
+          username: deploy
+          key: ${{ secrets.PROD_DEPLOY_SSH_KEY }}
+          port: 2222
+          script: |
+            curl -sSf -X POST "${{ secrets.DOKPLOY_WEBHOOK_PROD_BACKEND }}"
+            curl -sSf -X POST "${{ secrets.DOKPLOY_WEBHOOK_PROD_WEB }}"
+            curl -sSf -X POST "${{ secrets.DOKPLOY_WEBHOOK_PROD_TMA }}"
+            curl -sSf -X POST "${{ secrets.DOKPLOY_WEBHOOK_PROD_LANDING }}"
+      - name: Health check
+        run: |
+          curl -sSf --retry 10 --retry-delay 5 --retry-all-errors \
+            https://api.ugcboost.kz/healthz

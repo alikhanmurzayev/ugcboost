@@ -1,0 +1,30 @@
+name: Migrate Production
+
+# Manual-only — Run workflow в Actions UI.
+# Запускает goose up на prod БД из образа :production (latest на main).
+
+on:
+  workflow_dispatch:
+
+env:
+  IMAGE_PREFIX: ghcr.io/${{ github.repository_owner }}/ugcboost
+
+jobs:
+  migrate:
+    name: Migrate Production DB
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run migrations via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ vars.PROD_HOST }}
+          username: deploy
+          key: ${{ secrets.PROD_DEPLOY_SSH_KEY }}
+          port: 2222
+          script: |
+            echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            docker pull ${{ env.IMAGE_PREFIX }}/backend:production
+            docker run --rm --network=dokploy-network \
+              --entrypoint goose \
+              ${{ env.IMAGE_PREFIX }}/backend:production \
+              -dir /migrations postgres "${{ secrets.PROD_DATABASE_URL }}" up
