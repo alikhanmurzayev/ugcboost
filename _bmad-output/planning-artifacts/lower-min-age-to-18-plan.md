@@ -11,10 +11,11 @@
 - **REQ-1 (must):** `domain.MinCreatorAge` = 18. Сообщение валидации становится «Возраст менее 18 лет» автоматически (service использует `domain.MinCreatorAge` в `fmt.Sprintf`).
 - **REQ-2 (must):** Backend unit-тесты, ловившие `under MinCreatorAge` сценарий, продолжают ловить ошибку. `under by one day` в `iin_test.go` после смены константы не должен молча пройти (20 ≥ 18) — отвязать даты от конкретного значения, привязав к самой константе.
 - **REQ-3 (must):** E2E backend (`creator_application_test.go`) — `const minAge` синхронизирован с domain (поменять хардкод 21 → 18; формула `now - (minAge - 2)` остаётся валидной).
-- **REQ-4 (must):** User-facing текст лендинга «Тебе 21+» → «Тебе 18+» (две строки в `content.ts`).
-- **REQ-5 (must):** Комментарий-пример в `frontend/landing/src/api/client.ts` — синхронизирован с фактическим серверным сообщением («Возраст менее 18 лет»).
-- **REQ-6 (should):** Спека `spec-creator-application-submit.md` — отметить откат на 18 (living document, исторический контекст сохранить).
-- **REQ-7 (must, comment hygiene):** Комментарий в `domain/iin.go` после правки — на английском, объясняет «почему 18», без упоминаний прошлого подъёма до 21 (комментарии — это про принятое решение, не журнал изменений; источник правды истории — git log + спека).
+- **REQ-4 (must):** Shared frontend e2e helper `frontend/e2e/helpers/api.ts:MIN_CREATOR_AGE` — синхронизирован с backend (21 → 18). На нём строится `underageIIN()` для landing-spec'а под-возрастной валидации.
+- **REQ-5 (must):** User-facing текст лендинга «Тебе 21+» → «Тебе 18+» (две строки в `content.ts`).
+- **REQ-6 (must):** Комментарий-пример в `frontend/landing/src/api/client.ts` — синхронизирован с фактическим серверным сообщением («Возраст менее 18 лет»).
+- **REQ-7 (should):** Спека `spec-creator-application-submit.md` — отметить откат на 18 (living document, исторический контекст сохранить).
+- **REQ-8 (must, comment hygiene):** Комментарий в `domain/iin.go` после правки — на английском, объясняет «почему 18», без упоминаний прошлого подъёма до 21 (комментарии — это про принятое решение, не журнал изменений; источник правды истории — git log + спека).
 
 ### Nice-to-have
 
@@ -24,7 +25,7 @@
 
 - PRD/legal documents — уже говорят «18+», не трогаем.
 - Backend OpenAPI / SQL миграции — возраст не материализуют.
-- `frontend/web`, `frontend/tma` — константа их не касается.
+- `frontend/web`, `frontend/tma` source — константа их не касается. Shared helper `frontend/e2e/helpers/api.ts:MIN_CREATOR_AGE` живёт **вне** этих директорий (это namespace-shared e2e модуль) и **в скоупе** — см. REQ-4.
 - Client-side JS-валидация возраста — её нет (форма шлёт ИИН, ошибка приходит с сервера) и добавлять её сейчас не требуется.
 
 ### Критерии успеха
@@ -32,8 +33,9 @@
 1. `cd backend && go test ./internal/domain/... ./internal/service/... -count=1 -race` — зелёный.
 2. `make test-unit-backend-coverage` — зелёный (per-method ≥80%).
 3. `make test-e2e-backend` — зелёный, включая `creator_application` пакет, сценарий `under MinCreatorAge rejected with UNDER_AGE`.
-4. `make lint-backend`, `make lint-landing`, `make build-landing` — зелёные.
-5. Ручная проверка не нужна (UI-текст — статика, бизнес-логика покрыта e2e). Но если хотим — `make start-landing` и убедиться, что в блоке «Кого мы ищем» теперь «Тебе 18+».
+4. `make test-e2e-landing` — зелёный (под-возрастной landing-spec строится на shared helper `MIN_CREATOR_AGE`).
+5. `make lint-backend`, `make lint-landing`, `make build-landing` — зелёные.
+6. Ручная проверка не нужна (UI-текст — статика, бизнес-логика покрыта e2e). Но если хотим — `make start-landing` и убедиться, что в блоке «Кого мы ищем» теперь «Тебе 18+».
 
 ## Файлы для изменения
 
@@ -42,6 +44,7 @@
 | `backend/internal/domain/iin.go` | `MinCreatorAge = 21` → `18`. Перефразировать godoc-комментарий (строки 26-29): убрать упоминание подъёма до 21 / EFW, оставить лаконичное описание «minimum age required to submit a creator application» с указанием источника требования (PRD FR3 / 18+ в РК). |
 | `backend/internal/domain/iin_test.go` | TestEnsureAdult: подтесты `under MinCreatorAge by one day` и `exactly MinCreatorAge today` (строки 133-146) — даты привязать к `MinCreatorAge`, чтобы тесты не зависели от конкретного значения. Конкретно: `birth := time.Date(2005, time.April, 21, …)` и `now := time.Date(2005+MinCreatorAge, time.April, 20, …)` (для `under by one day` — возраст = MinCreatorAge-1); `birth := time.Date(2005, time.April, 20, …)` и `now := time.Date(2005+MinCreatorAge, time.April, 20, …)` (для `exactly today` — возраст = MinCreatorAge ровно). Третий подтест `comfortably adult` (строки 148-153) трогать не надо. |
 | `backend/e2e/creator_application/creator_application_test.go` | Строка 580 `const minAge = 21 // mirrors domain.MinCreatorAge` → `18`. Комментарий «mirrors domain.MinCreatorAge» оставить — он подсвечивает связь с константой. |
+| `frontend/e2e/helpers/api.ts` | Строка 15: `export const MIN_CREATOR_AGE = 21;` → `18`. Shared helper между web/tma/landing e2e — landing-spec под-возрастной валидации (`frontend/landing/e2e/submit.spec.ts`) полагается на него. Расхождение с backend ломает `test-e2e-landing`. |
 | `frontend/landing/src/content.ts` | Строки 94 и 97: `bold: "Тебе 21+"` → `"Тебе 18+"` (обе вхождения в `criteria.items[0]`). |
 | `frontend/landing/src/api/client.ts` | Комментарий в строках 24-25: пример `"Возраст менее 21 лет"` → `"Возраст менее 18 лет"` (синхронизация с фактическим сообщением сервера). |
 | `_bmad-output/implementation-artifacts/spec-creator-application-submit.md` | Строка 204: запись «MinCreatorAge поднят с 18 до 21. Бизнес-фильтр EFW…» — дописать «откатили обратно к 18 на 2026-04-28: расширяем воронку заявок, EFW-фильтр снимаем». Строка 228: `domain.MinCreatorAge = 21` → `18`. |
@@ -56,19 +59,21 @@
 2. [ ] **Backend, доменная константа.** В `backend/internal/domain/iin.go`: `MinCreatorAge = 18`. Переписать комментарий 26-29 на английском, без истории про 21/EFW. Пример: `// MinCreatorAge is the minimum age required to submit a creator application. Mirrors PRD FR3 ("18+ via IIN birth date").`
 3. [ ] **Backend, доменные тесты.** В `backend/internal/domain/iin_test.go` для подтестов `under by one day` и `exactly today`: даты завязать на `MinCreatorAge`. После правки — `cd backend && go test ./internal/domain/... -count=1 -race -run TestEnsureAdult` локально, убедиться зелёный.
 4. [ ] **Backend, e2e константа.** В `backend/e2e/creator_application/creator_application_test.go:580` — `const minAge = 18`. Запустить локально `make test-e2e-backend` (длительно — поднимет docker compose; делать в фоне другой команды можно).
-5. [ ] **Frontend, текст лендинга.** В `frontend/landing/src/content.ts` обе строки `"Тебе 21+"` → `"Тебе 18+"`.
-6. [ ] **Frontend, комментарий-пример.** В `frontend/landing/src/api/client.ts:24-25` обновить пример сообщения.
-7. [ ] **Спека.** В `_bmad-output/implementation-artifacts/spec-creator-application-submit.md`: отметить откат и поправить значение константы.
-8. [ ] **Локальные гейты (обязательны до push, см. memory `feedback_local_build_first`).** Запустить:
+5. [ ] **Frontend e2e helper.** В `frontend/e2e/helpers/api.ts:15` — `MIN_CREATOR_AGE = 18`. Прогнать `make test-e2e-landing` (поднимет landing + backend через docker compose). Гейт обязателен — landing под-возрастной spec строится на этой константе.
+6. [ ] **Frontend, текст лендинга.** В `frontend/landing/src/content.ts` обе строки `"Тебе 21+"` → `"Тебе 18+"`.
+7. [ ] **Frontend, комментарий-пример.** В `frontend/landing/src/api/client.ts:24-25` обновить пример сообщения.
+8. [ ] **Спека.** В `_bmad-output/implementation-artifacts/spec-creator-application-submit.md`: отметить откат и поправить значение константы.
+9. [ ] **Локальные гейты (обязательны до push, см. memory `feedback_local_build_first`).** Запустить:
    - `make lint-backend`
    - `make test-unit-backend`
    - `make test-unit-backend-coverage`
    - `make test-e2e-backend`
    - `make lint-landing`
    - `make build-landing`
+   - `make test-e2e-landing`
    
    Если что-то падает — фиксим и перепроверяем тот же таргет, потом запускаем дальше.
-9. [ ] **Передать на ревью Alikhan.** Согласно memory — Claude НЕ коммитит и НЕ мержит сам. Изменения остаются в working tree до ручного ревью. После апрува — Alikhan сам делает коммит, push, PR.
+10. [ ] **Передать на ревью Alikhan.** Согласно memory — Claude НЕ коммитит и НЕ мержит сам. Изменения остаются в working tree до ручного ревью. После апрува — Alikhan сам делает коммит, push, PR.
 
 ## Стратегия тестирования
 

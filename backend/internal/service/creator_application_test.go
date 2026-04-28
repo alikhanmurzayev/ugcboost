@@ -23,7 +23,7 @@ import (
 // validCreatorInput builds an input that passes every precondition so scenarios
 // can selectively invalidate one field to hit a specific branch.
 // IIN 950515312348 encodes 1995-05-15. Against the fixed "now" of 2026-04-20
-// the applicant is 30, which clears the 21+ floor with margin.
+// the applicant is 30, which clears the MinCreatorAge floor with margin.
 //
 // Address is intentionally left nil — the landing flow does not collect a
 // legal address (the bot/admin captures it after approval), so the canonical

@@ -38,7 +38,13 @@
 | 6 | `frontend/landing/src/content.ts:97` | `{ bold: "Тебе 21+" }` (parts[0]) | `{ bold: "Тебе 18+" }` |
 | 7 | `frontend/landing/src/api/client.ts:24-25` | Комментарий с примером `"Возраст менее 21 лет"` | Поменять пример на «менее 18 лет» (нужно для согласованности с фактическим серверным сообщением). |
 
-`frontend/landing/src/pages/index.astro:443` — фраза «Нужен для проверки возраста и подписания договора» возраст не называет, **не трогаем**. Клиентской JS-валидации возраста нет (форма шлёт ИИН на сервер, ошибка `UNDER_AGE` приходит с message — рендерится через `ApiError.serverMessage`). E2E-Playwright тестов на форму в landing пока нет (`placeholder.test.ts` — заглушка, реальных spec-файлов в репо нет).
+`frontend/landing/src/pages/index.astro:443` — фраза «Нужен для проверки возраста и подписания договора» возраст не называет, **не трогаем**. Клиентской JS-валидации возраста нет (форма шлёт ИИН на сервер, ошибка `UNDER_AGE` приходит с message — рендерится через `ApiError.serverMessage`).
+
+### Frontend e2e — shared helper (mirror backend константы)
+
+| # | Файл:строка | Текущее | Целевое |
+|---|---|---|---|
+| 7a | `frontend/e2e/helpers/api.ts:15` | `export const MIN_CREATOR_AGE = 21;` | `18`. Shared между web/tma/landing e2e (live в `frontend/e2e/`, **вне** `frontend/{web,tma,landing}/src`). На нём строится `underageIIN()` для landing-spec'а под-возрастной валидации (`frontend/landing/e2e/submit.spec.ts`). Расхождение с backend → `test-e2e-landing` падает по 422-ассерту. Сам helper в комментарии (`api.ts:12-14`) явно требует синхронизации: «Bumping the backend constant means bumping this one too». |
 
 ### Спека и документация (artifacts)
 
@@ -80,9 +86,10 @@ Backend OpenAPI-спека (`backend/api/openapi.yaml`) и SQL-миграции 
 2. **Backend, доменное ядро:** `iin.go` — `MinCreatorAge = 18` + переписать комментарий (без следа про 21/EFW).
 3. **Backend, доменные тесты:** `iin_test.go:133-146` — пересчитать (или, лучше, привязать) даты `under by one day` / `exactly MinCreatorAge today` к новому значению.
 4. **Backend, e2e тест:** `creator_application_test.go:580` — `const minAge = 18`.
-5. **Frontend:** `content.ts:94,97` — «Тебе 18+»; `client.ts:24-25` — пример в комментарии.
-6. **Спека:** `spec-creator-application-submit.md:204,228` — отметить откат к 18 и обновить значение константы.
-7. Локальные гейты: `make lint-backend`, `make test-unit-backend`, `make test-unit-backend-coverage`, `make test-e2e-backend`, `make lint-landing`, `make build-landing`. Сторонним фронтам (`web`, `tma`) изменения не касаются — отдельные команды можно не запускать.
-8. PR с фокусом «откат MinCreatorAge с 21 до 18 — возвращаем PRD-FR3 поведение, расширяем воронку заявок». Перед открытием — `/review` если хочется multi-agent ревью.
+5. **Frontend e2e shared helper:** `frontend/e2e/helpers/api.ts:15` — `MIN_CREATOR_AGE = 18` (mirror backend; landing under-age spec строится на нём).
+6. **Frontend landing:** `content.ts:94,97` — «Тебе 18+»; `client.ts:24-25` — пример в комментарии.
+7. **Спека:** `spec-creator-application-submit.md:204,228` — отметить откат к 18 и обновить значение константы.
+8. Локальные гейты: `make lint-backend`, `make test-unit-backend`, `make test-unit-backend-coverage`, `make test-e2e-backend`, `make test-e2e-landing`, `make lint-landing`, `make build-landing`. Сторонним фронтам (`web`, `tma`) изменения не касаются — отдельные команды можно не запускать.
+9. PR с фокусом «откат MinCreatorAge с 21 до 18 — возвращаем PRD-FR3 поведение, расширяем воронку заявок». Перед открытием — `/review` если хочется multi-agent ревью.
 
 **Альтернатива (overkill для текущего MVP, не рекомендую):** вынести `MinCreatorAge` в конфиг (env / DB-config) — позволит менять без релиза. Не надо: сейчас задача одна, конфиг-флаг = новые точки отказа и тесты. Если в будущем потребуется крутить порог часто (>2 раз) — тогда вернёмся.
