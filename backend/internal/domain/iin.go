@@ -24,9 +24,9 @@ var (
 )
 
 // MinCreatorAge is the minimum age required to submit a creator application.
-// Originally 18 per FR3; raised to 21 on 2026-04-25 as the EFW business filter
-// (anything stricter — alcohol campaigns etc. — stays downstream).
-const MinCreatorAge = 21
+// Mirrors PRD FR3 ("18+ via IIN birth date") — the legal floor in RK; any
+// stricter business filter (alcohol campaigns etc.) stays downstream.
+const MinCreatorAge = 18
 
 // ValidateIIN verifies a Kazakhstani IIN: exactly 12 digits, a valid control
 // checksum per the two-pass Republic of Kazakhstan algorithm, a recognisable

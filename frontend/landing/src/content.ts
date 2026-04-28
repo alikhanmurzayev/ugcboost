@@ -91,10 +91,10 @@ export const criteria = {
   intro: "Ты подходишь, если:",
   items: [
     {
-      bold: "Тебе 21+",
+      bold: "Тебе 18+",
       text: ", живешь в Алматы",
       parts: [
-        { bold: "Тебе 21+" },
+        { bold: "Тебе 18+" },
         { text: ", живешь в " },
         { bold: "Алматы" },
       ],

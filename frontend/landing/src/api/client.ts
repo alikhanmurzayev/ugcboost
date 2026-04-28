@@ -22,7 +22,7 @@ export class ApiError extends Error {
   code: string;
   // serverMessage preserves the human-readable message returned by the API so
   // the landing form can show it verbatim ("Невалидный ИИН", "Возраст менее
-  // 21 лет" и т.п.). Keep it separate from the JS Error.message contract:
+  // 18 лет" и т.п.). Keep it separate from the JS Error.message contract:
   // callers can either fall back to err.message (which we still set to the
   // server message via super()) or branch on err.code for code-driven UI.
   serverMessage: string;

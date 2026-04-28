@@ -202,6 +202,7 @@ Adversarial code review PR #19 branch `alikhan/creator-application-submit` — 3
 3. **MaxCategoriesPerApplication = 3.** Лимит на бэке (`domain.MaxCategoriesPerApplication`). При >3 → 422 `VALIDATION_ERROR`.
 
 4. **MinCreatorAge поднят с 18 до 21.** Бизнес-фильтр EFW. Сообщение "Возраст менее 21 года". Legal min остаётся 18 для будущих воронок (если понадобятся — выносить в Config).
+   - **Update 2026-04-28:** откатили обратно к 18 — расширяем воронку заявок, EFW-фильтр снят. Сообщение возвращается к "Возраст менее 18 лет". Если потребуется крутить порог чаще одного раза — выносить в Config (см. альтернативу в scout-артефакте `lower-min-age-to-18-scout.md`).
 
 5. **SocialPlatform += `threads`.** Миграция `ALTER TYPE social_platform ADD VALUE 'threads'`. Handle-regex тот же (`^[a-z0-9._]{1,30}$`). `domain.SocialPlatformThreads` константа.
 
@@ -225,7 +226,7 @@ Adversarial code review PR #19 branch `alikhan/creator-application-submit` — 3
 ### Сопутствующие изменения на бэке
 
 - `domain.SocialPlatformValues += SocialPlatformThreads`
-- `domain.MinCreatorAge = 21` (поднят с 18)
+- `domain.MinCreatorAge = 18` (вернули с 21 — см. изменения контракта п.4 Update 2026-04-28)
 - `domain.MaxCategoriesPerApplication = 3` (новая константа)
 - Удалены `repository.CategoryRepo` / `CategoryRow` / `categoryRepository` и моки — заменены на `DictionaryRepo`
 - `service.CreatorApplicationService` рефакторен: `NewDictionaryRepo` вместо `NewCategoryRepo`, `requireAllConsents/AsMap/consentLabelRU` удалены, добавлены валидации MaxCategories и categoryOtherText.

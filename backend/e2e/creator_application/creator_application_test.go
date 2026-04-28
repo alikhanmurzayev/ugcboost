@@ -577,7 +577,7 @@ func flipDigit(r byte) string {
 // a hardcoded year would stop reproducing under-age the moment real time
 // caught up.
 func buildUnderageIIN() string {
-	const minAge = 21 // mirrors domain.MinCreatorAge
+	const minAge = 18 // mirrors domain.MinCreatorAge
 	birth := time.Now().UTC().AddDate(-(minAge - 2), 0, 0)
 	yy := fmt.Sprintf("%02d", birth.Year()%100)
 	mm := fmt.Sprintf("%02d", int(birth.Month()))
