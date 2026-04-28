@@ -1,4 +1,4 @@
-# Транзакции [REQUIRED]
+# Транзакции
 
 ## Принцип
 
@@ -125,6 +125,19 @@ return dbutil.WithTx(ctx, s.pool, func(tx dbutil.DB) error {
 })
 ```
 
+**Логи успеха пишутся ПОСЛЕ `WithTx`**, не внутри callback'а. Если callback откатится после `logger.Info("...success")` — лог соврёт о результате операции. Внутри callback'а допустимы только debug/error логи о ходе операции.
+
+**Public endpoint без аутентифицированного actor'а** (например, creator application submit от анонимного пользователя) пишет audit-row с `actor_id = NULL`. Миграция таблицы `audit_logs` обязана делать колонку `actor_id` NULLABLE — иначе INSERT упадёт. Down-миграция для возврата `NOT NULL` без backfill — corner case (упадёт, если есть ряды с NULL, созданные публичными endpoint'ами).
+
 ## Ограничения
 
 - **Nested transactions (savepoints)** — запрещены. Если два сервиса нуждаются в общей транзакции — рефакторинг в один orchestrating сервис
+
+## Что ревьюить
+
+- [blocker] Прямой `pool.Begin()` в сервисе (вместо `dbutil.WithTx`).
+- [blocker] Аудит-лог fire-and-forget (вне tx с mutate-операцией) — если mutate откатится, audit останется.
+- [blocker] Nested transaction / savepoint.
+- [major] Сервис передаёт `tx` напрямую в `Repo` (вместо `s.repoFactory.NewXRepo(tx)`).
+- [major] `logger.Info("success...")` ВНУТРИ `WithTx` callback — если callback откатится после лога, лог соврёт. Логи успеха пишутся ПОСЛЕ `WithTx`.
+- [major] Public endpoint пишет audit от анонимного actor'а, но колонка `actor_id` в `audit_logs` — `NOT NULL`. Миграция должна сделать колонку nullable.

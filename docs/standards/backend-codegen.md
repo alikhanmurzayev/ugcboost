@@ -1,4 +1,4 @@
-# Использование кодогенерации [REQUIRED]
+# Использование кодогенерации
 
 Contract-first подход: OpenAPI YAML → кодогенерация для Go (oapi-codegen), TypeScript (openapi-typescript), E2E-клиентов. Сгенерированный код **должен использоваться**. Ручные дубликаты запрещены.
 
@@ -16,3 +16,12 @@ Contract-first подход: OpenAPI YAML → кодогенерация для 
 ## Frontend
 
 - **API-типы** — только из `generated/schema.ts`. Ручные interface/type для API request/response запрещены
+
+## Что ревьюить
+
+- [blocker] Ручной struct для API request/response в handler (вместо типов из `api/`).
+- [blocker] Ручной `json.NewDecoder(r.Body).Decode` в handler (вместо ServerInterfaceWrapper / strict-server).
+- [major] Ручной `r.URL.Query().Get(...)` / `chi.URLParam(...)` для API-эндпоинта (должно идти через сгенерированные параметры).
+- [major] Хардкод-список enum-значений в switch / error message вместо `req.X.Valid()` от сгенерированного типа.
+- [minor] Ручной мок вместо mockery с `all: true`.
+- [blocker] Generated файл (`*.gen.go`, `frontend/*/generated/*` и др.) изменён в diff'е без правки yaml-источника (`api/openapi.yaml`) — нарушение codegen pipeline.

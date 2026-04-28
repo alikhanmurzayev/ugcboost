@@ -1,4 +1,4 @@
-# Фронтенд: качество и надёжность [REQUIRED]
+# Фронтенд: качество и надёжность
 
 ## TypeScript strict mode
 
@@ -49,3 +49,19 @@
 ## Runtime config — с валидацией
 
 Runtime config валидируется при инициализации приложения. В production отсутствие обязательного конфига — fatal error (лучше не запуститься, чем работать неправильно). В dev — допустимы fallback-значения.
+
+## Landing (Astro) specifics
+
+- **Form input masks.** Поля известного формата (телефон `+7 ___ ___ __ __`, ИИН — 12 цифр) получают input mask на клиенте. Без маски пользователь вводит мусор → валидация выдаёт UX-ошибки задним числом, после submit.
+- **WebP по дефолту для растровых ассетов.** Hero, benefits, logos и другие статичные изображения — WebP. Fallback на PNG/JPG только если нужна совместимость с конкретным потребителем. Без WebP лендос отдаёт 2-5x лишних байт на изображение.
+
+## Что ревьюить
+
+- [blocker] Runtime config не валидируется при инициализации в production — приложение запустится с пропавшим обязательным конфигом.
+- [major] `any` / `!` (non-null assertion) / `as` (type assertion) в коде. Исключение `document.getElementById('root')!` — единственное.
+- [major] `console.log` в коде (только `console.error` / `console.warn` допустимы).
+- [major] Молчаливый return формы без error message.
+- [major] `<input>` / `<select>` / `<textarea>` без связанного `<label>` / `aria-label`.
+- [major] Ошибка валидации без `role="alert"` / без `aria-describedby` на поле.
+- [minor] Form input без mask для известного формата (phone, IIN).
+- [minor] Растровый ассет не WebP (jpg/png без обоснования).

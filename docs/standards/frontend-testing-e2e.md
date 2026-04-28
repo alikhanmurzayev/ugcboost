@@ -1,4 +1,4 @@
-# Browser E2E тесты [REQUIRED]
+# Browser E2E тесты
 
 Playwright. Только критические user flows — не дублируем edge cases из backend E2E.
 
@@ -124,3 +124,16 @@ await page.getByTestId('email-input').fill('test@example.com')
  * пароль» без утечки того, какой именно компонент ошибся. ...
  */
 ```
+
+## Landing (Astro) specifics
+
+Лендос не имеет своего seed-bootstrap (в отличие от web/tma c admin-аккаунтом). Тесты не должны полагаться на конкретные значения, которые могут меняться: справочники, контент CMS, конкретные admin-emails. Assert'ы — на инварианты (форма submit'ится; redirect на success-page произошёл; обязательное поле помечено required), не на конкретные строки из БД.
+
+## Что ревьюить
+
+- [major] Локатор по тексту (`getByText("Войти")`) вместо `data-testid` — ломается при смене копирайта / i18n.
+- [major] `t.describe` по фиче, а не user flow (когда flow естественен).
+- [major] Hardcoded зависимость от seed-значения — тест ожидает `admin@example.com` или `gaming` в категориях, поломается если seed/словарь изменился.
+- [major] `E2E_CLEANUP=false` оставлен в коммите (только локальный override).
+- [minor] Header JSDoc не на русском, не нарратив (нумерованный список шагов).
+- [minor] Edge case дублируется из backend e2e (frontend e2e — только критические user flows).
