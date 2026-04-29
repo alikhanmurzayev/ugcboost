@@ -390,13 +390,14 @@ func TestTestAPIHandler_SendTelegramUpdate(t *testing.T) {
 		require.Equal(t, http.StatusUnprocessableEntity, rec.Code)
 	})
 
-	t.Run("nil dispatcher returns internal error (defensive guard)", func(t *testing.T) {
+	t.Run("nil dispatcher returns 500 INTERNAL_ERROR", func(t *testing.T) {
 		t.Parallel()
 		auth := mocks.NewMockTestAPIAuthService(t)
 		repos := mocks.NewMockTestAPICleanupRepoFactory(t)
 		pool := dbutilmocks.NewMockPool(t)
 		store := mocks.NewMockTokenStore(t)
 		log := logmocks.NewMockLogger(t)
+		expectUnexpectedErrorLog(log, path)
 
 		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, nil, nil, log))
 
@@ -405,7 +406,7 @@ func TestTestAPIHandler_SendTelegramUpdate(t *testing.T) {
 		req.Header.Set("Content-Type", "application/json")
 		rec := httptest.NewRecorder()
 		router.ServeHTTP(rec, req)
-		require.NotEqual(t, http.StatusOK, rec.Code, "nil dispatcher must not produce a 200")
+		require.Equal(t, http.StatusInternalServerError, rec.Code)
 	})
 }
 

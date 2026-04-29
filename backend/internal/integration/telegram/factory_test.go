@@ -3,6 +3,7 @@ package telegram_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -158,4 +159,90 @@ func TestRealClient_DecodeErrorWraps(t *testing.T) {
 	err = client.SendMessage(context.Background(), 1, "x")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "decode")
+}
+
+func TestRealClient_FiveHundredSurfacesAsAPIError(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusBadGateway)
+		_, _ = w.Write([]byte(`<html>bad gateway</html>`))
+	}))
+	t.Cleanup(srv.Close)
+
+	cfg := &config.Config{TelegramBotToken: "test-token"}
+	client, _, err := telegram.NewClient(cfg, logmocks.NewMockLogger(t))
+	require.NoError(t, err)
+	telegram.SetRealClientAPIBaseForTest(client, srv.URL)
+
+	err = client.SendMessage(context.Background(), 1, "x")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "502")
+}
+
+func TestRealClient_RetryAfterFromJSON(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"ok":false,"error_code":429,"description":"Too Many Requests","parameters":{"retry_after":42}}`))
+	}))
+	t.Cleanup(srv.Close)
+
+	cfg := &config.Config{TelegramBotToken: "test-token"}
+	client, _, err := telegram.NewClient(cfg, logmocks.NewMockLogger(t))
+	require.NoError(t, err)
+	telegram.SetRealClientAPIBaseForTest(client, srv.URL)
+
+	err = client.SendMessage(context.Background(), 1, "x")
+	require.Error(t, err)
+	delay, ok := telegram.RetryAfterFromError(err)
+	require.True(t, ok, "expected RetryAfter to be populated")
+	require.Equal(t, 42*time.Second, delay)
+}
+
+func TestRealClient_RetryAfterFromHeader(t *testing.T) {
+	t.Parallel()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Retry-After", "17")
+		w.WriteHeader(http.StatusTooManyRequests)
+		_, _ = w.Write([]byte(`{"ok":false,"error_code":429,"description":"Too Many Requests"}`))
+	}))
+	t.Cleanup(srv.Close)
+
+	cfg := &config.Config{TelegramBotToken: "test-token"}
+	client, _, err := telegram.NewClient(cfg, logmocks.NewMockLogger(t))
+	require.NoError(t, err)
+	telegram.SetRealClientAPIBaseForTest(client, srv.URL)
+
+	err = client.SendMessage(context.Background(), 1, "x")
+	require.Error(t, err)
+	delay, ok := telegram.RetryAfterFromError(err)
+	require.True(t, ok)
+	require.Equal(t, 17*time.Second, delay)
+}
+
+func TestSanitiseTransportError_PassesThroughNonURLErrors(t *testing.T) {
+	t.Parallel()
+	plain := errors.New("plain non-url error")
+	out := telegram.SanitiseTransportErrorForTest("getUpdates", plain)
+	require.Same(t, plain, out, "non-url errors must pass through unchanged")
+}
+
+func TestRealClient_TransportErrorRedactsToken(t *testing.T) {
+	t.Parallel()
+
+	cfg := &config.Config{TelegramBotToken: "ultra-secret-bot-token"}
+	client, _, err := telegram.NewClient(cfg, logmocks.NewMockLogger(t))
+	require.NoError(t, err)
+	// Point the client at an unreachable URL so http.Do returns *url.Error
+	// containing the request URL — without sanitisation it would carry the
+	// token. We expect the wrapped error to NOT contain the token.
+	telegram.SetRealClientAPIBaseForTest(client, "http://127.0.0.1:1") // closed port
+
+	err = client.SendMessage(context.Background(), 1, "x")
+	require.Error(t, err)
+	require.NotContains(t, err.Error(), "ultra-secret-bot-token",
+		"transport error must not leak the bot token into the error message")
+	require.Contains(t, err.Error(), "<redacted>")
 }

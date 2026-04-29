@@ -2,6 +2,7 @@ package testutil
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"sync/atomic"
 	"testing"
@@ -16,14 +17,14 @@ import (
 // collide on the UNIQUE constraint over telegram_user_id.
 var telegramTestIDCounter int64
 
-// uniqueTelegramID returns a fresh int64 identifier. The base is the lower
-// 32 bits of UnixNano with a per-process counter added; the result fits
-// comfortably inside Telegram's BIGINT range and stays well clear of any
-// realistic Telegram user_id (10^10).
+// uniqueTelegramID returns a fresh int64 identifier. The base sits inside a
+// 1.0–1.07 GiB window (well below ~10 GiB realistic Telegram user_id space)
+// so a synthetic id never accidentally matches a real Telegram user that
+// might appear during a manual smoke test through the real bot.
 func uniqueTelegramID() int64 {
-	const epoch int64 = 1 << 31 // 2_147_483_648 — clear of Telegram's real-id space
+	const epoch int64 = 1 << 30 // 1_073_741_824 — clear of real Telegram ids and >0
 	delta := atomic.AddInt64(&telegramTestIDCounter, 1)
-	return epoch + (time.Now().UnixNano()%(1<<24))*1024 + delta
+	return epoch + (time.Now().UnixNano()%(1<<20))*1024 + delta
 }
 
 // TelegramUpdateParams collects everything the test endpoint needs to compose
@@ -64,24 +65,7 @@ func DefaultTelegramUpdateParams(t *testing.T) TelegramUpdateParams {
 func uniqueLabel(t *testing.T) string {
 	t.Helper()
 	n := atomic.AddUint64(&counter, 1)
-	return runID + "-" + uintToString(n)
-}
-
-// uintToString wraps strconv.Itoa for uint64 without importing strconv at the
-// call sites — keeps the helper signature tight.
-func uintToString(n uint64) string {
-	const digits = "0123456789"
-	if n == 0 {
-		return "0"
-	}
-	var b [20]byte
-	i := len(b)
-	for n > 0 {
-		i--
-		b[i] = digits[n%10]
-		n /= 10
-	}
-	return string(b[i:])
+	return fmt.Sprintf("%s-%d", runID, n)
 }
 
 // SendTelegramUpdate POSTs to /test/telegram/send-update with the given

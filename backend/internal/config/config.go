@@ -104,6 +104,13 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("invalid ENVIRONMENT %q: must be one of local, staging, production", cfg.Environment)
 	}
 
+	// Telegram long-poll timeout is sent to Bot API as `int(seconds)` — a
+	// sub-second value truncates to 0 and would convert long polling into a
+	// hot loop. Require ≥1s.
+	if cfg.TelegramPollingTimeout < time.Second {
+		return nil, fmt.Errorf("TELEGRAM_POLLING_TIMEOUT must be at least 1s, got %s", cfg.TelegramPollingTimeout)
+	}
+
 	// Derive values from Environment
 	cfg.CookieSecure = cfg.Environment != EnvLocal
 	cfg.EnableTestEndpoints = cfg.Environment != EnvProduction

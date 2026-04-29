@@ -53,6 +53,64 @@ func TestStartHandler_Handle(t *testing.T) {
 		fix.handler.Handle(context.Background(), telegram.IncomingUpdate{ChatID: 100, UserID: 7000}, "not-a-uuid")
 	})
 
+	t.Run("loose UUID forms (urn:uuid:..., no dashes) rejected", func(t *testing.T) {
+		t.Parallel()
+		for _, payload := range []string{
+			"urn:uuid:11111111-2222-3333-4444-555555555555",
+			"{11111111-2222-3333-4444-555555555555}",
+			"11111111222233334444555555555555", // no dashes
+		} {
+			payload := payload
+			t.Run(payload, func(t *testing.T) {
+				t.Parallel()
+				fix := newStartHandlerFixture(t)
+				fix.messages.EXPECT().InvalidPayload().Return("invalid-text")
+				fix.client.EXPECT().SendMessage(mock.Anything, int64(100), "invalid-text").Return(nil)
+				fix.handler.Handle(context.Background(), telegram.IncomingUpdate{ChatID: 100, UserID: 7000}, payload)
+			})
+		}
+	})
+
+	t.Run("nil-uuid (00000000-0000-0000-0000-000000000000) rejected without DB hit", func(t *testing.T) {
+		t.Parallel()
+		fix := newStartHandlerFixture(t)
+		fix.messages.EXPECT().InvalidPayload().Return("invalid-text")
+		fix.client.EXPECT().SendMessage(mock.Anything, int64(100), "invalid-text").Return(nil)
+		fix.handler.Handle(context.Background(), telegram.IncomingUpdate{ChatID: 100, UserID: 7000},
+			"00000000-0000-0000-0000-000000000000")
+	})
+
+	t.Run("dash in wrong position rejected", func(t *testing.T) {
+		t.Parallel()
+		fix := newStartHandlerFixture(t)
+		fix.messages.EXPECT().InvalidPayload().Return("invalid-text")
+		fix.client.EXPECT().SendMessage(mock.Anything, int64(100), "invalid-text").Return(nil)
+		// Length is 36, but a dash is in position 9 instead of 8.
+		fix.handler.Handle(context.Background(), telegram.IncomingUpdate{ChatID: 100, UserID: 7000},
+			"111111112-222-3333-4444-55555555555")
+	})
+
+	t.Run("non-hex character rejected", func(t *testing.T) {
+		t.Parallel()
+		fix := newStartHandlerFixture(t)
+		fix.messages.EXPECT().InvalidPayload().Return("invalid-text")
+		fix.client.EXPECT().SendMessage(mock.Anything, int64(100), "invalid-text").Return(nil)
+		// Length 36 with dashes in correct positions, but contains 'g'.
+		fix.handler.Handle(context.Background(), telegram.IncomingUpdate{ChatID: 100, UserID: 7000},
+			"gggggggg-2222-3333-4444-555555555555")
+	})
+
+	t.Run("uppercase hex accepted", func(t *testing.T) {
+		t.Parallel()
+		fix := newStartHandlerFixture(t)
+		fix.service.EXPECT().LinkTelegram(mock.Anything, mock.Anything, mock.Anything).
+			Return(&domain.TelegramLinkResult{}, nil)
+		fix.messages.EXPECT().LinkSuccess().Return("ok")
+		fix.client.EXPECT().SendMessage(mock.Anything, int64(100), "ok").Return(nil)
+		fix.handler.Handle(context.Background(), telegram.IncomingUpdate{ChatID: 100, UserID: 7000},
+			"AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE")
+	})
+
 	t.Run("happy path: link service success → LinkSuccess reply", func(t *testing.T) {
 		t.Parallel()
 		fix := newStartHandlerFixture(t)

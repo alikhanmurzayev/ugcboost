@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -57,5 +58,22 @@ func TestClientIP(t *testing.T) {
 		w := httptest.NewRecorder()
 		router.ServeHTTP(w, req)
 		require.Equal(t, "10.0.0.1", *seen)
+	})
+}
+
+func TestWithClientIP(t *testing.T) {
+	t.Parallel()
+
+	t.Run("WithClientIP stamps a non-HTTP marker readable by ClientIPFromContext", func(t *testing.T) {
+		t.Parallel()
+		ctx := WithClientIP(context.Background(), "telegram-bot")
+		require.Equal(t, "telegram-bot", ClientIPFromContext(ctx))
+	})
+
+	t.Run("WithClientIP overrides earlier value", func(t *testing.T) {
+		t.Parallel()
+		ctx := WithClientIP(context.Background(), "first")
+		ctx = WithClientIP(ctx, "second")
+		require.Equal(t, "second", ClientIPFromContext(ctx))
 	})
 }

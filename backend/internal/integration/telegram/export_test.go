@@ -2,6 +2,7 @@ package telegram
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/logger"
@@ -42,4 +43,29 @@ func SetRealClientAPIBaseForTest(c Client, base string) {
 	if rc, ok := c.(*realClient); ok {
 		rc.apiBase = base
 	}
+}
+
+// NewAPIErrorForTest builds a telegramAPIError so external test files can
+// drive the runner's retry-after path without depending on the internal type.
+func NewAPIErrorForTest(code int, description string, retryAfter time.Duration) error {
+	return &telegramAPIError{Code: code, Description: description, RetryAfter: retryAfter}
+}
+
+// SanitiseTransportErrorForTest exposes the internal redactor so unit tests
+// can verify both branches (url.Error → redacted; non-url err → passthrough)
+// without going through a real HTTP transport.
+func SanitiseTransportErrorForTest(method string, err error) error {
+	return sanitiseTransportError(method, err)
+}
+
+// RetryAfterFromError extracts Telegram's retry-after hint from a wrapped
+// telegramAPIError, exposing it to external _test files without leaking the
+// internal type. ok==false means the error is not a Telegram API error or it
+// did not carry a retry hint.
+func RetryAfterFromError(err error) (time.Duration, bool) {
+	var apiErr *telegramAPIError
+	if !errors.As(err, &apiErr) || apiErr.RetryAfter <= 0 {
+		return 0, false
+	}
+	return apiErr.RetryAfter, true
 }

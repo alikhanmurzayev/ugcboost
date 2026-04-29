@@ -51,6 +51,7 @@ package telegram_test
 import (
 	"context"
 	"net/http"
+	"os"
 	"os/exec"
 	"testing"
 	"time"
@@ -61,6 +62,11 @@ import (
 	"github.com/alikhanmurzayev/ugcboost/backend/e2e/apiclient"
 	"github.com/alikhanmurzayev/ugcboost/backend/e2e/testutil"
 )
+
+// telegramBackendContainer is the docker-compose container name PIIGuard
+// greps for stdout. Override via E2E_BACKEND_CONTAINER if your local compose
+// project name differs.
+const telegramBackendContainer = "ugcboost-backend-1"
 
 const (
 	successReply        = "Здравствуйте! Заявка успешно связана с вашим Telegram-аккаунтом. В ближайшее время в этом чате откроется мини-приложение со статусом обработки заявки."
@@ -289,11 +295,18 @@ func TestTelegramLinkPIIGuard(t *testing.T) {
 
 	// Probe for PII in stdout logs of the running backend container. The
 	// backend is launched via `make start-backend`, which uses docker
-	// compose; the container name is stable. If the test is run outside
-	// docker (e.g. locally with `make run-backend`), skip — we cannot grep
-	// those logs from here without a stdin pipe to the process.
-	logs, err := exec.Command("docker", "logs", "ugcboost-backend-1").CombinedOutput()
+	// compose. On CI the container is required; locally a developer can
+	// run `make run-backend` outside docker — we tolerate the skip there
+	// but never on CI (CI=true is enough to fail loudly).
+	containerName := telegramBackendContainer
+	if v := os.Getenv("E2E_BACKEND_CONTAINER"); v != "" {
+		containerName = v
+	}
+	logs, err := exec.Command("docker", "logs", containerName).CombinedOutput()
 	if err != nil {
+		if os.Getenv("CI") == "true" {
+			t.Fatalf("docker logs %q unavailable on CI: %v\n%s", containerName, err, string(logs))
+		}
 		t.Skipf("docker logs unavailable: %v (skipping PII guard)", err)
 	}
 	logStr := string(logs)

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 
 	openapi_types "github.com/oapi-codegen/runtime/types"
 
@@ -179,12 +180,27 @@ func (h *TestAPIHandler) CleanupEntity(w http.ResponseWriter, r *http.Request) {
 // e2e tests use it to drive the bot without a live Telegram connection.
 func (h *TestAPIHandler) SendTelegramUpdate(w http.ResponseWriter, r *http.Request) {
 	if h.dispatcher == nil || h.spy == nil {
-		respondError(w, r, domain.NewBusinessError(domain.CodeInternal, "telegram test endpoint not wired"), h.logger)
+		// Plain error → respondError default branch → 500 INTERNAL_ERROR
+		// (NOT a BusinessError, which would map to 409 Conflict).
+		respondError(w, r, fmt.Errorf("telegram test endpoint not wired"), h.logger)
 		return
 	}
 	var req testapi.SendTelegramUpdateRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondError(w, r, domain.NewValidationError(domain.CodeValidation, "Invalid request body"), h.logger)
+		return
+	}
+	// Reject zero/negative ids — Telegram never sends them, so an
+	// accidental {chatId:0} from a misconfigured test must surface as 422,
+	// not silently dispatch a phantom update and drain chat 0.
+	if req.UpdateId <= 0 || req.ChatId <= 0 || req.UserId <= 0 {
+		respondError(w, r, domain.NewValidationError(domain.CodeValidation,
+			"updateId, chatId and userId must be positive"), h.logger)
+		return
+	}
+	if strings.TrimSpace(req.Text) == "" {
+		respondError(w, r, domain.NewValidationError(domain.CodeValidation,
+			"text must be non-empty"), h.logger)
 		return
 	}
 

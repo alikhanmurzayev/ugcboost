@@ -15,14 +15,31 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
+	"net/url"
+	"strconv"
 	"sync"
 	"time"
+
+	"github.com/AlekSi/pointer"
 
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/config"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/logger"
 )
+
+// telegramHTTPTimeout caps every single Bot API call. The long-poll already
+// has its own timeout via the `timeout` Bot API parameter, but the HTTP layer
+// must impose a hard ceiling so a stuck DNS / TLS handshake cannot wedge the
+// runner forever. 60s = pollTimeout (30s) + buffer.
+const telegramHTTPTimeout = 60 * time.Second
+
+// telegramResponseBodyLimit caps the JSON envelope we read from Telegram.
+// Real Bot API responses are tens of KB at worst; 1 MiB is a defensive ceiling
+// against a misbehaving proxy or MITM that returns a huge body.
+const telegramResponseBodyLimit int64 = 1 << 20
 
 // telegramAPIBase is the canonical Bot API host. Hardcoded — the only place
 // in the codebase that talks to t.me. realClient overrides it via apiBase
@@ -108,66 +125,112 @@ func newRealClient(token string, log logger.Logger) *realClient {
 	return &realClient{
 		token:   token,
 		apiBase: telegramAPIBase,
-		http:    &http.Client{},
+		http:    &http.Client{Timeout: telegramHTTPTimeout},
 		logger:  log,
 	}
 }
 
 // telegramResponse is the canonical envelope every Bot API method returns.
 // We unmarshal the result lazily into a dedicated struct per call, so the
-// generic envelope stays untyped here.
+// generic envelope stays untyped here. ResponseParameters carries
+// `retry_after` on 429 — the runner uses it to honour Telegram's back-off
+// instead of hammering the API every 10s.
 type telegramResponse struct {
 	OK          bool            `json:"ok"`
 	Description string          `json:"description"`
 	ErrorCode   int             `json:"error_code"`
 	Result      json.RawMessage `json:"result"`
+	Parameters  *struct {
+		RetryAfter int `json:"retry_after"`
+	} `json:"parameters,omitempty"`
 }
 
 // telegramAPIError captures a non-OK Bot API reply (e.g. HTTP 409 "terminated
 // by other getUpdates request" during a Dokploy rolling deploy). The runner
 // logs the description and retries, so the error type is opaque on purpose.
+// RetryAfter is populated when Telegram surfaces a per-method back-off via
+// the `parameters.retry_after` field (mostly on 429 Too Many Requests).
 type telegramAPIError struct {
 	Code        int
 	Description string
+	RetryAfter  time.Duration
 }
 
 func (e *telegramAPIError) Error() string {
 	return fmt.Sprintf("telegram api error %d: %s", e.Code, e.Description)
 }
 
+// sanitiseTransportError strips the bot token from net/http error messages.
+// Go wraps transport failures (DNS, dial, TLS, deadline) into *url.Error with
+// the full request URL — including the token segment — embedded in Error().
+// We rebuild a *url.Error with a redacted URL so wrapped errors logged via
+// slog never leak the secret. Non-url errors pass through unchanged.
+func sanitiseTransportError(method string, err error) error {
+	var ue *url.Error
+	if !errors.As(err, &ue) {
+		return err
+	}
+	return &url.Error{
+		Op:  ue.Op,
+		URL: "https://api.telegram.org/bot<redacted>/" + method,
+		Err: ue.Err,
+	}
+}
+
 // invoke performs one Bot API call. Body is JSON-marshalled and parsed; the
 // caller passes a pointer to a typed result struct that gets unmarshalled
-// from .result on success. timeout-less ctx and cfg.TelegramPollingTimeout
-// are both honoured by net/http via the request context.
+// from .result on success. The http.Client's Timeout caps the call; ctx
+// cancellation aborts it earlier when the runner is shutting down. Transport
+// errors are scrubbed of the token segment before returning so structured
+// logs never leak the secret. Non-2xx HTTP responses are checked before JSON
+// decoding so an HTML 502 from a CDN does not surface as a misleading decode
+// error.
 func (c *realClient) invoke(ctx context.Context, method string, body any, out any) error {
-	url := fmt.Sprintf("%s/bot%s/%s", c.apiBase, c.token, method)
-	var bodyReader *bytes.Reader
+	requestURL := fmt.Sprintf("%s/bot%s/%s", c.apiBase, c.token, method)
+	var bodyReader io.Reader
 	if body != nil {
 		raw, err := json.Marshal(body)
 		if err != nil {
 			return fmt.Errorf("telegram %s marshal: %w", method, err)
 		}
 		bodyReader = bytes.NewReader(raw)
-	} else {
-		bodyReader = bytes.NewReader(nil)
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bodyReader)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, requestURL, bodyReader)
 	if err != nil {
-		return fmt.Errorf("telegram %s request: %w", method, err)
+		return fmt.Errorf("telegram %s request: %w", method, sanitiseTransportError(method, err))
 	}
 	req.Header.Set("Content-Type", "application/json")
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return fmt.Errorf("telegram %s do: %w", method, err)
+		return fmt.Errorf("telegram %s do: %w", method, sanitiseTransportError(method, err))
 	}
 	defer func() { _ = resp.Body.Close() }()
 
+	limited := io.LimitReader(resp.Body, telegramResponseBodyLimit)
+	if resp.StatusCode >= 500 {
+		// 5xx: body may be HTML/plain text; do not try to decode the JSON
+		// envelope. Surface a typed error so the runner can retry sanely.
+		return &telegramAPIError{Code: resp.StatusCode, Description: http.StatusText(resp.StatusCode)}
+	}
+
 	var env telegramResponse
-	if err := json.NewDecoder(resp.Body).Decode(&env); err != nil {
+	if err := json.NewDecoder(limited).Decode(&env); err != nil {
 		return fmt.Errorf("telegram %s decode: %w", method, err)
 	}
 	if !env.OK {
-		return &telegramAPIError{Code: env.ErrorCode, Description: env.Description}
+		apiErr := &telegramAPIError{Code: env.ErrorCode, Description: env.Description}
+		if env.Parameters != nil && env.Parameters.RetryAfter > 0 {
+			apiErr.RetryAfter = time.Duration(env.Parameters.RetryAfter) * time.Second
+		} else if resp.StatusCode == http.StatusTooManyRequests {
+			// Some Bot API deployments return Retry-After as an HTTP header
+			// instead of (or alongside) the JSON parameters block.
+			if h := resp.Header.Get("Retry-After"); h != "" {
+				if secs, perr := strconv.Atoi(h); perr == nil && secs > 0 {
+					apiErr.RetryAfter = time.Duration(secs) * time.Second
+				}
+			}
+		}
+		return apiErr
 	}
 	if out != nil && len(env.Result) > 0 {
 		if err := json.Unmarshal(env.Result, out); err != nil {
@@ -228,16 +291,13 @@ func (c *realClient) GetUpdates(ctx context.Context, offset int64, timeout time.
 			Text:     u.Message.Text,
 		}
 		if u.Message.From.Username != "" {
-			v := u.Message.From.Username
-			incoming.Username = &v
+			incoming.Username = pointer.ToString(u.Message.From.Username)
 		}
 		if u.Message.From.FirstName != "" {
-			v := u.Message.From.FirstName
-			incoming.FirstName = &v
+			incoming.FirstName = pointer.ToString(u.Message.From.FirstName)
 		}
 		if u.Message.From.LastName != "" {
-			v := u.Message.From.LastName
-			incoming.LastName = &v
+			incoming.LastName = pointer.ToString(u.Message.From.LastName)
 		}
 		out = append(out, incoming)
 	}

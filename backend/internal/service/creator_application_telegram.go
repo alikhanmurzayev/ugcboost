@@ -11,8 +11,15 @@ import (
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/dbutil"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/domain"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/logger"
+	"github.com/alikhanmurzayev/ugcboost/backend/internal/middleware"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/repository"
 )
+
+// telegramBotActorIP is the synthetic marker LinkTelegram stamps onto
+// audit_logs.ip_address when there is no inbound HTTP request to derive a
+// real client IP from. The column is NOT NULL — without an explicit value
+// it would default to "", which lies about the operation.
+const telegramBotActorIP = "telegram-bot"
 
 // CreatorApplicationTelegramRepoFactory enumerates the repos the Telegram-link
 // service needs. It is deliberately narrower than CreatorApplicationRepoFactory
@@ -66,6 +73,13 @@ func (s *CreatorApplicationTelegramService) LinkTelegram(ctx context.Context, in
 	firstName := capOptionalString(in.TgFirstName, domain.TelegramNameMaxLen)
 	lastName := capOptionalString(in.TgLastName, domain.TelegramNameMaxLen)
 
+	// audit_logs.ip_address is NOT NULL. The bot path has no HTTP middleware
+	// so ClientIPFromContext would return "". Stamp a stable marker so the
+	// audit row carries an honest source instead of an empty string.
+	if middleware.ClientIPFromContext(ctx) == "" {
+		ctx = middleware.WithClientIP(ctx, telegramBotActorIP)
+	}
+
 	var result *domain.TelegramLinkResult
 
 	err := dbutil.WithTx(ctx, s.pool, func(tx dbutil.DB) error {
@@ -81,8 +95,11 @@ func (s *CreatorApplicationTelegramService) LinkTelegram(ctx context.Context, in
 			return fmt.Errorf("get application: %w", err)
 		}
 		if !isLinkableStatus(appRow.Status) {
-			return domain.NewBusinessError(domain.CodeTelegramApplicationNotActive,
-				"Эта заявка неактивна. Если хотите подать новую, перейдите на ugcboost.kz.")
+			// User-facing wording lives in telegram package's messages.go;
+			// the BusinessError carries only the code, which the bot maps
+			// to the canonical reply. Keeping the Message empty avoids two
+			// drifting copies of the same text.
+			return domain.NewBusinessError(domain.CodeTelegramApplicationNotActive, "")
 		}
 
 		existingLink, err := linkRepo.GetByApplicationID(ctx, in.ApplicationID)
@@ -99,8 +116,7 @@ func (s *CreatorApplicationTelegramService) LinkTelegram(ctx context.Context, in
 				}
 				return nil
 			}
-			return domain.NewBusinessError(domain.CodeTelegramApplicationAlreadyLinked,
-				"Эта заявка уже связана с другим Telegram-аккаунтом. Если это ошибка, обратитесь в поддержку.")
+			return domain.NewBusinessError(domain.CodeTelegramApplicationAlreadyLinked, "")
 		case errors.Is(err, sql.ErrNoRows):
 			// No link yet — proceed to insert.
 		default:
@@ -118,8 +134,7 @@ func (s *CreatorApplicationTelegramService) LinkTelegram(ctx context.Context, in
 		if err != nil {
 			switch {
 			case errors.Is(err, domain.ErrTelegramAccountLinkConflict):
-				return domain.NewBusinessError(domain.CodeTelegramAccountAlreadyLinked,
-					"У вас уже есть активная заявка, связанная с этим Telegram-аккаунтом. Дождитесь решения или обратитесь в поддержку.")
+				return domain.NewBusinessError(domain.CodeTelegramAccountAlreadyLinked, "")
 			case errors.Is(err, domain.ErrTelegramApplicationLinkConflict):
 				// PK race: another /start for this application slipped in
 				// between our preflight SELECT and INSERT. Re-read to decide.
@@ -137,8 +152,7 @@ func (s *CreatorApplicationTelegramService) LinkTelegram(ctx context.Context, in
 					}
 					return nil
 				}
-				return domain.NewBusinessError(domain.CodeTelegramApplicationAlreadyLinked,
-					"Эта заявка уже связана с другим Telegram-аккаунтом. Если это ошибка, обратитесь в поддержку.")
+				return domain.NewBusinessError(domain.CodeTelegramApplicationAlreadyLinked, "")
 			default:
 				return fmt.Errorf("insert telegram link: %w", err)
 			}

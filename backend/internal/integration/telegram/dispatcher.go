@@ -2,10 +2,19 @@ package telegram
 
 import (
 	"context"
+	"regexp"
 	"strings"
+	"unicode"
 
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/logger"
 )
+
+// startCommandPattern matches the canonical /start command Telegram emits
+// when a deep-link is followed in private chat (`/start <payload>`) and the
+// `/start@bot_username <payload>` form Telegram inserts in groups. Any
+// payload (uuid or otherwise) is captured in group 2; absence of payload
+// matches with empty group 2.
+var startCommandPattern = regexp.MustCompile(`^/start(?:@\S+)?(?:\s+(.+))?$`)
 
 // Dispatcher routes a single IncomingUpdate to the right handler. Today the
 // only command is /start <uuid>; everything else goes to a fallback reply.
@@ -37,17 +46,33 @@ func NewDispatcher(client Client, start StartCommandHandler, messages Messages, 
 }
 
 func (d *dispatcher) Dispatch(ctx context.Context, update IncomingUpdate) {
-	text := strings.TrimSpace(update.Text)
+	// Trim every kind of unicode whitespace (incl. ZWNBSP / ideographic
+	// space) and lowercase to make the routing case-insensitive. Telegram
+	// canonicalises commands in lowercase but desktop clients sometimes
+	// pass through "/Start" — we treat them the same.
+	text := strings.TrimFunc(update.Text, unicode.IsSpace)
+	lower := strings.ToLower(text)
 
-	switch {
-	case text == "/start":
-		d.reply(ctx, update.ChatID, d.messages.StartNoPayload())
-	case strings.HasPrefix(text, "/start "):
-		payload := strings.TrimSpace(strings.TrimPrefix(text, "/start "))
-		d.start.Handle(ctx, update, payload)
-	default:
+	m := startCommandPattern.FindStringSubmatch(lower)
+	if m == nil {
 		d.reply(ctx, update.ChatID, d.messages.Fallback())
+		return
 	}
+	payload := strings.TrimSpace(m[1])
+	if payload == "" {
+		d.reply(ctx, update.ChatID, d.messages.StartNoPayload())
+		return
+	}
+	// Pull the payload from the original (non-lowered) text so UUIDs with
+	// uppercase hex (technically valid but we still parse-check downstream)
+	// arrive in their original casing.
+	originalMatch := startCommandPattern.FindStringSubmatch(text)
+	if len(originalMatch) > 1 {
+		if op := strings.TrimSpace(originalMatch[1]); op != "" {
+			payload = op
+		}
+	}
+	d.start.Handle(ctx, update, payload)
 }
 
 func (d *dispatcher) reply(ctx context.Context, chatID int64, text string) {

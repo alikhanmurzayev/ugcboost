@@ -106,10 +106,20 @@ func run() error {
 	tgStartHandler := telegram.NewStartHandler(tgLinkSvc, tgClient, tgMessages, appLogger)
 	tgDispatcher := telegram.NewDispatcher(tgClient, tgStartHandler, tgMessages, appLogger)
 
-	if !cfg.TelegramMock && cfg.TelegramBotToken != "" && !cfg.EnableTestEndpoints {
+	switch {
+	case cfg.EnableTestEndpoints:
+		appLogger.Info(ctx, "telegram bot runner disabled", "reason", "test_endpoints_enabled")
+	case cfg.TelegramMock:
+		appLogger.Info(ctx, "telegram bot runner disabled", "reason", "telegram_mock")
+	case cfg.TelegramBotToken == "":
+		appLogger.Info(ctx, "telegram bot runner disabled", "reason", "no_token")
+	default:
 		tgRunner := telegram.NewPollingRunner(tgClient, tgDispatcher, cfg.TelegramPollingTimeout, appLogger)
 		runnerCtx, runnerCancel := context.WithCancel(context.Background())
 		go func() {
+			// Run only ever returns nil today; the recover() inside
+			// safeDispatch absorbs handler panics. A non-nil err here would
+			// be a future signal that the runner gave up — surface it.
 			if err := tgRunner.Run(runnerCtx); err != nil {
 				appLogger.Error(ctx, "telegram runner stopped with error", "error", err)
 			}
@@ -120,8 +130,6 @@ func run() error {
 			return nil
 		})
 		appLogger.Info(ctx, "telegram bot started (long polling)")
-	} else {
-		appLogger.Info(ctx, "telegram bot disabled (no token / mock / test mode)")
 	}
 
 	// Seed admin

@@ -49,9 +49,18 @@ func NewStartHandler(service LinkService, client Client, messages Messages, log 
 // Handle implements startCommandHandler. The dispatcher calls it with the
 // trimmed payload (everything after "/start "). Empty or whitespace-only
 // payloads are caught upstream by the dispatcher and never reach here.
+//
+// Payload validation is deliberately strict: the deep-link Telegram opens is
+// always `?start=<canonical-uuid-form>` (8-4-4-4-12 hex with dashes). Any
+// looser variant (`urn:uuid:...`, braces, no dashes) and the all-zero UUID
+// would slip past `uuid.Parse` and waste a DB round-trip.
 func (h *StartHandler) Handle(ctx context.Context, update IncomingUpdate, payload string) {
+	if !looksLikeCanonicalUUID(payload) {
+		h.reply(ctx, update.ChatID, h.messages.InvalidPayload())
+		return
+	}
 	appID, err := uuid.Parse(payload)
-	if err != nil {
+	if err != nil || appID == uuid.Nil {
 		h.reply(ctx, update.ChatID, h.messages.InvalidPayload())
 		return
 	}
@@ -96,4 +105,40 @@ func (h *StartHandler) reply(ctx context.Context, chatID int64, text string) {
 	if err := h.client.SendMessage(ctx, chatID, text); err != nil {
 		h.logger.Warn(ctx, "telegram start handler reply failed", "chat_id", chatID, "error", err)
 	}
+}
+
+// looksLikeCanonicalUUID is a fast string-shape check before uuid.Parse:
+// length 36, dashes at positions 8/13/18/23, hex digits everywhere else. It
+// rejects `urn:uuid:` prefixes, braces, and the dash-less form that
+// `uuid.Parse` accepts liberally. The downstream uuid.Parse still validates
+// the hex characters definitively.
+func looksLikeCanonicalUUID(s string) bool {
+	if len(s) != 36 {
+		return false
+	}
+	for i, r := range s {
+		switch i {
+		case 8, 13, 18, 23:
+			if r != '-' {
+				return false
+			}
+		default:
+			if !isHexDigit(r) {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+func isHexDigit(r rune) bool {
+	switch {
+	case r >= '0' && r <= '9':
+		return true
+	case r >= 'a' && r <= 'f':
+		return true
+	case r >= 'A' && r <= 'F':
+		return true
+	}
+	return false
 }
