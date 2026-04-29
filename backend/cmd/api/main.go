@@ -116,6 +116,11 @@ func run() error {
 	default:
 		tgRunner := telegram.NewPollingRunner(tgClient, tgDispatcher, cfg.TelegramPollingTimeout, appLogger)
 		runnerCtx, runnerCancel := context.WithCancel(context.Background())
+		// Defer the cancel so it fires even if `run` returns before the
+		// closer is wired below (e.g. a future error between WithCancel
+		// and cl.Add). The closer's own runnerCancel call is a no-op on
+		// an already-cancelled context.
+		defer runnerCancel()
 		go func() {
 			// Run only ever returns nil today; the recover() inside
 			// safeDispatch absorbs handler panics. A non-nil err here would

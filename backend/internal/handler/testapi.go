@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"unicode"
 
 	openapi_types "github.com/oapi-codegen/runtime/types"
 
@@ -193,12 +194,18 @@ func (h *TestAPIHandler) SendTelegramUpdate(w http.ResponseWriter, r *http.Reque
 	// Reject zero/negative ids — Telegram never sends them, so an
 	// accidental {chatId:0} from a misconfigured test must surface as 422,
 	// not silently dispatch a phantom update and drain chat 0.
-	if req.UpdateId <= 0 || req.ChatId <= 0 || req.UserId <= 0 {
-		respondError(w, r, domain.NewValidationError(domain.CodeValidation,
-			"updateId, chatId and userId must be positive"), h.logger)
+	switch {
+	case req.UpdateId <= 0:
+		respondError(w, r, domain.NewValidationError(domain.CodeValidation, "updateId must be positive"), h.logger)
+		return
+	case req.ChatId <= 0:
+		respondError(w, r, domain.NewValidationError(domain.CodeValidation, "chatId must be positive"), h.logger)
+		return
+	case req.UserId <= 0:
+		respondError(w, r, domain.NewValidationError(domain.CodeValidation, "userId must be positive"), h.logger)
 		return
 	}
-	if strings.TrimSpace(req.Text) == "" {
+	if strings.TrimFunc(req.Text, unicode.IsSpace) == "" {
 		respondError(w, r, domain.NewValidationError(domain.CodeValidation,
 			"text must be non-empty"), h.logger)
 		return

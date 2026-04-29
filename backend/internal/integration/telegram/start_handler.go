@@ -51,16 +51,25 @@ func NewStartHandler(service LinkService, client Client, messages Messages, log 
 // payloads are caught upstream by the dispatcher and never reach here.
 //
 // Payload validation is deliberately strict: the deep-link Telegram opens is
-// always `?start=<canonical-uuid-form>` (8-4-4-4-12 hex with dashes). Any
-// looser variant (`urn:uuid:...`, braces, no dashes) and the all-zero UUID
-// would slip past `uuid.Parse` and waste a DB round-trip.
+// always `?start=<canonical-uuid-form>` (8-4-4-4-12 hex with dashes). The
+// shape check up front rejects looser variants (`urn:uuid:...`, braces,
+// no-dashes) that uuid.Parse would otherwise accept — once we're past the
+// shape check, uuid.Parse always succeeds on a 36-char hex+dash string, so
+// the only remaining failure mode is the nil UUID sentinel.
 func (h *StartHandler) Handle(ctx context.Context, update IncomingUpdate, payload string) {
 	if !looksLikeCanonicalUUID(payload) {
 		h.reply(ctx, update.ChatID, h.messages.InvalidPayload())
 		return
 	}
 	appID, err := uuid.Parse(payload)
-	if err != nil || appID == uuid.Nil {
+	if err != nil {
+		// Defensive: shape-check guarantees uuid.Parse succeeds, but
+		// keeping the branch protects against a future library upgrade
+		// changing semantics.
+		h.reply(ctx, update.ChatID, h.messages.InvalidPayload())
+		return
+	}
+	if appID == uuid.Nil {
 		h.reply(ctx, update.ChatID, h.messages.InvalidPayload())
 		return
 	}

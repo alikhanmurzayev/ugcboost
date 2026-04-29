@@ -103,7 +103,7 @@ func TestPollingRunner_Run(t *testing.T) {
 		require.NoError(t, runner.Run(ctx))
 	})
 
-	t.Run("safeDispatch recovers from dispatcher panic", func(t *testing.T) {
+	t.Run("safeDispatch recovers from dispatcher panic, advances offset, warns user-may-need-retry", func(t *testing.T) {
 		t.Parallel()
 		client := mocks.NewMockClient(t)
 		dispatcher := mocks.NewMockDispatcher(t)
@@ -119,6 +119,9 @@ func TestPollingRunner_Run(t *testing.T) {
 				panic("boom from handler")
 			})
 		log.EXPECT().Error(mock.Anything, "telegram dispatcher panic recovered", mock.Anything).Once()
+		log.EXPECT().Warn(mock.Anything,
+			"telegram update advanced past panicked handler — user may need to retry /start",
+			mock.Anything).Once()
 		client.EXPECT().GetUpdates(mock.Anything, int64(2), 30*time.Second).
 			Run(func(_ context.Context, _ int64, _ time.Duration) {
 				cancel() // exit the loop after the panic was absorbed

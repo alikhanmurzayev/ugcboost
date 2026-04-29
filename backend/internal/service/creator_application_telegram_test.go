@@ -194,7 +194,7 @@ func TestCreatorApplicationTelegramService_LinkTelegram(t *testing.T) {
 		require.ErrorContains(t, err, "link read boom")
 	})
 
-	t.Run("happy path: link inserted, audit row written, after-tx log fires", func(t *testing.T) {
+	t.Run("happy path: link inserted, audit row written with telegram-bot IP marker, after-tx log fires", func(t *testing.T) {
 		t.Parallel()
 		rig := newTelegramServiceRig(t)
 		expectTelegramTxBegin(rig)
@@ -249,6 +249,8 @@ func TestCreatorApplicationTelegramService_LinkTelegram(t *testing.T) {
 		require.Equal(t, AuditEntityTypeCreatorApplication, capturedAudit.EntityType)
 		require.NotNil(t, capturedAudit.EntityID)
 		require.Equal(t, in.ApplicationID, *capturedAudit.EntityID)
+		require.Equal(t, "telegram-bot", capturedAudit.IPAddress,
+			"audit row must carry the bot marker, not an empty IP")
 		require.JSONEq(t,
 			`{"telegram_user_id":7000123,"telegram_username":"test_42","telegram_first_name":"Айдана","telegram_last_name":"Муратова"}`,
 			string(capturedAudit.NewValue))

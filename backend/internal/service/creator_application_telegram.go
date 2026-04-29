@@ -73,12 +73,13 @@ func (s *CreatorApplicationTelegramService) LinkTelegram(ctx context.Context, in
 	firstName := capOptionalString(in.TgFirstName, domain.TelegramNameMaxLen)
 	lastName := capOptionalString(in.TgLastName, domain.TelegramNameMaxLen)
 
-	// audit_logs.ip_address is NOT NULL. The bot path has no HTTP middleware
-	// so ClientIPFromContext would return "". Stamp a stable marker so the
-	// audit row carries an honest source instead of an empty string.
-	if middleware.ClientIPFromContext(ctx) == "" {
-		ctx = middleware.WithClientIP(ctx, telegramBotActorIP)
-	}
+	// audit_logs.ip_address is NOT NULL. The bot path has no notion of a
+	// Telegram-side client IP (the Bot API does not expose user IPs in
+	// updates), so we always overwrite whatever the calling context might
+	// carry with the canonical bot marker. This includes the e2e
+	// test-endpoint path: a real test-client IP at that layer is irrelevant
+	// to audit semantics — the operation is conceptually "bot-initiated".
+	ctx = middleware.WithClientIP(ctx, telegramBotActorIP)
 
 	var result *domain.TelegramLinkResult
 

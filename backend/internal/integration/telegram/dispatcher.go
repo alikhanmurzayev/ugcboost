@@ -46,10 +46,13 @@ func NewDispatcher(client Client, start StartCommandHandler, messages Messages, 
 }
 
 func (d *dispatcher) Dispatch(ctx context.Context, update IncomingUpdate) {
-	// Trim every kind of unicode whitespace (incl. ZWNBSP / ideographic
-	// space) and lowercase to make the routing case-insensitive. Telegram
-	// canonicalises commands in lowercase but desktop clients sometimes
-	// pass through "/Start" — we treat them the same.
+	// Trim ASCII / Unicode whitespace via unicode.IsSpace and lowercase to
+	// make the routing case-insensitive. Telegram canonicalises commands
+	// in lowercase but desktop clients sometimes pass through "/Start" —
+	// we treat them the same. ZWNBSP (U+FEFF) is *not* considered space
+	// by unicode.IsSpace and would not be stripped — anyone seeing such
+	// input from real Telegram users would be evidence of a malformed
+	// client, not an expected case.
 	text := strings.TrimFunc(update.Text, unicode.IsSpace)
 	lower := strings.ToLower(text)
 

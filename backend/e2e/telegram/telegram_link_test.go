@@ -302,7 +302,11 @@ func TestTelegramLinkPIIGuard(t *testing.T) {
 	if v := os.Getenv("E2E_BACKEND_CONTAINER"); v != "" {
 		containerName = v
 	}
-	logs, err := exec.Command("docker", "logs", containerName).CombinedOutput()
+	// `--since` window guards against false positives from previous test
+	// runs (the container's stdout is shared across all parallel tests; an
+	// unrelated submit test that ran 10 minutes ago could otherwise paint
+	// our PII-grep red even though the current code is clean).
+	logs, err := exec.Command("docker", "logs", "--since", "60s", containerName).CombinedOutput()
 	if err != nil {
 		if os.Getenv("CI") == "true" {
 			t.Fatalf("docker logs %q unavailable on CI: %v\n%s", containerName, err, string(logs))

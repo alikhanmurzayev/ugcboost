@@ -214,8 +214,16 @@ func (c *realClient) invoke(ctx context.Context, method string, body any, out an
 	}
 
 	var env telegramResponse
-	if err := json.NewDecoder(limited).Decode(&env); err != nil {
+	dec := json.NewDecoder(limited)
+	if err := dec.Decode(&env); err != nil {
 		return fmt.Errorf("telegram %s decode: %w", method, err)
+	}
+	// LimitReader silently truncates; if the body was bigger than our cap,
+	// either the JSON-decoder already errored or — in pathological cases
+	// where the truncated prefix happens to parse — we'd accept partial
+	// data. Detect leftover bytes and refuse such responses.
+	if n, _ := io.Copy(io.Discard, limited); n > 0 {
+		return fmt.Errorf("telegram %s body exceeded %d bytes", method, telegramResponseBodyLimit)
 	}
 	if !env.OK {
 		apiErr := &telegramAPIError{Code: env.ErrorCode, Description: env.Description}
@@ -267,8 +275,13 @@ type telegramRawUpdate struct {
 }
 
 func (c *realClient) GetUpdates(ctx context.Context, offset int64, timeout time.Duration) ([]IncomingUpdate, error) {
+	// allowed_updates explicitly limits Telegram to message updates — we
+	// don't support edits / channel posts / callback queries, and asking
+	// only for what we use saves bandwidth and avoids needing to filter
+	// every unsupported variant downstream.
 	body := map[string]any{
-		"timeout": int(timeout.Seconds()),
+		"timeout":         int(timeout.Seconds()),
+		"allowed_updates": []string{"message"},
 	}
 	if offset > 0 {
 		body["offset"] = offset
@@ -329,15 +342,16 @@ func (c *noopClient) GetUpdates(_ context.Context, _ int64, _ time.Duration) ([]
 // drains the buffer for the chat under test, returning every reply the
 // production code attempted to send.
 type spyClient struct {
-	mu     sync.Mutex
-	queue  map[int64][]SentMessage
-	logger logger.Logger
+	mu    sync.Mutex
+	queue map[int64][]SentMessage
 }
 
-func newSpyClient(log logger.Logger) *spyClient {
+func newSpyClient(_ logger.Logger) *spyClient {
+	// Logger parameter accepted for symmetry with newRealClient/newNoopClient
+	// — the spy itself does not log anything (tests assert against
+	// captured replies, not stdout).
 	return &spyClient{
-		queue:  make(map[int64][]SentMessage),
-		logger: log,
+		queue: make(map[int64][]SentMessage),
 	}
 }
 
