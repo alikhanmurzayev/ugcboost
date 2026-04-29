@@ -53,3 +53,10 @@ func (f *RepoFactory) NewCreatorApplicationSocialRepo(db dbutil.DB) CreatorAppli
 func (f *RepoFactory) NewCreatorApplicationConsentRepo(db dbutil.DB) CreatorApplicationConsentRepo {
 	return &creatorApplicationConsentRepository{db: db}
 }
+
+// NewCreatorApplicationTelegramLinkRepo creates a repo for the
+// creator_application_telegram_links table — the join between a creator
+// application and the Telegram account bound to it via /start.
+func (f *RepoFactory) NewCreatorApplicationTelegramLinkRepo(db dbutil.DB) CreatorApplicationTelegramLinkRepo {
+	return &creatorApplicationTelegramLinkRepository{db: db}
+}

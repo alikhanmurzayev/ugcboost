@@ -1164,6 +1164,32 @@ components:
           type: string
           description: Truncated User-Agent recorded at submission.
 
+    TelegramLink:
+      type: object
+      description: Telegram account linked to a creator application via /start deep-link.
+      required: [telegramUserId, linkedAt]
+      properties:
+        telegramUserId:
+          type: integer
+          format: int64
+          description: Telegram numeric user id (BIGINT) — stable identifier of the linked account.
+        telegramUsername:
+          type: string
+          nullable: true
+          description: Telegram @username at link time (no leading @). Nullable — not every Telegram user sets one.
+        telegramFirstName:
+          type: string
+          nullable: true
+          description: Telegram first_name at link time. Nullable — Telegram may omit it.
+        telegramLastName:
+          type: string
+          nullable: true
+          description: Telegram last_name at link time. Nullable — Telegram may omit it.
+        linkedAt:
+          type: string
+          format: date-time
+          description: Timestamp of the successful link.
+
     CreatorApplicationDetailData:
       type: object
       required:
@@ -1236,6 +1262,14 @@ components:
             independent of the order they appear in the database.
           items:
             $ref: "#/components/schemas/CreatorApplicationDetailConsent"
+        telegramLink:
+          allOf:
+            - $ref: "#/components/schemas/TelegramLink"
+          nullable: true
+          description: |
+            Telegram account linked to this application via the /start deep-link.
+            Null when the creator has not yet opened the bot. Filled after a
+            successful /start <applicationId> command.
 
     GetCreatorApplicationResult:
       type: object

@@ -116,6 +116,47 @@ type SeedUserResult struct {
 	Data SeedUserData `json:"data"`
 }
 
+// SendTelegramUpdateData defines model for SendTelegramUpdateData.
+type SendTelegramUpdateData struct {
+	// Replies Replies the dispatcher sent through the spy client during this dispatch.
+	Replies []TelegramReply `json:"replies"`
+}
+
+// SendTelegramUpdateRequest defines model for SendTelegramUpdateRequest.
+type SendTelegramUpdateRequest struct {
+	// ChatId Chat id where the message was posted (in private chats equals userId).
+	ChatId int64 `json:"chatId"`
+
+	// FirstName Optional Telegram first_name.
+	FirstName *string `json:"firstName,omitempty"`
+
+	// LastName Optional Telegram last_name.
+	LastName *string `json:"lastName,omitempty"`
+
+	// Text Raw message text (e.g. "/start <uuid>").
+	Text string `json:"text"`
+
+	// UpdateId Telegram update_id — must be unique per test run for offset semantics.
+	UpdateId int64 `json:"updateId"`
+
+	// UserId Telegram user id of the sender.
+	UserId int64 `json:"userId"`
+
+	// Username Optional Telegram @username (no leading @).
+	Username *string `json:"username,omitempty"`
+}
+
+// SendTelegramUpdateResult defines model for SendTelegramUpdateResult.
+type SendTelegramUpdateResult struct {
+	Data SendTelegramUpdateData `json:"data"`
+}
+
+// TelegramReply defines model for TelegramReply.
+type TelegramReply struct {
+	ChatId int64  `json:"chatId"`
+	Text   string `json:"text"`
+}
+
 // GetResetTokenParams defines parameters for GetResetToken.
 type GetResetTokenParams struct {
 	Email openapi_types.Email `form:"email" json:"email"`
@@ -126,3 +167,6 @@ type CleanupEntityJSONRequestBody = CleanupEntityRequest
 
 // SeedUserJSONRequestBody defines body for SeedUser for application/json ContentType.
 type SeedUserJSONRequestBody = SeedUserRequest
+
+// SendTelegramUpdateJSONRequestBody defines body for SendTelegramUpdate for application/json ContentType.
+type SendTelegramUpdateJSONRequestBody = SendTelegramUpdateRequest

@@ -101,6 +101,11 @@ type ClientInterface interface {
 	SeedUserWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	SeedUser(ctx context.Context, body SeedUserJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// SendTelegramUpdateWithBody request with any body
+	SendTelegramUpdateWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	SendTelegramUpdate(ctx context.Context, body SendTelegramUpdateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 }
 
 func (c *Client) CleanupEntityWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -153,6 +158,30 @@ func (c *Client) SeedUserWithBody(ctx context.Context, contentType string, body 
 
 func (c *Client) SeedUser(ctx context.Context, body SeedUserJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewSeedUserRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) SendTelegramUpdateWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewSendTelegramUpdateRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) SendTelegramUpdate(ctx context.Context, body SendTelegramUpdateJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewSendTelegramUpdateRequest(c.Server, body)
 	if err != nil {
 		return nil, err
 	}
@@ -288,6 +317,46 @@ func NewSeedUserRequestWithBody(server string, contentType string, body io.Reade
 	return req, nil
 }
 
+// NewSendTelegramUpdateRequest calls the generic SendTelegramUpdate builder with application/json body
+func NewSendTelegramUpdateRequest(server string, body SendTelegramUpdateJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewSendTelegramUpdateRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewSendTelegramUpdateRequestWithBody generates requests for SendTelegramUpdate with any type of body
+func NewSendTelegramUpdateRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/test/telegram/send-update")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 func (c *Client) applyEditors(ctx context.Context, req *http.Request, additionalEditors []RequestEditorFn) error {
 	for _, r := range c.RequestEditors {
 		if err := r(ctx, req); err != nil {
@@ -343,6 +412,11 @@ type ClientWithResponsesInterface interface {
 	SeedUserWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SeedUserResponse, error)
 
 	SeedUserWithResponse(ctx context.Context, body SeedUserJSONRequestBody, reqEditors ...RequestEditorFn) (*SeedUserResponse, error)
+
+	// SendTelegramUpdateWithBodyWithResponse request with any body
+	SendTelegramUpdateWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SendTelegramUpdateResponse, error)
+
+	SendTelegramUpdateWithResponse(ctx context.Context, body SendTelegramUpdateJSONRequestBody, reqEditors ...RequestEditorFn) (*SendTelegramUpdateResponse, error)
 }
 
 type CleanupEntityResponse struct {
@@ -414,6 +488,29 @@ func (r SeedUserResponse) StatusCode() int {
 	return 0
 }
 
+type SendTelegramUpdateResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *SendTelegramUpdateResult
+	JSON422      *ErrorResponse
+}
+
+// Status returns HTTPResponse.Status
+func (r SendTelegramUpdateResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r SendTelegramUpdateResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 // CleanupEntityWithBodyWithResponse request with arbitrary body returning *CleanupEntityResponse
 func (c *ClientWithResponses) CleanupEntityWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CleanupEntityResponse, error) {
 	rsp, err := c.CleanupEntityWithBody(ctx, contentType, body, reqEditors...)
@@ -455,6 +552,23 @@ func (c *ClientWithResponses) SeedUserWithResponse(ctx context.Context, body See
 		return nil, err
 	}
 	return ParseSeedUserResponse(rsp)
+}
+
+// SendTelegramUpdateWithBodyWithResponse request with arbitrary body returning *SendTelegramUpdateResponse
+func (c *ClientWithResponses) SendTelegramUpdateWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SendTelegramUpdateResponse, error) {
+	rsp, err := c.SendTelegramUpdateWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseSendTelegramUpdateResponse(rsp)
+}
+
+func (c *ClientWithResponses) SendTelegramUpdateWithResponse(ctx context.Context, body SendTelegramUpdateJSONRequestBody, reqEditors ...RequestEditorFn) (*SendTelegramUpdateResponse, error) {
+	rsp, err := c.SendTelegramUpdate(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseSendTelegramUpdateResponse(rsp)
 }
 
 // ParseCleanupEntityResponse parses an HTTP response from a CleanupEntityWithResponse call
@@ -543,6 +657,39 @@ func ParseSeedUserResponse(rsp *http.Response) (*SeedUserResponse, error) {
 			return nil, err
 		}
 		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON422 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseSendTelegramUpdateResponse parses an HTTP response from a SendTelegramUpdateWithResponse call
+func ParseSendTelegramUpdateResponse(rsp *http.Response) (*SendTelegramUpdateResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &SendTelegramUpdateResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest SendTelegramUpdateResult
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
 		var dest ErrorResponse

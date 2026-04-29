@@ -19,6 +19,7 @@ import (
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/closer"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/config"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/handler"
+	"github.com/alikhanmurzayev/ugcboost/backend/internal/integration/telegram"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/logger"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/middleware"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/repository"
@@ -91,6 +92,38 @@ func run() error {
 	creatorApplicationSvc := service.NewCreatorApplicationService(pool, repoFactory, appLogger)
 	dictionarySvc := service.NewDictionaryService(pool, repoFactory, appLogger)
 
+	// Telegram bot wiring. The Client picks its implementation based on cfg
+	// (see telegram.NewClient): spy in test mode, noop without token, real
+	// client in production. The runner only starts when neither test mode
+	// nor mock mode is on AND a token is configured — without a token the
+	// dispatcher still lives so the e2e endpoint can drive it.
+	tgClient, tgSpy, err := telegram.NewClient(cfg, appLogger)
+	if err != nil {
+		return fmt.Errorf("init telegram client: %w", err)
+	}
+	tgLinkSvc := service.NewCreatorApplicationTelegramService(pool, repoFactory, appLogger)
+	tgMessages := telegram.DefaultMessages()
+	tgStartHandler := telegram.NewStartHandler(tgLinkSvc, tgClient, tgMessages, appLogger)
+	tgDispatcher := telegram.NewDispatcher(tgClient, tgStartHandler, tgMessages, appLogger)
+
+	if !cfg.TelegramMock && cfg.TelegramBotToken != "" && !cfg.EnableTestEndpoints {
+		tgRunner := telegram.NewPollingRunner(tgClient, tgDispatcher, cfg.TelegramPollingTimeout, appLogger)
+		runnerCtx, runnerCancel := context.WithCancel(context.Background())
+		go func() {
+			if err := tgRunner.Run(runnerCtx); err != nil {
+				appLogger.Error(ctx, "telegram runner stopped with error", "error", err)
+			}
+		}()
+		cl.Add("telegram-runner", func(_ context.Context) error {
+			runnerCancel()
+			tgRunner.Wait()
+			return nil
+		})
+		appLogger.Info(ctx, "telegram bot started (long polling)")
+	} else {
+		appLogger.Info(ctx, "telegram bot disabled (no token / mock / test mode)")
+	}
+
 	// Seed admin
 	if err := authSvc.SeedAdmin(ctx, cfg.AdminEmail, cfg.AdminPassword); err != nil {
 		return fmt.Errorf("seed admin: %w", err)
@@ -130,7 +163,7 @@ func run() error {
 	// endpoint uses the repo factory directly — the hard-delete for users
 	// is test-only and intentionally not exposed through any service.
 	if cfg.EnableTestEndpoints {
-		testHandler := handler.NewTestAPIHandler(authSvc, pool, repoFactory, resetTokenStore, appLogger)
+		testHandler := handler.NewTestAPIHandler(authSvc, pool, repoFactory, resetTokenStore, tgDispatcher, tgSpy, appLogger)
 		testapi.HandlerWithOptions(testHandler, testapi.ChiServerOptions{
 			BaseRouter:       r,
 			ErrorHandlerFunc: handler.HandleParamError(appLogger),

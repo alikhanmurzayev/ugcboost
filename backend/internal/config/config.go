@@ -62,6 +62,16 @@ type Config struct {
 	// Different bot per environment.
 	TelegramBotUsername string `env:"TELEGRAM_BOT_USERNAME,required"`
 
+	// Telegram Bot API token issued by @BotFather. Empty value (or
+	// TELEGRAM_MOCK=true) disables the long-polling runner — the dispatcher
+	// still lives so the e2e test endpoint can drive it. Token is a secret
+	// and must come from env vars only.
+	TelegramBotToken string `env:"TELEGRAM_BOT_TOKEN" envDefault:""`
+
+	// TelegramPollingTimeout caps each `getUpdates` long-poll. 30s matches
+	// Telegram's recommended ceiling and keeps shutdown latency predictable.
+	TelegramPollingTimeout time.Duration `env:"TELEGRAM_POLLING_TIMEOUT" envDefault:"30s"`
+
 	// Versions of the legal documents the user accepts at submission time.
 	// Stored alongside each consent row so that a future audit can show
 	// exactly which revision was in force.

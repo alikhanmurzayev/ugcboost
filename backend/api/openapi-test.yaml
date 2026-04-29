@@ -95,6 +95,38 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /test/telegram/send-update:
+    post:
+      operationId: sendTelegramUpdate
+      summary: Inject a Telegram update straight into the dispatcher
+      description: |
+        Test-only endpoint that bypasses the long-polling runner. The supplied
+        payload is wrapped into a domain telegram update and pushed through the
+        production dispatcher; replies the production code would have sent are
+        captured by the in-memory spy client and returned in the response. Used
+        by E2E tests to drive the bot without a live Telegram connection. NEVER
+        enabled in production.
+      tags: [test]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SendTelegramUpdateRequest"
+      responses:
+        "200":
+          description: Update dispatched, captured replies returned
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SendTelegramUpdateResult"
+        "422":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
 components:
   schemas:
     SeedUserRequest:
@@ -154,6 +186,65 @@ components:
           enum: [user, brand, creator_application]
         id:
           type: string
+
+    SendTelegramUpdateRequest:
+      type: object
+      required: [updateId, chatId, userId, text]
+      properties:
+        updateId:
+          type: integer
+          format: int64
+          description: Telegram update_id — must be unique per test run for offset semantics.
+        chatId:
+          type: integer
+          format: int64
+          description: Chat id where the message was posted (in private chats equals userId).
+        userId:
+          type: integer
+          format: int64
+          description: Telegram user id of the sender.
+        text:
+          type: string
+          description: Raw message text (e.g. "/start <uuid>").
+        username:
+          type: string
+          nullable: true
+          description: Optional Telegram @username (no leading @).
+        firstName:
+          type: string
+          nullable: true
+          description: Optional Telegram first_name.
+        lastName:
+          type: string
+          nullable: true
+          description: Optional Telegram last_name.
+
+    TelegramReply:
+      type: object
+      required: [chatId, text]
+      properties:
+        chatId:
+          type: integer
+          format: int64
+        text:
+          type: string
+
+    SendTelegramUpdateData:
+      type: object
+      required: [replies]
+      properties:
+        replies:
+          type: array
+          description: Replies the dispatcher sent through the spy client during this dispatch.
+          items:
+            $ref: "#/components/schemas/TelegramReply"
+
+    SendTelegramUpdateResult:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: "#/components/schemas/SendTelegramUpdateData"
 
     ErrorResponse:
       type: object

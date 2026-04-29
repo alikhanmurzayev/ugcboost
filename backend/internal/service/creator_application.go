@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"strings"
@@ -20,6 +21,7 @@ type CreatorApplicationRepoFactory interface {
 	NewCreatorApplicationCategoryRepo(db dbutil.DB) repository.CreatorApplicationCategoryRepo
 	NewCreatorApplicationSocialRepo(db dbutil.DB) repository.CreatorApplicationSocialRepo
 	NewCreatorApplicationConsentRepo(db dbutil.DB) repository.CreatorApplicationConsentRepo
+	NewCreatorApplicationTelegramLinkRepo(db dbutil.DB) repository.CreatorApplicationTelegramLinkRepo
 	NewAuditRepo(db dbutil.DB) repository.AuditRepo
 }
 
@@ -394,10 +396,13 @@ func trimOptional(s *string) *string {
 }
 
 // GetByID assembles the full read aggregate for an application: main row +
-// categories + socials + consents. All four queries run read-only against the
-// pool — no transaction is needed because nothing changes here. sql.ErrNoRows
-// from the main lookup is returned as-is (already wrapped by dbutil through
-// %w) so the handler can map it to 404 via errors.Is.
+// categories + socials + consents + the Telegram link if the creator has
+// already opened the bot. All five queries run read-only against the pool —
+// no transaction is needed because nothing changes here. sql.ErrNoRows from
+// the main lookup is returned as-is (already wrapped by dbutil through %w) so
+// the handler can map it to 404 via errors.Is. A missing Telegram link is the
+// expected state for a fresh application and is folded into TelegramLink=nil
+// without surfacing as an error.
 func (s *CreatorApplicationService) GetByID(ctx context.Context, id string) (*domain.CreatorApplicationDetail, error) {
 	appRow, err := s.repoFactory.NewCreatorApplicationRepo(s.pool).GetByID(ctx, id)
 	if err != nil {
@@ -419,22 +424,29 @@ func (s *CreatorApplicationService) GetByID(ctx context.Context, id string) (*do
 		return nil, fmt.Errorf("list consents: %w", err)
 	}
 
-	return s.creatorApplicationDetailFromRows(appRow, categoryRows, socialRows, consentRows), nil
+	linkRow, err := s.repoFactory.NewCreatorApplicationTelegramLinkRepo(s.pool).GetByApplicationID(ctx, id)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return nil, fmt.Errorf("get telegram link: %w", err)
+	}
+
+	return s.creatorApplicationDetailFromRows(appRow, categoryRows, socialRows, consentRows, linkRow), nil
 }
 
-// creatorApplicationDetailFromRows maps the four repo result sets onto the
+// creatorApplicationDetailFromRows maps the five repo result sets onto the
 // domain aggregate. Categories arrive as plain codes — name/sortOrder are
 // resolved by the handler against DictionaryService at presentation time,
 // so the service layer stays code-only. Consents are reordered in-memory by
 // canonical ConsentTypeValues so the response is deterministic regardless of
 // how Postgres returned them; missing types are skipped without error so the
 // read side does not fail on legacy or partial data (though POST atomically
-// creates all four).
+// creates all four). A nil link row simply yields TelegramLink=nil — a fresh
+// application without an opened bot is the expected baseline.
 func (s *CreatorApplicationService) creatorApplicationDetailFromRows(
 	app *repository.CreatorApplicationRow,
 	categories []string,
 	socials []*repository.CreatorApplicationSocialRow,
 	consents []*repository.CreatorApplicationConsentRow,
+	link *repository.CreatorApplicationTelegramLinkRow,
 ) *domain.CreatorApplicationDetail {
 	cats := append([]string(nil), categories...)
 
@@ -465,6 +477,18 @@ func (s *CreatorApplicationService) creatorApplicationDetailFromRows(
 		})
 	}
 
+	var tgLink *domain.CreatorApplicationTelegramLink
+	if link != nil {
+		tgLink = &domain.CreatorApplicationTelegramLink{
+			ApplicationID:     link.ApplicationID,
+			TelegramUserID:    link.TelegramUserID,
+			TelegramUsername:  link.TelegramUsername,
+			TelegramFirstName: link.TelegramFirstName,
+			TelegramLastName:  link.TelegramLastName,
+			LinkedAt:          link.LinkedAt,
+		}
+	}
+
 	return &domain.CreatorApplicationDetail{
 		ID:                app.ID,
 		LastName:          app.LastName,
@@ -482,5 +506,6 @@ func (s *CreatorApplicationService) creatorApplicationDetailFromRows(
 		Categories:        cats,
 		Socials:           socs,
 		Consents:          cons,
+		TelegramLink:      tgLink,
 	}
 }

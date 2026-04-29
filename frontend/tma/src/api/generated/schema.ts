@@ -561,6 +561,25 @@ export interface components {
             /** @description Truncated User-Agent recorded at submission. */
             userAgent: string;
         };
+        /** @description Telegram account linked to a creator application via /start deep-link. */
+        TelegramLink: {
+            /**
+             * Format: int64
+             * @description Telegram numeric user id (BIGINT) — stable identifier of the linked account.
+             */
+            telegramUserId: number;
+            /** @description Telegram @username at link time (no leading @). Nullable — not every Telegram user sets one. */
+            telegramUsername?: string | null;
+            /** @description Telegram first_name at link time. Nullable — Telegram may omit it. */
+            telegramFirstName?: string | null;
+            /** @description Telegram last_name at link time. Nullable — Telegram may omit it. */
+            telegramLastName?: string | null;
+            /**
+             * Format: date-time
+             * @description Timestamp of the successful link.
+             */
+            linkedAt: string;
+        };
         CreatorApplicationDetailData: {
             /** Format: uuid */
             id: string;
@@ -597,6 +616,12 @@ export interface components {
              *     independent of the order they appear in the database.
              */
             consents: components["schemas"]["CreatorApplicationDetailConsent"][];
+            /**
+             * @description Telegram account linked to this application via the /start deep-link.
+             *     Null when the creator has not yet opened the bot. Filled after a
+             *     successful /start <applicationId> command.
+             */
+            telegramLink?: components["schemas"]["TelegramLink"] | null;
         };
         GetCreatorApplicationResult: {
             data: components["schemas"]["CreatorApplicationDetailData"];

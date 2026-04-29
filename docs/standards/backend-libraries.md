@@ -21,6 +21,7 @@
 | Кодогенерация моков | `github.com/vektra/mockery` |
 | Pgx-моки в unit-тестах репо | `github.com/pashagolub/pgxmock/v4` |
 | Случайные значения (id, токены, фикстуры) | `crypto/rand` (stdlib) |
+| Telegram Bot API (getUpdates/sendMessage long polling) | `net/http` (stdlib) — нативный JSON over HTTPS, без тяжёлой обвязки |
 
 ### Правила
 

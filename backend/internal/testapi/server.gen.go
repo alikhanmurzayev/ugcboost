@@ -121,6 +121,47 @@ type SeedUserResult struct {
 	Data SeedUserData `json:"data"`
 }
 
+// SendTelegramUpdateData defines model for SendTelegramUpdateData.
+type SendTelegramUpdateData struct {
+	// Replies Replies the dispatcher sent through the spy client during this dispatch.
+	Replies []TelegramReply `json:"replies"`
+}
+
+// SendTelegramUpdateRequest defines model for SendTelegramUpdateRequest.
+type SendTelegramUpdateRequest struct {
+	// ChatId Chat id where the message was posted (in private chats equals userId).
+	ChatId int64 `json:"chatId"`
+
+	// FirstName Optional Telegram first_name.
+	FirstName *string `json:"firstName,omitempty"`
+
+	// LastName Optional Telegram last_name.
+	LastName *string `json:"lastName,omitempty"`
+
+	// Text Raw message text (e.g. "/start <uuid>").
+	Text string `json:"text"`
+
+	// UpdateId Telegram update_id — must be unique per test run for offset semantics.
+	UpdateId int64 `json:"updateId"`
+
+	// UserId Telegram user id of the sender.
+	UserId int64 `json:"userId"`
+
+	// Username Optional Telegram @username (no leading @).
+	Username *string `json:"username,omitempty"`
+}
+
+// SendTelegramUpdateResult defines model for SendTelegramUpdateResult.
+type SendTelegramUpdateResult struct {
+	Data SendTelegramUpdateData `json:"data"`
+}
+
+// TelegramReply defines model for TelegramReply.
+type TelegramReply struct {
+	ChatId int64  `json:"chatId"`
+	Text   string `json:"text"`
+}
+
 // GetResetTokenParams defines parameters for GetResetToken.
 type GetResetTokenParams struct {
 	Email openapi_types.Email `form:"email" json:"email"`
@@ -131,6 +172,9 @@ type CleanupEntityJSONRequestBody = CleanupEntityRequest
 
 // SeedUserJSONRequestBody defines body for SeedUser for application/json ContentType.
 type SeedUserJSONRequestBody = SeedUserRequest
+
+// SendTelegramUpdateJSONRequestBody defines body for SendTelegramUpdate for application/json ContentType.
+type SendTelegramUpdateJSONRequestBody = SendTelegramUpdateRequest
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
@@ -143,6 +187,9 @@ type ServerInterface interface {
 	// Create a test user with given credentials and role
 	// (POST /test/seed-user)
 	SeedUser(w http.ResponseWriter, r *http.Request)
+	// Inject a Telegram update straight into the dispatcher
+	// (POST /test/telegram/send-update)
+	SendTelegramUpdate(w http.ResponseWriter, r *http.Request)
 }
 
 // Unimplemented server implementation that returns http.StatusNotImplemented for each endpoint.
@@ -164,6 +211,12 @@ func (_ Unimplemented) GetResetToken(w http.ResponseWriter, r *http.Request, par
 // Create a test user with given credentials and role
 // (POST /test/seed-user)
 func (_ Unimplemented) SeedUser(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Inject a Telegram update straight into the dispatcher
+// (POST /test/telegram/send-update)
+func (_ Unimplemented) SendTelegramUpdate(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -229,6 +282,20 @@ func (siw *ServerInterfaceWrapper) SeedUser(w http.ResponseWriter, r *http.Reque
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.SeedUser(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// SendTelegramUpdate operation middleware
+func (siw *ServerInterfaceWrapper) SendTelegramUpdate(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SendTelegramUpdate(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -359,6 +426,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/test/seed-user", wrapper.SeedUser)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/test/telegram/send-update", wrapper.SendTelegramUpdate)
 	})
 
 	return r

@@ -75,6 +75,23 @@ const (
 	CodeUnknownCategory = "UNKNOWN_CATEGORY"
 	// 422 — at least one of the four mandatory consents is missing.
 	CodeMissingConsent = "MISSING_CONSENT"
+	// CodeTelegramApplicationAlreadyLinked is returned when /start references
+	// an application already bound to another Telegram account.
+	CodeTelegramApplicationAlreadyLinked = "TELEGRAM_APPLICATION_ALREADY_LINKED"
+	// CodeTelegramAccountAlreadyLinked is returned when the issuing Telegram
+	// account is already linked to a different application.
+	CodeTelegramAccountAlreadyLinked = "TELEGRAM_ACCOUNT_ALREADY_LINKED"
+	// CodeTelegramApplicationNotActive is returned when the targeted
+	// application is in a status that disallows linking (rejected, blocked).
+	CodeTelegramApplicationNotActive = "TELEGRAM_APPLICATION_NOT_ACTIVE"
+)
+
+// Telegram metadata length caps applied at the service layer before persisting.
+// They protect against attacker-controlled mega-strings; Telegram itself does
+// not enforce hard ceilings beyond the API request body limit.
+const (
+	TelegramUsernameMaxLen = 64
+	TelegramNameMaxLen     = 256
 )
 
 // ErrCreatorApplicationDuplicate is the sentinel the repository raises when
@@ -83,6 +100,19 @@ const (
 // the race after the service's HasActiveByIIN check). The service converts it
 // into a business error with CodeCreatorApplicationDuplicate.
 var ErrCreatorApplicationDuplicate = errors.New("creator application with this iin is already active")
+
+// ErrTelegramApplicationLinkConflict is the repository sentinel raised on a
+// PRIMARY KEY violation in creator_application_telegram_links(application_id)
+// — i.e. the application already has a Telegram link. The service re-reads
+// the existing row to decide whether the conflict is the same Telegram user
+// (idempotent success) or a different one (business error).
+var ErrTelegramApplicationLinkConflict = errors.New("telegram link for this application already exists")
+
+// ErrTelegramAccountLinkConflict is the repository sentinel raised on a
+// UNIQUE violation on creator_application_telegram_links(telegram_user_id)
+// — the same Telegram account is already linked to another application. The
+// service surfaces it as CodeTelegramAccountAlreadyLinked.
+var ErrTelegramAccountLinkConflict = errors.New("telegram account is already linked to another application")
 
 // SocialHandleRegex is the validation pattern applied to handles after they
 // are trimmed, stripped of leading '@' and lowercased. Current scope (IG/TT)
@@ -162,6 +192,45 @@ type CreatorApplicationDetail struct {
 	Categories        []string
 	Socials           []CreatorApplicationDetailSocial
 	Consents          []CreatorApplicationDetailConsent
+	TelegramLink      *CreatorApplicationTelegramLink
+}
+
+// CreatorApplicationTelegramLink describes the Telegram account bound to an
+// application. Nil on CreatorApplicationDetail.TelegramLink means the
+// creator has not opened the bot yet. Field semantics mirror the row stored
+// in creator_application_telegram_links — see also the OpenAPI TelegramLink
+// schema this projects onto.
+type CreatorApplicationTelegramLink struct {
+	ApplicationID     string
+	TelegramUserID    int64
+	TelegramUsername  *string
+	TelegramFirstName *string
+	TelegramLastName  *string
+	LinkedAt          time.Time
+}
+
+// TelegramLinkInput is the service-side input for binding a Telegram account
+// to an application. Username/first_name/last_name carry the same semantics as
+// in the Telegram API: they may legitimately be absent (Telegram users can
+// hide them) and must be trimmed + capped before persisting.
+type TelegramLinkInput struct {
+	ApplicationID string
+	TgUserID      int64
+	TgUsername    *string
+	TgFirstName   *string
+	TgLastName    *string
+}
+
+// TelegramLinkResult is what CreatorApplicationTelegramService.LinkTelegram
+// returns to the start-handler. Idempotent=true marks a repeated /start from
+// the same Telegram user against the same application — the start-handler
+// reuses the same success reply but the audit log is left untouched.
+type TelegramLinkResult struct {
+	ApplicationID  string
+	Status         string
+	TelegramUserID int64
+	LinkedAt       time.Time
+	Idempotent     bool
 }
 
 // CreatorApplicationDetailSocial is one social account attached to the

@@ -117,7 +117,7 @@ test-unit-backend:
 test-unit-backend-coverage:
 	cd backend && go test -coverprofile=/tmp/ugc-cover.out -race -count=1 ./internal/...
 	@cd backend && go tool cover -func=/tmp/ugc-cover.out | \
-		awk '$$1 ~ /\/(handler|service|repository|middleware|authz)\// \
+		awk '$$1 ~ /\/(handler|service|repository|middleware|authz|integration\/telegram)\// \
 			&& $$1 !~ /\.gen\.go:/ \
 			&& $$1 !~ /\/mocks\// \
 			&& $$1 !~ /\/cmd\// \

@@ -12,6 +12,7 @@ import (
 
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/dbutil"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/domain"
+	"github.com/alikhanmurzayev/ugcboost/backend/internal/integration/telegram"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/logger"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/repository"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/testapi"
@@ -37,6 +38,20 @@ type TestAPICleanupRepoFactory interface {
 	NewCreatorApplicationRepo(db dbutil.DB) repository.CreatorApplicationRepo
 }
 
+// TelegramDispatcher is the narrow interface the test handler needs to push
+// a synthetic update through the production dispatcher. Defined here so the
+// handler stays decoupled from the integration package's other surface.
+type TelegramDispatcher interface {
+	Dispatch(ctx context.Context, update telegram.IncomingUpdate)
+}
+
+// TelegramSpy is the test-side draining surface used to capture the bot's
+// replies after Dispatch returns. nil in production (the handler is not
+// registered when EnableTestEndpoints is false).
+type TelegramSpy interface {
+	Drain(chatID int64) []telegram.SentMessage
+}
+
 // TestAPIHandler provides test-only endpoints that back openapi-test.yaml.
 // Only registered when ENVIRONMENT != production. The cleanup endpoint
 // reaches into the repository layer directly (rather than through a service)
@@ -47,6 +62,8 @@ type TestAPIHandler struct {
 	pool       dbutil.Pool
 	repos      TestAPICleanupRepoFactory
 	tokenStore TokenStore
+	dispatcher TelegramDispatcher
+	spy        TelegramSpy
 	logger     logger.Logger
 }
 
@@ -58,6 +75,8 @@ func NewTestAPIHandler(
 	pool dbutil.Pool,
 	repos TestAPICleanupRepoFactory,
 	tokenStore TokenStore,
+	dispatcher TelegramDispatcher,
+	spy TelegramSpy,
 	log logger.Logger,
 ) *TestAPIHandler {
 	return &TestAPIHandler{
@@ -65,6 +84,8 @@ func NewTestAPIHandler(
 		pool:       pool,
 		repos:      repos,
 		tokenStore: tokenStore,
+		dispatcher: dispatcher,
+		spy:        spy,
 		logger:     log,
 	}
 }
@@ -146,6 +167,47 @@ func (h *TestAPIHandler) CleanupEntity(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// SendTelegramUpdate handles POST /test/telegram/send-update.
+//
+// Body is decoded into the generated testapi.SendTelegramUpdateRequest, then
+// shaped into a domain telegram.IncomingUpdate and dispatched synchronously
+// through the production dispatcher. After Dispatch returns, the spy client
+// is drained for the chat under test and every captured reply is returned
+// in the response. The whole call is one DB-less synchronous operation —
+// e2e tests use it to drive the bot without a live Telegram connection.
+func (h *TestAPIHandler) SendTelegramUpdate(w http.ResponseWriter, r *http.Request) {
+	if h.dispatcher == nil || h.spy == nil {
+		respondError(w, r, domain.NewBusinessError(domain.CodeInternal, "telegram test endpoint not wired"), h.logger)
+		return
+	}
+	var req testapi.SendTelegramUpdateRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, r, domain.NewValidationError(domain.CodeValidation, "Invalid request body"), h.logger)
+		return
+	}
+
+	update := telegram.IncomingUpdate{
+		UpdateID:  req.UpdateId,
+		ChatID:    req.ChatId,
+		UserID:    req.UserId,
+		Text:      req.Text,
+		Username:  req.Username,
+		FirstName: req.FirstName,
+		LastName:  req.LastName,
+	}
+	h.dispatcher.Dispatch(r.Context(), update)
+
+	captured := h.spy.Drain(req.ChatId)
+	replies := make([]testapi.TelegramReply, len(captured))
+	for i, m := range captured {
+		replies[i] = testapi.TelegramReply{ChatId: m.ChatID, Text: m.Text}
+	}
+
+	respondJSON(w, r, http.StatusOK, testapi.SendTelegramUpdateResult{
+		Data: testapi.SendTelegramUpdateData{Replies: replies},
+	}, h.logger)
 }
 
 // GetResetToken handles GET /test/reset-tokens?email=...

@@ -63,6 +63,7 @@ type creatorServiceRig struct {
 	appCategoryRepo *repomocks.MockCreatorApplicationCategoryRepo
 	appSocialRepo   *repomocks.MockCreatorApplicationSocialRepo
 	appConsentRepo  *repomocks.MockCreatorApplicationConsentRepo
+	tgLinkRepo      *repomocks.MockCreatorApplicationTelegramLinkRepo
 	auditRepo       *repomocks.MockAuditRepo
 	logger          *logmocks.MockLogger
 }
@@ -77,6 +78,7 @@ func newCreatorServiceRig(t *testing.T) creatorServiceRig {
 		appCategoryRepo: repomocks.NewMockCreatorApplicationCategoryRepo(t),
 		appSocialRepo:   repomocks.NewMockCreatorApplicationSocialRepo(t),
 		appConsentRepo:  repomocks.NewMockCreatorApplicationConsentRepo(t),
+		tgLinkRepo:      repomocks.NewMockCreatorApplicationTelegramLinkRepo(t),
 		auditRepo:       repomocks.NewMockAuditRepo(t),
 		logger:          logmocks.NewMockLogger(t),
 	}
@@ -680,7 +682,32 @@ func TestCreatorApplicationService_GetByID(t *testing.T) {
 		require.ErrorContains(t, err, "con boom")
 	})
 
-	t.Run("success builds aggregate and reorders consents to canonical sequence", func(t *testing.T) {
+	t.Run("telegram link list error wrapped", func(t *testing.T) {
+		t.Parallel()
+		rig := newCreatorServiceRig(t)
+		rig.factory.EXPECT().NewCreatorApplicationRepo(mock.Anything).Return(rig.appRepo)
+		rig.factory.EXPECT().NewCreatorApplicationCategoryRepo(mock.Anything).Return(rig.appCategoryRepo)
+		rig.factory.EXPECT().NewCreatorApplicationSocialRepo(mock.Anything).Return(rig.appSocialRepo)
+		rig.factory.EXPECT().NewCreatorApplicationConsentRepo(mock.Anything).Return(rig.appConsentRepo)
+		rig.factory.EXPECT().NewCreatorApplicationTelegramLinkRepo(mock.Anything).Return(rig.tgLinkRepo)
+		rig.appRepo.EXPECT().GetByID(mock.Anything, appID).
+			Return(&repository.CreatorApplicationRow{ID: appID}, nil)
+		rig.appCategoryRepo.EXPECT().ListByApplicationID(mock.Anything, appID).
+			Return(nil, nil)
+		rig.appSocialRepo.EXPECT().ListByApplicationID(mock.Anything, appID).
+			Return(nil, nil)
+		rig.appConsentRepo.EXPECT().ListByApplicationID(mock.Anything, appID).
+			Return(nil, nil)
+		rig.tgLinkRepo.EXPECT().GetByApplicationID(mock.Anything, appID).
+			Return(nil, errors.New("link boom"))
+
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.logger)
+		_, err := svc.GetByID(context.Background(), appID)
+		require.ErrorContains(t, err, "get telegram link")
+		require.ErrorContains(t, err, "link boom")
+	})
+
+	t.Run("success without telegram link returns aggregate with TelegramLink=nil", func(t *testing.T) {
 		t.Parallel()
 		rig := newCreatorServiceRig(t)
 		birth := time.Date(1995, 5, 15, 0, 0, 0, 0, time.UTC)
@@ -692,6 +719,7 @@ func TestCreatorApplicationService_GetByID(t *testing.T) {
 		rig.factory.EXPECT().NewCreatorApplicationCategoryRepo(mock.Anything).Return(rig.appCategoryRepo)
 		rig.factory.EXPECT().NewCreatorApplicationSocialRepo(mock.Anything).Return(rig.appSocialRepo)
 		rig.factory.EXPECT().NewCreatorApplicationConsentRepo(mock.Anything).Return(rig.appConsentRepo)
+		rig.factory.EXPECT().NewCreatorApplicationTelegramLinkRepo(mock.Anything).Return(rig.tgLinkRepo)
 		rig.appRepo.EXPECT().GetByID(mock.Anything, appID).
 			Return(&repository.CreatorApplicationRow{
 				ID:                appID,
@@ -724,6 +752,8 @@ func TestCreatorApplicationService_GetByID(t *testing.T) {
 				{ApplicationID: appID, ConsentType: domain.ConsentTypeThirdParty, AcceptedAt: acceptedAt, DocumentVersion: "pp-1", IPAddress: "127.0.0.1", UserAgent: "ua/1"},
 				{ApplicationID: appID, ConsentType: domain.ConsentTypeProcessing, AcceptedAt: acceptedAt, DocumentVersion: "pp-1", IPAddress: "127.0.0.1", UserAgent: "ua/1"},
 			}, nil)
+		rig.tgLinkRepo.EXPECT().GetByApplicationID(mock.Anything, appID).
+			Return(nil, sql.ErrNoRows)
 
 		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.logger)
 		got, err := svc.GetByID(context.Background(), appID)
@@ -753,6 +783,46 @@ func TestCreatorApplicationService_GetByID(t *testing.T) {
 				{ConsentType: domain.ConsentTypeCrossBorder, AcceptedAt: acceptedAt, DocumentVersion: "pp-1", IPAddress: "127.0.0.1", UserAgent: "ua/1"},
 				{ConsentType: domain.ConsentTypeTerms, AcceptedAt: acceptedAt, DocumentVersion: "agr-1", IPAddress: "127.0.0.1", UserAgent: "ua/1"},
 			},
+			TelegramLink: nil,
 		}, got)
+	})
+
+	t.Run("success with telegram link populates TelegramLink", func(t *testing.T) {
+		t.Parallel()
+		rig := newCreatorServiceRig(t)
+		linkedAt := time.Date(2026, 4, 21, 10, 0, 0, 0, time.UTC)
+
+		rig.factory.EXPECT().NewCreatorApplicationRepo(mock.Anything).Return(rig.appRepo)
+		rig.factory.EXPECT().NewCreatorApplicationCategoryRepo(mock.Anything).Return(rig.appCategoryRepo)
+		rig.factory.EXPECT().NewCreatorApplicationSocialRepo(mock.Anything).Return(rig.appSocialRepo)
+		rig.factory.EXPECT().NewCreatorApplicationConsentRepo(mock.Anything).Return(rig.appConsentRepo)
+		rig.factory.EXPECT().NewCreatorApplicationTelegramLinkRepo(mock.Anything).Return(rig.tgLinkRepo)
+		rig.appRepo.EXPECT().GetByID(mock.Anything, appID).
+			Return(&repository.CreatorApplicationRow{ID: appID, Status: domain.CreatorApplicationStatusPending}, nil)
+		rig.appCategoryRepo.EXPECT().ListByApplicationID(mock.Anything, appID).Return(nil, nil)
+		rig.appSocialRepo.EXPECT().ListByApplicationID(mock.Anything, appID).Return(nil, nil)
+		rig.appConsentRepo.EXPECT().ListByApplicationID(mock.Anything, appID).Return(nil, nil)
+		rig.tgLinkRepo.EXPECT().GetByApplicationID(mock.Anything, appID).
+			Return(&repository.CreatorApplicationTelegramLinkRow{
+				ApplicationID:     appID,
+				TelegramUserID:    7000123,
+				TelegramUsername:  pointer.ToString("test_42"),
+				TelegramFirstName: pointer.ToString("Айдана"),
+				TelegramLastName:  pointer.ToString("Муратова"),
+				LinkedAt:          linkedAt,
+			}, nil)
+
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.logger)
+		got, err := svc.GetByID(context.Background(), appID)
+		require.NoError(t, err)
+		require.NotNil(t, got.TelegramLink)
+		require.Equal(t, &domain.CreatorApplicationTelegramLink{
+			ApplicationID:     appID,
+			TelegramUserID:    7000123,
+			TelegramUsername:  pointer.ToString("test_42"),
+			TelegramFirstName: pointer.ToString("Айдана"),
+			TelegramLastName:  pointer.ToString("Муратова"),
+			LinkedAt:          linkedAt,
+		}, got.TelegramLink)
 	})
 }

@@ -1,10 +1,13 @@
 package handler
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/go-chi/chi/v5"
@@ -18,6 +21,7 @@ import (
 	dbutilmocks "github.com/alikhanmurzayev/ugcboost/backend/internal/dbutil/mocks"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/domain"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/handler/mocks"
+	"github.com/alikhanmurzayev/ugcboost/backend/internal/integration/telegram"
 	logmocks "github.com/alikhanmurzayev/ugcboost/backend/internal/logger/mocks"
 	repomocks "github.com/alikhanmurzayev/ugcboost/backend/internal/repository/mocks"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/testapi"
@@ -47,7 +51,7 @@ func TestTestAPIHandler_SeedUser(t *testing.T) {
 		pool := dbutilmocks.NewMockPool(t)
 		store := mocks.NewMockTokenStore(t)
 		log := logmocks.NewMockLogger(t)
-		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, log))
+		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, nil, nil, log))
 
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/test/seed-user",
 			map[string]any{"email": 123})
@@ -62,7 +66,7 @@ func TestTestAPIHandler_SeedUser(t *testing.T) {
 		pool := dbutilmocks.NewMockPool(t)
 		store := mocks.NewMockTokenStore(t)
 		log := logmocks.NewMockLogger(t)
-		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, log))
+		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, nil, nil, log))
 
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/test/seed-user",
 			testapi.SeedUserRequest{Email: "user@example.com", Password: "pass"})
@@ -80,7 +84,7 @@ func TestTestAPIHandler_SeedUser(t *testing.T) {
 		auth.EXPECT().SeedUser(mock.Anything, "user@example.com", "pass", "admin").
 			Return(nil, errors.New("db error"))
 		expectUnexpectedErrorLog(log, "/test/seed-user")
-		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, log))
+		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, nil, nil, log))
 
 		w, _ := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/test/seed-user",
 			testapi.SeedUserRequest{
@@ -99,7 +103,7 @@ func TestTestAPIHandler_SeedUser(t *testing.T) {
 		log := logmocks.NewMockLogger(t)
 		auth.EXPECT().SeedUser(mock.Anything, "user@example.com", "pass", "admin").
 			Return(&domain.User{ID: "u-seed", Email: "user@example.com", Role: api.Admin}, nil)
-		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, log))
+		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, nil, nil, log))
 
 		w, resp := doJSON[testapi.SeedUserResult](t, router, http.MethodPost, "/test/seed-user",
 			testapi.SeedUserRequest{
@@ -127,7 +131,7 @@ func TestTestAPIHandler_CleanupEntity(t *testing.T) {
 		pool := dbutilmocks.NewMockPool(t)
 		store := mocks.NewMockTokenStore(t)
 		log := logmocks.NewMockLogger(t)
-		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, log))
+		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, nil, nil, log))
 
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/test/cleanup-entity",
 			map[string]any{"type": 42})
@@ -142,7 +146,7 @@ func TestTestAPIHandler_CleanupEntity(t *testing.T) {
 		pool := dbutilmocks.NewMockPool(t)
 		store := mocks.NewMockTokenStore(t)
 		log := logmocks.NewMockLogger(t)
-		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, log))
+		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, nil, nil, log))
 
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/test/cleanup-entity",
 			testapi.CleanupEntityRequest{Type: testapi.User, Id: ""})
@@ -157,7 +161,7 @@ func TestTestAPIHandler_CleanupEntity(t *testing.T) {
 		pool := dbutilmocks.NewMockPool(t)
 		store := mocks.NewMockTokenStore(t)
 		log := logmocks.NewMockLogger(t)
-		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, log))
+		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, nil, nil, log))
 
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/test/cleanup-entity",
 			map[string]any{"type": "campaign", "id": "c-1"})
@@ -183,7 +187,7 @@ func TestTestAPIHandler_CleanupEntity(t *testing.T) {
 		repos.EXPECT().NewUserRepo(mock.Anything).Return(userRepo)
 		userRepo.EXPECT().DeleteForTests(mock.Anything, "u-1").Return(nil)
 
-		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, log))
+		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, nil, nil, log))
 
 		w, _ := doJSON[any](t, router, http.MethodPost, "/test/cleanup-entity",
 			testapi.CleanupEntityRequest{Type: testapi.User, Id: "u-1"})
@@ -205,7 +209,7 @@ func TestTestAPIHandler_CleanupEntity(t *testing.T) {
 		repos.EXPECT().NewUserRepo(mock.Anything).Return(userRepo)
 		userRepo.EXPECT().DeleteForTests(mock.Anything, "u-missing").Return(sql.ErrNoRows)
 
-		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, log))
+		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, nil, nil, log))
 
 		w, _ := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/test/cleanup-entity",
 			testapi.CleanupEntityRequest{Type: testapi.User, Id: "u-missing"})
@@ -228,7 +232,7 @@ func TestTestAPIHandler_CleanupEntity(t *testing.T) {
 		userRepo.EXPECT().DeleteForTests(mock.Anything, "u-boom").Return(errors.New("db boom"))
 		expectUnexpectedErrorLog(log, "/test/cleanup-entity")
 
-		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, log))
+		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, nil, nil, log))
 
 		w, _ := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/test/cleanup-entity",
 			testapi.CleanupEntityRequest{Type: testapi.User, Id: "u-boom"})
@@ -247,7 +251,7 @@ func TestTestAPIHandler_CleanupEntity(t *testing.T) {
 		repos.EXPECT().NewBrandRepo(mock.Anything).Return(brandRepo)
 		brandRepo.EXPECT().Delete(mock.Anything, "b-1").Return(nil)
 
-		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, log))
+		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, nil, nil, log))
 
 		w, _ := doJSON[any](t, router, http.MethodPost, "/test/cleanup-entity",
 			testapi.CleanupEntityRequest{Type: testapi.Brand, Id: "b-1"})
@@ -266,7 +270,7 @@ func TestTestAPIHandler_CleanupEntity(t *testing.T) {
 		repos.EXPECT().NewBrandRepo(mock.Anything).Return(brandRepo)
 		brandRepo.EXPECT().Delete(mock.Anything, "b-missing").Return(sql.ErrNoRows)
 
-		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, log))
+		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, nil, nil, log))
 
 		w, _ := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/test/cleanup-entity",
 			testapi.CleanupEntityRequest{Type: testapi.Brand, Id: "b-missing"})
@@ -285,7 +289,7 @@ func TestTestAPIHandler_GetResetToken(t *testing.T) {
 		store := mocks.NewMockTokenStore(t)
 		log := logmocks.NewMockLogger(t)
 		store.EXPECT().GetToken("missing@example.com").Return("", false)
-		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, log))
+		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, nil, nil, log))
 
 		w, _ := doJSON[api.ErrorResponse](t, router, http.MethodGet,
 			"/test/reset-tokens?email=missing@example.com", nil)
@@ -300,7 +304,7 @@ func TestTestAPIHandler_GetResetToken(t *testing.T) {
 		store := mocks.NewMockTokenStore(t)
 		log := logmocks.NewMockLogger(t)
 		store.EXPECT().GetToken("alice@example.com").Return("raw-token-123", true)
-		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, log))
+		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, nil, nil, log))
 
 		w, resp := doJSON[testapi.ResetTokenResult](t, router, http.MethodGet,
 			"/test/reset-tokens?email=alice@example.com", nil)
@@ -308,6 +312,100 @@ func TestTestAPIHandler_GetResetToken(t *testing.T) {
 		require.Equal(t, testapi.ResetTokenResult{
 			Data: testapi.ResetTokenData{Token: "raw-token-123"},
 		}, resp)
+	})
+}
+
+func TestTestAPIHandler_SendTelegramUpdate(t *testing.T) {
+	t.Parallel()
+
+	const path = "/test/telegram/send-update"
+
+	t.Run("dispatches and returns drained replies", func(t *testing.T) {
+		t.Parallel()
+		auth := mocks.NewMockTestAPIAuthService(t)
+		repos := mocks.NewMockTestAPICleanupRepoFactory(t)
+		pool := dbutilmocks.NewMockPool(t)
+		store := mocks.NewMockTokenStore(t)
+		dispatcher := mocks.NewMockTelegramDispatcher(t)
+		spy := mocks.NewMockTelegramSpy(t)
+		log := logmocks.NewMockLogger(t)
+
+		username := "u"
+		firstName := "F"
+		lastName := "L"
+		expectedUpdate := telegram.IncomingUpdate{
+			UpdateID:  42,
+			ChatID:    100,
+			UserID:    7000,
+			Text:      "/start abc",
+			Username:  &username,
+			FirstName: &firstName,
+			LastName:  &lastName,
+		}
+		dispatcher.EXPECT().Dispatch(mock.Anything, expectedUpdate).Once()
+		spy.EXPECT().Drain(int64(100)).
+			Return([]telegram.SentMessage{{ChatID: 100, Text: "ok"}})
+
+		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, dispatcher, spy, log))
+
+		body, err := json.Marshal(testapi.SendTelegramUpdateRequest{
+			UpdateId:  42,
+			ChatId:    100,
+			UserId:    7000,
+			Text:      "/start abc",
+			Username:  &username,
+			FirstName: &firstName,
+			LastName:  &lastName,
+		})
+		require.NoError(t, err)
+
+		req := httptest.NewRequest(http.MethodPost, path, bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+
+		require.Equal(t, http.StatusOK, rec.Code)
+		var got testapi.SendTelegramUpdateResult
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &got))
+		require.Equal(t, []testapi.TelegramReply{{ChatId: 100, Text: "ok"}}, got.Data.Replies)
+	})
+
+	t.Run("invalid JSON yields 422", func(t *testing.T) {
+		t.Parallel()
+		auth := mocks.NewMockTestAPIAuthService(t)
+		repos := mocks.NewMockTestAPICleanupRepoFactory(t)
+		pool := dbutilmocks.NewMockPool(t)
+		store := mocks.NewMockTokenStore(t)
+		dispatcher := mocks.NewMockTelegramDispatcher(t)
+		spy := mocks.NewMockTelegramSpy(t)
+		log := logmocks.NewMockLogger(t)
+
+		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, dispatcher, spy, log))
+
+		req := httptest.NewRequest(http.MethodPost, path, bytes.NewReader([]byte(`{not json`)))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+
+		require.Equal(t, http.StatusUnprocessableEntity, rec.Code)
+	})
+
+	t.Run("nil dispatcher returns internal error (defensive guard)", func(t *testing.T) {
+		t.Parallel()
+		auth := mocks.NewMockTestAPIAuthService(t)
+		repos := mocks.NewMockTestAPICleanupRepoFactory(t)
+		pool := dbutilmocks.NewMockPool(t)
+		store := mocks.NewMockTokenStore(t)
+		log := logmocks.NewMockLogger(t)
+
+		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, nil, nil, log))
+
+		body, _ := json.Marshal(testapi.SendTelegramUpdateRequest{ChatId: 1, UserId: 1, UpdateId: 1, Text: "/start"})
+		req := httptest.NewRequest(http.MethodPost, path, bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		router.ServeHTTP(rec, req)
+		require.NotEqual(t, http.StatusOK, rec.Code, "nil dispatcher must not produce a 200")
 	})
 }
 
