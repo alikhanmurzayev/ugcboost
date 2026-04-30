@@ -49,7 +49,7 @@ test.describe("Auth flow", () => {
   test("1. Happy login — email + password → dashboard with sidebar", async ({
     page,
   }) => {
-    await page.goto("/login");
+    await page.goto("/login", { waitUntil: "domcontentloaded" });
 
     await page.getByTestId("email-input").fill(TEST_EMAIL);
     await page.getByTestId("password-input").fill(TEST_PASSWORD);
@@ -70,7 +70,7 @@ test.describe("Auth flow", () => {
   });
 
   test("2. Wrong password — error shown, stay on login", async ({ page }) => {
-    await page.goto("/login");
+    await page.goto("/login", { waitUntil: "domcontentloaded" });
 
     await page.getByTestId("email-input").fill(TEST_EMAIL);
     await page.getByTestId("password-input").fill("wrongpassword");
@@ -85,7 +85,7 @@ test.describe("Auth flow", () => {
 
   test("3. Session restore — F5 keeps user logged in", async ({ page }) => {
     // Login first
-    await page.goto("/login");
+    await page.goto("/login", { waitUntil: "domcontentloaded" });
     await page.getByTestId("email-input").fill(TEST_EMAIL);
     await page.getByTestId("password-input").fill(TEST_PASSWORD);
     await page.getByTestId("login-button").click();
@@ -104,7 +104,7 @@ test.describe("Auth flow", () => {
     page,
   }) => {
     // Login first
-    await page.goto("/login");
+    await page.goto("/login", { waitUntil: "domcontentloaded" });
     await page.getByTestId("email-input").fill(TEST_EMAIL);
     await page.getByTestId("password-input").fill(TEST_PASSWORD);
     await page.getByTestId("login-button").click();
@@ -115,7 +115,7 @@ test.describe("Auth flow", () => {
     await expect(page).toHaveURL("/login");
 
     // Try accessing dashboard — should redirect to login
-    await page.goto("/");
+    await page.goto("/", { waitUntil: "domcontentloaded" });
     await expect(page).toHaveURL("/login");
   });
 
@@ -123,7 +123,7 @@ test.describe("Auth flow", () => {
     page,
   }) => {
     // Go directly to protected route without logging in
-    await page.goto("/");
+    await page.goto("/", { waitUntil: "domcontentloaded" });
     await expect(page).toHaveURL("/login");
   });
 });

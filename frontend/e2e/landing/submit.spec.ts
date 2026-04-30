@@ -113,7 +113,7 @@ test.describe("Landing submission flow", () => {
     // dropdown carries real options, categories renders at least one
     // checkbox. Placed first so a regression here fails fast and obviously,
     // before any submit flow runs.
-    await page.goto("/");
+    await page.goto("/", { waitUntil: "domcontentloaded" });
     await waitForDictionaries(page);
 
     const cityCount = await page.getByTestId("city-select").locator("option").count();
@@ -125,7 +125,7 @@ test.describe("Landing submission flow", () => {
   test("1. Golden path — fills the form, sees success screen with telegram CTA", async ({
     page,
   }) => {
-    await page.goto("/");
+    await page.goto("/", { waitUntil: "domcontentloaded" });
     await waitForDictionaries(page);
 
     await fillRequiredFields(page, uniqueIIN());
@@ -151,7 +151,7 @@ test.describe("Landing submission flow", () => {
   test("2. Other category — categoryOtherText input appears and submit succeeds", async ({
     page,
   }) => {
-    await page.goto("/");
+    await page.goto("/", { waitUntil: "domcontentloaded" });
     await waitForDictionaries(page);
 
     await fillRequiredFields(page, uniqueIIN());
@@ -173,7 +173,7 @@ test.describe("Landing submission flow", () => {
   test("3. Server validation — under-age IIN surfaces form error, no success", async ({
     page,
   }) => {
-    await page.goto("/");
+    await page.goto("/", { waitUntil: "domcontentloaded" });
     await waitForDictionaries(page);
 
     await fillRequiredFields(page, underageIIN());
