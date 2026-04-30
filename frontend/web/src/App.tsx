@@ -38,16 +38,16 @@ function App() {
           <Routes>
           <Route path={ROUTES.LOGIN} element={<LoginPage />} />
 
-          <Route
-            path="/prototype/*"
-            element={
-              <Suspense fallback={<Spinner className="mt-12" />}>
-                <PrototypeApp />
-              </Suspense>
-            }
-          />
-
           <Route element={<AuthGuard />}>
+            <Route
+              path="/prototype/*"
+              element={
+                <Suspense fallback={<Spinner className="mt-12" />}>
+                  <PrototypeApp />
+                </Suspense>
+              }
+            />
+
             <Route element={<DashboardLayout />}>
               <Route index element={<DashboardPage />} />
               <Route path={ROUTES.BRANDS} element={<BrandsPage />} />

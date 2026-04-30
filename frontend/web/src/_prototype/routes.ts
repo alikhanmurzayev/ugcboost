@@ -1,6 +1,14 @@
 // Routes for the prototype area (mounted under /prototype/* in main App.tsx).
 // All paths are relative — React Router handles the /prototype prefix.
+// Mirrors the route names Aidana used in the original DashboardLayout so the
+// layout copy stays 1-for-1.
 export const ROUTES = {
+  LOGIN: "/login",
+  DASHBOARD: "/prototype",
+  BRANDS: "brands",
+  BRAND_DETAIL: (id: string) => `brands/${id}`,
+  BRAND_DETAIL_PATTERN: "brands/:brandId",
+  AUDIT: "audit",
   CREATOR_APP_VERIFICATION: "creator-applications/verification",
   CREATOR_APP_MODERATION: "creator-applications/moderation",
   CREATOR_APP_CONTRACTS: "creator-applications/contracts",

@@ -67,10 +67,10 @@ export default function DashboardLayout() {
         <div className="border-t border-surface-300 px-3 py-4">
           <Link
             to="/prototype"
-            className="mb-2 block rounded-button px-3 py-2 text-left text-xs font-medium text-amber-700 transition hover:bg-amber-50"
+            className="mb-3 block px-3 text-xs text-gray-500 transition hover:text-gray-700"
             data-testid="link-prototype"
           >
-            🧪 Прототип Aidana
+            Прототип Aidana →
           </Link>
           <div className="mb-3 px-3">
             <p className="truncate text-sm font-medium text-gray-900">{user?.email}</p>
