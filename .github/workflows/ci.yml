@@ -374,7 +374,8 @@ jobs:
             curl -sSf -X POST "${{ secrets.DOKPLOY_WEBHOOK_LANDING }}"
       - name: Wait for staging-api to roll out the new commit
         run: |
-          EXPECTED=$(git rev-parse --short HEAD)
+          FULL="${{ github.sha }}"
+          EXPECTED="${FULL:0:7}"
           echo "expecting deployed version: $EXPECTED"
           for i in $(seq 1 60); do
             RESP=$(curl -sS \
