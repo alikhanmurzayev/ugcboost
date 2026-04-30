@@ -92,13 +92,10 @@ func run() error {
 	creatorApplicationSvc := service.NewCreatorApplicationService(pool, repoFactory, appLogger)
 	dictionarySvc := service.NewDictionaryService(pool, repoFactory, appLogger)
 
-	// Telegram skeleton: handler stays in-process for both real polling and
-	// the test endpoint. Long polling starts whenever a token is set —
-	// independent of EnableTestEndpoints, so staging (where test endpoints
-	// are on) still answers real Telegram users. The test endpoint bypasses
-	// the polling client entirely (synthetic Update → handler → spy), so
-	// the two paths don't fight over the same updates.
-	tgHandler := telegram.NewHandler()
+	// Long polling starts whenever a token is set; the test endpoint
+	// drives the same handler with a spy Sender on a separate path, so
+	// the two do not fight over updates.
+	tgHandler := telegram.NewHandler(appLogger)
 	if cfg.TelegramBotToken != "" {
 		runnerCtx, runnerCancel := context.WithCancel(context.Background())
 		defer runnerCancel()

@@ -1,19 +1,8 @@
-// Package telegram — E2E тесты на skeleton Telegram-бота.
+// Package telegram — E2E тесты Telegram-бота.
 //
-// Бэкенд работает в test-режиме: production long-polling не стартует
-// (TELEGRAM_BOT_TOKEN либо пустой, либо EnableTestEndpoints=true гасит
-// runner). Обновления инжектятся синхронно через POST /test/telegram/message —
-// тестовая ручка собирает Update, зовёт in-process telegram.Handler с
-// in-memory spy Sender и возвращает зафиксированные ответы. Это полный
-// round-trip через настоящий бизнес-слой, но без живой Telegram-инфры.
-//
-// TestSendTelegramMessage_HelloWorld — бот должен вернуть "Hello, world!"
-// на любой текстовый ввод. Этот тест — sanity-чек скелета: подтверждает,
-// что транспорт↔бизнес-разделение работает (handler принимает Update,
-// отвечает через Sender, ответ ловится spy'ем и возвращается клиенту).
-//
-// TestSendTelegramMessage_ValidationErrors — пустой text отвергается
-// сервером с 422 без захода в handler.
+// Тесты используют POST /test/telegram/message: ручка собирает synthetic
+// Update, прогоняет через тот же in-process handler, что и production
+// long polling, и возвращает ответы, перехваченные in-memory spy Sender.
 package telegram_test
 
 import (
@@ -49,7 +38,6 @@ func TestSendTelegramMessage_ValidationErrors(t *testing.T) {
 
 	tc := testutil.NewTestClient(t)
 
-	// Empty text → 422 before the handler runs (server-side guard).
 	resp, err := tc.SendTelegramMessageWithResponse(context.Background(), testclient.SendTelegramMessageJSONRequestBody{
 		ChatId: 1,
 		Text:   "",

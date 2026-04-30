@@ -61,11 +61,7 @@ type Config struct {
 	// Different bot per environment.
 	TelegramBotUsername string `env:"TELEGRAM_BOT_USERNAME,required"`
 
-	// Telegram bot token. Empty value means long polling does not start
-	// (intentional — local dev without a real bot, or the test stack where
-	// EnableTestEndpoints injects updates synthetically). Wiring also skips
-	// polling when EnableTestEndpoints is on, so an env with both a token
-	// and test endpoints turned on still won't talk to Telegram.
+	// Empty value means long polling does not start.
 	TelegramBotToken string `env:"TELEGRAM_BOT_TOKEN" envDefault:""`
 
 	// Versions of the legal documents the user accepts at submission time.

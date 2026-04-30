@@ -5,33 +5,26 @@ import (
 
 	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
+
+	"github.com/alikhanmurzayev/ugcboost/backend/internal/logger"
 )
 
-// HelloWorldReply is the placeholder text the skeleton bot sends back on
-// any message. Real business logic will replace this once the higher-level
-// chunks land.
-const HelloWorldReply = "Hello, world!"
-
-// Handler is the in-process business layer. Run() in transport calls
-// Handle for every incoming update; the test-API endpoint calls it
-// directly with a synthetic update + spy Sender.
-type Handler struct{}
-
-// NewHandler constructs the skeleton handler. Future chunks will accept
-// dependencies (services, link repository, etc.) here.
-func NewHandler() *Handler {
-	return &Handler{}
+type Handler struct {
+	log logger.Logger
 }
 
-// Handle processes one update. The skeleton replies "Hello, world!" to any
-// text message and ignores everything else (channel posts, callback
-// queries, edits — they will get real handling later).
+func NewHandler(log logger.Logger) *Handler {
+	return &Handler{log: log}
+}
+
 func (h *Handler) Handle(ctx context.Context, sender Sender, update *models.Update) {
 	if update == nil || update.Message == nil {
 		return
 	}
-	_, _ = sender.SendMessage(ctx, &bot.SendMessageParams{
+	if _, err := sender.SendMessage(ctx, &bot.SendMessageParams{
 		ChatID: update.Message.Chat.ID,
-		Text:   HelloWorldReply,
-	})
+		Text:   "Hello, world!",
+	}); err != nil {
+		h.log.Error(ctx, "telegram send message failed", "error", err, "chat_id", update.Message.Chat.ID)
+	}
 }
