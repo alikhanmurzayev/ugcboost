@@ -124,10 +124,18 @@ type SeedUserResult struct {
 // SendTelegramMessageRequest defines model for SendTelegramMessageRequest.
 type SendTelegramMessageRequest struct {
 	// ChatId Synthetic chat id; echoed in the spy reply for assertions.
-	ChatId int64 `json:"chatId"`
+	ChatId    int64   `json:"chatId"`
+	FirstName *string `json:"firstName,omitempty"`
+	LastName  *string `json:"lastName,omitempty"`
 
 	// Text Message text the simulated user sends to the bot.
 	Text string `json:"text"`
+
+	// UserId Synthetic Telegram user id (defaults to chatId when omitted).
+	UserId *int64 `json:"userId,omitempty"`
+
+	// Username Optional Telegram @username (no leading @).
+	Username *string `json:"username,omitempty"`
 }
 
 // SendTelegramMessageResult defines model for SendTelegramMessageResult.

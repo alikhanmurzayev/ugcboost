@@ -11,7 +11,8 @@ const (
 	AuditActionBrandDelete              = "brand_delete"
 	AuditActionManagerAssign            = "manager_assign"
 	AuditActionManagerRemove            = "manager_remove"
-	AuditActionCreatorApplicationSubmit = "creator_application_submit"
+	AuditActionCreatorApplicationSubmit       = "creator_application_submit"
+	AuditActionCreatorApplicationLinkTelegram = "creator_application_link_telegram"
 )
 
 // Audit entity types used alongside AuditAction* values.

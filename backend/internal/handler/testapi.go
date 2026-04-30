@@ -102,10 +102,24 @@ func (h *TestAPIHandler) SendTelegramMessage(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	from := &tgmodels.User{ID: req.ChatId}
+	if req.UserId != nil {
+		from.ID = *req.UserId
+	}
+	if req.Username != nil {
+		from.Username = *req.Username
+	}
+	if req.FirstName != nil {
+		from.FirstName = *req.FirstName
+	}
+	if req.LastName != nil {
+		from.LastName = *req.LastName
+	}
 	update := &tgmodels.Update{
 		Message: &tgmodels.Message{
 			Chat: tgmodels.Chat{ID: req.ChatId},
 			Text: req.Text,
+			From: from,
 		},
 	}
 	spy := &telegramSpySender{}

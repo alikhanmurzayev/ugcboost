@@ -197,6 +197,20 @@ components:
           type: string
           minLength: 1
           description: Message text the simulated user sends to the bot.
+        userId:
+          type: integer
+          format: int64
+          description: Synthetic Telegram user id (defaults to chatId when omitted).
+        username:
+          type: string
+          nullable: true
+          description: Optional Telegram @username (no leading @).
+        firstName:
+          type: string
+          nullable: true
+        lastName:
+          type: string
+          nullable: true
 
     TelegramReply:
       type: object

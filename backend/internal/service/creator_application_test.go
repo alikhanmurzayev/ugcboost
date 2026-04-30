@@ -56,29 +56,31 @@ func validCreatorInput(t *testing.T) domain.CreatorApplicationInput {
 // dictRepo serves both the category lookup (dictionary GetActiveByCodes call)
 // and stays around for any future dictionary-backed checks.
 type creatorServiceRig struct {
-	pool            *dbmocks.MockPool
-	factory         *svcmocks.MockCreatorApplicationRepoFactory
-	appRepo         *repomocks.MockCreatorApplicationRepo
-	dictRepo        *repomocks.MockDictionaryRepo
-	appCategoryRepo *repomocks.MockCreatorApplicationCategoryRepo
-	appSocialRepo   *repomocks.MockCreatorApplicationSocialRepo
-	appConsentRepo  *repomocks.MockCreatorApplicationConsentRepo
-	auditRepo       *repomocks.MockAuditRepo
-	logger          *logmocks.MockLogger
+	pool                *dbmocks.MockPool
+	factory             *svcmocks.MockCreatorApplicationRepoFactory
+	appRepo             *repomocks.MockCreatorApplicationRepo
+	dictRepo            *repomocks.MockDictionaryRepo
+	appCategoryRepo     *repomocks.MockCreatorApplicationCategoryRepo
+	appSocialRepo       *repomocks.MockCreatorApplicationSocialRepo
+	appConsentRepo      *repomocks.MockCreatorApplicationConsentRepo
+	appTelegramLinkRepo *repomocks.MockCreatorApplicationTelegramLinkRepo
+	auditRepo           *repomocks.MockAuditRepo
+	logger              *logmocks.MockLogger
 }
 
 func newCreatorServiceRig(t *testing.T) creatorServiceRig {
 	t.Helper()
 	return creatorServiceRig{
-		pool:            dbmocks.NewMockPool(t),
-		factory:         svcmocks.NewMockCreatorApplicationRepoFactory(t),
-		appRepo:         repomocks.NewMockCreatorApplicationRepo(t),
-		dictRepo:        repomocks.NewMockDictionaryRepo(t),
-		appCategoryRepo: repomocks.NewMockCreatorApplicationCategoryRepo(t),
-		appSocialRepo:   repomocks.NewMockCreatorApplicationSocialRepo(t),
-		appConsentRepo:  repomocks.NewMockCreatorApplicationConsentRepo(t),
-		auditRepo:       repomocks.NewMockAuditRepo(t),
-		logger:          logmocks.NewMockLogger(t),
+		pool:                dbmocks.NewMockPool(t),
+		factory:             svcmocks.NewMockCreatorApplicationRepoFactory(t),
+		appRepo:             repomocks.NewMockCreatorApplicationRepo(t),
+		dictRepo:            repomocks.NewMockDictionaryRepo(t),
+		appCategoryRepo:     repomocks.NewMockCreatorApplicationCategoryRepo(t),
+		appSocialRepo:       repomocks.NewMockCreatorApplicationSocialRepo(t),
+		appConsentRepo:      repomocks.NewMockCreatorApplicationConsentRepo(t),
+		appTelegramLinkRepo: repomocks.NewMockCreatorApplicationTelegramLinkRepo(t),
+		auditRepo:           repomocks.NewMockAuditRepo(t),
+		logger:              logmocks.NewMockLogger(t),
 	}
 }
 
@@ -680,6 +682,28 @@ func TestCreatorApplicationService_GetByID(t *testing.T) {
 		require.ErrorContains(t, err, "con boom")
 	})
 
+	t.Run("telegram link error wrapped", func(t *testing.T) {
+		t.Parallel()
+		rig := newCreatorServiceRig(t)
+		rig.factory.EXPECT().NewCreatorApplicationRepo(mock.Anything).Return(rig.appRepo)
+		rig.factory.EXPECT().NewCreatorApplicationCategoryRepo(mock.Anything).Return(rig.appCategoryRepo)
+		rig.factory.EXPECT().NewCreatorApplicationSocialRepo(mock.Anything).Return(rig.appSocialRepo)
+		rig.factory.EXPECT().NewCreatorApplicationConsentRepo(mock.Anything).Return(rig.appConsentRepo)
+		rig.factory.EXPECT().NewCreatorApplicationTelegramLinkRepo(mock.Anything).Return(rig.appTelegramLinkRepo)
+		rig.appRepo.EXPECT().GetByID(mock.Anything, appID).
+			Return(&repository.CreatorApplicationRow{ID: appID}, nil)
+		rig.appCategoryRepo.EXPECT().ListByApplicationID(mock.Anything, appID).Return(nil, nil)
+		rig.appSocialRepo.EXPECT().ListByApplicationID(mock.Anything, appID).Return(nil, nil)
+		rig.appConsentRepo.EXPECT().ListByApplicationID(mock.Anything, appID).Return(nil, nil)
+		rig.appTelegramLinkRepo.EXPECT().GetByApplicationID(mock.Anything, appID).
+			Return(nil, errors.New("link boom"))
+
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.logger)
+		_, err := svc.GetByID(context.Background(), appID)
+		require.ErrorContains(t, err, "get telegram link")
+		require.ErrorContains(t, err, "link boom")
+	})
+
 	t.Run("success builds aggregate and reorders consents to canonical sequence", func(t *testing.T) {
 		t.Parallel()
 		rig := newCreatorServiceRig(t)
@@ -692,6 +716,7 @@ func TestCreatorApplicationService_GetByID(t *testing.T) {
 		rig.factory.EXPECT().NewCreatorApplicationCategoryRepo(mock.Anything).Return(rig.appCategoryRepo)
 		rig.factory.EXPECT().NewCreatorApplicationSocialRepo(mock.Anything).Return(rig.appSocialRepo)
 		rig.factory.EXPECT().NewCreatorApplicationConsentRepo(mock.Anything).Return(rig.appConsentRepo)
+		rig.factory.EXPECT().NewCreatorApplicationTelegramLinkRepo(mock.Anything).Return(rig.appTelegramLinkRepo)
 		rig.appRepo.EXPECT().GetByID(mock.Anything, appID).
 			Return(&repository.CreatorApplicationRow{
 				ID:                appID,
@@ -724,6 +749,8 @@ func TestCreatorApplicationService_GetByID(t *testing.T) {
 				{ApplicationID: appID, ConsentType: domain.ConsentTypeThirdParty, AcceptedAt: acceptedAt, DocumentVersion: "pp-1", IPAddress: "127.0.0.1", UserAgent: "ua/1"},
 				{ApplicationID: appID, ConsentType: domain.ConsentTypeProcessing, AcceptedAt: acceptedAt, DocumentVersion: "pp-1", IPAddress: "127.0.0.1", UserAgent: "ua/1"},
 			}, nil)
+		rig.appTelegramLinkRepo.EXPECT().GetByApplicationID(mock.Anything, appID).
+			Return(nil, sql.ErrNoRows)
 
 		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.logger)
 		got, err := svc.GetByID(context.Background(), appID)

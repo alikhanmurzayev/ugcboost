@@ -205,6 +205,16 @@ func domainCreatorApplicationDetailToAPI(
 			UserAgent:       c.UserAgent,
 		}
 	}
+	var tgLink *api.TelegramLink
+	if d.TelegramLink != nil {
+		tgLink = &api.TelegramLink{
+			TelegramUserId:    d.TelegramLink.TelegramUserID,
+			TelegramUsername:  d.TelegramLink.TelegramUsername,
+			TelegramFirstName: d.TelegramLink.TelegramFirstName,
+			TelegramLastName:  d.TelegramLink.TelegramLastName,
+			LinkedAt:          d.TelegramLink.LinkedAt,
+		}
+	}
 	return api.CreatorApplicationDetailData{
 		Id:                id,
 		LastName:          d.LastName,
@@ -222,6 +232,7 @@ func domainCreatorApplicationDetailToAPI(
 		Categories:        cats,
 		Socials:           socs,
 		Consents:          cons,
+		TelegramLink:      tgLink,
 	}
 }
 
