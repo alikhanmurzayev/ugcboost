@@ -1,0 +1,18 @@
+{
+  "title": "Креаторы",
+  "description": "Активные креаторы — подписали договор и работают на платформе.",
+  "empty": "Активных креаторов пока нет",
+  "columns": {
+    "signedAt": "Подписан",
+    "rating": "Рейтинг",
+    "completedOrders": "Выполнено",
+    "activeOrders": "В работе"
+  },
+  "drawer": {
+    "rating": "Рейтинг",
+    "completedOrders": "Выполнено заказов",
+    "activeOrders": "Заказов в работе",
+    "noOrdersYet": "Заказов пока нет",
+    "noRatingYet": "Нет оценок"
+  }
+}

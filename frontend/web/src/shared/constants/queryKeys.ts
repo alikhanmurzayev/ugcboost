@@ -6,3 +6,24 @@ export const brandKeys = {
 export const auditKeys = {
   list: (filters: Record<string, unknown>) => ["audit-logs", filters] as const,
 };
+
+export const creatorApplicationKeys = {
+  all: () => ["creator-applications"] as const,
+  list: (stage: string, filters?: Record<string, unknown>) =>
+    ["creator-applications", "list", stage, filters ?? {}] as const,
+  counts: () => ["creator-applications", "counts"] as const,
+  detail: (id: string) => ["creator-applications", "detail", id] as const,
+};
+
+export const dictionaryKeys = {
+  list: (type: string) => ["dictionaries", type] as const,
+};
+
+export const campaignKeys = {
+  all: () => ["campaigns"] as const,
+  list: (status?: string) => ["campaigns", "list", status ?? "all"] as const,
+  counts: () => ["campaigns", "counts"] as const,
+  detail: (id: string) => ["campaigns", "detail", id] as const,
+  applications: (campaignId: string) =>
+    ["campaigns", "applications", campaignId] as const,
+};

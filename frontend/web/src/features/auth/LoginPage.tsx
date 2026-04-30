@@ -42,8 +42,12 @@ export default function LoginPage() {
     <div className="flex min-h-screen items-center justify-center bg-surface-100">
       <div className="w-full max-w-sm rounded-card bg-white p-8 shadow-lg">
         <div className="mb-8 text-center">
-          <h1 className="text-2xl font-bold text-gray-900">{t("auth:title")}</h1>
-          <p className="mt-1 text-sm text-gray-500">{t("auth:subtitle")}</p>
+          <img
+            src="/logo-ugcboost.png"
+            alt="UGC boost"
+            className="mx-auto h-20 w-auto"
+          />
+          <p className="mt-3 text-sm text-gray-500">{t("auth:subtitle")}</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4" data-testid="login-form">
