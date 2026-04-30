@@ -93,11 +93,13 @@ func run() error {
 	dictionarySvc := service.NewDictionaryService(pool, repoFactory, appLogger)
 
 	// Telegram skeleton: handler stays in-process for both real polling and
-	// the test endpoint. Real long polling only starts when a token is set
-	// AND test endpoints are off — otherwise the bot is a passive
-	// dependency that the test API drives via synthetic updates.
+	// the test endpoint. Long polling starts whenever a token is set —
+	// independent of EnableTestEndpoints, so staging (where test endpoints
+	// are on) still answers real Telegram users. The test endpoint bypasses
+	// the polling client entirely (synthetic Update → handler → spy), so
+	// the two paths don't fight over the same updates.
 	tgHandler := telegram.NewHandler()
-	if cfg.TelegramBotToken != "" && !cfg.EnableTestEndpoints {
+	if cfg.TelegramBotToken != "" {
 		runnerCtx, runnerCancel := context.WithCancel(context.Background())
 		defer runnerCancel()
 		go telegram.Run(runnerCtx, cfg.TelegramBotToken, tgHandler, appLogger)
@@ -107,9 +109,7 @@ func run() error {
 		})
 		appLogger.Info(ctx, "telegram bot polling enabled")
 	} else {
-		appLogger.Info(ctx, "telegram bot polling disabled",
-			"has_token", cfg.TelegramBotToken != "",
-			"test_endpoints", cfg.EnableTestEndpoints)
+		appLogger.Info(ctx, "telegram bot polling disabled (no token)")
 	}
 
 	// Seed admin
