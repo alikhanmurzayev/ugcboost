@@ -116,6 +116,26 @@ type SeedUserResult struct {
 	Data SeedUserData `json:"data"`
 }
 
+// SendTelegramMessageRequest defines model for SendTelegramMessageRequest.
+type SendTelegramMessageRequest struct {
+	// ChatId Synthetic chat id; echoed in the spy reply for assertions.
+	ChatId int64 `json:"chatId"`
+
+	// Text Message text the simulated user sends to the bot.
+	Text string `json:"text"`
+}
+
+// SendTelegramMessageResult defines model for SendTelegramMessageResult.
+type SendTelegramMessageResult struct {
+	Replies []TelegramReply `json:"replies"`
+}
+
+// TelegramReply defines model for TelegramReply.
+type TelegramReply struct {
+	ChatId int64  `json:"chatId"`
+	Text   string `json:"text"`
+}
+
 // GetResetTokenParams defines parameters for GetResetToken.
 type GetResetTokenParams struct {
 	Email openapi_types.Email `form:"email" json:"email"`
@@ -126,3 +146,6 @@ type CleanupEntityJSONRequestBody = CleanupEntityRequest
 
 // SeedUserJSONRequestBody defines body for SeedUser for application/json ContentType.
 type SeedUserJSONRequestBody = SeedUserRequest
+
+// SendTelegramMessageJSONRequestBody defines body for SendTelegramMessage for application/json ContentType.
+type SendTelegramMessageJSONRequestBody = SendTelegramMessageRequest

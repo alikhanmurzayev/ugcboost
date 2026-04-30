@@ -20,6 +20,7 @@
 | Тестовые ассерты + моки | `github.com/stretchr/testify` |
 | Кодогенерация моков | `github.com/vektra/mockery` |
 | Pgx-моки в unit-тестах репо | `github.com/pashagolub/pgxmock/v4` |
+| Telegram Bot API клиент | `github.com/go-telegram/bot` |
 | Случайные значения (id, токены, фикстуры) | `crypto/rand` (stdlib) |
 
 ### Правила

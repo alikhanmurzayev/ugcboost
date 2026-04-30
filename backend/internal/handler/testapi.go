@@ -8,12 +8,15 @@ import (
 	"fmt"
 	"net/http"
 
+	tgbot "github.com/go-telegram/bot"
+	tgmodels "github.com/go-telegram/bot/models"
 	openapi_types "github.com/oapi-codegen/runtime/types"
 
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/dbutil"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/domain"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/logger"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/repository"
+	"github.com/alikhanmurzayev/ugcboost/backend/internal/telegram"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/testapi"
 )
 
@@ -47,6 +50,7 @@ type TestAPIHandler struct {
 	pool       dbutil.Pool
 	repos      TestAPICleanupRepoFactory
 	tokenStore TokenStore
+	tgHandler  *telegram.Handler
 	logger     logger.Logger
 }
 
@@ -58,6 +62,7 @@ func NewTestAPIHandler(
 	pool dbutil.Pool,
 	repos TestAPICleanupRepoFactory,
 	tokenStore TokenStore,
+	tgHandler *telegram.Handler,
 	log logger.Logger,
 ) *TestAPIHandler {
 	return &TestAPIHandler{
@@ -65,8 +70,56 @@ func NewTestAPIHandler(
 		pool:       pool,
 		repos:      repos,
 		tokenStore: tokenStore,
+		tgHandler:  tgHandler,
 		logger:     log,
 	}
+}
+
+// telegramSpySender captures every SendMessage call into an in-memory slice
+// so SendTelegramMessage can return the bot's replies in the HTTP response.
+// Lives only inside one request — fresh instance per call, no shared state.
+type telegramSpySender struct {
+	sent []*tgbot.SendMessageParams
+}
+
+func (s *telegramSpySender) SendMessage(_ context.Context, params *tgbot.SendMessageParams) (*tgmodels.Message, error) {
+	s.sent = append(s.sent, params)
+	return &tgmodels.Message{ID: len(s.sent)}, nil
+}
+
+// SendTelegramMessage handles POST /test/telegram/message.
+// Builds a synthetic Update from the request body, invokes the in-process
+// Telegram handler with a spy Sender, and returns whatever replies it
+// produced. Bypasses long-polling and Telegram entirely.
+func (h *TestAPIHandler) SendTelegramMessage(w http.ResponseWriter, r *http.Request) {
+	var req testapi.SendTelegramMessageRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, r, domain.NewValidationError(domain.CodeValidation, "Invalid request body"), h.logger)
+		return
+	}
+	if req.Text == "" {
+		respondError(w, r, domain.NewValidationError(domain.CodeValidation, "text is required"), h.logger)
+		return
+	}
+
+	update := &tgmodels.Update{
+		Message: &tgmodels.Message{
+			Chat: tgmodels.Chat{ID: req.ChatId},
+			Text: req.Text,
+		},
+	}
+	spy := &telegramSpySender{}
+	h.tgHandler.Handle(r.Context(), spy, update)
+
+	replies := make([]testapi.TelegramReply, 0, len(spy.sent))
+	for _, params := range spy.sent {
+		chatID, _ := params.ChatID.(int64)
+		replies = append(replies, testapi.TelegramReply{
+			ChatId: chatID,
+			Text:   params.Text,
+		})
+	}
+	respondJSON(w, r, http.StatusOK, testapi.SendTelegramMessageResult{Replies: replies}, h.logger)
 }
 
 // SeedUser handles POST /test/seed-user.

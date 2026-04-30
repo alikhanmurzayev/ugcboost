@@ -23,6 +23,7 @@ import (
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/middleware"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/repository"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/service"
+	"github.com/alikhanmurzayev/ugcboost/backend/internal/telegram"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/testapi"
 )
 
@@ -91,6 +92,26 @@ func run() error {
 	creatorApplicationSvc := service.NewCreatorApplicationService(pool, repoFactory, appLogger)
 	dictionarySvc := service.NewDictionaryService(pool, repoFactory, appLogger)
 
+	// Telegram skeleton: handler stays in-process for both real polling and
+	// the test endpoint. Real long polling only starts when a token is set
+	// AND test endpoints are off — otherwise the bot is a passive
+	// dependency that the test API drives via synthetic updates.
+	tgHandler := telegram.NewHandler()
+	if cfg.TelegramBotToken != "" && !cfg.EnableTestEndpoints {
+		runnerCtx, runnerCancel := context.WithCancel(context.Background())
+		defer runnerCancel()
+		go telegram.Run(runnerCtx, cfg.TelegramBotToken, tgHandler, appLogger)
+		cl.Add("telegram-runner", func(_ context.Context) error {
+			runnerCancel()
+			return nil
+		})
+		appLogger.Info(ctx, "telegram bot polling enabled")
+	} else {
+		appLogger.Info(ctx, "telegram bot polling disabled",
+			"has_token", cfg.TelegramBotToken != "",
+			"test_endpoints", cfg.EnableTestEndpoints)
+	}
+
 	// Seed admin
 	if err := authSvc.SeedAdmin(ctx, cfg.AdminEmail, cfg.AdminPassword); err != nil {
 		return fmt.Errorf("seed admin: %w", err)
@@ -130,7 +151,7 @@ func run() error {
 	// endpoint uses the repo factory directly — the hard-delete for users
 	// is test-only and intentionally not exposed through any service.
 	if cfg.EnableTestEndpoints {
-		testHandler := handler.NewTestAPIHandler(authSvc, pool, repoFactory, resetTokenStore, appLogger)
+		testHandler := handler.NewTestAPIHandler(authSvc, pool, repoFactory, resetTokenStore, tgHandler, appLogger)
 		testapi.HandlerWithOptions(testHandler, testapi.ChiServerOptions{
 			BaseRouter:       r,
 			ErrorHandlerFunc: handler.HandleParamError(appLogger),
