@@ -372,12 +372,26 @@ jobs:
             curl -sSf -X POST "${{ secrets.DOKPLOY_WEBHOOK_WEB }}"
             curl -sSf -X POST "${{ secrets.DOKPLOY_WEBHOOK_TMA }}"
             curl -sSf -X POST "${{ secrets.DOKPLOY_WEBHOOK_LANDING }}"
-      - name: Health check
+      - name: Wait for staging-api to roll out the new commit
         run: |
-          curl -sSf --retry 10 --retry-delay 5 --retry-all-errors \
-            -H "CF-Access-Client-Id: ${{ secrets.CF_ACCESS_CLIENT_ID }}" \
-            -H "CF-Access-Client-Secret: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}" \
-            https://staging-api.ugcboost.kz/healthz
+          FULL="${{ github.sha }}"
+          EXPECTED="${FULL:0:7}"
+          echo "expecting deployed version: $EXPECTED"
+          for i in $(seq 1 60); do
+            RESP=$(curl -sS \
+              -H "CF-Access-Client-Id: ${{ secrets.CF_ACCESS_CLIENT_ID }}" \
+              -H "CF-Access-Client-Secret: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}" \
+              https://staging-api.ugcboost.kz/healthz 2>/dev/null || true)
+            ACTUAL=$(echo "$RESP" | jq -r '.version // ""' 2>/dev/null || echo "")
+            if [ "$ACTUAL" = "$EXPECTED" ]; then
+              echo "deployed: $ACTUAL"
+              exit 0
+            fi
+            echo "attempt $i/60 — got '$ACTUAL', want '$EXPECTED'"
+            sleep 5
+          done
+          echo "staging-api did not roll out $EXPECTED within 5 minutes"
+          exit 1
 
   # ── Stage 4: Staging E2E (needs stage 3) ───────────────────────
 
