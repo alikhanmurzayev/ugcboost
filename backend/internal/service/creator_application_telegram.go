@@ -43,21 +43,23 @@ func NewCreatorApplicationTelegramService(pool dbutil.Pool, repoFactory CreatorA
 // LinkTelegram performs the link operation atomically. Behaviour mirrors the
 // rules agreed for the bot:
 //
-//   - Application must exist; otherwise domain.ErrNotFound.
+//   - Application must exist; otherwise domain.ErrNotFound (FK violation on
+//     INSERT also maps here — handles the race where the parent row is gone
+//     between the appRepo.GetByID preflight and our insert).
 //   - Application of any status (including rejected) accepts a link.
 //   - One application binds to at most one Telegram account (PK guards this).
-//     A repeat /start from the same TG is idempotent (no audit, no log);
+//     A repeat /start from the same TG is idempotent (no audit, debug-log only);
 //     a different TG hitting an already-linked application yields
 //     CodeTelegramApplicationAlreadyLinked.
 //   - One TG may be linked to many applications (no UNIQUE on telegram_user_id).
-func (s *CreatorApplicationTelegramService) LinkTelegram(ctx context.Context, in domain.TelegramLinkInput, now time.Time) (*domain.TelegramLinkResult, error) {
-	username := capOptionalString(in.TgUsername, domain.TelegramUsernameMaxLen)
-	firstName := capOptionalString(in.TgFirstName, domain.TelegramNameMaxLen)
-	lastName := capOptionalString(in.TgLastName, domain.TelegramNameMaxLen)
+func (s *CreatorApplicationTelegramService) LinkTelegram(ctx context.Context, in domain.TelegramLinkInput, now time.Time) error {
+	username := capOptionalString(in.TelegramUsername, domain.TelegramUsernameMaxLen)
+	firstName := capOptionalString(in.TelegramFirstName, domain.TelegramNameMaxLen)
+	lastName := capOptionalString(in.TelegramLastName, domain.TelegramNameMaxLen)
 
 	ctx = middleware.WithClientIP(ctx, telegramBotActorIP)
 
-	var result *domain.TelegramLinkResult
+	var idempotent bool
 
 	err := dbutil.WithTx(ctx, s.pool, func(tx dbutil.DB) error {
 		appRepo := s.repoFactory.NewCreatorApplicationRepo(tx)
@@ -72,11 +74,18 @@ func (s *CreatorApplicationTelegramService) LinkTelegram(ctx context.Context, in
 			return fmt.Errorf("get application: %w", err)
 		}
 
+		// Preflight read of the link row. Postgres aborts the whole
+		// transaction on a constraint violation, so we cannot rely on
+		// catching 23505 from INSERT and then re-reading in the same tx
+		// (the SELECT would also fail with "current transaction is
+		// aborted"). The 23505 branch below is kept only as a safety net
+		// for the genuine race window between this preflight and the
+		// INSERT — rare but not impossible under concurrent /start.
 		existingLink, err := linkRepo.GetByApplicationID(ctx, in.ApplicationID)
 		switch {
 		case err == nil:
-			if existingLink.TelegramUserID == in.TgUserID {
-				result = idempotentResult(appRow.Status, existingLink)
+			if existingLink.TelegramUserID == in.TelegramUserID {
+				idempotent = true
 				return nil
 			}
 			return domain.NewBusinessError(domain.CodeTelegramApplicationAlreadyLinked, "")
@@ -88,27 +97,26 @@ func (s *CreatorApplicationTelegramService) LinkTelegram(ctx context.Context, in
 
 		insertedLink, err := linkRepo.Insert(ctx, repository.CreatorApplicationTelegramLinkRow{
 			ApplicationID:     appRow.ID,
-			TelegramUserID:    in.TgUserID,
+			TelegramUserID:    in.TelegramUserID,
 			TelegramUsername:  username,
 			TelegramFirstName: firstName,
 			TelegramLastName:  lastName,
 			LinkedAt:          now,
 		})
 		if err != nil {
-			if !errors.Is(err, domain.ErrTelegramApplicationLinkConflict) {
-				return fmt.Errorf("insert telegram link: %w", err)
+			if errors.Is(err, domain.ErrTelegramApplicationLinkConflict) {
+				// PK race: another /start for this application slipped in
+				// between our preflight SELECT and INSERT. Both decisions
+				// (idempotent vs already-linked) collapse onto the data
+				// the winning transaction wrote — at this point our own
+				// tx is aborted, so we surface a generic business error.
+				// The next /start from this user will succeed via the
+				// preflight path above.
+				return domain.NewBusinessError(domain.CodeTelegramApplicationAlreadyLinked, "")
 			}
-			// PK race: another /start for this application slipped in between
-			// our preflight SELECT and INSERT. Re-read to decide.
-			raceLink, raceErr := linkRepo.GetByApplicationID(ctx, in.ApplicationID)
-			if raceErr != nil {
-				return fmt.Errorf("re-read telegram link after PK race: %w", raceErr)
-			}
-			if raceLink.TelegramUserID == in.TgUserID {
-				result = idempotentResult(appRow.Status, raceLink)
-				return nil
-			}
-			return domain.NewBusinessError(domain.CodeTelegramApplicationAlreadyLinked, "")
+			// FK violation (parent application gone) is already mapped to
+			// domain.ErrNotFound by the repo; everything else bubbles up.
+			return fmt.Errorf("insert telegram link: %w", err)
 		}
 
 		auditPayload := map[string]any{
@@ -122,38 +130,24 @@ func (s *CreatorApplicationTelegramService) LinkTelegram(ctx context.Context, in
 			nil, auditPayload); err != nil {
 			return fmt.Errorf("write audit: %w", err)
 		}
-
-		result = &domain.TelegramLinkResult{
-			ApplicationID:  appRow.ID,
-			Status:         appRow.Status,
-			TelegramUserID: insertedLink.TelegramUserID,
-			LinkedAt:       insertedLink.LinkedAt,
-			Idempotent:     false,
-		}
 		return nil
 	})
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	if result != nil && !result.Idempotent {
-		// Identifiers only — Telegram username/first/last name stay out of
-		// stdout per docs/standards/security.md.
-		s.logger.Info(ctx, "telegram linked to creator application",
-			"application_id", result.ApplicationID,
-			"telegram_user_id", result.TelegramUserID)
+	// Identifiers only — Telegram username/first/last name stay out of stdout
+	// per docs/standards/security.md.
+	if idempotent {
+		s.logger.Debug(ctx, "telegram link idempotent",
+			"application_id", in.ApplicationID,
+			"telegram_user_id", in.TelegramUserID)
+		return nil
 	}
-	return result, nil
-}
-
-func idempotentResult(status string, row *repository.CreatorApplicationTelegramLinkRow) *domain.TelegramLinkResult {
-	return &domain.TelegramLinkResult{
-		ApplicationID:  row.ApplicationID,
-		Status:         status,
-		TelegramUserID: row.TelegramUserID,
-		LinkedAt:       row.LinkedAt,
-		Idempotent:     true,
-	}
+	s.logger.Info(ctx, "telegram linked to creator application",
+		"application_id", in.ApplicationID,
+		"telegram_user_id", in.TelegramUserID)
+	return nil
 }
 
 // capOptionalString trims whitespace, drops empty results to nil and caps the

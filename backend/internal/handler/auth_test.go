@@ -40,7 +40,7 @@ func TestServer_Login(t *testing.T) {
 	t.Run("invalid JSON", func(t *testing.T) {
 		t.Parallel()
 		auth := mocks.NewMockAuthService(t)
-		router := newTestRouter(t, NewServer(auth, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"},logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(auth, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/auth/login", map[string]any{
 			"email":    "not-an-email",
@@ -53,7 +53,7 @@ func TestServer_Login(t *testing.T) {
 	t.Run("missing fields", func(t *testing.T) {
 		t.Parallel()
 		auth := mocks.NewMockAuthService(t)
-		router := newTestRouter(t, NewServer(auth, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"},logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(auth, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/auth/login",
 			map[string]any{"email": "", "password": ""})
@@ -67,7 +67,7 @@ func TestServer_Login(t *testing.T) {
 		auth.EXPECT().Login(mock.Anything, "a@b.com", "wrongpass").
 			Return(nil, domain.ErrUnauthorized)
 
-		router := newTestRouter(t, NewServer(auth, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"},logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(auth, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/auth/login",
 			api.LoginRequest{Email: "a@b.com", Password: "wrongpass"})
@@ -81,7 +81,7 @@ func TestServer_Login(t *testing.T) {
 		auth.EXPECT().Login(mock.Anything, "admin@example.com", "password123").
 			Return(nil, domain.ErrUnauthorized)
 
-		router := newTestRouter(t, NewServer(auth, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"},logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(auth, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 
 		w, _ := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/auth/login",
 			map[string]any{"email": "  Admin@Example.COM  ", "password": "password123"})
@@ -102,7 +102,7 @@ func TestServer_Login(t *testing.T) {
 				User:             user,
 			}, nil)
 
-		router := newTestRouter(t, NewServer(auth, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"},logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(auth, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 
 		w, resp := doJSON[api.LoginResult](t, router, http.MethodPost, "/auth/login",
 			api.LoginRequest{Email: "user@example.com", Password: "password123"})
@@ -129,7 +129,7 @@ func TestServer_RefreshToken(t *testing.T) {
 	t.Run("no cookie", func(t *testing.T) {
 		t.Parallel()
 		auth := mocks.NewMockAuthService(t)
-		router := newTestRouter(t, NewServer(auth, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"},logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(auth, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/auth/refresh", nil)
 		require.Equal(t, http.StatusUnauthorized, w.Code)
@@ -142,7 +142,7 @@ func TestServer_RefreshToken(t *testing.T) {
 		auth.EXPECT().Refresh(mock.Anything, "stale").
 			Return(nil, domain.ErrUnauthorized)
 
-		router := newTestRouter(t, NewServer(auth, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"},logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(auth, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/auth/refresh", nil,
 			func(r *http.Request) {
@@ -166,7 +166,7 @@ func TestServer_RefreshToken(t *testing.T) {
 				User:             user,
 			}, nil)
 
-		router := newTestRouter(t, NewServer(auth, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"},logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(auth, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 
 		w, resp := doJSON[api.LoginResult](t, router, http.MethodPost, "/auth/refresh", nil,
 			func(r *http.Request) {
@@ -192,7 +192,7 @@ func TestServer_RequestPasswordReset(t *testing.T) {
 	t.Run("empty email", func(t *testing.T) {
 		t.Parallel()
 		auth := mocks.NewMockAuthService(t)
-		router := newTestRouter(t, NewServer(auth, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"},logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(auth, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/auth/password-reset-request",
 			map[string]any{"email": ""})
@@ -212,7 +212,7 @@ func TestServer_RequestPasswordReset(t *testing.T) {
 			return len(args) == 2 && args[0] == "error"
 		})).Once()
 
-		router := newTestRouter(t, NewServer(auth, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"},log))
+		router := newTestRouter(t, NewServer(auth, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, log))
 
 		w, resp := doJSON[api.MessageResponse](t, router, http.MethodPost, "/auth/password-reset-request",
 			api.PasswordResetRequestBody{Email: "anyone@test.com"})
@@ -227,7 +227,7 @@ func TestServer_RequestPasswordReset(t *testing.T) {
 		auth := mocks.NewMockAuthService(t)
 		auth.EXPECT().RequestPasswordReset(mock.Anything, "anyone@test.com").Return(nil)
 
-		router := newTestRouter(t, NewServer(auth, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"},logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(auth, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 
 		w, resp := doJSON[api.MessageResponse](t, router, http.MethodPost, "/auth/password-reset-request",
 			api.PasswordResetRequestBody{Email: "anyone@test.com"})
@@ -244,7 +244,7 @@ func TestServer_ResetPassword(t *testing.T) {
 	t.Run("missing token", func(t *testing.T) {
 		t.Parallel()
 		auth := mocks.NewMockAuthService(t)
-		router := newTestRouter(t, NewServer(auth, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"},logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(auth, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/auth/password-reset",
 			api.PasswordResetBody{Token: "", NewPassword: "newpass123"})
@@ -255,7 +255,7 @@ func TestServer_ResetPassword(t *testing.T) {
 	t.Run("short password", func(t *testing.T) {
 		t.Parallel()
 		auth := mocks.NewMockAuthService(t)
-		router := newTestRouter(t, NewServer(auth, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"},logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(auth, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/auth/password-reset",
 			api.PasswordResetBody{Token: "abc", NewPassword: "12345"})
@@ -268,7 +268,7 @@ func TestServer_ResetPassword(t *testing.T) {
 		auth := mocks.NewMockAuthService(t)
 		auth.EXPECT().ResetPassword(mock.Anything, "abc", "newpass123").
 			Return("", domain.ErrUnauthorized)
-		router := newTestRouter(t, NewServer(auth, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"},logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(auth, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/auth/password-reset",
 			api.PasswordResetBody{Token: "abc", NewPassword: "newpass123"})
@@ -283,7 +283,7 @@ func TestServer_ResetPassword(t *testing.T) {
 			Return("", errors.New("db error"))
 		log := logmocks.NewMockLogger(t)
 		expectHandlerUnexpectedErrorLog(log, "/auth/password-reset")
-		router := newTestRouter(t, NewServer(auth, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"},log))
+		router := newTestRouter(t, NewServer(auth, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, log))
 
 		w, _ := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/auth/password-reset",
 			api.PasswordResetBody{Token: "abc", NewPassword: "newpass123"})
@@ -294,7 +294,7 @@ func TestServer_ResetPassword(t *testing.T) {
 		t.Parallel()
 		auth := mocks.NewMockAuthService(t)
 		auth.EXPECT().ResetPassword(mock.Anything, "abc", "newpass123").Return("user-1", nil)
-		router := newTestRouter(t, NewServer(auth, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"},logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(auth, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 
 		w, resp := doJSON[api.MessageResponse](t, router, http.MethodPost, "/auth/password-reset",
 			api.PasswordResetBody{Token: "abc", NewPassword: "newpass123"})
@@ -311,7 +311,7 @@ func TestServer_Logout(t *testing.T) {
 	t.Run("no user in context", func(t *testing.T) {
 		t.Parallel()
 		auth := mocks.NewMockAuthService(t)
-		router := newTestRouter(t, NewServer(auth, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"},logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(auth, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 
 		w, _ := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/auth/logout", nil)
 		require.Equal(t, http.StatusUnauthorized, w.Code)
@@ -327,7 +327,7 @@ func TestServer_Logout(t *testing.T) {
 		log.EXPECT().Error(mock.Anything, "failed to revoke refresh tokens on logout", mock.MatchedBy(func(args []any) bool {
 			return len(args) == 4 && args[0] == "error" && args[2] == "userID" && args[3] == "u-admin"
 		})).Once()
-		router := newTestRouter(t, NewServer(auth, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"},log))
+		router := newTestRouter(t, NewServer(auth, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, log))
 
 		w, resp := doJSON[api.MessageResponse](t, router, http.MethodPost, "/auth/logout", nil,
 			withRole("u-admin", api.Admin))
@@ -345,7 +345,7 @@ func TestServer_Logout(t *testing.T) {
 		t.Parallel()
 		auth := mocks.NewMockAuthService(t)
 		auth.EXPECT().Logout(mock.Anything, "u-admin").Return(nil)
-		router := newTestRouter(t, NewServer(auth, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"},logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(auth, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 
 		w, resp := doJSON[api.MessageResponse](t, router, http.MethodPost, "/auth/logout", nil,
 			withRole("u-admin", api.Admin))
@@ -367,7 +367,7 @@ func TestServer_GetMe(t *testing.T) {
 	t.Run("no user in context", func(t *testing.T) {
 		t.Parallel()
 		auth := mocks.NewMockAuthService(t)
-		router := newTestRouter(t, NewServer(auth, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"},logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(auth, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 
 		w, _ := doJSON[api.ErrorResponse](t, router, http.MethodGet, "/auth/me", nil)
 		require.Equal(t, http.StatusUnauthorized, w.Code)
@@ -380,7 +380,7 @@ func TestServer_GetMe(t *testing.T) {
 			Return(nil, errors.New("db error"))
 		log := logmocks.NewMockLogger(t)
 		expectHandlerUnexpectedErrorLog(log, "/auth/me")
-		router := newTestRouter(t, NewServer(auth, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"},log))
+		router := newTestRouter(t, NewServer(auth, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, log))
 
 		w, _ := doJSON[api.ErrorResponse](t, router, http.MethodGet, "/auth/me", nil,
 			withRole("u-admin", api.Admin))
@@ -392,7 +392,7 @@ func TestServer_GetMe(t *testing.T) {
 		auth := mocks.NewMockAuthService(t)
 		user := newTestUser()
 		auth.EXPECT().GetUser(mock.Anything, "u-admin").Return(&user, nil)
-		router := newTestRouter(t, NewServer(auth, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"},logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(auth, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 
 		w, resp := doJSON[api.UserResponse](t, router, http.MethodGet, "/auth/me", nil,
 			withRole("u-admin", api.Admin))

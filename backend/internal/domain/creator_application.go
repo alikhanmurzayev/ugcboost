@@ -194,21 +194,11 @@ type CreatorApplicationTelegramLink struct {
 // TelegramLinkInput is what the service receives from the bot's /start handler.
 // Username/first/last may legitimately be absent (Telegram users can hide them).
 type TelegramLinkInput struct {
-	ApplicationID string
-	TgUserID      int64
-	TgUsername    *string
-	TgFirstName   *string
-	TgLastName    *string
-}
-
-// TelegramLinkResult is what the service returns. Idempotent=true marks a
-// repeat /start from the same Telegram user against the same application.
-type TelegramLinkResult struct {
-	ApplicationID  string
-	Status         string
-	TelegramUserID int64
-	LinkedAt       time.Time
-	Idempotent     bool
+	ApplicationID     string
+	TelegramUserID    int64
+	TelegramUsername  *string
+	TelegramFirstName *string
+	TelegramLastName  *string
 }
 
 // CreatorApplicationDetailSocial is one social account attached to the

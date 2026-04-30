@@ -117,7 +117,10 @@ func (h *TestAPIHandler) SendTelegramMessage(w http.ResponseWriter, r *http.Requ
 	}
 	update := &tgmodels.Update{
 		Message: &tgmodels.Message{
-			Chat: tgmodels.Chat{ID: req.ChatId},
+			// Test endpoint always simulates a private 1:1 chat with the bot —
+			// the production handler drops everything else (group/channel) for
+			// PII reasons, see telegram/handler.go.
+			Chat: tgmodels.Chat{ID: req.ChatId, Type: "private"},
 			Text: req.Text,
 			From: from,
 		},

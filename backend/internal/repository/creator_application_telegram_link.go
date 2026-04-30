@@ -26,6 +26,8 @@ const (
 
 	// Used to disambiguate 23505 violations from any future unique index.
 	CreatorApplicationTelegramLinksPK = "creator_application_telegram_links_pkey"
+	// Used to disambiguate 23503 violations from any future foreign key.
+	CreatorApplicationTelegramLinksApplicationFK = "creator_application_telegram_links_application_id_fkey"
 )
 
 // CreatorApplicationTelegramLinkRow maps to creator_application_telegram_links.
@@ -58,7 +60,9 @@ type creatorApplicationTelegramLinkRepository struct {
 // Insert creates a link row. A PK conflict on application_id (concurrent
 // /start for the same application) is translated to
 // ErrTelegramApplicationLinkConflict so the service can re-read and decide
-// idempotent vs business error.
+// idempotent vs business error. An FK violation on application_id (parent
+// row gone between the service's preflight and our insert) is translated
+// to domain.ErrNotFound — the service maps it to MessageApplicationNotFound.
 func (r *creatorApplicationTelegramLinkRepository) Insert(ctx context.Context, row CreatorApplicationTelegramLinkRow) (*CreatorApplicationTelegramLinkRow, error) {
 	q := sq.Insert(TableCreatorApplicationTelegramLinks).
 		SetMap(toMap(row, creatorApplicationTelegramLinkInsertMapper)).
@@ -66,8 +70,13 @@ func (r *creatorApplicationTelegramLinkRepository) Insert(ctx context.Context, r
 	result, err := dbutil.One[CreatorApplicationTelegramLinkRow](ctx, r.db, q)
 	if err != nil {
 		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == "23505" && pgErr.ConstraintName == CreatorApplicationTelegramLinksPK {
-			return nil, domain.ErrTelegramApplicationLinkConflict
+		if errors.As(err, &pgErr) {
+			switch {
+			case pgErr.Code == "23505" && pgErr.ConstraintName == CreatorApplicationTelegramLinksPK:
+				return nil, domain.ErrTelegramApplicationLinkConflict
+			case pgErr.Code == "23503" && pgErr.ConstraintName == CreatorApplicationTelegramLinksApplicationFK:
+				return nil, domain.ErrNotFound
+			}
 		}
 		return nil, err
 	}

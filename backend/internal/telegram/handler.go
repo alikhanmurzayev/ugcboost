@@ -3,6 +3,7 @@ package telegram
 import (
 	"context"
 	"errors"
+	"runtime/debug"
 	"strings"
 	"time"
 
@@ -14,11 +15,16 @@ import (
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/logger"
 )
 
+// chatTypePrivate is the Chat.Type value Telegram uses for 1:1 conversations
+// between a user and the bot. Group/supergroup/channel updates are dropped
+// before any business logic runs — see Handle.
+const chatTypePrivate = "private"
+
 // LinkService is the narrow contract the handler depends on — only the
 // /start binding entry point. Defined here so the bot package owns its
 // dependency surface (accept interfaces, return structs).
 type LinkService interface {
-	LinkTelegram(ctx context.Context, in domain.TelegramLinkInput, now time.Time) (*domain.TelegramLinkResult, error)
+	LinkTelegram(ctx context.Context, in domain.TelegramLinkInput, now time.Time) error
 }
 
 // Handler routes every incoming update through one entry point.
@@ -40,8 +46,32 @@ func NewHandler(link LinkService, log logger.Logger) *Handler {
 // Handle is the single dispatcher invoked by the long-poll runner. It
 // understands one command — /start <uuid> — and falls back to the generic
 // "submit on the website" reply for everything else.
+//
+// Updates from non-private chats (groups, supergroups, channels) are dropped
+// silently: replying to /start there would leak application status into a
+// public conversation. Updates without an attributable user (anonymous group
+// admin, channel post — From is nil) are dropped for the same reason.
+//
+// The body runs under a panic recovery — go-telegram/bot dispatches each
+// update in its own goroutine, so a panic here would crash the process
+// otherwise (HTTP middleware.Recovery does not cover this code path).
 func (h *Handler) Handle(ctx context.Context, sender Sender, update *models.Update) {
+	defer func() {
+		if rec := recover(); rec != nil {
+			h.log.Error(ctx, "telegram handler panic",
+				"panic", rec,
+				"stack", string(debug.Stack()),
+			)
+		}
+	}()
+
 	if update == nil || update.Message == nil {
+		return
+	}
+	if update.Message.Chat.Type != chatTypePrivate {
+		return
+	}
+	if update.Message.From == nil || update.Message.From.ID <= 0 {
 		return
 	}
 	chatID := update.Message.Chat.ID
@@ -63,7 +93,7 @@ func (h *Handler) Handle(ctx context.Context, sender Sender, update *models.Upda
 	}
 
 	in := buildLinkInput(appID, update.Message.From)
-	if _, err := h.link.LinkTelegram(ctx, in, h.now()); err != nil {
+	if err := h.link.LinkTelegram(ctx, in, h.now()); err != nil {
 		h.reply(ctx, sender, chatID, h.errorReply(ctx, err))
 		return
 	}
@@ -90,15 +120,15 @@ func buildLinkInput(appID uuid.UUID, from *models.User) domain.TelegramLinkInput
 	if from == nil {
 		return in
 	}
-	in.TgUserID = from.ID
+	in.TelegramUserID = from.ID
 	if u := from.Username; u != "" {
-		in.TgUsername = &u
+		in.TelegramUsername = &u
 	}
 	if f := from.FirstName; f != "" {
-		in.TgFirstName = &f
+		in.TelegramFirstName = &f
 	}
 	if l := from.LastName; l != "" {
-		in.TgLastName = &l
+		in.TelegramLastName = &l
 	}
 	return in
 }

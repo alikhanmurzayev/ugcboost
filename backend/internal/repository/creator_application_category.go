@@ -66,9 +66,9 @@ func (r *creatorApplicationCategoryRepository) InsertMany(ctx context.Context, r
 // active dictionary and re-sorts in-memory, so callers do not depend on this
 // order for presentation.
 func (r *creatorApplicationCategoryRepository) ListByApplicationID(ctx context.Context, applicationID string) ([]string, error) {
-	q := sq.Select("c." + DictionaryColumnCode).
-		From(TableCreatorApplicationCategories + " cac").
-		Join(TableCategories + " c ON c." + DictionaryColumnID + " = cac." + CreatorApplicationCategoryColumnCategoryID).
+	q := sq.Select("c."+DictionaryColumnCode).
+		From(TableCreatorApplicationCategories+" cac").
+		Join(TableCategories+" c ON c."+DictionaryColumnID+" = cac."+CreatorApplicationCategoryColumnCategoryID).
 		Where(sq.Eq{"cac." + CreatorApplicationCategoryColumnApplicationID: applicationID}).
 		OrderBy("c."+DictionaryColumnSortOrder+" ASC", "c."+DictionaryColumnCode+" ASC")
 	return dbutil.Vals[string](ctx, r.db, q)

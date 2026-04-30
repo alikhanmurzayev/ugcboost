@@ -769,7 +769,7 @@ func TestCreatorApplicationService_GetByID(t *testing.T) {
 			Status:            domain.CreatorApplicationStatusPending,
 			CreatedAt:         created,
 			UpdatedAt:         updated,
-			Categories: []string{"beauty", "fashion"},
+			Categories:        []string{"beauty", "fashion"},
 			Socials: []domain.CreatorApplicationDetailSocial{
 				{Platform: domain.SocialPlatformInstagram, Handle: "aidana"},
 				{Platform: domain.SocialPlatformTikTok, Handle: "aidana_tt"},

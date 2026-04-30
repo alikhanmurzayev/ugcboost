@@ -21,9 +21,7 @@ import (
 	svcmocks "github.com/alikhanmurzayev/ugcboost/backend/internal/service/mocks"
 )
 
-
 var _ = mock.Anything // keep testify/mock import even when no direct use below
-
 
 // testBcryptCost keeps hashing fast in unit tests.
 const testBcryptCost = bcrypt.MinCost

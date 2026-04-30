@@ -40,31 +40,20 @@ func (_m *MockLinkService) EXPECT() *MockLinkService_Expecter {
 }
 
 // LinkTelegram provides a mock function for the type MockLinkService
-func (_mock *MockLinkService) LinkTelegram(ctx context.Context, in domain.TelegramLinkInput, now time.Time) (*domain.TelegramLinkResult, error) {
+func (_mock *MockLinkService) LinkTelegram(ctx context.Context, in domain.TelegramLinkInput, now time.Time) error {
 	ret := _mock.Called(ctx, in, now)
 
 	if len(ret) == 0 {
 		panic("no return value specified for LinkTelegram")
 	}
 
-	var r0 *domain.TelegramLinkResult
-	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, domain.TelegramLinkInput, time.Time) (*domain.TelegramLinkResult, error)); ok {
-		return returnFunc(ctx, in, now)
-	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, domain.TelegramLinkInput, time.Time) *domain.TelegramLinkResult); ok {
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, domain.TelegramLinkInput, time.Time) error); ok {
 		r0 = returnFunc(ctx, in, now)
 	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*domain.TelegramLinkResult)
-		}
+		r0 = ret.Error(0)
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, domain.TelegramLinkInput, time.Time) error); ok {
-		r1 = returnFunc(ctx, in, now)
-	} else {
-		r1 = ret.Error(1)
-	}
-	return r0, r1
+	return r0
 }
 
 // MockLinkService_LinkTelegram_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'LinkTelegram'
@@ -103,12 +92,12 @@ func (_c *MockLinkService_LinkTelegram_Call) Run(run func(ctx context.Context, i
 	return _c
 }
 
-func (_c *MockLinkService_LinkTelegram_Call) Return(telegramLinkResult *domain.TelegramLinkResult, err error) *MockLinkService_LinkTelegram_Call {
-	_c.Call.Return(telegramLinkResult, err)
+func (_c *MockLinkService_LinkTelegram_Call) Return(err error) *MockLinkService_LinkTelegram_Call {
+	_c.Call.Return(err)
 	return _c
 }
 
-func (_c *MockLinkService_LinkTelegram_Call) RunAndReturn(run func(ctx context.Context, in domain.TelegramLinkInput, now time.Time) (*domain.TelegramLinkResult, error)) *MockLinkService_LinkTelegram_Call {
+func (_c *MockLinkService_LinkTelegram_Call) RunAndReturn(run func(ctx context.Context, in domain.TelegramLinkInput, now time.Time) error) *MockLinkService_LinkTelegram_Call {
 	_c.Call.Return(run)
 	return _c
 }

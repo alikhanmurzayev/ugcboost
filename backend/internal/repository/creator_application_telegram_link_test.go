@@ -78,6 +78,19 @@ func TestCreatorApplicationTelegramLinkRepository_Insert(t *testing.T) {
 		require.Error(t, err)
 	})
 
+	t.Run("FK violation 23503 translates to domain.ErrNotFound", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &creatorApplicationTelegramLinkRepository{db: mock}
+
+		mock.ExpectQuery(sqlStmt).
+			WithArgs("app-1", linkedAt, first, last, int64(123456), username).
+			WillReturnError(&pgconn.PgError{Code: "23503", ConstraintName: CreatorApplicationTelegramLinksApplicationFK})
+
+		_, err := repo.Insert(context.Background(), row)
+		require.ErrorIs(t, err, domain.ErrNotFound)
+	})
+
 	t.Run("non-pg error propagates", func(t *testing.T) {
 		t.Parallel()
 		mock := newPgxmock(t)

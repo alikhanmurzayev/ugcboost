@@ -22,7 +22,7 @@ const validAppID = "11111111-2222-3333-4444-555555555555"
 func newUpdate(text string) *models.Update {
 	return &models.Update{
 		Message: &models.Message{
-			Chat: models.Chat{ID: 4242},
+			Chat: models.Chat{ID: 4242, Type: "private"},
 			Text: text,
 			From: &models.User{
 				ID:        int64(123),
@@ -77,6 +77,61 @@ func TestHandler_Handle(t *testing.T) {
 		})
 	})
 
+	t.Run("group chat is dropped silently", func(t *testing.T) {
+		t.Parallel()
+		h := telegram.NewHandler(tgmocks.NewMockLinkService(t), logmocks.NewMockLogger(t))
+		spy := tgmocks.NewMockSender(t)
+
+		upd := newUpdate("/start " + validAppID)
+		upd.Message.Chat.Type = "group"
+
+		h.Handle(context.Background(), spy, upd)
+	})
+
+	t.Run("supergroup is dropped silently", func(t *testing.T) {
+		t.Parallel()
+		h := telegram.NewHandler(tgmocks.NewMockLinkService(t), logmocks.NewMockLogger(t))
+		spy := tgmocks.NewMockSender(t)
+
+		upd := newUpdate("/start " + validAppID)
+		upd.Message.Chat.Type = "supergroup"
+
+		h.Handle(context.Background(), spy, upd)
+	})
+
+	t.Run("channel post is dropped silently", func(t *testing.T) {
+		t.Parallel()
+		h := telegram.NewHandler(tgmocks.NewMockLinkService(t), logmocks.NewMockLogger(t))
+		spy := tgmocks.NewMockSender(t)
+
+		upd := newUpdate("/start " + validAppID)
+		upd.Message.Chat.Type = "channel"
+
+		h.Handle(context.Background(), spy, upd)
+	})
+
+	t.Run("From == nil is dropped silently", func(t *testing.T) {
+		t.Parallel()
+		h := telegram.NewHandler(tgmocks.NewMockLinkService(t), logmocks.NewMockLogger(t))
+		spy := tgmocks.NewMockSender(t)
+
+		upd := newUpdate("/start " + validAppID)
+		upd.Message.From = nil
+
+		h.Handle(context.Background(), spy, upd)
+	})
+
+	t.Run("From.ID <= 0 is dropped silently", func(t *testing.T) {
+		t.Parallel()
+		h := telegram.NewHandler(tgmocks.NewMockLinkService(t), logmocks.NewMockLogger(t))
+		spy := tgmocks.NewMockSender(t)
+
+		upd := newUpdate("/start " + validAppID)
+		upd.Message.From.ID = 0
+
+		h.Handle(context.Background(), spy, upd)
+	})
+
 	t.Run("/start without payload → fallback", func(t *testing.T) {
 		t.Parallel()
 		expectFallback(t, "/start")
@@ -95,6 +150,25 @@ func TestHandler_Handle(t *testing.T) {
 	t.Run("/start with nil UUID → fallback", func(t *testing.T) {
 		t.Parallel()
 		expectFallback(t, "/start 00000000-0000-0000-0000-000000000000")
+	})
+
+	t.Run("/start with mixed-case hex UUID → success", func(t *testing.T) {
+		t.Parallel()
+		linkSvc := tgmocks.NewMockLinkService(t)
+		log := logmocks.NewMockLogger(t)
+		spy := tgmocks.NewMockSender(t)
+		h := telegram.NewHandler(linkSvc, log)
+
+		const hexUUID = "aabbccdd-eeff-aabb-ccdd-eeff00112233"
+		linkSvc.EXPECT().LinkTelegram(mock.Anything, mock.Anything, mock.Anything).
+			Run(func(_ context.Context, in domain.TelegramLinkInput, _ time.Time) {
+				require.Equal(t, hexUUID, in.ApplicationID)
+			}).
+			Return(nil)
+		spy.EXPECT().SendMessage(mock.Anything, matchSend(4242, telegram.MessageLinkSuccess)).
+			Return(nil, nil)
+
+		h.Handle(context.Background(), spy, newUpdate("/start "+hexUUID))
 	})
 
 	t.Run("any other command → fallback", func(t *testing.T) {
@@ -117,11 +191,11 @@ func TestHandler_Handle(t *testing.T) {
 		linkSvc.EXPECT().LinkTelegram(mock.Anything, mock.Anything, mock.Anything).
 			Run(func(_ context.Context, in domain.TelegramLinkInput, _ time.Time) {
 				require.Equal(t, validAppID, in.ApplicationID)
-				require.Equal(t, int64(123), in.TgUserID)
-				require.NotNil(t, in.TgUsername)
-				require.Equal(t, "aidana", *in.TgUsername)
+				require.Equal(t, int64(123), in.TelegramUserID)
+				require.NotNil(t, in.TelegramUsername)
+				require.Equal(t, "aidana", *in.TelegramUsername)
 			}).
-			Return(&domain.TelegramLinkResult{ApplicationID: validAppID}, nil)
+			Return(nil)
 		spy.EXPECT().SendMessage(mock.Anything, matchSend(4242, telegram.MessageLinkSuccess)).
 			Return(nil, nil)
 
@@ -136,7 +210,7 @@ func TestHandler_Handle(t *testing.T) {
 		h := telegram.NewHandler(linkSvc, log)
 
 		linkSvc.EXPECT().LinkTelegram(mock.Anything, mock.Anything, mock.Anything).
-			Return(nil, domain.ErrNotFound)
+			Return(domain.ErrNotFound)
 		spy.EXPECT().SendMessage(mock.Anything, matchSend(4242, telegram.MessageApplicationNotFound)).
 			Return(nil, nil)
 
@@ -151,7 +225,7 @@ func TestHandler_Handle(t *testing.T) {
 		h := telegram.NewHandler(linkSvc, log)
 
 		linkSvc.EXPECT().LinkTelegram(mock.Anything, mock.Anything, mock.Anything).
-			Return(nil, domain.NewBusinessError(domain.CodeTelegramApplicationAlreadyLinked, ""))
+			Return(domain.NewBusinessError(domain.CodeTelegramApplicationAlreadyLinked, ""))
 		spy.EXPECT().SendMessage(mock.Anything, matchSend(4242, telegram.MessageApplicationAlreadyLinked)).
 			Return(nil, nil)
 
@@ -166,7 +240,7 @@ func TestHandler_Handle(t *testing.T) {
 		h := telegram.NewHandler(linkSvc, log)
 
 		linkSvc.EXPECT().LinkTelegram(mock.Anything, mock.Anything, mock.Anything).
-			Return(nil, errors.New("db down"))
+			Return(errors.New("db down"))
 		log.EXPECT().Error(mock.Anything, "telegram link failed", mock.Anything).Once()
 		spy.EXPECT().SendMessage(mock.Anything, matchSend(4242, telegram.MessageInternalError)).
 			Return(nil, nil)
@@ -185,5 +259,25 @@ func TestHandler_Handle(t *testing.T) {
 		log.EXPECT().Error(mock.Anything, "telegram send message failed", mock.Anything).Once()
 
 		h.Handle(context.Background(), spy, newUpdate("/help"))
+	})
+
+	t.Run("panic in LinkService is recovered with stack log", func(t *testing.T) {
+		t.Parallel()
+		linkSvc := tgmocks.NewMockLinkService(t)
+		log := logmocks.NewMockLogger(t)
+		spy := tgmocks.NewMockSender(t)
+		h := telegram.NewHandler(linkSvc, log)
+
+		linkSvc.EXPECT().LinkTelegram(mock.Anything, mock.Anything, mock.Anything).
+			Run(func(_ context.Context, _ domain.TelegramLinkInput, _ time.Time) {
+				panic("boom")
+			}).
+			Return(nil) // unreachable but mockery requires a return for typed mocks
+		log.EXPECT().Error(mock.Anything, "telegram handler panic", mock.Anything).Once()
+
+		// require.NotPanics asserts the defer recover swallowed the panic.
+		require.NotPanics(t, func() {
+			h.Handle(context.Background(), spy, newUpdate("/start "+validAppID))
+		})
 	})
 }

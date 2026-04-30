@@ -12,14 +12,14 @@ import (
 
 // Creator application consents table and column names.
 const (
-	TableCreatorApplicationConsents                   = "creator_application_consents"
-	CreatorApplicationConsentColumnID                 = "id"
-	CreatorApplicationConsentColumnApplicationID      = "application_id"
-	CreatorApplicationConsentColumnConsentType        = "consent_type"
-	CreatorApplicationConsentColumnAcceptedAt         = "accepted_at"
-	CreatorApplicationConsentColumnDocumentVersion    = "document_version"
-	CreatorApplicationConsentColumnIPAddress          = "ip_address"
-	CreatorApplicationConsentColumnUserAgent          = "user_agent"
+	TableCreatorApplicationConsents                = "creator_application_consents"
+	CreatorApplicationConsentColumnID              = "id"
+	CreatorApplicationConsentColumnApplicationID   = "application_id"
+	CreatorApplicationConsentColumnConsentType     = "consent_type"
+	CreatorApplicationConsentColumnAcceptedAt      = "accepted_at"
+	CreatorApplicationConsentColumnDocumentVersion = "document_version"
+	CreatorApplicationConsentColumnIPAddress       = "ip_address"
+	CreatorApplicationConsentColumnUserAgent       = "user_agent"
 )
 
 // CreatorApplicationConsentRow maps to the creator_application_consents table.
