@@ -1,4 +1,4 @@
-import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useAuthStore } from "@/stores/auth";
 import { logout } from "@/api/auth";
@@ -65,6 +65,13 @@ export default function DashboardLayout() {
         </nav>
 
         <div className="border-t border-surface-300 px-3 py-4">
+          <Link
+            to="/prototype"
+            className="mb-3 block px-3 text-xs text-gray-500 transition hover:text-gray-700"
+            data-testid="link-prototype"
+          >
+            Прототип Aidana →
+          </Link>
           <div className="mb-3 px-3">
             <p className="truncate text-sm font-medium text-gray-900">{user?.email}</p>
             <p className="text-xs text-gray-500">
