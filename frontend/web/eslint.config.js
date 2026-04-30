@@ -6,7 +6,9 @@ import tseslint from 'typescript-eslint'
 import { defineConfig, globalIgnores } from 'eslint/config'
 
 export default defineConfig([
-  globalIgnores(['dist']),
+  // src/_prototype/ is Aidana's mock prototype. Held to typecheck + build but
+  // not strict lint — lint quality bar applies to real production code only.
+  globalIgnores(['dist', 'src/_prototype/**']),
   {
     files: ['**/*.{ts,tsx}'],
     extends: [

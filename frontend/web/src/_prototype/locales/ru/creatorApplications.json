@@ -1,0 +1,142 @@
+{
+  "navGroup": "Заявки креаторов",
+  "stages": {
+    "verification": {
+      "title": "Верификация",
+      "description": "Креаторы подтверждают владение аккаунтом в Telegram-боте."
+    },
+    "moderation": {
+      "title": "Модерация",
+      "description": "Подтверждённые заявки в очереди на ручную модерацию."
+    },
+    "contracts": {
+      "title": "Договоры",
+      "description": "Одобренные креаторы — статус подписания договора."
+    },
+    "rejected": {
+      "title": "Отклонённые",
+      "description": "Архив отклонённых заявок."
+    }
+  },
+  "comingSoon": "Раздел в разработке",
+  "loading": "Загрузка...",
+  "loadError": "Не удалось загрузить заявки",
+  "empty": "Нет заявок в этой очереди",
+  "emptyFiltered": "Нет заявок по выбранным фильтрам",
+  "drawer": {
+    "submittedAt": "Подана",
+    "iin": "ИИН",
+    "birthDate": "Дата рождения",
+    "phone": "Телефон",
+    "city": "Город",
+    "categories": "Категории",
+    "categoryOther": "Другое",
+    "socials": "Соцсети",
+    "rejectionComment": "Ответ креатору",
+    "internalNote": "Внутреннее примечание",
+    "contractStatus": "Статус договора",
+    "approvedAt": "Одобрена",
+    "rejectedAt": "Отклонена",
+    "signedAt": "Договор подписан"
+  },
+  "contractStatus": {
+    "not_sent": "Не отправлен",
+    "sent": "Отправлен",
+    "signed": "Подписан"
+  },
+  "columns": {
+    "submittedAt": "Подана",
+    "qualityIndicator": "Статистика",
+    "fullName": "ФИО",
+    "city": "Город",
+    "age": "Возраст",
+    "categories": "Категории",
+    "socials": "Соцсети",
+    "hoursInStage": "В этапе",
+    "waiting": "Ожидает",
+    "approvedAt": "Одобрена",
+    "rejectedAt": "Отклонена",
+    "contractStatus": "Договор",
+    "rejectionComment": "Ответ креатору"
+  },
+  "qualityIndicator": {
+    "label": "Статистика",
+    "tooltip": "Автоматическая оценка профиля по статистике",
+    "green": "Качественный",
+    "orange": "Под вопросом",
+    "red": "Не соответствует",
+    "none": "Нет данных",
+    "source": "Источник: Instagram (LiveDune)"
+  },
+  "metrics": {
+    "followers": "Подписчики",
+    "totalPosts": "Публикаций всего",
+    "avgViews": "Среднее просмотров",
+    "engagementRate": "ER",
+    "postedLast14Days": "Постит за 14 дней",
+    "yes": "Да",
+    "no": "Нет"
+  },
+  "drawerNav": {
+    "prev": "Предыдущая заявка",
+    "next": "Следующая заявка"
+  },
+  "actions": {
+    "approve": "Одобрить",
+    "reject": "Отклонить",
+    "approving": "Одобрение...",
+    "rejecting": "Отклонение...",
+    "returnToModeration": "Вернуть на модерацию",
+    "returning": "Возврат...",
+    "sendContracts": "Разослать договоры",
+    "sendContract": "Отправить договор",
+    "revokeContract": "Отозвать договор",
+    "revoking": "Отзыв...",
+    "sending": "Отправка...",
+    "selectedCount": "Выбрано: {{count}}"
+  },
+  "rejectDialog": {
+    "title": "Отклонить заявку?",
+    "comment": "Ответ креатору",
+    "commentOptional": "необязательно",
+    "commentHint": "Уйдёт ему в Telegram, если заполнен.",
+    "submit": "Отклонить заявку",
+    "cancel": "Отмена"
+  },
+  "filters": {
+    "title": "Фильтры",
+    "open": "Фильтры",
+    "dateFrom": "Дата с",
+    "dateTo": "Дата по",
+    "city": "Город",
+    "ageFrom": "Возраст от",
+    "ageTo": "Возраст до",
+    "categories": "Категории",
+    "reset": "Сбросить",
+    "apply": "Применить",
+    "anyCity": "Любой город",
+    "anyCategory": "Любая категория",
+    "active": "Активные фильтры",
+    "date": "Период подачи",
+    "age": "Возраст",
+    "searchCity": "Найти город",
+    "searchCategory": "Найти категорию",
+    "search": "Поиск по ФИО или нику"
+  },
+  "internalNote": {
+    "label": "Внутреннее примечание",
+    "placeholder": "Видно только админам",
+    "save": "Сохранить",
+    "saving": "Сохранение...",
+    "saved": "Сохранено"
+  },
+  "errors": {
+    "approveError": "Не удалось одобрить заявку",
+    "rejectError": "Не удалось отклонить заявку",
+    "saveNoteError": "Не удалось сохранить примечание",
+    "returnError": "Не удалось вернуть заявку на модерацию",
+    "sendContractsError": "Не удалось разослать договоры",
+    "sendContractError": "Не удалось отправить договор",
+    "revokeContractError": "Не удалось отозвать договор"
+  }
+}

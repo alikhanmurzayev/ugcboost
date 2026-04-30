@@ -1,4 +1,5 @@
 import "@/shared/i18n/config";
+import { lazy, Suspense } from "react";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import LoginPage from "@/features/auth/LoginPage";
@@ -10,8 +11,15 @@ import BrandDetailPage from "@/features/brands/BrandDetailPage";
 import AuditLogPage from "@/features/audit/AuditLogPage";
 import RoleGuard from "@/features/auth/RoleGuard";
 import ErrorBoundary from "@/shared/components/ErrorBoundary";
+import Spinner from "@/shared/components/Spinner";
 import { ROUTES } from "@/shared/constants/routes";
 import { Roles } from "@/shared/constants/roles";
+
+// Aidana's brand-cabinet prototype — isolated under /prototype/* with its own
+// layout, mock API, types and i18n namespaces. Lazy-loaded so it stays out of
+// the main bundle until visited. As features are reimplemented properly
+// against the real backend, drop the corresponding folders from src/_prototype/.
+const PrototypeApp = lazy(() => import("@/_prototype/PrototypeApp"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -29,6 +37,15 @@ function App() {
         <BrowserRouter>
           <Routes>
           <Route path={ROUTES.LOGIN} element={<LoginPage />} />
+
+          <Route
+            path="/prototype/*"
+            element={
+              <Suspense fallback={<Spinner className="mt-12" />}>
+                <PrototypeApp />
+              </Suspense>
+            }
+          />
 
           <Route element={<AuthGuard />}>
             <Route element={<DashboardLayout />}>
