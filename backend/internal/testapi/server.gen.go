@@ -121,6 +121,26 @@ type SeedUserResult struct {
 	Data SeedUserData `json:"data"`
 }
 
+// SendTelegramMessageRequest defines model for SendTelegramMessageRequest.
+type SendTelegramMessageRequest struct {
+	// ChatId Synthetic chat id; echoed in the spy reply for assertions.
+	ChatId int64 `json:"chatId"`
+
+	// Text Message text the simulated user sends to the bot.
+	Text string `json:"text"`
+}
+
+// SendTelegramMessageResult defines model for SendTelegramMessageResult.
+type SendTelegramMessageResult struct {
+	Replies []TelegramReply `json:"replies"`
+}
+
+// TelegramReply defines model for TelegramReply.
+type TelegramReply struct {
+	ChatId int64  `json:"chatId"`
+	Text   string `json:"text"`
+}
+
 // GetResetTokenParams defines parameters for GetResetToken.
 type GetResetTokenParams struct {
 	Email openapi_types.Email `form:"email" json:"email"`
@@ -131,6 +151,9 @@ type CleanupEntityJSONRequestBody = CleanupEntityRequest
 
 // SeedUserJSONRequestBody defines body for SeedUser for application/json ContentType.
 type SeedUserJSONRequestBody = SeedUserRequest
+
+// SendTelegramMessageJSONRequestBody defines body for SendTelegramMessage for application/json ContentType.
+type SendTelegramMessageJSONRequestBody = SendTelegramMessageRequest
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
@@ -143,6 +166,9 @@ type ServerInterface interface {
 	// Create a test user with given credentials and role
 	// (POST /test/seed-user)
 	SeedUser(w http.ResponseWriter, r *http.Request)
+	// Inject a synthetic text message into the Telegram handler
+	// (POST /test/telegram/message)
+	SendTelegramMessage(w http.ResponseWriter, r *http.Request)
 }
 
 // Unimplemented server implementation that returns http.StatusNotImplemented for each endpoint.
@@ -164,6 +190,12 @@ func (_ Unimplemented) GetResetToken(w http.ResponseWriter, r *http.Request, par
 // Create a test user with given credentials and role
 // (POST /test/seed-user)
 func (_ Unimplemented) SeedUser(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Inject a synthetic text message into the Telegram handler
+// (POST /test/telegram/message)
+func (_ Unimplemented) SendTelegramMessage(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -229,6 +261,20 @@ func (siw *ServerInterfaceWrapper) SeedUser(w http.ResponseWriter, r *http.Reque
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.SeedUser(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// SendTelegramMessage operation middleware
+func (siw *ServerInterfaceWrapper) SendTelegramMessage(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SendTelegramMessage(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -359,6 +405,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/test/seed-user", wrapper.SeedUser)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/test/telegram/message", wrapper.SendTelegramMessage)
 	})
 
 	return r

@@ -53,7 +53,6 @@ type Config struct {
 	// Feature flags for mock integrations
 	LiveDuneMock bool `env:"LIVEDUNE_MOCK" envDefault:"false"`
 	TrustMeMock  bool `env:"TRUSTME_MOCK" envDefault:"false"`
-	TelegramMock bool `env:"TELEGRAM_MOCK" envDefault:"false"`
 	EmailMock    bool `env:"EMAIL_MOCK" envDefault:"false"`
 	StorageMock  bool `env:"STORAGE_MOCK" envDefault:"false"`
 
@@ -61,6 +60,9 @@ type Config struct {
 	// after a public application is accepted (https://t.me/<username>?start=<application_id>).
 	// Different bot per environment.
 	TelegramBotUsername string `env:"TELEGRAM_BOT_USERNAME,required"`
+
+	// Empty value means long polling does not start.
+	TelegramBotToken string `env:"TELEGRAM_BOT_TOKEN" envDefault:""`
 
 	// Versions of the legal documents the user accepts at submission time.
 	// Stored alongside each consent row so that a future audit can show

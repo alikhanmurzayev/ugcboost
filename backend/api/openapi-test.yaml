@@ -95,6 +95,36 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /test/telegram/message:
+    post:
+      operationId: sendTelegramMessage
+      summary: Inject a synthetic text message into the Telegram handler
+      description: |
+        Builds a minimal Telegram Update from the request body, invokes the
+        in-process Telegram handler with a spy Sender, and returns whatever
+        replies the handler produced. No network calls — the real long-polling
+        client is bypassed entirely. NEVER enabled in production.
+      tags: [test]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SendTelegramMessageRequest"
+      responses:
+        "200":
+          description: Replies captured by the spy Sender
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SendTelegramMessageResult"
+        "422":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
 components:
   schemas:
     SeedUserRequest:
@@ -154,6 +184,38 @@ components:
           enum: [user, brand, creator_application]
         id:
           type: string
+
+    SendTelegramMessageRequest:
+      type: object
+      required: [chatId, text]
+      properties:
+        chatId:
+          type: integer
+          format: int64
+          description: Synthetic chat id; echoed in the spy reply for assertions.
+        text:
+          type: string
+          minLength: 1
+          description: Message text the simulated user sends to the bot.
+
+    TelegramReply:
+      type: object
+      required: [chatId, text]
+      properties:
+        chatId:
+          type: integer
+          format: int64
+        text:
+          type: string
+
+    SendTelegramMessageResult:
+      type: object
+      required: [replies]
+      properties:
+        replies:
+          type: array
+          items:
+            $ref: "#/components/schemas/TelegramReply"
 
     ErrorResponse:
       type: object

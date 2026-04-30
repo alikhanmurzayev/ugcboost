@@ -23,6 +23,7 @@ import (
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/middleware"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/repository"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/service"
+	"github.com/alikhanmurzayev/ugcboost/backend/internal/telegram"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/testapi"
 )
 
@@ -91,6 +92,23 @@ func run() error {
 	creatorApplicationSvc := service.NewCreatorApplicationService(pool, repoFactory, appLogger)
 	dictionarySvc := service.NewDictionaryService(pool, repoFactory, appLogger)
 
+	// Long polling starts whenever a token is set; the test endpoint
+	// drives the same handler with a spy Sender on a separate path, so
+	// the two do not fight over updates.
+	tgHandler := telegram.NewHandler(appLogger)
+	if cfg.TelegramBotToken != "" {
+		runnerCtx, runnerCancel := context.WithCancel(context.Background())
+		defer runnerCancel()
+		go telegram.Run(runnerCtx, cfg.TelegramBotToken, tgHandler, appLogger)
+		cl.Add("telegram-runner", func(_ context.Context) error {
+			runnerCancel()
+			return nil
+		})
+		appLogger.Info(ctx, "telegram bot polling enabled")
+	} else {
+		appLogger.Info(ctx, "telegram bot polling disabled (no token)")
+	}
+
 	// Seed admin
 	if err := authSvc.SeedAdmin(ctx, cfg.AdminEmail, cfg.AdminPassword); err != nil {
 		return fmt.Errorf("seed admin: %w", err)
@@ -130,7 +148,7 @@ func run() error {
 	// endpoint uses the repo factory directly — the hard-delete for users
 	// is test-only and intentionally not exposed through any service.
 	if cfg.EnableTestEndpoints {
-		testHandler := handler.NewTestAPIHandler(authSvc, pool, repoFactory, resetTokenStore, appLogger)
+		testHandler := handler.NewTestAPIHandler(authSvc, pool, repoFactory, resetTokenStore, tgHandler, appLogger)
 		testapi.HandlerWithOptions(testHandler, testapi.ChiServerOptions{
 			BaseRouter:       r,
 			ErrorHandlerFunc: handler.HandleParamError(appLogger),
