@@ -33,3 +33,10 @@ func ClientIPFromContext(ctx context.Context) string {
 	v, _ := ctx.Value(clientIPKey{}).(string)
 	return v
 }
+
+// WithClientIP attaches an explicit client IP to the context. Used by
+// non-HTTP code paths (background workers, the Telegram bot) so audit_logs
+// rows still carry an honest, non-empty marker.
+func WithClientIP(ctx context.Context, ip string) context.Context {
+	return context.WithValue(ctx, clientIPKey{}, ip)
+}

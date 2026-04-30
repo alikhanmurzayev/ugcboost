@@ -16,11 +16,11 @@ const (
 // Sentinel errors for programmatic checks in callers (service layer wraps
 // them into ValidationError with the right code/message).
 var (
-	ErrIINFormat     = errors.New("iin must be exactly 12 digits")
-	ErrIINChecksum   = errors.New("iin checksum is invalid")
-	ErrIINCentury    = errors.New("iin century code is invalid")
-	ErrIINBirthDate  = errors.New("iin encodes an invalid birth date")
-	ErrIINUnderAge = errors.New("applicant is younger than MinCreatorAge")
+	ErrIINFormat    = errors.New("iin must be exactly 12 digits")
+	ErrIINChecksum  = errors.New("iin checksum is invalid")
+	ErrIINCentury   = errors.New("iin century code is invalid")
+	ErrIINBirthDate = errors.New("iin encodes an invalid birth date")
+	ErrIINUnderAge  = errors.New("applicant is younger than MinCreatorAge")
 )
 
 // MinCreatorAge is the minimum age required to submit a creator application.

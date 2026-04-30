@@ -90,12 +90,13 @@ func run() error {
 	auditSvc := service.NewAuditService(pool, repoFactory)
 	authzSvc := authz.NewAuthzService(brandSvc)
 	creatorApplicationSvc := service.NewCreatorApplicationService(pool, repoFactory, appLogger)
+	creatorApplicationTelegramSvc := service.NewCreatorApplicationTelegramService(pool, repoFactory, appLogger)
 	dictionarySvc := service.NewDictionaryService(pool, repoFactory, appLogger)
 
 	// Long polling starts whenever a token is set; the test endpoint
 	// drives the same handler with a spy Sender on a separate path, so
 	// the two do not fight over updates.
-	tgHandler := telegram.NewHandler(appLogger)
+	tgHandler := telegram.NewHandler(creatorApplicationTelegramSvc, appLogger)
 	if cfg.TelegramBotToken != "" {
 		runnerCtx, runnerCancel := context.WithCancel(context.Background())
 		defer runnerCancel()

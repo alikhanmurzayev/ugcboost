@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"strings"
@@ -20,6 +21,7 @@ type CreatorApplicationRepoFactory interface {
 	NewCreatorApplicationCategoryRepo(db dbutil.DB) repository.CreatorApplicationCategoryRepo
 	NewCreatorApplicationSocialRepo(db dbutil.DB) repository.CreatorApplicationSocialRepo
 	NewCreatorApplicationConsentRepo(db dbutil.DB) repository.CreatorApplicationConsentRepo
+	NewCreatorApplicationTelegramLinkRepo(db dbutil.DB) repository.CreatorApplicationTelegramLinkRepo
 	NewAuditRepo(db dbutil.DB) repository.AuditRepo
 }
 
@@ -419,7 +421,12 @@ func (s *CreatorApplicationService) GetByID(ctx context.Context, id string) (*do
 		return nil, fmt.Errorf("list consents: %w", err)
 	}
 
-	return s.creatorApplicationDetailFromRows(appRow, categoryRows, socialRows, consentRows), nil
+	linkRow, err := s.repoFactory.NewCreatorApplicationTelegramLinkRepo(s.pool).GetByApplicationID(ctx, id)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return nil, fmt.Errorf("get telegram link: %w", err)
+	}
+
+	return s.creatorApplicationDetailFromRows(appRow, categoryRows, socialRows, consentRows, linkRow), nil
 }
 
 // creatorApplicationDetailFromRows maps the four repo result sets onto the
@@ -435,6 +442,7 @@ func (s *CreatorApplicationService) creatorApplicationDetailFromRows(
 	categories []string,
 	socials []*repository.CreatorApplicationSocialRow,
 	consents []*repository.CreatorApplicationConsentRow,
+	link *repository.CreatorApplicationTelegramLinkRow,
 ) *domain.CreatorApplicationDetail {
 	cats := append([]string(nil), categories...)
 
@@ -465,6 +473,18 @@ func (s *CreatorApplicationService) creatorApplicationDetailFromRows(
 		})
 	}
 
+	var tgLink *domain.CreatorApplicationTelegramLink
+	if link != nil {
+		tgLink = &domain.CreatorApplicationTelegramLink{
+			ApplicationID:     link.ApplicationID,
+			TelegramUserID:    link.TelegramUserID,
+			TelegramUsername:  link.TelegramUsername,
+			TelegramFirstName: link.TelegramFirstName,
+			TelegramLastName:  link.TelegramLastName,
+			LinkedAt:          link.LinkedAt,
+		}
+	}
+
 	return &domain.CreatorApplicationDetail{
 		ID:                app.ID,
 		LastName:          app.LastName,
@@ -482,5 +502,6 @@ func (s *CreatorApplicationService) creatorApplicationDetailFromRows(
 		Categories:        cats,
 		Socials:           socs,
 		Consents:          cons,
+		TelegramLink:      tgLink,
 	}
 }

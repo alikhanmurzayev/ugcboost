@@ -135,14 +135,32 @@ type Pool interface {
 // WithTx runs fn inside a database transaction. If fn returns an error the
 // transaction is rolled back; otherwise it is committed.
 // Both fn error and rollback error are joined if both occur.
+//
+// On panic inside fn the transaction is rolled back and the panic is
+// re-thrown so an outer recover (e.g. telegram handler, HTTP
+// middleware.Recovery) can log it. Without this defer the connection would
+// return to the pool with an open transaction — pgx cleans it up, but we
+// do not rely on driver-internal behaviour for correctness.
+//
+// Rollback uses context.WithoutCancel so cleanup still goes on the wire
+// even if the request ctx was cancelled (middleware timeout, client
+// disconnect). Otherwise pgx would skip the ROLLBACK and we would lose
+// the failure mode to a generic "context canceled" error.
 func WithTx(ctx context.Context, starter TxStarter, fn func(tx DB) error) error {
 	tx, err := starter.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("dbutil.WithTx begin: %w", err)
 	}
 
+	defer func() {
+		if rec := recover(); rec != nil {
+			_ = tx.Rollback(context.WithoutCancel(ctx))
+			panic(rec)
+		}
+	}()
+
 	if fnErr := fn(tx); fnErr != nil {
-		if rbErr := tx.Rollback(ctx); rbErr != nil {
+		if rbErr := tx.Rollback(context.WithoutCancel(ctx)); rbErr != nil {
 			return errors.Join(fnErr, fmt.Errorf("rollback: %w", rbErr))
 		}
 		return fnErr

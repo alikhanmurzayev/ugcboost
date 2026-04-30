@@ -69,6 +69,7 @@
 - [major] `CLAUDE.md` обновлён, если поменялся workflow.
 - [minor] Коммит-сообщения concise, English, описывают «почему».
 - [major] CI gate для нового инварианта добавлен (lint/test/sync-проверка).
+- [major] `gofmt -l backend/` возвращает пусто; gofmt включён в `formatters` секции `backend/.golangci.yml`.
 
 ## Расширение чеклиста
 

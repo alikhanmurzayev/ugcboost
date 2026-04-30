@@ -286,8 +286,12 @@ type CreatorApplicationDetailData struct {
 	Socials []CreatorApplicationDetailSocial `json:"socials"`
 
 	// Status Moderation status of the application.
-	Status    CreatorApplicationDetailDataStatus `json:"status"`
-	UpdatedAt time.Time                          `json:"updatedAt"`
+	Status CreatorApplicationDetailDataStatus `json:"status"`
+
+	// TelegramLink Telegram account linked to this application. Null when the creator
+	// has not yet opened the bot.
+	TelegramLink *TelegramLink `json:"telegramLink,omitempty"`
+	UpdatedAt    time.Time     `json:"updatedAt"`
 }
 
 // CreatorApplicationDetailDataStatus Moderation status of the application.
@@ -472,6 +476,24 @@ type SocialAccountInput struct {
 
 // SocialPlatform Supported social network for creator accounts (MVP scope).
 type SocialPlatform string
+
+// TelegramLink Telegram account linked to a creator application via /start deep-link.
+type TelegramLink struct {
+	// LinkedAt Timestamp of the successful link.
+	LinkedAt time.Time `json:"linkedAt"`
+
+	// TelegramFirstName Telegram first_name at link time. Nullable.
+	TelegramFirstName *string `json:"telegramFirstName,omitempty"`
+
+	// TelegramLastName Telegram last_name at link time. Nullable.
+	TelegramLastName *string `json:"telegramLastName,omitempty"`
+
+	// TelegramUserId Telegram numeric user id (BIGINT) — stable identifier of the linked account.
+	TelegramUserId int64 `json:"telegramUserId"`
+
+	// TelegramUsername Telegram @username at link time (no leading @). Nullable.
+	TelegramUsername *string `json:"telegramUsername,omitempty"`
+}
 
 // UpdateBrandRequest defines model for UpdateBrandRequest.
 type UpdateBrandRequest struct {

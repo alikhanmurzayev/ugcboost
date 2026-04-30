@@ -53,3 +53,9 @@ func (f *RepoFactory) NewCreatorApplicationSocialRepo(db dbutil.DB) CreatorAppli
 func (f *RepoFactory) NewCreatorApplicationConsentRepo(db dbutil.DB) CreatorApplicationConsentRepo {
 	return &creatorApplicationConsentRepository{db: db}
 }
+
+// NewCreatorApplicationTelegramLinkRepo creates a repo for the
+// creator_application_telegram_links table.
+func (f *RepoFactory) NewCreatorApplicationTelegramLinkRepo(db dbutil.DB) CreatorApplicationTelegramLinkRepo {
+	return &creatorApplicationTelegramLinkRepository{db: db}
+}

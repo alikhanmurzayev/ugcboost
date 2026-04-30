@@ -38,4 +38,3 @@ func TestToMap_PanicsOnUnmappableValue(t *testing.T) {
 		toMap(42, st)
 	})
 }
-

@@ -12,3 +12,4 @@ packages:
   github.com/alikhanmurzayev/ugcboost/backend/internal/middleware:
   github.com/alikhanmurzayev/ugcboost/backend/internal/authz:
   github.com/alikhanmurzayev/ugcboost/backend/internal/logger:
+  github.com/alikhanmurzayev/ugcboost/backend/internal/telegram:

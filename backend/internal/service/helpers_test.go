@@ -13,7 +13,7 @@ import (
 type testTx struct{}
 
 func (testTx) Commit(context.Context) error   { return nil }
-func (testTx) Rollback(context.Context) error  { return nil }
+func (testTx) Rollback(context.Context) error { return nil }
 func (testTx) Begin(context.Context) (pgx.Tx, error) {
 	panic("testTx: unexpected Begin")
 }

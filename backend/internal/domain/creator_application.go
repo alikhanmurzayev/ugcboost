@@ -75,6 +75,15 @@ const (
 	CodeUnknownCategory = "UNKNOWN_CATEGORY"
 	// 422 — at least one of the four mandatory consents is missing.
 	CodeMissingConsent = "MISSING_CONSENT"
+	// 409 — application is already linked to a different Telegram account.
+	CodeTelegramApplicationAlreadyLinked = "TELEGRAM_APPLICATION_ALREADY_LINKED"
+)
+
+// Telegram metadata length caps applied at the service layer before persisting,
+// to prevent attacker-controlled mega-strings.
+const (
+	TelegramUsernameMaxLen = 64
+	TelegramNameMaxLen     = 256
 )
 
 // ErrCreatorApplicationDuplicate is the sentinel the repository raises when
@@ -83,6 +92,12 @@ const (
 // the race after the service's HasActiveByIIN check). The service converts it
 // into a business error with CodeCreatorApplicationDuplicate.
 var ErrCreatorApplicationDuplicate = errors.New("creator application with this iin is already active")
+
+// ErrTelegramApplicationLinkConflict is raised by the repo on a PRIMARY KEY
+// violation on creator_application_telegram_links(application_id) — the
+// application is already linked. The service re-reads the row to decide
+// idempotent vs business error.
+var ErrTelegramApplicationLinkConflict = errors.New("telegram link for this application already exists")
 
 // SocialHandleRegex is the validation pattern applied to handles after they
 // are trimmed, stripped of leading '@' and lowercased. Current scope (IG/TT)
@@ -162,6 +177,28 @@ type CreatorApplicationDetail struct {
 	Categories        []string
 	Socials           []CreatorApplicationDetailSocial
 	Consents          []CreatorApplicationDetailConsent
+	TelegramLink      *CreatorApplicationTelegramLink
+}
+
+// CreatorApplicationTelegramLink describes the Telegram account bound to an
+// application. Nil means the creator has not opened the bot yet.
+type CreatorApplicationTelegramLink struct {
+	ApplicationID     string
+	TelegramUserID    int64
+	TelegramUsername  *string
+	TelegramFirstName *string
+	TelegramLastName  *string
+	LinkedAt          time.Time
+}
+
+// TelegramLinkInput is what the service receives from the bot's /start handler.
+// Username/first/last may legitimately be absent (Telegram users can hide them).
+type TelegramLinkInput struct {
+	ApplicationID     string
+	TelegramUserID    int64
+	TelegramUsername  *string
+	TelegramFirstName *string
+	TelegramLastName  *string
 }
 
 // CreatorApplicationDetailSocial is one social account attached to the

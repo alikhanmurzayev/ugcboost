@@ -549,4 +549,3 @@ func TestBrandRepository_IsManager(t *testing.T) {
 		require.False(t, ok)
 	})
 }
-

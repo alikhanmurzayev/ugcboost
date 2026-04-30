@@ -135,14 +135,14 @@ func TestServer_SubmitCreatorApplication(t *testing.T) {
 		require.WithinDuration(t, before, captured.Now, after.Sub(before)+time.Second)
 		captured.Now = time.Time{}
 		require.Equal(t, domain.CreatorApplicationInput{
-			LastName:         "Муратова",
-			FirstName:        "Айдана",
-			MiddleName:       pointer.ToString("Ивановна"),
-			IIN:              "950515312348",
-			Phone:            "+77001234567",
-			City:             "Алматы",
-			Address:          pointer.ToString("ул. Абая 1"),
-			CategoryCodes:    []string{"beauty", "fashion"},
+			LastName:      "Муратова",
+			FirstName:     "Айдана",
+			MiddleName:    pointer.ToString("Ивановна"),
+			IIN:           "950515312348",
+			Phone:         "+77001234567",
+			City:          "Алматы",
+			Address:       pointer.ToString("ул. Абая 1"),
+			CategoryCodes: []string{"beauty", "fashion"},
 			Socials: []domain.SocialAccountInput{
 				{Platform: "instagram", Handle: "@aidana"},
 				{Platform: "tiktok", Handle: "aidana_tt"},

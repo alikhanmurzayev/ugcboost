@@ -102,10 +102,10 @@ func (r *brandRepository) List(ctx context.Context) ([]*BrandWithManagerCount, e
 		"COUNT(bm."+BrandManagerColumnID+") AS manager_count",
 		"b."+BrandColumnCreatedAt, "b."+BrandColumnUpdatedAt,
 	).
-		From(TableBrands+" b").
-		LeftJoin(TableBrandManagers+" bm ON bm."+BrandManagerColumnBrandID+" = b."+BrandColumnID).
-		GroupBy("b."+BrandColumnID).
-		OrderBy("b."+BrandColumnCreatedAt+" DESC")
+		From(TableBrands + " b").
+		LeftJoin(TableBrandManagers + " bm ON bm." + BrandManagerColumnBrandID + " = b." + BrandColumnID).
+		GroupBy("b." + BrandColumnID).
+		OrderBy("b." + BrandColumnCreatedAt + " DESC")
 	return dbutil.Many[BrandWithManagerCount](ctx, r.db, q)
 }
 
@@ -117,7 +117,7 @@ func (r *brandRepository) ListByUser(ctx context.Context, userID string) ([]*Bra
 	).
 		From(TableBrands+" b").
 		Join(TableBrandManagers+" bm ON bm."+BrandManagerColumnBrandID+" = b."+BrandColumnID+" AND bm."+BrandManagerColumnUserID+" = ?", userID).
-		OrderBy("b."+BrandColumnCreatedAt+" DESC")
+		OrderBy("b." + BrandColumnCreatedAt + " DESC")
 	return dbutil.Many[BrandWithManagerCount](ctx, r.db, q)
 }
 
@@ -168,10 +168,10 @@ func (r *brandRepository) RemoveManager(ctx context.Context, brandID, userID str
 
 func (r *brandRepository) ListManagers(ctx context.Context, brandID string) ([]*BrandManagerRow, error) {
 	q := sq.Select("bm."+BrandManagerColumnUserID, "u."+UserColumnEmail, "bm."+BrandManagerColumnCreatedAt).
-		From(TableBrandManagers+" bm").
-		Join(TableUsers+" u ON u."+UserColumnID+" = bm."+BrandManagerColumnUserID).
+		From(TableBrandManagers + " bm").
+		Join(TableUsers + " u ON u." + UserColumnID + " = bm." + BrandManagerColumnUserID).
 		Where(sq.Eq{"bm." + BrandManagerColumnBrandID: brandID}).
-		OrderBy("bm."+BrandManagerColumnCreatedAt+" ASC")
+		OrderBy("bm." + BrandManagerColumnCreatedAt + " ASC")
 	return dbutil.Many[BrandManagerRow](ctx, r.db, q)
 }
 
