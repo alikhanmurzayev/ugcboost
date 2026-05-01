@@ -184,10 +184,10 @@ lint-legal:
 # ── Code generation ──────────────────────────────────────────────
 
 generate-api:
-	oapi-codegen -package api -generate chi-server,models \
+	oapi-codegen -package api -generate chi-server,strict-server,models \
 		-o backend/internal/api/server.gen.go \
 		backend/api/openapi.yaml
-	oapi-codegen -package testapi -generate chi-server,models \
+	oapi-codegen -package testapi -generate chi-server,strict-server,models \
 		-o backend/internal/testapi/server.gen.go \
 		backend/api/openapi-test.yaml
 	cd frontend/web && npx openapi-typescript ../../backend/api/openapi.yaml -o src/api/generated/schema.ts

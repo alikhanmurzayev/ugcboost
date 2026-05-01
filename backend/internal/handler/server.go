@@ -2,18 +2,20 @@ package handler
 
 import (
 	"context"
+	"net/http"
 
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/api"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/domain"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/logger"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/service"
+	"github.com/alikhanmurzayev/ugcboost/backend/internal/testapi"
 )
 
 // AuthService is the interface Server needs from the auth service.
 type AuthService interface {
 	Login(ctx context.Context, email, password string) (*service.LoginResult, error)
 	Refresh(ctx context.Context, rawRefreshToken string) (*service.RefreshResult, error)
-	Logout(ctx context.Context, userID string) error
+	LogoutByRefresh(ctx context.Context, rawRefreshToken string) error
 	RequestPasswordReset(ctx context.Context, email string) error
 	ResetPassword(ctx context.Context, rawToken, newPassword string) (string, error)
 	GetUser(ctx context.Context, userID string) (*domain.User, error)
@@ -73,7 +75,7 @@ type ServerConfig struct {
 	LegalPrivacyVersion   string
 }
 
-// Server implements api.ServerInterface.
+// Server implements api.StrictServerInterface.
 type Server struct {
 	authService               AuthService
 	brandService              BrandService
@@ -89,7 +91,7 @@ type Server struct {
 	logger                    logger.Logger
 }
 
-var _ api.ServerInterface = (*Server)(nil)
+var _ api.StrictServerInterface = (*Server)(nil)
 
 // NewServer creates a new Server.
 func NewServer(
@@ -116,4 +118,42 @@ func NewServer(
 		legalPrivacyVersion:       cfg.LegalPrivacyVersion,
 		logger:                    log,
 	}
+}
+
+// strictErrorHandlerFunc matches both api.* and testapi.* RequestErrorHandlerFunc /
+// ResponseErrorHandlerFunc signatures — they are identical net/http handlers.
+type strictErrorHandlerFunc = func(w http.ResponseWriter, r *http.Request, err error)
+
+// newStrictErrorHandlers binds respondError to a logger and returns the pair of
+// handlers strict-server expects. Body-decode errors always become 422 +
+// CodeValidation; runtime errors keep their domain-driven mapping.
+func newStrictErrorHandlers(log logger.Logger) (request, response strictErrorHandlerFunc) {
+	request = func(w http.ResponseWriter, r *http.Request, _ error) {
+		respondError(w, r, domain.NewValidationError(domain.CodeValidation, "Invalid request body"), log)
+	}
+	response = func(w http.ResponseWriter, r *http.Request, err error) {
+		respondError(w, r, err, log)
+	}
+	return
+}
+
+// NewStrictAPIHandler wraps a Server with the strict-server adapter, plugging
+// respondError as the source of truth for both decode-time and runtime errors.
+// The same factory is shared by main.go and helpers_test.go to keep production
+// and test wiring identical.
+func NewStrictAPIHandler(s *Server) api.ServerInterface {
+	requestErr, responseErr := newStrictErrorHandlers(s.logger)
+	return api.NewStrictHandlerWithOptions(s, nil, api.StrictHTTPServerOptions{
+		RequestErrorHandlerFunc:  requestErr,
+		ResponseErrorHandlerFunc: responseErr,
+	})
+}
+
+// NewStrictTestAPIHandler mirrors NewStrictAPIHandler for the test API.
+func NewStrictTestAPIHandler(h *TestAPIHandler) testapi.ServerInterface {
+	requestErr, responseErr := newStrictErrorHandlers(h.logger)
+	return testapi.NewStrictHandlerWithOptions(h, nil, testapi.StrictHTTPServerOptions{
+		RequestErrorHandlerFunc:  requestErr,
+		ResponseErrorHandlerFunc: responseErr,
+	})
 }

@@ -3,10 +3,8 @@ package handler
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"net/http"
 
 	tgbot "github.com/go-telegram/bot"
 	tgmodels "github.com/go-telegram/bot/models"
@@ -54,7 +52,7 @@ type TestAPIHandler struct {
 	logger     logger.Logger
 }
 
-var _ testapi.ServerInterface = (*TestAPIHandler)(nil)
+var _ testapi.StrictServerInterface = (*TestAPIHandler)(nil)
 
 // NewTestAPIHandler creates a new TestAPIHandler.
 func NewTestAPIHandler(
@@ -91,15 +89,10 @@ func (s *telegramSpySender) SendMessage(_ context.Context, params *tgbot.SendMes
 // Builds a synthetic Update from the request body, invokes the in-process
 // Telegram handler with a spy Sender, and returns whatever replies it
 // produced. Bypasses long-polling and Telegram entirely.
-func (h *TestAPIHandler) SendTelegramMessage(w http.ResponseWriter, r *http.Request) {
-	var req testapi.SendTelegramMessageRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		respondError(w, r, domain.NewValidationError(domain.CodeValidation, "Invalid request body"), h.logger)
-		return
-	}
+func (h *TestAPIHandler) SendTelegramMessage(ctx context.Context, request testapi.SendTelegramMessageRequestObject) (testapi.SendTelegramMessageResponseObject, error) {
+	req := request.Body
 	if req.Text == "" {
-		respondError(w, r, domain.NewValidationError(domain.CodeValidation, "text is required"), h.logger)
-		return
+		return nil, domain.NewValidationError(domain.CodeValidation, "text is required")
 	}
 
 	from := &tgmodels.User{ID: req.ChatId}
@@ -126,7 +119,7 @@ func (h *TestAPIHandler) SendTelegramMessage(w http.ResponseWriter, r *http.Requ
 		},
 	}
 	spy := &telegramSpySender{}
-	h.tgHandler.Handle(r.Context(), spy, update)
+	h.tgHandler.Handle(ctx, spy, update)
 
 	replies := make([]testapi.TelegramReply, 0, len(spy.sent))
 	for _, params := range spy.sent {
@@ -136,98 +129,82 @@ func (h *TestAPIHandler) SendTelegramMessage(w http.ResponseWriter, r *http.Requ
 			Text:   params.Text,
 		})
 	}
-	respondJSON(w, r, http.StatusOK, testapi.SendTelegramMessageResult{Replies: replies}, h.logger)
+	return testapi.SendTelegramMessage200JSONResponse{Replies: replies}, nil
 }
 
 // SeedUser handles POST /test/seed-user.
-func (h *TestAPIHandler) SeedUser(w http.ResponseWriter, r *http.Request) {
-	var req testapi.SeedUserRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		respondError(w, r, domain.NewValidationError(domain.CodeValidation, "Invalid request body"), h.logger)
-		return
-	}
+func (h *TestAPIHandler) SeedUser(ctx context.Context, request testapi.SeedUserRequestObject) (testapi.SeedUserResponseObject, error) {
+	req := request.Body
 
 	email := string(req.Email)
 	if email == "" || req.Password == "" || req.Role == "" {
-		respondError(w, r, domain.NewValidationError(domain.CodeValidation, "email, password, and role are required"), h.logger)
-		return
+		return nil, domain.NewValidationError(domain.CodeValidation, "email, password, and role are required")
 	}
 
-	user, err := h.auth.SeedUser(r.Context(), email, req.Password, string(req.Role))
+	user, err := h.auth.SeedUser(ctx, email, req.Password, string(req.Role))
 	if err != nil {
-		respondError(w, r, err, h.logger)
-		return
+		return nil, err
 	}
 
-	respondJSON(w, r, http.StatusCreated, testapi.SeedUserResult{
+	return testapi.SeedUser201JSONResponse{
 		Data: testapi.SeedUserData{
 			Id:    user.ID,
 			Email: openapi_types.Email(user.Email),
 			Role:  testapi.SeedUserDataRole(user.Role),
 		},
-	}, h.logger)
+	}, nil
 }
 
 // CleanupEntity handles POST /test/cleanup-entity.
 // Dispatches by req.Type: "user" hard-deletes the user and its references
 // inside a transaction; "brand" forwards to the standard brand delete.
-func (h *TestAPIHandler) CleanupEntity(w http.ResponseWriter, r *http.Request) {
-	var req testapi.CleanupEntityRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		respondError(w, r, domain.NewValidationError(domain.CodeValidation, "Invalid request body"), h.logger)
-		return
-	}
+func (h *TestAPIHandler) CleanupEntity(ctx context.Context, request testapi.CleanupEntityRequestObject) (testapi.CleanupEntityResponseObject, error) {
+	req := request.Body
 
 	if req.Id == "" {
-		respondError(w, r, domain.NewValidationError(domain.CodeValidation, "id is required"), h.logger)
-		return
+		return nil, domain.NewValidationError(domain.CodeValidation, "id is required")
 	}
 
 	var deleteErr error
 	switch req.Type {
 	case testapi.User:
-		deleteErr = dbutil.WithTx(r.Context(), h.pool, func(tx dbutil.DB) error {
-			return h.repos.NewUserRepo(tx).DeleteForTests(r.Context(), req.Id)
+		deleteErr = dbutil.WithTx(ctx, h.pool, func(tx dbutil.DB) error {
+			return h.repos.NewUserRepo(tx).DeleteForTests(ctx, req.Id)
 		})
 	case testapi.Brand:
-		deleteErr = h.repos.NewBrandRepo(h.pool).Delete(r.Context(), req.Id)
+		deleteErr = h.repos.NewBrandRepo(h.pool).Delete(ctx, req.Id)
 	case testapi.CreatorApplication:
-		deleteErr = h.repos.NewCreatorApplicationRepo(h.pool).DeleteForTests(r.Context(), req.Id)
+		deleteErr = h.repos.NewCreatorApplicationRepo(h.pool).DeleteForTests(ctx, req.Id)
 	default:
 		if !req.Type.Valid() {
-			respondError(w, r, domain.NewValidationError(domain.CodeValidation,
-				fmt.Sprintf("unknown type: %q", req.Type)), h.logger)
-			return
+			return nil, domain.NewValidationError(domain.CodeValidation,
+				fmt.Sprintf("unknown type: %q", req.Type))
 		}
 		// Defensive: a Valid value the switch above does not handle means the
 		// OpenAPI enum grew but the cleanup dispatch was not extended.
-		respondError(w, r, domain.NewValidationError(domain.CodeValidation,
-			fmt.Sprintf("unsupported type: %q", req.Type)), h.logger)
-		return
+		return nil, domain.NewValidationError(domain.CodeValidation,
+			fmt.Sprintf("unsupported type: %q", req.Type))
 	}
 
 	if deleteErr != nil {
 		if errors.Is(deleteErr, sql.ErrNoRows) {
-			respondError(w, r, domain.ErrNotFound, h.logger)
-			return
+			return nil, domain.ErrNotFound
 		}
-		respondError(w, r, deleteErr, h.logger)
-		return
+		return nil, deleteErr
 	}
 
-	w.WriteHeader(http.StatusNoContent)
+	return testapi.CleanupEntity204Response{}, nil
 }
 
 // GetResetToken handles GET /test/reset-tokens?email=...
-func (h *TestAPIHandler) GetResetToken(w http.ResponseWriter, r *http.Request, params testapi.GetResetTokenParams) {
-	email := string(params.Email)
+func (h *TestAPIHandler) GetResetToken(_ context.Context, request testapi.GetResetTokenRequestObject) (testapi.GetResetTokenResponseObject, error) {
+	email := string(request.Params.Email)
 	token, ok := h.tokenStore.GetToken(email)
 	if !ok {
-		respondError(w, r, domain.ErrNotFound, h.logger)
-		return
+		return nil, domain.ErrNotFound
 	}
 
-	respondJSON(w, r, http.StatusOK, testapi.ResetTokenResult{
+	return testapi.GetResetToken200JSONResponse{
 		Data: testapi.ResetTokenData{Token: token},
-	}, h.logger)
+	}, nil
 }

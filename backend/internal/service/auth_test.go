@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"strings"
@@ -417,8 +418,59 @@ func TestAuthService_Refresh(t *testing.T) {
 	})
 }
 
-func TestAuthService_Logout(t *testing.T) {
+func TestAuthService_LogoutByRefresh(t *testing.T) {
 	t.Parallel()
+
+	t.Run("empty refresh token is no-op", func(t *testing.T) {
+		t.Parallel()
+
+		pool := dbmocks.NewMockPool(t)
+		factory := svcmocks.NewMockAuthRepoFactory(t)
+		tokens := svcmocks.NewMockTokenGenerator(t)
+
+		svc := NewAuthService(pool, factory, tokens, nil, testBcryptCost, logmocks.NewMockLogger(t))
+		require.NoError(t, svc.LogoutByRefresh(context.Background(), ""))
+	})
+
+	t.Run("unknown refresh token is no-op", func(t *testing.T) {
+		t.Parallel()
+
+		pool := dbmocks.NewMockPool(t)
+		factory := svcmocks.NewMockAuthRepoFactory(t)
+		repo := repomocks.NewMockUserRepo(t)
+		audit := repomocks.NewMockAuditRepo(t)
+		tokens := svcmocks.NewMockTokenGenerator(t)
+
+		pool.EXPECT().Begin(mock.Anything).Return(testTx{}, nil)
+		factory.EXPECT().NewUserRepo(mock.Anything).Return(repo)
+		factory.EXPECT().NewAuditRepo(mock.Anything).Return(audit)
+		repo.EXPECT().ClaimRefreshToken(mock.Anything, HashToken("raw-token")).
+			Return((*repository.RefreshTokenRow)(nil), sql.ErrNoRows)
+
+		svc := NewAuthService(pool, factory, tokens, nil, testBcryptCost, logmocks.NewMockLogger(t))
+		require.NoError(t, svc.LogoutByRefresh(context.Background(), "raw-token"))
+	})
+
+	t.Run("claim error other than no-rows propagates", func(t *testing.T) {
+		t.Parallel()
+
+		pool := dbmocks.NewMockPool(t)
+		factory := svcmocks.NewMockAuthRepoFactory(t)
+		repo := repomocks.NewMockUserRepo(t)
+		audit := repomocks.NewMockAuditRepo(t)
+		tokens := svcmocks.NewMockTokenGenerator(t)
+
+		pool.EXPECT().Begin(mock.Anything).Return(testTx{}, nil)
+		factory.EXPECT().NewUserRepo(mock.Anything).Return(repo)
+		factory.EXPECT().NewAuditRepo(mock.Anything).Return(audit)
+		repo.EXPECT().ClaimRefreshToken(mock.Anything, HashToken("raw-token")).
+			Return((*repository.RefreshTokenRow)(nil), errors.New("connection refused"))
+
+		svc := NewAuthService(pool, factory, tokens, nil, testBcryptCost, logmocks.NewMockLogger(t))
+		err := svc.LogoutByRefresh(context.Background(), "raw-token")
+		require.ErrorContains(t, err, "claim refresh token")
+		require.ErrorContains(t, err, "connection refused")
+	})
 
 	t.Run("delete refresh tokens error aborts tx", func(t *testing.T) {
 		t.Parallel()
@@ -432,11 +484,13 @@ func TestAuthService_Logout(t *testing.T) {
 		pool.EXPECT().Begin(mock.Anything).Return(testTx{}, nil)
 		factory.EXPECT().NewUserRepo(mock.Anything).Return(repo)
 		factory.EXPECT().NewAuditRepo(mock.Anything).Return(audit)
+		repo.EXPECT().ClaimRefreshToken(mock.Anything, HashToken("raw-token")).
+			Return(&repository.RefreshTokenRow{UserID: "user-1"}, nil)
 		repo.EXPECT().DeleteUserRefreshTokens(mock.Anything, "user-1").
 			Return(errors.New("db error"))
 
 		svc := NewAuthService(pool, factory, tokens, nil, testBcryptCost, logmocks.NewMockLogger(t))
-		err := svc.Logout(context.Background(), "user-1")
+		err := svc.LogoutByRefresh(context.Background(), "raw-token")
 		require.ErrorContains(t, err, "db error")
 	})
 
@@ -452,11 +506,13 @@ func TestAuthService_Logout(t *testing.T) {
 		pool.EXPECT().Begin(mock.Anything).Return(testTx{}, nil)
 		factory.EXPECT().NewUserRepo(mock.Anything).Return(repo)
 		factory.EXPECT().NewAuditRepo(mock.Anything).Return(audit)
+		repo.EXPECT().ClaimRefreshToken(mock.Anything, HashToken("raw-token")).
+			Return(&repository.RefreshTokenRow{UserID: "user-1"}, nil)
 		repo.EXPECT().DeleteUserRefreshTokens(mock.Anything, "user-1").Return(nil)
 		audit.EXPECT().Create(mock.Anything, mock.Anything).Return(errors.New("audit failed"))
 
 		svc := NewAuthService(pool, factory, tokens, nil, testBcryptCost, logmocks.NewMockLogger(t))
-		err := svc.Logout(context.Background(), "user-1")
+		err := svc.LogoutByRefresh(context.Background(), "raw-token")
 		require.ErrorContains(t, err, "audit failed")
 	})
 
@@ -473,6 +529,8 @@ func TestAuthService_Logout(t *testing.T) {
 		pool.EXPECT().Begin(mock.Anything).Return(testTx{}, nil)
 		factory.EXPECT().NewUserRepo(mock.Anything).Return(repo)
 		factory.EXPECT().NewAuditRepo(mock.Anything).Return(audit)
+		repo.EXPECT().ClaimRefreshToken(mock.Anything, HashToken("raw-token")).
+			Return(&repository.RefreshTokenRow{UserID: "user-1"}, nil)
 		repo.EXPECT().DeleteUserRefreshTokens(mock.Anything, "user-1").Return(nil)
 
 		actorID := "user-1"
@@ -485,8 +543,7 @@ func TestAuthService_Logout(t *testing.T) {
 		}, "", "")
 
 		svc := NewAuthService(pool, factory, tokens, nil, testBcryptCost, logmocks.NewMockLogger(t))
-		err := svc.Logout(context.Background(), "user-1")
-		require.NoError(t, err)
+		require.NoError(t, svc.LogoutByRefresh(context.Background(), "raw-token"))
 	})
 }
 

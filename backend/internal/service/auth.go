@@ -2,6 +2,8 @@ package service
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 
@@ -11,7 +13,6 @@ import (
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/dbutil"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/domain"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/logger"
-	"github.com/alikhanmurzayev/ugcboost/backend/internal/middleware"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/repository"
 )
 
@@ -159,28 +160,34 @@ func (s *AuthService) Refresh(ctx context.Context, rawRefreshToken string) (*Ref
 	return result, nil
 }
 
-// Logout invalidates all refresh tokens for the user and records the
-// logout audit entry inside the same transaction.
-func (s *AuthService) Logout(ctx context.Context, userID string) error {
+// LogoutByRefresh resolves the user from the supplied refresh-token cookie,
+// revokes every refresh token they own, and records the audit entry — all in
+// one transaction. An empty or unknown cookie is a no-op so anonymous
+// /auth/logout calls (cookie already cleared, expired token, etc.) still
+// succeed and let the handler emit the clear-cookie response.
+func (s *AuthService) LogoutByRefresh(ctx context.Context, rawRefreshToken string) error {
+	if rawRefreshToken == "" {
+		return nil
+	}
+	hash := HashToken(rawRefreshToken)
 	return dbutil.WithTx(ctx, s.pool, func(tx dbutil.DB) error {
 		userRepo := s.repoFactory.NewUserRepo(tx)
 		auditRepo := s.repoFactory.NewAuditRepo(tx)
 
-		if err := userRepo.DeleteUserRefreshTokens(ctx, userID); err != nil {
+		rt, err := userRepo.ClaimRefreshToken(ctx, hash)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return nil
+			}
+			return fmt.Errorf("claim refresh token: %w", err)
+		}
+
+		if err := userRepo.DeleteUserRefreshTokens(ctx, rt.UserID); err != nil {
 			return err
 		}
 
-		// Ensure actor info is present even if the caller supplied a bare
-		// context (e.g. background jobs). In production the auth middleware
-		// already fills these keys, but overriding with the explicit userID
-		// keeps audit rows consistent in every code path.
-		actorCtx := ctx
-		if middleware.UserIDFromContext(actorCtx) == "" {
-			actorCtx = contextWithActor(actorCtx, userID, "")
-		}
-
-		return writeAudit(actorCtx, auditRepo,
-			AuditActionLogout, AuditEntityTypeUser, userID, nil, nil)
+		return writeAudit(contextWithActor(ctx, rt.UserID, ""), auditRepo,
+			AuditActionLogout, AuditEntityTypeUser, rt.UserID, nil, nil)
 	})
 }
 

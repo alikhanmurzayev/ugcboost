@@ -44,3 +44,4 @@ BMad config files (`_bmad/*/config.yaml`) are per-user and gitignored. After clo
 - **Branch naming**: `<username>/<description>` (e.g. `alikhan/backend-auth`)
 - **No direct pushes to main** — only via Pull Request with 1 approval
 - **Commit messages**: concise, in English, describe the "why"
+- **Local gate before push** — через `make`: build, lint, unit+coverage, e2e. Все четыре, всегда.

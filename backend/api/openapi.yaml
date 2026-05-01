@@ -106,12 +106,21 @@ paths:
     post:
       operationId: logout
       summary: Logout and invalidate refresh token
+      description: |
+        Public endpoint — identity is derived from the refresh-token cookie, not
+        from the bearer access token. Allows a client whose access token has
+        expired to still revoke its session. The Set-Cookie clear is
+        unconditional (idempotent for clients without a session).
       tags: [auth]
-      security:
-        - bearerAuth: []
+      security: []
       responses:
         "200":
           description: Logged out
+          headers:
+            Set-Cookie:
+              description: Cleared refresh token cookie
+              schema:
+                type: string
           content:
             application/json:
               schema:
@@ -946,6 +955,7 @@ components:
             $ref: "#/components/schemas/AuditLogEntry"
         total:
           type: integer
+          format: int64
         page:
           type: integer
         perPage:

@@ -24,14 +24,14 @@ func expectHandlerUnexpectedErrorLog(log *logmocks.MockLogger, path string) {
 	})).Once()
 }
 
-// newTestRouter registers the given Server behind the generated chi wrapper.
-// The returned router accepts requests exactly like the production router
-// (same ServerInterfaceWrapper, same param parsing), so unit tests exercise
-// the full handler contract instead of calling methods directly.
+// newTestRouter mirrors prod wiring: strict adapter behind chi, RequestMeta for
+// User-Agent, RefreshCookie for the /auth/refresh and /auth/logout cookie path.
 func newTestRouter(t *testing.T, s *Server) chi.Router {
 	t.Helper()
 	r := chi.NewRouter()
-	api.HandlerWithOptions(s, api.ChiServerOptions{
+	r.Use(middleware.RequestMeta)
+	r.Use(middleware.RefreshCookie)
+	api.HandlerWithOptions(NewStrictAPIHandler(s), api.ChiServerOptions{
 		BaseRouter:       r,
 		ErrorHandlerFunc: HandleParamError(logmocks.NewMockLogger(t)),
 	})
@@ -77,5 +77,14 @@ func withRole(userID string, role api.UserRole) func(*http.Request) {
 		ctx := context.WithValue(r.Context(), middleware.ContextKeyUserID, userID)
 		ctx = context.WithValue(ctx, middleware.ContextKeyRole, role)
 		*r = *r.WithContext(ctx)
+	}
+}
+
+// withRefreshCookie attaches a refresh-token cookie so middleware.RefreshCookie
+// surfaces it to the handler via context — only takes effect for whitelisted
+// routes (/auth/refresh, /auth/logout).
+func withRefreshCookie(value string) func(*http.Request) {
+	return func(r *http.Request) {
+		r.AddCookie(&http.Cookie{Name: middleware.CookieRefreshToken, Value: value})
 	}
 }

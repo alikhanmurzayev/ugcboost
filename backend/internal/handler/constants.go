@@ -1,9 +1,8 @@
 package handler
 
-// Cookie names.
-const (
-	CookieRefreshToken = "refresh_token"
-)
+import "github.com/alikhanmurzayev/ugcboost/backend/internal/middleware"
+
+const CookieRefreshToken = middleware.CookieRefreshToken
 
 // HTTP header names.
 const (

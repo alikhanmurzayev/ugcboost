@@ -1,43 +1,33 @@
 package handler
 
 import (
-	"encoding/json"
-	"net/http"
+	"context"
 
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/api"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/domain"
 )
 
-// CreateBrand handles POST /brands
-func (s *Server) CreateBrand(w http.ResponseWriter, r *http.Request) {
-	if err := s.authzService.CanCreateBrand(r.Context()); err != nil {
-		respondError(w, r, err, s.logger)
-		return
+// CreateBrand handles POST /brands.
+func (s *Server) CreateBrand(ctx context.Context, request api.CreateBrandRequestObject) (api.CreateBrandResponseObject, error) {
+	if err := s.authzService.CanCreateBrand(ctx); err != nil {
+		return nil, err
 	}
 
-	var req api.CreateBrandRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		respondError(w, r, domain.NewValidationError(domain.CodeValidation, "Invalid request body"), s.logger)
-		return
-	}
-
-	brand, err := s.brandService.CreateBrand(r.Context(), req.Name, req.LogoUrl)
+	brand, err := s.brandService.CreateBrand(ctx, request.Body.Name, request.Body.LogoUrl)
 	if err != nil {
-		respondError(w, r, err, s.logger)
-		return
+		return nil, err
 	}
 
-	respondJSON(w, r, http.StatusCreated, api.BrandResult{
+	return api.CreateBrand201JSONResponse{
 		Data: domainBrandToAPI(brand),
-	}, s.logger)
+	}, nil
 }
 
-// ListBrands handles GET /brands
-func (s *Server) ListBrands(w http.ResponseWriter, r *http.Request) {
-	canViewAll, userID, err := s.authzService.CanListBrands(r.Context())
+// ListBrands handles GET /brands.
+func (s *Server) ListBrands(ctx context.Context, _ api.ListBrandsRequestObject) (api.ListBrandsResponseObject, error) {
+	canViewAll, userID, err := s.authzService.CanListBrands(ctx)
 	if err != nil {
-		respondError(w, r, err, s.logger)
-		return
+		return nil, err
 	}
 
 	var managerID *string
@@ -45,10 +35,9 @@ func (s *Server) ListBrands(w http.ResponseWriter, r *http.Request) {
 		managerID = &userID
 	}
 
-	brands, err := s.brandService.ListBrands(r.Context(), managerID)
+	brands, err := s.brandService.ListBrands(ctx, managerID)
 	if err != nil {
-		respondError(w, r, err, s.logger)
-		return
+		return nil, err
 	}
 
 	items := make([]api.BrandListItem, len(brands))
@@ -63,28 +52,25 @@ func (s *Server) ListBrands(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	respondJSON(w, r, http.StatusOK, api.ListBrandsResult{
+	return api.ListBrands200JSONResponse{
 		Data: api.ListBrandsData{Brands: items},
-	}, s.logger)
+	}, nil
 }
 
-// GetBrand handles GET /brands/{brandID}
-func (s *Server) GetBrand(w http.ResponseWriter, r *http.Request, brandID string) {
-	if err := s.authzService.CanViewBrand(r.Context(), brandID); err != nil {
-		respondError(w, r, err, s.logger)
-		return
+// GetBrand handles GET /brands/{brandID}.
+func (s *Server) GetBrand(ctx context.Context, request api.GetBrandRequestObject) (api.GetBrandResponseObject, error) {
+	if err := s.authzService.CanViewBrand(ctx, request.BrandID); err != nil {
+		return nil, err
 	}
 
-	brand, err := s.brandService.GetBrand(r.Context(), brandID)
+	brand, err := s.brandService.GetBrand(ctx, request.BrandID)
 	if err != nil {
-		respondError(w, r, err, s.logger)
-		return
+		return nil, err
 	}
 
-	managers, err := s.brandService.ListManagers(r.Context(), brandID)
+	managers, err := s.brandService.ListManagers(ctx, request.BrandID)
 	if err != nil {
-		respondError(w, r, err, s.logger)
-		return
+		return nil, err
 	}
 
 	managerList := make([]api.ManagerInfo, len(managers))
@@ -96,7 +82,7 @@ func (s *Server) GetBrand(w http.ResponseWriter, r *http.Request, brandID string
 		}
 	}
 
-	respondJSON(w, r, http.StatusOK, api.GetBrandResult{
+	return api.GetBrand200JSONResponse{
 		Data: api.BrandDetailData{
 			Id:        brand.ID,
 			Name:      brand.Name,
@@ -105,67 +91,49 @@ func (s *Server) GetBrand(w http.ResponseWriter, r *http.Request, brandID string
 			CreatedAt: brand.CreatedAt,
 			UpdatedAt: brand.UpdatedAt,
 		},
-	}, s.logger)
+	}, nil
 }
 
-// UpdateBrand handles PUT /brands/{brandID}
-func (s *Server) UpdateBrand(w http.ResponseWriter, r *http.Request, brandID string) {
-	if err := s.authzService.CanUpdateBrand(r.Context(), brandID); err != nil {
-		respondError(w, r, err, s.logger)
-		return
+// UpdateBrand handles PUT /brands/{brandID}.
+func (s *Server) UpdateBrand(ctx context.Context, request api.UpdateBrandRequestObject) (api.UpdateBrandResponseObject, error) {
+	if err := s.authzService.CanUpdateBrand(ctx, request.BrandID); err != nil {
+		return nil, err
 	}
 
-	var req api.UpdateBrandRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		respondError(w, r, domain.NewValidationError(domain.CodeValidation, "Invalid request body"), s.logger)
-		return
-	}
-
-	brand, err := s.brandService.UpdateBrand(r.Context(), brandID, req.Name, req.LogoUrl)
+	brand, err := s.brandService.UpdateBrand(ctx, request.BrandID, request.Body.Name, request.Body.LogoUrl)
 	if err != nil {
-		respondError(w, r, err, s.logger)
-		return
+		return nil, err
 	}
 
-	respondJSON(w, r, http.StatusOK, api.BrandResult{
+	return api.UpdateBrand200JSONResponse{
 		Data: domainBrandToAPI(brand),
-	}, s.logger)
+	}, nil
 }
 
-// DeleteBrand handles DELETE /brands/{brandID}
-func (s *Server) DeleteBrand(w http.ResponseWriter, r *http.Request, brandID string) {
-	if err := s.authzService.CanDeleteBrand(r.Context(), brandID); err != nil {
-		respondError(w, r, err, s.logger)
-		return
+// DeleteBrand handles DELETE /brands/{brandID}.
+func (s *Server) DeleteBrand(ctx context.Context, request api.DeleteBrandRequestObject) (api.DeleteBrandResponseObject, error) {
+	if err := s.authzService.CanDeleteBrand(ctx, request.BrandID); err != nil {
+		return nil, err
 	}
 
-	if err := s.brandService.DeleteBrand(r.Context(), brandID); err != nil {
-		respondError(w, r, err, s.logger)
-		return
+	if err := s.brandService.DeleteBrand(ctx, request.BrandID); err != nil {
+		return nil, err
 	}
 
-	respondJSON(w, r, http.StatusOK, api.MessageResponse{
+	return api.DeleteBrand200JSONResponse{
 		Data: api.MessageData{Message: "Brand deleted"},
-	}, s.logger)
+	}, nil
 }
 
-// AssignManager handles POST /brands/{brandID}/managers
-func (s *Server) AssignManager(w http.ResponseWriter, r *http.Request, brandID string) {
-	if err := s.authzService.CanAssignManager(r.Context(), brandID); err != nil {
-		respondError(w, r, err, s.logger)
-		return
+// AssignManager handles POST /brands/{brandID}/managers.
+func (s *Server) AssignManager(ctx context.Context, request api.AssignManagerRequestObject) (api.AssignManagerResponseObject, error) {
+	if err := s.authzService.CanAssignManager(ctx, request.BrandID); err != nil {
+		return nil, err
 	}
 
-	var req api.AssignManagerRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		respondError(w, r, domain.NewValidationError(domain.CodeValidation, "Invalid request body"), s.logger)
-		return
-	}
-
-	user, tempPassword, err := s.brandService.AssignManager(r.Context(), brandID, req.Email)
+	user, tempPassword, err := s.brandService.AssignManager(ctx, request.BrandID, request.Body.Email)
 	if err != nil {
-		respondError(w, r, err, s.logger)
-		return
+		return nil, err
 	}
 
 	var tp *string
@@ -173,31 +141,29 @@ func (s *Server) AssignManager(w http.ResponseWriter, r *http.Request, brandID s
 		tp = &tempPassword
 	}
 
-	respondJSON(w, r, http.StatusCreated, api.AssignManagerResult{
+	return api.AssignManager201JSONResponse{
 		Data: api.AssignManagerData{
 			UserId:       user.ID,
 			Email:        user.Email,
 			Role:         string(user.Role),
 			TempPassword: tp,
 		},
-	}, s.logger)
+	}, nil
 }
 
-// RemoveManager handles DELETE /brands/{brandID}/managers/{userID}
-func (s *Server) RemoveManager(w http.ResponseWriter, r *http.Request, brandID string, userID string) {
-	if err := s.authzService.CanRemoveManager(r.Context(), brandID, userID); err != nil {
-		respondError(w, r, err, s.logger)
-		return
+// RemoveManager handles DELETE /brands/{brandID}/managers/{userID}.
+func (s *Server) RemoveManager(ctx context.Context, request api.RemoveManagerRequestObject) (api.RemoveManagerResponseObject, error) {
+	if err := s.authzService.CanRemoveManager(ctx, request.BrandID, request.UserID); err != nil {
+		return nil, err
 	}
 
-	if err := s.brandService.RemoveManager(r.Context(), brandID, userID); err != nil {
-		respondError(w, r, err, s.logger)
-		return
+	if err := s.brandService.RemoveManager(ctx, request.BrandID, request.UserID); err != nil {
+		return nil, err
 	}
 
-	respondJSON(w, r, http.StatusOK, api.MessageResponse{
+	return api.RemoveManager200JSONResponse{
 		Data: api.MessageData{Message: "Manager removed"},
-	}, s.logger)
+	}, nil
 }
 
 func domainBrandToAPI(b *domain.Brand) api.Brand {

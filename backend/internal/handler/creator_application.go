@@ -1,8 +1,7 @@
 package handler
 
 import (
-	"encoding/json"
-	"net/http"
+	"context"
 	"net/url"
 	"slices"
 	"strings"
@@ -16,29 +15,9 @@ import (
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/middleware"
 )
 
-// maxUserAgentLength caps the User-Agent string persisted with consent rows.
-// Anything longer is truncated before the service layer touches it — the
-// attacker-controlled header should not balloon DB rows or stdout logs.
-const maxUserAgentLength = 1024
+func (s *Server) SubmitCreatorApplication(ctx context.Context, request api.SubmitCreatorApplicationRequestObject) (api.SubmitCreatorApplicationResponseObject, error) {
+	req := request.Body
 
-// SubmitCreatorApplication handles POST /creators/applications.
-//
-// The endpoint is public (no auth, no RBAC check). The handler parses the
-// request body into the generated API type, hydrates domain.CreatorApplicationInput
-// with request metadata (client IP, User-Agent, legal document versions,
-// current time) and delegates to CreatorApplicationService. On success the
-// response includes the application id and the Telegram bot deep-link.
-func (s *Server) SubmitCreatorApplication(w http.ResponseWriter, r *http.Request) {
-	var req api.CreatorApplicationSubmitRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		respondError(w, r, domain.NewValidationError(domain.CodeValidation, "Invalid request body"), s.logger)
-		return
-	}
-
-	ua := r.UserAgent()
-	if len(ua) > maxUserAgentLength {
-		ua = ua[:maxUserAgentLength]
-	}
 	input := domain.CreatorApplicationInput{
 		LastName:          req.LastName,
 		FirstName:         req.FirstName,
@@ -51,34 +30,33 @@ func (s *Server) SubmitCreatorApplication(w http.ResponseWriter, r *http.Request
 		CategoryOtherText: req.CategoryOtherText,
 		Socials:           apiSocialsToDomain(req.Socials),
 		Consents:          domain.ConsentsInput{AcceptedAll: req.AcceptedAll},
-		IPAddress:         middleware.ClientIPFromContext(r.Context()),
-		UserAgent:         ua,
+		IPAddress:         middleware.ClientIPFromContext(ctx),
+		UserAgent:         middleware.UserAgentFromContext(ctx),
 		AgreementVersion:  s.legalAgreementVersion,
 		PrivacyVersion:    s.legalPrivacyVersion,
 		Now:               time.Now().UTC(),
 	}
 
-	submission, err := s.creatorApplicationService.Submit(r.Context(), input)
+	submission, err := s.creatorApplicationService.Submit(ctx, input)
 	if err != nil {
-		respondError(w, r, err, s.logger)
-		return
+		return nil, err
 	}
 
 	applicationID, err := uuid.Parse(submission.ApplicationID)
 	if err != nil {
 		// The service always returns a DB-generated UUID here, so a parse
-		// failure indicates a real bug. respondError already logs the wrapped
-		// internal error via its default branch — no need for a second log.
-		respondError(w, r, err, s.logger)
-		return
+		// failure indicates a real bug. The strict-server adapter forwards
+		// the error to ResponseErrorHandlerFunc → respondError, which logs
+		// it via the default branch as 500.
+		return nil, err
 	}
 
-	respondJSON(w, r, http.StatusCreated, api.CreatorApplicationSubmitResult{
+	return api.SubmitCreatorApplication201JSONResponse{
 		Data: api.CreatorApplicationSubmitData{
 			ApplicationId:  applicationID,
 			TelegramBotUrl: s.buildTelegramBotURL(submission.ApplicationID),
 		},
-	}, s.logger)
+	}, nil
 }
 
 // buildTelegramBotURL assembles the deep-link returned to the creator. The
@@ -115,38 +93,33 @@ func apiSocialsToDomain(in []api.SocialAccountInput) []domain.SocialAccountInput
 // logs nothing about the response body — every persisted field is PII-bearing
 // (iin, names, phone, address) and must not surface in stdout логах приложения
 // per docs/standards/security.md.
-func (s *Server) GetCreatorApplication(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
-	ctx := r.Context()
+func (s *Server) GetCreatorApplication(ctx context.Context, request api.GetCreatorApplicationRequestObject) (api.GetCreatorApplicationResponseObject, error) {
 	if err := s.authzService.CanViewCreatorApplication(ctx); err != nil {
-		respondError(w, r, err, s.logger)
-		return
+		return nil, err
 	}
 
-	detail, err := s.creatorApplicationService.GetByID(ctx, id.String())
+	detail, err := s.creatorApplicationService.GetByID(ctx, request.Id.String())
 	if err != nil {
-		respondError(w, r, err, s.logger)
-		return
+		return nil, err
 	}
 
 	categoryEntries, err := s.dictionaryService.List(ctx, domain.DictionaryTypeCategories)
 	if err != nil {
-		respondError(w, r, err, s.logger)
-		return
+		return nil, err
 	}
 	cityEntries, err := s.dictionaryService.List(ctx, domain.DictionaryTypeCities)
 	if err != nil {
-		respondError(w, r, err, s.logger)
-		return
+		return nil, err
 	}
 
-	respondJSON(w, r, http.StatusOK, api.GetCreatorApplicationResult{
+	return api.GetCreatorApplication200JSONResponse{
 		Data: domainCreatorApplicationDetailToAPI(
-			id,
+			request.Id,
 			detail,
 			indexDictionaryByCode(categoryEntries),
 			indexDictionaryByCode(cityEntries),
 		),
-	}, s.logger)
+	}, nil
 }
 
 // indexDictionaryByCode builds a code-keyed lookup over a freshly-fetched

@@ -32,8 +32,10 @@ func TestServer_CreateBrand(t *testing.T) {
 
 	t.Run("invalid JSON", func(t *testing.T) {
 		t.Parallel()
+		// strict-server decodes the body before the handler runs, so authz is
+		// never called when JSON is malformed — the request rejects at the
+		// adapter layer with 422+CodeValidation via RequestErrorHandlerFunc.
 		authz := mocks.NewMockAuthzService(t)
-		authz.EXPECT().CanCreateBrand(mock.Anything).Return(nil)
 
 		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/brands",
@@ -244,8 +246,8 @@ func TestServer_UpdateBrand(t *testing.T) {
 
 	t.Run("invalid JSON", func(t *testing.T) {
 		t.Parallel()
+		// See TestServer_CreateBrand/invalid_JSON for the authz-skip rationale.
 		authz := mocks.NewMockAuthzService(t)
-		authz.EXPECT().CanUpdateBrand(mock.Anything, "b-1").Return(nil)
 
 		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPut, "/brands/b-1",
@@ -348,8 +350,8 @@ func TestServer_AssignManager(t *testing.T) {
 
 	t.Run("invalid JSON", func(t *testing.T) {
 		t.Parallel()
+		// See TestServer_CreateBrand/invalid_JSON for the authz-skip rationale.
 		authz := mocks.NewMockAuthzService(t)
-		authz.EXPECT().CanAssignManager(mock.Anything, "b-1").Return(nil)
 
 		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/brands/b-1/managers",

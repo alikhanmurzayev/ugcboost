@@ -27,10 +27,12 @@
 // а авторизованный админ получает полный user-payload с корректными email
 // и ролью.
 //
-// TestLogout — POST /auth/logout. Неавторизованный вызов — 401, успешный —
-// 200. После успешного логаута последующий /auth/refresh уже отвергается:
-// refresh_token действительно инвалидирован серверной стороной, а не просто
-// очищен cookie у клиента.
+// TestLogout — POST /auth/logout. Эндпоинт публичный (Bearer не требуется):
+// личность определяется по refresh-cookie, чтобы клиент с истёкшим access
+// смог отозвать сессию. Без cookie ручка идемпотентно отдаёт 200 с очищенной
+// cookie. С валидным refresh-cookie сервер инвалидирует токен — последующий
+// /auth/refresh уже отвергается: всё-таки revoke на сервере, а не просто
+// очистка cookie у клиента.
 //
 // TestPasswordReset проходит полный lifecycle сброса пароля. Запрос на сброс
 // для существующего и для несуществующего email одинаково отвечает 200 —
@@ -286,22 +288,20 @@ func TestGetMe(t *testing.T) {
 func TestLogout(t *testing.T) {
 	t.Parallel()
 
-	t.Run("no auth returns 401", func(t *testing.T) {
+	t.Run("no cookie returns 200 idempotent", func(t *testing.T) {
 		t.Parallel()
 		c := testutil.NewAPIClient(t)
 		resp, err := c.LogoutWithResponse(context.Background())
 		require.NoError(t, err)
-		require.Equal(t, http.StatusUnauthorized, resp.StatusCode())
-		// Logout only models JSONDefault for error responses.
-		require.NotNil(t, resp.JSONDefault)
-		require.Equal(t, "UNAUTHORIZED", resp.JSONDefault.Error.Code)
+		require.Equal(t, http.StatusOK, resp.StatusCode())
+		require.NotNil(t, resp.JSON200)
 	})
 
 	t.Run("success returns 200", func(t *testing.T) {
 		t.Parallel()
-		c, token, _ := testutil.SetupAdminClient(t)
+		c, _, _ := testutil.SetupAdminClient(t)
 
-		resp, err := c.LogoutWithResponse(context.Background(), testutil.WithAuth(token))
+		resp, err := c.LogoutWithResponse(context.Background())
 		require.NoError(t, err)
 		require.Equal(t, http.StatusOK, resp.StatusCode())
 		require.NotNil(t, resp.JSON200)
@@ -309,9 +309,9 @@ func TestLogout(t *testing.T) {
 
 	t.Run("refresh fails after logout", func(t *testing.T) {
 		t.Parallel()
-		c, token, _ := testutil.SetupAdminClient(t)
+		c, _, _ := testutil.SetupAdminClient(t)
 
-		logoutResp, err := c.LogoutWithResponse(context.Background(), testutil.WithAuth(token))
+		logoutResp, err := c.LogoutWithResponse(context.Background())
 		require.NoError(t, err)
 		require.Equal(t, http.StatusOK, logoutResp.StatusCode())
 

@@ -14,6 +14,7 @@ import (
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/domain"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/handler/mocks"
 	logmocks "github.com/alikhanmurzayev/ugcboost/backend/internal/logger/mocks"
+	"github.com/alikhanmurzayev/ugcboost/backend/internal/middleware"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/service"
 )
 
@@ -184,6 +185,35 @@ func TestServer_RefreshToken(t *testing.T) {
 		require.Equal(t, "new-refresh", cookie.Value)
 		require.WithinDuration(t, refreshExpires, cookie.Expires, time.Second)
 	})
+
+	t.Run("reads refresh cookie from middleware-context", func(t *testing.T) {
+		// Captured-input test: the strict-server adapter does not pass *http.Request
+		// to handler methods, so RefreshToken must read the raw cookie via
+		// middleware.RefreshCookieFromContext. Pre-seed the context with
+		// middleware.WithRefreshCookie and assert the service receives the
+		// exact value — proves the wiring uses ctx, not r.Cookie.
+		t.Parallel()
+		user := newTestUser()
+		refreshExpires := time.Now().Add(30 * 24 * time.Hour)
+
+		auth := mocks.NewMockAuthService(t)
+		auth.EXPECT().Refresh(mock.Anything, "ctx-token").
+			Return(&service.RefreshResult{
+				AccessToken:      "new-access",
+				RefreshTokenRaw:  "rotated",
+				RefreshExpiresAt: refreshExpires.Unix(),
+				User:             user,
+			}, nil)
+
+		router := newTestRouter(t, NewServer(auth, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+
+		w, _ := doJSON[api.LoginResult](t, router, http.MethodPost, "/auth/refresh", nil,
+			func(r *http.Request) {
+				ctx := middleware.WithRefreshCookie(r.Context(), "ctx-token")
+				*r = *r.WithContext(ctx)
+			})
+		require.Equal(t, http.StatusOK, w.Code)
+	})
 }
 
 func TestServer_RequestPasswordReset(t *testing.T) {
@@ -308,29 +338,34 @@ func TestServer_ResetPassword(t *testing.T) {
 func TestServer_Logout(t *testing.T) {
 	t.Parallel()
 
-	t.Run("no user in context", func(t *testing.T) {
+	t.Run("no refresh cookie still returns 200 with cleared cookie", func(t *testing.T) {
 		t.Parallel()
 		auth := mocks.NewMockAuthService(t)
+		auth.EXPECT().LogoutByRefresh(mock.Anything, "").Return(nil)
 		router := newTestRouter(t, NewServer(auth, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 
-		w, _ := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/auth/logout", nil)
-		require.Equal(t, http.StatusUnauthorized, w.Code)
+		w, resp := doJSON[api.MessageResponse](t, router, http.MethodPost, "/auth/logout", nil)
+		require.Equal(t, http.StatusOK, w.Code)
+		require.Equal(t, api.MessageResponse{
+			Data: api.MessageData{Message: "Logged out"},
+		}, resp)
+		cookie := refreshCookie(t, w.Result())
+		require.Equal(t, "", cookie.Value)
+		require.Equal(t, -1, cookie.MaxAge)
 	})
 
 	t.Run("service error still returns 200 with cleared cookie", func(t *testing.T) {
 		t.Parallel()
 		auth := mocks.NewMockAuthService(t)
-		// Logout handler deliberately logs errors but always clears the cookie
-		// and returns 200 — anything else would leak session state.
-		auth.EXPECT().Logout(mock.Anything, "u-admin").Return(errors.New("db error"))
+		auth.EXPECT().LogoutByRefresh(mock.Anything, "raw-token").Return(errors.New("db error"))
 		log := logmocks.NewMockLogger(t)
 		log.EXPECT().Error(mock.Anything, "failed to revoke refresh tokens on logout", mock.MatchedBy(func(args []any) bool {
-			return len(args) == 4 && args[0] == "error" && args[2] == "userID" && args[3] == "u-admin"
+			return len(args) == 2 && args[0] == "error"
 		})).Once()
 		router := newTestRouter(t, NewServer(auth, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, log))
 
 		w, resp := doJSON[api.MessageResponse](t, router, http.MethodPost, "/auth/logout", nil,
-			withRole("u-admin", api.Admin))
+			withRefreshCookie("raw-token"))
 		require.Equal(t, http.StatusOK, w.Code)
 		require.Equal(t, api.MessageResponse{
 			Data: api.MessageData{Message: "Logged out"},
@@ -344,11 +379,11 @@ func TestServer_Logout(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		t.Parallel()
 		auth := mocks.NewMockAuthService(t)
-		auth.EXPECT().Logout(mock.Anything, "u-admin").Return(nil)
+		auth.EXPECT().LogoutByRefresh(mock.Anything, "raw-token").Return(nil)
 		router := newTestRouter(t, NewServer(auth, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 
 		w, resp := doJSON[api.MessageResponse](t, router, http.MethodPost, "/auth/logout", nil,
-			withRole("u-admin", api.Admin))
+			withRefreshCookie("raw-token"))
 		require.Equal(t, http.StatusOK, w.Code)
 		require.Equal(t, api.MessageResponse{
 			Data: api.MessageData{Message: "Logged out"},
@@ -400,5 +435,51 @@ func TestServer_GetMe(t *testing.T) {
 		require.Equal(t, api.UserResponse{
 			Data: api.User{Id: user.ID, Email: openapi_types.Email(user.Email), Role: user.Role},
 		}, resp)
+	})
+}
+
+func TestServer_refreshCookieString(t *testing.T) {
+	t.Parallel()
+
+	t.Run("secure environment sets all hardening flags", func(t *testing.T) {
+		t.Parallel()
+		s := &Server{cookieSecure: true}
+		expires := time.Date(2030, 1, 1, 12, 0, 0, 0, time.UTC)
+
+		got := s.refreshCookieString("token-value", expires.Unix())
+
+		require.Contains(t, got, "refresh_token=token-value")
+		require.Contains(t, got, "Path=/")
+		require.Contains(t, got, "HttpOnly")
+		require.Contains(t, got, "Secure")
+		require.Contains(t, got, "SameSite=Strict")
+	})
+
+	t.Run("insecure environment drops Secure flag", func(t *testing.T) {
+		t.Parallel()
+		s := &Server{cookieSecure: false}
+
+		got := s.refreshCookieString("v", time.Now().Add(time.Hour).Unix())
+
+		require.NotContains(t, got, "Secure")
+		require.Contains(t, got, "HttpOnly")
+		require.Contains(t, got, "SameSite=Strict")
+	})
+}
+
+func TestServer_clearRefreshCookieString(t *testing.T) {
+	t.Parallel()
+
+	t.Run("zeroes value and asks browser to delete", func(t *testing.T) {
+		t.Parallel()
+		s := &Server{cookieSecure: true}
+
+		got := s.clearRefreshCookieString()
+
+		require.Contains(t, got, "refresh_token=")
+		require.Contains(t, got, "Max-Age=0")
+		require.Contains(t, got, "HttpOnly")
+		require.Contains(t, got, "Secure")
+		require.Contains(t, got, "SameSite=Strict")
 	})
 }
