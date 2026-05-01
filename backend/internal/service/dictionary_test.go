@@ -53,8 +53,8 @@ func TestDictionaryService_List(t *testing.T) {
 		rig.factory.EXPECT().NewDictionaryRepo(rig.db).Return(rig.dictRepo)
 		rig.dictRepo.EXPECT().ListActive(mock.Anything, repository.TableCategories).
 			Return([]*repository.DictionaryEntryRow{
-				{ID: "c-1", Code: "fashion", Name: "Мода / Стиль", Active: true, SortOrder: 10},
-				{ID: "c-2", Code: "beauty", Name: "Бьюти (макияж, уход)", Active: true, SortOrder: 20},
+				{Code: "fashion", Name: "Мода / Стиль", Active: true, SortOrder: 10},
+				{Code: "beauty", Name: "Бьюти (макияж, уход)", Active: true, SortOrder: 20},
 			}, nil)
 
 		svc := NewDictionaryService(rig.db, rig.factory, rig.logger)
@@ -73,7 +73,7 @@ func TestDictionaryService_List(t *testing.T) {
 		rig.factory.EXPECT().NewDictionaryRepo(rig.db).Return(rig.dictRepo)
 		rig.dictRepo.EXPECT().ListActive(mock.Anything, repository.TableCities).
 			Return([]*repository.DictionaryEntryRow{
-				{ID: "ct-1", Code: "almaty", Name: "Алматы", Active: true, SortOrder: 10},
+				{Code: "almaty", Name: "Алматы", Active: true, SortOrder: 10},
 			}, nil)
 
 		svc := NewDictionaryService(rig.db, rig.factory, rig.logger)

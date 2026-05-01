@@ -37,7 +37,7 @@ func validCreatorInput(t *testing.T) domain.CreatorApplicationInput {
 		MiddleName:    pointer.ToString("Ивановна"),
 		IIN:           "950515312348",
 		Phone:         "+77001234567",
-		City:          "Алматы",
+		CityCode:      "almaty",
 		CategoryCodes: []string{"beauty", "fashion"},
 		Socials: []domain.SocialAccountInput{
 			{Platform: domain.SocialPlatformInstagram, Handle: "@aidana"},
@@ -92,7 +92,7 @@ func expectTxBegin(rig creatorServiceRig) {
 
 // expectFactoryWiring configures the factory calls every TX performs eagerly
 // at the top of the Submit transaction. The dictionary repo is constructed
-// lazily inside resolveCategoryIDs and is wired separately by tests that
+// lazily inside resolveCategoryCodes and is wired separately by tests that
 // reach that code path (see expectDictionaryWiring).
 func expectFactoryWiring(rig creatorServiceRig) {
 	rig.factory.EXPECT().NewCreatorApplicationRepo(mock.Anything).Return(rig.appRepo)
@@ -102,10 +102,18 @@ func expectFactoryWiring(rig creatorServiceRig) {
 	rig.factory.EXPECT().NewAuditRepo(mock.Anything).Return(rig.auditRepo)
 }
 
-// expectDictionaryWiring registers the lazy NewDictionaryRepo call made by
-// resolveCategoryIDs once the duplicate check has passed.
+// expectDictionaryWiring registers the NewDictionaryRepo call Submit makes
+// once the duplicate check has passed. The repo serves both the category
+// and city lookups inside the same TX, so a single factory call is enough.
 func expectDictionaryWiring(rig creatorServiceRig) {
 	rig.factory.EXPECT().NewDictionaryRepo(mock.Anything).Return(rig.dictRepo)
+}
+
+// expectCityLookupSuccess wires the GetActiveByCodes call resolveCityCode
+// makes against the cities table when the rest of the request is valid.
+func expectCityLookupSuccess(rig creatorServiceRig, code string) {
+	rig.dictRepo.EXPECT().GetActiveByCodes(mock.Anything, repository.TableCities, []string{code}).
+		Return([]*repository.DictionaryEntryRow{{Code: code, Active: true}}, nil)
 }
 
 func TestCreatorApplicationService_Submit(t *testing.T) {
@@ -197,9 +205,10 @@ func TestCreatorApplicationService_Submit(t *testing.T) {
 		rig.appRepo.EXPECT().HasActiveByIIN(mock.Anything, in.IIN).Return(false, nil)
 		rig.dictRepo.EXPECT().GetActiveByCodes(mock.Anything, repository.TableCategories, []string{"beauty", "fashion"}).
 			Return([]*repository.DictionaryEntryRow{
-				{ID: "c-1", Code: "beauty", Active: true},
-				{ID: "c-2", Code: "fashion", Active: true},
+				{Code: "beauty", Active: true},
+				{Code: "fashion", Active: true},
 			}, nil)
+		expectCityLookupSuccess(rig, "almaty")
 		rig.appRepo.EXPECT().Create(mock.Anything, mock.Anything).
 			Return(&repository.CreatorApplicationRow{ID: "app-th"}, nil)
 		rig.appCategoryRepo.EXPECT().InsertMany(mock.Anything, mock.Anything).Return(nil)
@@ -228,6 +237,77 @@ func TestCreatorApplicationService_Submit(t *testing.T) {
 		require.ErrorAs(t, err, &ve)
 		require.Equal(t, domain.CodeValidation, ve.Code)
 		require.Contains(t, ve.Message, "Максимум")
+	})
+
+	t.Run("blank-only category codes rejected inside tx", func(t *testing.T) {
+		t.Parallel()
+		// Every entry trims to empty, so the dedup loop produces no codes
+		// and resolveCategoryCodes refuses without ever hitting
+		// GetActiveByCodes — but Submit has already constructed the shared
+		// dictionary repo, so its factory call still fires.
+		rig := newCreatorServiceRig(t)
+		in := validCreatorInput(t)
+		in.CategoryCodes = []string{"   ", "\t"}
+
+		expectTxBegin(rig)
+		expectFactoryWiring(rig)
+		expectDictionaryWiring(rig)
+		rig.appRepo.EXPECT().HasActiveByIIN(mock.Anything, in.IIN).Return(false, nil)
+
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.logger)
+		_, err := svc.Submit(context.Background(), in)
+		var ve *domain.ValidationError
+		require.ErrorAs(t, err, &ve)
+		require.Equal(t, domain.CodeValidation, ve.Code)
+	})
+
+	t.Run("duplicate category codes deduplicated before lookup", func(t *testing.T) {
+		t.Parallel()
+		// Same code repeated and one whitespace-only entry survive only one
+		// dictionary lookup against ["beauty"]. Ensures the seen-map and the
+		// trimmed=="" branches both run.
+		rig := newCreatorServiceRig(t)
+		in := validCreatorInput(t)
+		in.CategoryCodes = []string{"beauty", "beauty", " "}
+
+		expectTxBegin(rig)
+		expectFactoryWiring(rig)
+		expectDictionaryWiring(rig)
+		rig.appRepo.EXPECT().HasActiveByIIN(mock.Anything, in.IIN).Return(false, nil)
+		rig.dictRepo.EXPECT().GetActiveByCodes(mock.Anything, repository.TableCategories, []string{"beauty"}).
+			Return([]*repository.DictionaryEntryRow{{Code: "beauty", Active: true}}, nil)
+		expectCityLookupSuccess(rig, "almaty")
+		rig.appRepo.EXPECT().Create(mock.Anything, mock.Anything).
+			Return(&repository.CreatorApplicationRow{ID: "app-dedup"}, nil)
+		rig.appCategoryRepo.EXPECT().InsertMany(mock.Anything, []repository.CreatorApplicationCategoryRow{
+			{ApplicationID: "app-dedup", CategoryCode: "beauty"},
+		}).Return(nil)
+		rig.appSocialRepo.EXPECT().InsertMany(mock.Anything, mock.Anything).Return(nil)
+		rig.appConsentRepo.EXPECT().InsertMany(mock.Anything, mock.Anything).Return(nil)
+		rig.auditRepo.EXPECT().Create(mock.Anything, mock.Anything).Return(nil)
+		rig.logger.EXPECT().Info(mock.Anything, "creator application submitted", []any{"application_id", "app-dedup"}).Once()
+
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.logger)
+		_, err := svc.Submit(context.Background(), in)
+		require.NoError(t, err)
+	})
+
+	t.Run("dictionary repo error wraps as lookup categories", func(t *testing.T) {
+		t.Parallel()
+		rig := newCreatorServiceRig(t)
+		in := validCreatorInput(t)
+
+		expectTxBegin(rig)
+		expectFactoryWiring(rig)
+		expectDictionaryWiring(rig)
+		rig.appRepo.EXPECT().HasActiveByIIN(mock.Anything, in.IIN).Return(false, nil)
+		rig.dictRepo.EXPECT().GetActiveByCodes(mock.Anything, repository.TableCategories, []string{"beauty", "fashion"}).
+			Return(nil, errors.New("db down"))
+
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.logger)
+		_, err := svc.Submit(context.Background(), in)
+		require.ErrorContains(t, err, "lookup categories")
+		require.ErrorContains(t, err, "db down")
 	})
 
 	t.Run("other category without text rejected before tx", func(t *testing.T) {
@@ -321,7 +401,7 @@ func TestCreatorApplicationService_Submit(t *testing.T) {
 		expectDictionaryWiring(rig)
 		rig.appRepo.EXPECT().HasActiveByIIN(mock.Anything, in.IIN).Return(false, nil)
 		rig.dictRepo.EXPECT().GetActiveByCodes(mock.Anything, repository.TableCategories, []string{"beauty", "mystery"}).
-			Return([]*repository.DictionaryEntryRow{{ID: "c-1", Code: "beauty", Active: true}}, nil)
+			Return([]*repository.DictionaryEntryRow{{Code: "beauty", Active: true}}, nil)
 
 		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.logger)
 		_, err := svc.Submit(context.Background(), in)
@@ -329,6 +409,57 @@ func TestCreatorApplicationService_Submit(t *testing.T) {
 		var ve *domain.ValidationError
 		require.ErrorAs(t, err, &ve)
 		require.Equal(t, domain.CodeUnknownCategory, ve.Code)
+	})
+
+	t.Run("unknown city returns 422 before create", func(t *testing.T) {
+		t.Parallel()
+		// City code that the cities dictionary does not know about: the FK on
+		// creator_applications.city_code would surface as a 500 later, so the
+		// service must catch it up front via resolveCityCode and answer 422.
+		rig := newCreatorServiceRig(t)
+		in := validCreatorInput(t)
+		in.CityCode = "neverland"
+
+		expectTxBegin(rig)
+		expectFactoryWiring(rig)
+		expectDictionaryWiring(rig)
+		rig.appRepo.EXPECT().HasActiveByIIN(mock.Anything, in.IIN).Return(false, nil)
+		rig.dictRepo.EXPECT().GetActiveByCodes(mock.Anything, repository.TableCategories, []string{"beauty", "fashion"}).
+			Return([]*repository.DictionaryEntryRow{
+				{Code: "beauty", Active: true},
+				{Code: "fashion", Active: true},
+			}, nil)
+		rig.dictRepo.EXPECT().GetActiveByCodes(mock.Anything, repository.TableCities, []string{"neverland"}).
+			Return(nil, nil)
+
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.logger)
+		_, err := svc.Submit(context.Background(), in)
+		var ve *domain.ValidationError
+		require.ErrorAs(t, err, &ve)
+		require.Equal(t, domain.CodeUnknownCity, ve.Code)
+	})
+
+	t.Run("city dictionary error wraps as lookup city", func(t *testing.T) {
+		t.Parallel()
+		rig := newCreatorServiceRig(t)
+		in := validCreatorInput(t)
+
+		expectTxBegin(rig)
+		expectFactoryWiring(rig)
+		expectDictionaryWiring(rig)
+		rig.appRepo.EXPECT().HasActiveByIIN(mock.Anything, in.IIN).Return(false, nil)
+		rig.dictRepo.EXPECT().GetActiveByCodes(mock.Anything, repository.TableCategories, []string{"beauty", "fashion"}).
+			Return([]*repository.DictionaryEntryRow{
+				{Code: "beauty", Active: true},
+				{Code: "fashion", Active: true},
+			}, nil)
+		rig.dictRepo.EXPECT().GetActiveByCodes(mock.Anything, repository.TableCities, []string{"almaty"}).
+			Return(nil, errors.New("db down"))
+
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.logger)
+		_, err := svc.Submit(context.Background(), in)
+		require.ErrorContains(t, err, "lookup city")
+		require.ErrorContains(t, err, "db down")
 	})
 
 	t.Run("application insert error aborts tx", func(t *testing.T) {
@@ -342,9 +473,10 @@ func TestCreatorApplicationService_Submit(t *testing.T) {
 		rig.appRepo.EXPECT().HasActiveByIIN(mock.Anything, in.IIN).Return(false, nil)
 		rig.dictRepo.EXPECT().GetActiveByCodes(mock.Anything, repository.TableCategories, []string{"beauty", "fashion"}).
 			Return([]*repository.DictionaryEntryRow{
-				{ID: "c-1", Code: "beauty", Active: true},
-				{ID: "c-2", Code: "fashion", Active: true},
+				{Code: "beauty", Active: true},
+				{Code: "fashion", Active: true},
 			}, nil)
+		expectCityLookupSuccess(rig, "almaty")
 		rig.appRepo.EXPECT().Create(mock.Anything, mock.Anything).
 			Return((*repository.CreatorApplicationRow)(nil), errors.New("insert failed"))
 
@@ -366,9 +498,10 @@ func TestCreatorApplicationService_Submit(t *testing.T) {
 		rig.appRepo.EXPECT().HasActiveByIIN(mock.Anything, in.IIN).Return(false, nil)
 		rig.dictRepo.EXPECT().GetActiveByCodes(mock.Anything, repository.TableCategories, []string{"beauty", "fashion"}).
 			Return([]*repository.DictionaryEntryRow{
-				{ID: "c-1", Code: "beauty", Active: true},
-				{ID: "c-2", Code: "fashion", Active: true},
+				{Code: "beauty", Active: true},
+				{Code: "fashion", Active: true},
 			}, nil)
+		expectCityLookupSuccess(rig, "almaty")
 		rig.appRepo.EXPECT().Create(mock.Anything, repository.CreatorApplicationRow{
 			LastName:   "Муратова",
 			FirstName:  "Айдана",
@@ -376,7 +509,7 @@ func TestCreatorApplicationService_Submit(t *testing.T) {
 			IIN:        "950515312348",
 			BirthDate:  birth,
 			Phone:      "+77001234567",
-			City:       "Алматы",
+			CityCode:   "almaty",
 			Status:     domain.CreatorApplicationStatusPending,
 		}).Return(&repository.CreatorApplicationRow{
 			ID:         "app-1",
@@ -386,14 +519,14 @@ func TestCreatorApplicationService_Submit(t *testing.T) {
 			IIN:        "950515312348",
 			BirthDate:  birth,
 			Phone:      "+77001234567",
-			City:       "Алматы",
+			CityCode:   "almaty",
 			Status:     "pending",
 			CreatedAt:  created,
 			UpdatedAt:  created,
 		}, nil)
 		rig.appCategoryRepo.EXPECT().InsertMany(mock.Anything, []repository.CreatorApplicationCategoryRow{
-			{ApplicationID: "app-1", CategoryID: "c-1"},
-			{ApplicationID: "app-1", CategoryID: "c-2"},
+			{ApplicationID: "app-1", CategoryCode: "beauty"},
+			{ApplicationID: "app-1", CategoryCode: "fashion"},
 		}).Return(nil)
 		rig.appSocialRepo.EXPECT().InsertMany(mock.Anything, []repository.CreatorApplicationSocialRow{
 			{ApplicationID: "app-1", Platform: "instagram", Handle: "aidana"},
@@ -438,9 +571,10 @@ func TestCreatorApplicationService_Submit(t *testing.T) {
 		rig.appRepo.EXPECT().HasActiveByIIN(mock.Anything, in.IIN).Return(false, nil)
 		rig.dictRepo.EXPECT().GetActiveByCodes(mock.Anything, repository.TableCategories, []string{"beauty", "fashion"}).
 			Return([]*repository.DictionaryEntryRow{
-				{ID: "c-1", Code: "beauty", Active: true},
-				{ID: "c-2", Code: "fashion", Active: true},
+				{Code: "beauty", Active: true},
+				{Code: "fashion", Active: true},
 			}, nil)
+		expectCityLookupSuccess(rig, "almaty")
 		rig.appRepo.EXPECT().Create(mock.Anything, mock.MatchedBy(func(row repository.CreatorApplicationRow) bool {
 			return row.Address != nil && *row.Address == "ул. Абая 1"
 		})).Return(&repository.CreatorApplicationRow{ID: "app-addr"}, nil)
@@ -470,9 +604,10 @@ func TestCreatorApplicationService_Submit(t *testing.T) {
 		rig.appRepo.EXPECT().HasActiveByIIN(mock.Anything, in.IIN).Return(false, nil)
 		rig.dictRepo.EXPECT().GetActiveByCodes(mock.Anything, repository.TableCategories, []string{"beauty", "fashion"}).
 			Return([]*repository.DictionaryEntryRow{
-				{ID: "c-1", Code: "beauty", Active: true},
-				{ID: "c-2", Code: "fashion", Active: true},
+				{Code: "beauty", Active: true},
+				{Code: "fashion", Active: true},
 			}, nil)
+		expectCityLookupSuccess(rig, "almaty")
 		rig.appRepo.EXPECT().Create(mock.Anything, mock.MatchedBy(func(row repository.CreatorApplicationRow) bool {
 			return row.Address == nil
 		})).Return(&repository.CreatorApplicationRow{ID: "app-blank"}, nil)
@@ -501,7 +636,8 @@ func TestCreatorApplicationService_Submit(t *testing.T) {
 		expectDictionaryWiring(rig)
 		rig.appRepo.EXPECT().HasActiveByIIN(mock.Anything, in.IIN).Return(false, nil)
 		rig.dictRepo.EXPECT().GetActiveByCodes(mock.Anything, repository.TableCategories, []string{"other"}).
-			Return([]*repository.DictionaryEntryRow{{ID: "c-other", Code: "other", Active: true}}, nil)
+			Return([]*repository.DictionaryEntryRow{{Code: "other", Active: true}}, nil)
+		expectCityLookupSuccess(rig, "almaty")
 		rig.appRepo.EXPECT().Create(mock.Anything, mock.MatchedBy(func(row repository.CreatorApplicationRow) bool {
 			return row.CategoryOtherText != nil && *row.CategoryOtherText == trimmed
 		})).Return(&repository.CreatorApplicationRow{ID: "app-other"}, nil)
@@ -530,7 +666,7 @@ func TestCreatorApplicationService_Submit(t *testing.T) {
 			{"first_name", func(in *domain.CreatorApplicationInput) { in.FirstName = "" }, "first_name"},
 			{"iin", func(in *domain.CreatorApplicationInput) { in.IIN = "  " }, "iin"},
 			{"phone", func(in *domain.CreatorApplicationInput) { in.Phone = "" }, "phone"},
-			{"city", func(in *domain.CreatorApplicationInput) { in.City = "  " }, "city"},
+			{"city", func(in *domain.CreatorApplicationInput) { in.CityCode = "  " }, "city"},
 		}
 		for _, tc := range cases {
 			tc := tc
@@ -594,9 +730,10 @@ func TestCreatorApplicationService_Submit(t *testing.T) {
 		rig.appRepo.EXPECT().HasActiveByIIN(mock.Anything, in.IIN).Return(false, nil)
 		rig.dictRepo.EXPECT().GetActiveByCodes(mock.Anything, repository.TableCategories, []string{"beauty", "fashion"}).
 			Return([]*repository.DictionaryEntryRow{
-				{ID: "c-1", Code: "beauty", Active: true},
-				{ID: "c-2", Code: "fashion", Active: true},
+				{Code: "beauty", Active: true},
+				{Code: "fashion", Active: true},
 			}, nil)
+		expectCityLookupSuccess(rig, "almaty")
 		rig.appRepo.EXPECT().Create(mock.Anything, mock.Anything).
 			Return((*repository.CreatorApplicationRow)(nil), domain.ErrCreatorApplicationDuplicate)
 
@@ -726,7 +863,7 @@ func TestCreatorApplicationService_GetByID(t *testing.T) {
 				IIN:               "950515312348",
 				BirthDate:         birth,
 				Phone:             "+77001234567",
-				City:              "Алматы",
+				CityCode:          "almaty",
 				Address:           pointer.ToString("ул. Абая 1"),
 				CategoryOtherText: pointer.ToString("Авторские ASMR"),
 				Status:            domain.CreatorApplicationStatusPending,
@@ -763,7 +900,7 @@ func TestCreatorApplicationService_GetByID(t *testing.T) {
 			IIN:               "950515312348",
 			BirthDate:         birth,
 			Phone:             "+77001234567",
-			City:              "Алматы",
+			CityCode:          "almaty",
 			Address:           pointer.ToString("ул. Абая 1"),
 			CategoryOtherText: pointer.ToString("Авторские ASMR"),
 			Status:            domain.CreatorApplicationStatusPending,

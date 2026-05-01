@@ -94,8 +94,14 @@ func (s *CreatorApplicationService) Submit(ctx context.Context, in domain.Creato
 			return s.duplicateError()
 		}
 
-		categoryIDs, err := s.resolveCategoryIDs(ctx, tx, in.CategoryCodes)
+		// One dictionary repo serves both lookups — categories and cities live
+		// in different physical tables but share the same read interface.
+		dictRepo := s.repoFactory.NewDictionaryRepo(tx)
+		categoryCodes, err := s.resolveCategoryCodes(ctx, dictRepo, in.CategoryCodes)
 		if err != nil {
+			return err
+		}
+		if err := s.resolveCityCode(ctx, dictRepo, trimmed.CityCode); err != nil {
 			return err
 		}
 
@@ -106,7 +112,7 @@ func (s *CreatorApplicationService) Submit(ctx context.Context, in domain.Creato
 			IIN:               trimmed.IIN,
 			BirthDate:         birth,
 			Phone:             trimmed.Phone,
-			City:              trimmed.City,
+			CityCode:          trimmed.CityCode,
 			Address:           trimmed.Address,
 			CategoryOtherText: categoryOtherText,
 			Status:            domain.CreatorApplicationStatusPending,
@@ -118,11 +124,11 @@ func (s *CreatorApplicationService) Submit(ctx context.Context, in domain.Creato
 			return fmt.Errorf("create application: %w", err)
 		}
 
-		catRows := make([]repository.CreatorApplicationCategoryRow, len(categoryIDs))
-		for i, id := range categoryIDs {
+		catRows := make([]repository.CreatorApplicationCategoryRow, len(categoryCodes))
+		for i, code := range categoryCodes {
 			catRows[i] = repository.CreatorApplicationCategoryRow{
 				ApplicationID: appRow.ID,
-				CategoryID:    id,
+				CategoryCode:  code,
 			}
 		}
 		if err := appCategoryRepo.InsertMany(ctx, catRows); err != nil {
@@ -187,7 +193,7 @@ type trimmedCreatorApplicationInput struct {
 	FirstName string
 	IIN       string
 	Phone     string
-	City      string
+	CityCode  string
 	Address   *string
 }
 
@@ -201,7 +207,7 @@ func (s *CreatorApplicationService) trimAndValidateRequired(in domain.CreatorApp
 		FirstName: strings.TrimSpace(in.FirstName),
 		IIN:       strings.TrimSpace(in.IIN),
 		Phone:     strings.TrimSpace(in.Phone),
-		City:      strings.TrimSpace(in.City),
+		CityCode:  strings.TrimSpace(in.CityCode),
 		Address:   trimOptional(in.Address),
 	}
 	missing := func(name string) error {
@@ -217,7 +223,7 @@ func (s *CreatorApplicationService) trimAndValidateRequired(in domain.CreatorApp
 		return out, missing("iin")
 	case out.Phone == "":
 		return out, missing("phone")
-	case out.City == "":
+	case out.CityCode == "":
 		return out, missing("city")
 	}
 	return out, nil
@@ -303,12 +309,13 @@ func (s *CreatorApplicationService) normaliseSocials(accounts []domain.SocialAcc
 	return out, nil
 }
 
-// resolveCategoryIDs maps user-provided category codes to DB ids. Missing or
-// inactive codes surface as UNKNOWN_CATEGORY (422) pointing at the first bad
-// code — one error is enough, we don't need to enumerate every issue. The repo
-// is built from tx so the lookup runs inside the same transaction as the
-// subsequent writes.
-func (s *CreatorApplicationService) resolveCategoryIDs(ctx context.Context, tx dbutil.DB, codes []string) ([]string, error) {
+// resolveCategoryCodes validates user-provided category codes against the
+// active dictionary and returns the canonical, deduplicated set ready for
+// INSERT. Missing or inactive codes surface as UNKNOWN_CATEGORY (422)
+// pointing at the first bad code — one error is enough, we don't need to
+// enumerate every issue. The dictionary repo is bound to the caller's tx so
+// the lookup runs inside the same transaction as the subsequent writes.
+func (s *CreatorApplicationService) resolveCategoryCodes(ctx context.Context, dictRepo repository.DictionaryRepo, codes []string) ([]string, error) {
 	if len(codes) == 0 {
 		return nil, domain.NewValidationError(domain.CodeValidation, "At least one category is required")
 	}
@@ -329,24 +336,37 @@ func (s *CreatorApplicationService) resolveCategoryIDs(ctx context.Context, tx d
 		return nil, domain.NewValidationError(domain.CodeValidation, "At least one category is required")
 	}
 
-	rows, err := s.repoFactory.NewDictionaryRepo(tx).GetActiveByCodes(ctx, repository.TableCategories, unique)
+	rows, err := dictRepo.GetActiveByCodes(ctx, repository.TableCategories, unique)
 	if err != nil {
 		return nil, fmt.Errorf("lookup categories: %w", err)
 	}
-	byCode := make(map[string]string, len(rows))
+	known := make(map[string]struct{}, len(rows))
 	for _, row := range rows {
-		byCode[row.Code] = row.ID
+		known[row.Code] = struct{}{}
 	}
-	ids := make([]string, 0, len(unique))
 	for _, code := range unique {
-		id, ok := byCode[code]
-		if !ok {
+		if _, ok := known[code]; !ok {
 			return nil, domain.NewValidationError(domain.CodeUnknownCategory,
 				fmt.Sprintf("Неизвестная категория: %s", code))
 		}
-		ids = append(ids, id)
 	}
-	return ids, nil
+	return unique, nil
+}
+
+// resolveCityCode confirms the city code from the request lives in the
+// active cities dictionary. Mirrors resolveCategoryCodes so the FK on
+// creator_applications.city_code never surfaces as a 500 — unknown or
+// deactivated codes get translated to a 422 the client can reason about.
+func (s *CreatorApplicationService) resolveCityCode(ctx context.Context, dictRepo repository.DictionaryRepo, code string) error {
+	rows, err := dictRepo.GetActiveByCodes(ctx, repository.TableCities, []string{code})
+	if err != nil {
+		return fmt.Errorf("lookup city: %w", err)
+	}
+	if len(rows) == 0 {
+		return domain.NewValidationError(domain.CodeUnknownCity,
+			fmt.Sprintf("Неизвестный город: %s", code))
+	}
+	return nil
 }
 
 // buildConsentRows converts the request-level consent data into one repo row
@@ -376,7 +396,7 @@ func (s *CreatorApplicationService) auditNewValue(in domain.CreatorApplicationIn
 	}
 	return map[string]any{
 		"application_id": applicationID,
-		"city":           in.City,
+		"city":           in.CityCode,
 		"categories":     in.CategoryCodes,
 		"platforms":      platforms,
 	}
@@ -493,7 +513,7 @@ func (s *CreatorApplicationService) creatorApplicationDetailFromRows(
 		IIN:               app.IIN,
 		BirthDate:         app.BirthDate,
 		Phone:             app.Phone,
-		City:              app.City,
+		CityCode:          app.CityCode,
 		Address:           app.Address,
 		CategoryOtherText: app.CategoryOtherText,
 		Status:            app.Status,

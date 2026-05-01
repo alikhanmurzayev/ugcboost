@@ -125,7 +125,7 @@ const (
 
 ## Идентификатор словаря
 
-Текущие словари (`categories`, `cities`) хранят и `id (UUID)`, и `code (TEXT UNIQUE)`. Целевая модель — `code` как PK, FK ссылаются на code → колонки таблиц-потребителей хранят `<entity>_code`, а не `<entity>_id`. Это устраняет лишний JOIN при чтении и indirection в коде. Refactor — отдельная задача с миграцией данных; новые словари в этой схеме не заводим.
+Словари (`categories`, `cities`) используют `code` как PK; FK на потребителях — `<entity>_code TEXT REFERENCES <dict>(code)`. Без UUID-indirection и без JOIN на чтении.
 
 ## Пагинация
 
