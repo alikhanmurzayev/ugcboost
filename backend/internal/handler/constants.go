@@ -7,8 +7,6 @@ const CookieRefreshToken = middleware.CookieRefreshToken
 // HTTP header names.
 const (
 	HeaderAuthorization = "Authorization"
-	HeaderXForwardedFor = "X-Forwarded-For"
-	HeaderXRealIP       = "X-Real-IP"
 )
 
 // Auth scheme constants.

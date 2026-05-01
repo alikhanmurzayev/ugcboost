@@ -37,7 +37,7 @@ func TestLogging_LogsRequest(t *testing.T) {
 	handler := Logging(log)(okHandler())
 
 	r := httptest.NewRequest("GET", "/foo", nil)
-	r.RemoteAddr = "127.0.0.1:4242"
+	r = r.WithContext(WithClientIP(r.Context(), "203.0.113.7"))
 	w := httptest.NewRecorder()
 	handler.ServeHTTP(w, r)
 
@@ -50,8 +50,8 @@ func TestLogging_LogsRequest(t *testing.T) {
 	require.Equal(t, 200, captured[5])
 	require.Equal(t, "duration_ms", captured[6])
 	require.IsType(t, int64(0), captured[7])
-	require.Equal(t, "remote_addr", captured[8])
-	require.Equal(t, "127.0.0.1:4242", captured[9])
+	require.Equal(t, "client_ip", captured[8])
+	require.Equal(t, "203.0.113.7", captured[9])
 }
 
 func TestLogging_DoesNotLogAuthorization(t *testing.T) {
