@@ -109,7 +109,7 @@ func TestAuditLogFiltering(t *testing.T) {
 
 		require.Len(t, resp.JSON200.Data.Logs, 2,
 			"per_page=2 must trim the returned slice to 2 entries")
-		require.GreaterOrEqual(t, resp.JSON200.Data.Total, 3,
+		require.GreaterOrEqual(t, resp.JSON200.Data.Total, int64(3),
 			"total must count every matching brand_create row this admin produced")
 		require.Equal(t, page, resp.JSON200.Data.Page)
 		require.Equal(t, perPage, resp.JSON200.Data.PerPage)
