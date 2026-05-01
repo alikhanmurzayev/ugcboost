@@ -1,4 +1,4 @@
-import { Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes } from "react-router-dom";
 import PrototypeLayout from "./PrototypeLayout";
 import { ROUTES } from "./routes";
 // All pages prototype-local — fully isolated from main src and the real
@@ -30,6 +30,10 @@ export default function PrototypeApp() {
         <Route path={ROUTES.BRANDS} element={<BrandsPage />} />
         <Route path={ROUTES.BRAND_DETAIL_PATTERN} element={<BrandDetailPage />} />
         <Route path={ROUTES.AUDIT} element={<AuditLogPage />} />
+        <Route
+          path={ROUTES.CAMPAIGNS}
+          element={<Navigate to={"/prototype/" + ROUTES.CAMPAIGNS_ACTIVE} replace />}
+        />
         <Route path={ROUTES.CAMPAIGN_NEW} element={<CampaignNewPage />} />
         <Route path={ROUTES.CAMPAIGN_EDIT_PATTERN} element={<CampaignNewPage />} />
         <Route path={ROUTES.CAMPAIGNS_ACTIVE} element={<CampaignsPage status="active" />} />

@@ -5,13 +5,12 @@
 //   - NavLink targets are prefixed with /prototype so navigation stays inside
 //     the prototype subtree; logout still redirects to the real /login.
 //
-// Role view is decoupled from the real auth role: a sticky toggle (persisted
-// in localStorage) lets a real admin preview the brand cabinet without an
-// extra account, and vice versa. In production the same one-account model
-// will use real auth role + per-route guards — this toggle exists only to
-// demo both navigation sets from a single login.
-import { useEffect, useState } from "react";
-import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
+// Sidebar is driven by the *URL*, not by a separate toggle: admin URLs
+// (creator-applications/*, creators, audit) render the admin nav; everything
+// else renders the brand nav. The "Просмотр" toggle is a quick shortcut that
+// navigates between the two starting points; clicking it doesn't put the UI
+// into a state that mismatches the current URL.
+import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
 import { useAuthStore } from "@/stores/auth";
@@ -23,9 +22,12 @@ import {
   creatorApplicationKeys,
 } from "@/_prototype/queryKeys";
 
-type ViewAs = "admin" | "brand";
-const VIEW_AS_KEY = "prototype:viewAs";
 const DEMO_BRAND_NAME = "Demo Brand";
+const ADMIN_URL_PREFIXES = [
+  "/prototype/creator-applications",
+  "/prototype/creators",
+  "/prototype/audit",
+];
 
 interface NavItem {
   to: string;
@@ -43,10 +45,8 @@ function withPrototypePrefix(path: string): string {
   return "/prototype/" + path;
 }
 
-function readStoredViewAs(): ViewAs | null {
-  if (typeof window === "undefined") return null;
-  const v = window.localStorage.getItem(VIEW_AS_KEY);
-  return v === "admin" || v === "brand" ? v : null;
+function isAdminUrl(pathname: string): boolean {
+  return ADMIN_URL_PREFIXES.some((prefix) => pathname.startsWith(prefix));
 }
 
 export default function PrototypeLayout() {
@@ -62,16 +62,9 @@ export default function PrototypeLayout() {
   const user = useAuthStore((s) => s.user);
   const clearAuth = useAuthStore((s) => s.clearAuth);
   const navigate = useNavigate();
+  const location = useLocation();
 
-  const [viewAs, setViewAs] = useState<ViewAs>(() => {
-    return readStoredViewAs() ?? (user?.role === "admin" ? "admin" : "brand");
-  });
-
-  useEffect(() => {
-    window.localStorage.setItem(VIEW_AS_KEY, viewAs);
-  }, [viewAs]);
-
-  const isAdminView = viewAs === "admin";
+  const isAdminView = isAdminUrl(location.pathname);
 
   const { data: counts } = useQuery({
     queryKey: creatorApplicationKeys.counts(),
@@ -190,7 +183,7 @@ export default function PrototypeLayout() {
           <div className="flex rounded-button bg-surface-200 p-0.5" role="group">
             <button
               type="button"
-              onClick={() => setViewAs("admin")}
+              onClick={() => navigate("/prototype/creator-applications/moderation")}
               className={`flex-1 rounded-button px-2 py-1 text-xs font-medium transition ${
                 isAdminView ? "bg-white text-gray-900 shadow-sm" : "text-gray-600 hover:text-gray-900"
               }`}
@@ -200,7 +193,7 @@ export default function PrototypeLayout() {
             </button>
             <button
               type="button"
-              onClick={() => setViewAs("brand")}
+              onClick={() => navigate("/prototype/campaigns/active")}
               className={`flex-1 rounded-button px-2 py-1 text-xs font-medium transition ${
                 !isAdminView ? "bg-white text-gray-900 shadow-sm" : "text-gray-600 hover:text-gray-900"
               }`}
