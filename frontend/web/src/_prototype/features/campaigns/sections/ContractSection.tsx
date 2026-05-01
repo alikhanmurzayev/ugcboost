@@ -3,8 +3,8 @@ import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { getCampaign, listCampaignApplications } from "@/_prototype/api/campaigns";
 import { campaignKeys } from "@/_prototype/queryKeys";
-import Spinner from "@/shared/components/Spinner";
-import ErrorState from "@/shared/components/ErrorState";
+import Spinner from "@/_prototype/shared/components/Spinner";
+import ErrorState from "@/_prototype/shared/components/ErrorState";
 import CostSummary from "../components/CostSummary";
 import ContractWizard from "../components/ContractWizard";
 
