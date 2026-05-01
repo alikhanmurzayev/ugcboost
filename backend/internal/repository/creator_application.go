@@ -31,7 +31,7 @@ const (
 	CreatorApplicationColumnIIN               = "iin"
 	CreatorApplicationColumnBirthDate         = "birth_date"
 	CreatorApplicationColumnPhone             = "phone"
-	CreatorApplicationColumnCity              = "city"
+	CreatorApplicationColumnCityCode          = "city_code"
 	CreatorApplicationColumnAddress           = "address"
 	CreatorApplicationColumnCategoryOtherText = "category_other_text"
 	CreatorApplicationColumnStatus            = "status"
@@ -51,7 +51,7 @@ type CreatorApplicationRow struct {
 	IIN               string    `db:"iin"                 insert:"iin"`
 	BirthDate         time.Time `db:"birth_date"          insert:"birth_date"`
 	Phone             string    `db:"phone"               insert:"phone"`
-	City              string    `db:"city"                insert:"city"`
+	CityCode          string    `db:"city_code"           insert:"city_code"`
 	Address           *string   `db:"address"             insert:"address"`
 	CategoryOtherText *string   `db:"category_other_text" insert:"category_other_text"`
 	Status            string    `db:"status"              insert:"status"`

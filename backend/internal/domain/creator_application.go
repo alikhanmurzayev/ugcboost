@@ -73,6 +73,8 @@ const (
 	CodeCreatorApplicationDuplicate = "CREATOR_APPLICATION_DUPLICATE"
 	// 422 — a category code in the request is unknown or inactive.
 	CodeUnknownCategory = "UNKNOWN_CATEGORY"
+	// 422 — the city code in the request is unknown or inactive.
+	CodeUnknownCity = "UNKNOWN_CITY"
 	// 422 — at least one of the four mandatory consents is missing.
 	CodeMissingConsent = "MISSING_CONSENT"
 	// 409 — application is already linked to a different Telegram account.
@@ -116,7 +118,7 @@ type CreatorApplicationInput struct {
 	MiddleName        *string
 	IIN               string
 	Phone             string
-	City              string
+	CityCode          string
 	Address           *string
 	CategoryCodes     []string
 	CategoryOtherText *string
@@ -156,10 +158,11 @@ type CreatorApplicationSubmission struct {
 // application row with its three associated collections so the handler can
 // shape one self-contained response — no extra round trips needed.
 //
-// Categories and City carry only the raw codes stored in the database — the
-// handler layer resolves them against DictionaryService at read time. Keeping
-// the domain free of human-readable names means service/repo do not depend on
-// the dictionary cache and stay one source of truth: data, not presentation.
+// Categories and CityCode carry only the raw codes stored in the database —
+// the handler layer resolves them against DictionaryService at read time.
+// Keeping the domain free of human-readable names means service/repo do not
+// depend on the dictionary cache and stay one source of truth: data, not
+// presentation.
 type CreatorApplicationDetail struct {
 	ID                string
 	LastName          string
@@ -168,7 +171,7 @@ type CreatorApplicationDetail struct {
 	IIN               string
 	BirthDate         time.Time
 	Phone             string
-	City              string
+	CityCode          string
 	Address           *string
 	CategoryOtherText *string
 	Status            string

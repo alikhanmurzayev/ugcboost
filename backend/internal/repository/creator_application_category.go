@@ -15,7 +15,7 @@ const (
 	TableCreatorApplicationCategories             = "creator_application_categories"
 	CreatorApplicationCategoryColumnID            = "id"
 	CreatorApplicationCategoryColumnApplicationID = "application_id"
-	CreatorApplicationCategoryColumnCategoryID    = "category_id"
+	CreatorApplicationCategoryColumnCategoryCode  = "category_code"
 	CreatorApplicationCategoryColumnCreatedAt     = "created_at"
 )
 
@@ -23,7 +23,7 @@ const (
 type CreatorApplicationCategoryRow struct {
 	ID            string    `db:"id"`
 	ApplicationID string    `db:"application_id" insert:"application_id"`
-	CategoryID    string    `db:"category_id"    insert:"category_id"`
+	CategoryCode  string    `db:"category_code"  insert:"category_code"`
 	CreatedAt     time.Time `db:"created_at"`
 }
 
@@ -58,18 +58,14 @@ func (r *creatorApplicationCategoryRepository) InsertMany(ctx context.Context, r
 }
 
 // ListByApplicationID returns the category codes linked to an application.
-// The JOIN against categories is kept because the link table only stores
-// category_id (UUID) — the code lives on the categories row. We deliberately
-// do NOT filter by c.active: historical applications must still surface a
-// category that has since been deactivated. The (sort_order, code) ORDER BY
-// keeps the slice deterministic, but the handler resolves names against the
-// active dictionary and re-sorts in-memory, so callers do not depend on this
-// order for presentation.
+// No JOIN is needed: category_code is stored directly on the link row, so
+// historical applications surface their codes even if the category has been
+// deactivated. The handler resolves names against the active dictionary and
+// re-sorts in-memory, so callers do not depend on this order for presentation.
 func (r *creatorApplicationCategoryRepository) ListByApplicationID(ctx context.Context, applicationID string) ([]string, error) {
-	q := sq.Select("c."+DictionaryColumnCode).
-		From(TableCreatorApplicationCategories+" cac").
-		Join(TableCategories+" c ON c."+DictionaryColumnID+" = cac."+CreatorApplicationCategoryColumnCategoryID).
-		Where(sq.Eq{"cac." + CreatorApplicationCategoryColumnApplicationID: applicationID}).
-		OrderBy("c."+DictionaryColumnSortOrder+" ASC", "c."+DictionaryColumnCode+" ASC")
+	q := sq.Select(CreatorApplicationCategoryColumnCategoryCode).
+		From(TableCreatorApplicationCategories).
+		Where(sq.Eq{CreatorApplicationCategoryColumnApplicationID: applicationID}).
+		OrderBy(CreatorApplicationCategoryColumnCategoryCode + " ASC")
 	return dbutil.Vals[string](ctx, r.db, q)
 }

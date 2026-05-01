@@ -552,7 +552,7 @@ func validRequestMap(iin string) map[string]any {
 		"middleName": "Ивановна",
 		"iin":        iin,
 		"phone":      "+77001234567",
-		"city":       "Алматы",
+		"city":       "almaty",
 		"categories": []string{"beauty", "fashion"},
 		"socials": []map[string]string{
 			{"platform": "instagram", "handle": "@aidana_" + iin[7:]},

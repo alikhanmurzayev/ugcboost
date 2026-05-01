@@ -37,7 +37,7 @@ func validRequest() api.CreatorApplicationSubmitRequest {
 		MiddleName: pointer.ToString("Ивановна"),
 		Iin:        "950515312348",
 		Phone:      "+77001234567",
-		City:       "Алматы",
+		City:       "almaty",
 		Address:    pointer.ToString("ул. Абая 1"),
 		Categories: []string{"beauty", "fashion"},
 		Socials: []api.SocialAccountInput{
@@ -140,7 +140,7 @@ func TestServer_SubmitCreatorApplication(t *testing.T) {
 			MiddleName:    pointer.ToString("Ивановна"),
 			IIN:           "950515312348",
 			Phone:         "+77001234567",
-			City:          "Алматы",
+			CityCode:      "almaty",
 			Address:       pointer.ToString("ул. Абая 1"),
 			CategoryCodes: []string{"beauty", "fashion"},
 			Socials: []domain.SocialAccountInput{
@@ -378,7 +378,7 @@ func TestServer_GetCreatorApplication(t *testing.T) {
 				IIN:               "950515312348",
 				BirthDate:         birth,
 				Phone:             "+77001234567",
-				City:              "almaty",
+				CityCode:          "almaty",
 				Address:           pointer.ToString("ул. Абая 1"),
 				CategoryOtherText: pointer.ToString("Авторские ASMR"),
 				Status:            domain.CreatorApplicationStatusPending,
@@ -465,7 +465,7 @@ func TestServer_GetCreatorApplication(t *testing.T) {
 				IIN:        "950515312348",
 				BirthDate:  birth,
 				Phone:      "+77001234567",
-				City:       "atyrau", // not present in the active dictionary below
+				CityCode:   "atyrau", // not present in the active dictionary below
 				Address:    pointer.ToString("ул. Абая 1"),
 				Status:     domain.CreatorApplicationStatusPending,
 				CreatedAt:  created,

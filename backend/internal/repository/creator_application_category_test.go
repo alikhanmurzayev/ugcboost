@@ -13,7 +13,7 @@ import (
 func TestCreatorApplicationCategoryRepository_InsertMany(t *testing.T) {
 	t.Parallel()
 
-	const sqlStmt = "INSERT INTO creator_application_categories (application_id,category_id) VALUES ($1,$2),($3,$4)"
+	const sqlStmt = "INSERT INTO creator_application_categories (application_id,category_code) VALUES ($1,$2),($3,$4)"
 
 	t.Run("empty input short-circuits", func(t *testing.T) {
 		t.Parallel()
@@ -29,12 +29,12 @@ func TestCreatorApplicationCategoryRepository_InsertMany(t *testing.T) {
 		repo := &creatorApplicationCategoryRepository{db: mock}
 
 		mock.ExpectExec(sqlStmt).
-			WithArgs("app-1", "cat-1", "app-1", "cat-2").
+			WithArgs("app-1", "beauty", "app-1", "fashion").
 			WillReturnResult(pgconn.NewCommandTag("INSERT 0 2"))
 
 		err := repo.InsertMany(context.Background(), []CreatorApplicationCategoryRow{
-			{ApplicationID: "app-1", CategoryID: "cat-1"},
-			{ApplicationID: "app-1", CategoryID: "cat-2"},
+			{ApplicationID: "app-1", CategoryCode: "beauty"},
+			{ApplicationID: "app-1", CategoryCode: "fashion"},
 		})
 		require.NoError(t, err)
 	})
@@ -45,12 +45,12 @@ func TestCreatorApplicationCategoryRepository_InsertMany(t *testing.T) {
 		repo := &creatorApplicationCategoryRepository{db: mock}
 
 		mock.ExpectExec(sqlStmt).
-			WithArgs("app-1", "cat-1", "app-1", "cat-2").
+			WithArgs("app-1", "beauty", "app-1", "fashion").
 			WillReturnError(errors.New("fk violation"))
 
 		err := repo.InsertMany(context.Background(), []CreatorApplicationCategoryRow{
-			{ApplicationID: "app-1", CategoryID: "cat-1"},
-			{ApplicationID: "app-1", CategoryID: "cat-2"},
+			{ApplicationID: "app-1", CategoryCode: "beauty"},
+			{ApplicationID: "app-1", CategoryCode: "fashion"},
 		})
 		require.ErrorContains(t, err, "fk violation")
 	})
@@ -59,13 +59,10 @@ func TestCreatorApplicationCategoryRepository_InsertMany(t *testing.T) {
 func TestCreatorApplicationCategoryRepository_ListByApplicationID(t *testing.T) {
 	t.Parallel()
 
-	// Strict literal — ensures the JOIN against categories stays in place
-	// (without it the link table only carries category_id, not the code) and
-	// the (sort_order, code) ordering survives. The handler still re-sorts
-	// in-memory after dictionary resolution, but the repo keeps a stable order
-	// so debugging the raw query remains predictable. squirrel renders Join()
-	// as plain "JOIN" (not "INNER JOIN"), which is equivalent in Postgres.
-	const sqlStmt = "SELECT c.code FROM creator_application_categories cac JOIN categories c ON c.id = cac.category_id WHERE cac.application_id = $1 ORDER BY c.sort_order ASC, c.code ASC"
+	// category_code lives directly on the link row now, so the read collapses
+	// to a single-table SELECT. The deactivation fallback is the handler's
+	// job — repo only returns whatever codes were stored at submit time.
+	const sqlStmt = "SELECT category_code FROM creator_application_categories WHERE application_id = $1 ORDER BY category_code ASC"
 
 	t.Run("success returns codes in DB order", func(t *testing.T) {
 		t.Parallel()
@@ -74,7 +71,7 @@ func TestCreatorApplicationCategoryRepository_ListByApplicationID(t *testing.T) 
 
 		mock.ExpectQuery(sqlStmt).
 			WithArgs("app-1").
-			WillReturnRows(pgxmock.NewRows([]string{"code"}).
+			WillReturnRows(pgxmock.NewRows([]string{"category_code"}).
 				AddRow("beauty").
 				AddRow("fashion"))
 
@@ -90,7 +87,7 @@ func TestCreatorApplicationCategoryRepository_ListByApplicationID(t *testing.T) 
 
 		mock.ExpectQuery(sqlStmt).
 			WithArgs("app-empty").
-			WillReturnRows(pgxmock.NewRows([]string{"code"}))
+			WillReturnRows(pgxmock.NewRows([]string{"category_code"}))
 
 		got, err := repo.ListByApplicationID(context.Background(), "app-empty")
 		require.NoError(t, err)

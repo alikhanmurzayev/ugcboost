@@ -18,12 +18,10 @@ const (
 	TableCities     = "cities"
 )
 
-// Common column names shared by every dictionary table. The schema is fixed
-// for now: every dictionary row has id/code/name/active/sort_order/created_at.
-// Per-dictionary metadata (e.g. region for cities) belongs on its own
-// dedicated repo, not here.
+// Common column names shared by every dictionary table. `code` is the
+// primary key — no separate UUID identifier exists. Per-dictionary metadata
+// (e.g. region for cities) belongs on its own dedicated repo, not here.
 const (
-	DictionaryColumnID        = "id"
 	DictionaryColumnCode      = "code"
 	DictionaryColumnName      = "name"
 	DictionaryColumnActive    = "active"
@@ -35,7 +33,6 @@ const (
 // insert tags — dictionaries are seeded in migrations; runtime writes are
 // not planned for MVP.
 type DictionaryEntryRow struct {
-	ID        string    `db:"id"`
 	Code      string    `db:"code"`
 	Name      string    `db:"name"`
 	Active    bool      `db:"active"`
