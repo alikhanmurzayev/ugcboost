@@ -6,9 +6,9 @@ import { createCampaign, getCampaign, updateCampaign } from "@/_prototype/api/ca
 import { listDictionary } from "@/_prototype/api/dictionaries";
 import { campaignKeys, dictionaryKeys } from "@/_prototype/queryKeys";
 import { ROUTES } from "@/_prototype/routes";
-import { ApiError } from "@/api/client";
-import { getErrorMessage } from "@/shared/i18n/errors";
-import Spinner from "@/shared/components/Spinner";
+import { ApiError } from "@/_prototype/api/client";
+import { getErrorMessage } from "@/_prototype/shared/i18n/errors";
+import Spinner from "@/_prototype/shared/components/Spinner";
 import CampaignTypeStep from "./components/CampaignTypeStep";
 import CampaignForm, {
   type CampaignFormValues,

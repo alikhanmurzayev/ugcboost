@@ -1,6 +1,4 @@
-import type { components } from "@/api/generated/schema";
-
-type Detail = components["schemas"]["CreatorApplicationDetailData"];
+import type { CreatorApplicationDetailData as Detail } from "@/_prototype/types/api";
 
 export const ApplicationStages = {
   VERIFICATION: "verification",

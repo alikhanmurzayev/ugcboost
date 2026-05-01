@@ -15,8 +15,6 @@ import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
 import { useAuthStore } from "@/stores/auth";
-import { logout } from "@/api/auth";
-import { Roles } from "@/shared/constants/roles";
 import { getQueueCounts } from "@/_prototype/api/creatorApplications";
 import { getCampaignCounts } from "@/_prototype/api/campaigns";
 import { ROUTES } from "@/_prototype/routes";
@@ -66,7 +64,7 @@ export default function PrototypeLayout() {
   const navigate = useNavigate();
 
   const [viewAs, setViewAs] = useState<ViewAs>(() => {
-    return readStoredViewAs() ?? (user?.role === Roles.ADMIN ? "admin" : "brand");
+    return readStoredViewAs() ?? (user?.role === "admin" ? "admin" : "brand");
   });
 
   useEffect(() => {
@@ -166,12 +164,11 @@ export default function PrototypeLayout() {
 
   const navGroups = isAdminView ? adminNav : brandNav;
 
-  async function handleLogout() {
-    try {
-      await logout();
-    } catch {
-      // ignore — clear local state anyway
-    }
+  // Local-only logout — clear in-memory auth, redirect to /login. We
+  // intentionally don't call the real backend logout endpoint here so the
+  // prototype stays fully isolated. The refresh-token cookie may still be
+  // valid; that's fine for a demo, and the real /login flow handles it.
+  function handleLogout() {
     clearAuth();
     navigate(ROUTES.LOGIN, { replace: true });
   }

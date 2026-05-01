@@ -5,8 +5,8 @@ import { useTranslation } from "react-i18next";
 import { listCampaigns } from "@/_prototype/api/campaigns";
 import { campaignKeys } from "@/_prototype/queryKeys";
 import { ROUTES } from "@/_prototype/routes";
-import Spinner from "@/shared/components/Spinner";
-import ErrorState from "@/shared/components/ErrorState";
+import Spinner from "@/_prototype/shared/components/Spinner";
+import ErrorState from "@/_prototype/shared/components/ErrorState";
 import ApplicationsTable, {
   type Column,
 } from "@/_prototype/features/creatorApplications/components/ApplicationsTable";

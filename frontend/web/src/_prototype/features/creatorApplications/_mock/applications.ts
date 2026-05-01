@@ -1,8 +1,8 @@
-import type { components } from "@/api/generated/schema";
+import type {
+  CreatorApplicationDetailCity as DetailCity,
+  CreatorApplicationDetailCategory as DetailCategory,
+} from "@/_prototype/types/api";
 import type { Application } from "../types";
-
-type DetailCity = components["schemas"]["CreatorApplicationDetailCity"];
-type DetailCategory = components["schemas"]["CreatorApplicationDetailCategory"];
 
 const ALMATY: DetailCity = { code: "almaty", name: "Алматы", sortOrder: 10 };
 const ASTANA: DetailCity = { code: "astana", name: "Астана", sortOrder: 20 };

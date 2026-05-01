@@ -9,8 +9,8 @@ import {
   setApplicationStatus,
 } from "@/_prototype/api/campaigns";
 import { campaignKeys } from "@/_prototype/queryKeys";
-import Spinner from "@/shared/components/Spinner";
-import ErrorState from "@/shared/components/ErrorState";
+import Spinner from "@/_prototype/shared/components/Spinner";
+import ErrorState from "@/_prototype/shared/components/ErrorState";
 import SocialLink from "@/_prototype/features/creatorApplications/components/SocialLink";
 import ApplicationsTable, {
   type Column,
