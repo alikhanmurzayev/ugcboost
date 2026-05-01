@@ -15,7 +15,7 @@ import (
 type AuthService interface {
 	Login(ctx context.Context, email, password string) (*service.LoginResult, error)
 	Refresh(ctx context.Context, rawRefreshToken string) (*service.RefreshResult, error)
-	Logout(ctx context.Context, userID string) error
+	LogoutByRefresh(ctx context.Context, rawRefreshToken string) error
 	RequestPasswordReset(ctx context.Context, email string) error
 	ResetPassword(ctx context.Context, rawToken, newPassword string) (string, error)
 	GetUser(ctx context.Context, userID string) (*domain.User, error)

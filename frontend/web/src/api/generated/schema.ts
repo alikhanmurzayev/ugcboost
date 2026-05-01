@@ -64,7 +64,13 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Logout and invalidate refresh token */
+        /**
+         * Logout and invalidate refresh token
+         * @description Public endpoint — identity is derived from the refresh-token cookie, not
+         *     from the bearer access token. Allows a client whose access token has
+         *     expired to still revoke its session. The Set-Cookie clear is
+         *     unconditional (idempotent for clients without a session).
+         */
         post: operations["logout"];
         delete?: never;
         options?: never;
@@ -440,6 +446,7 @@ export interface components {
         };
         ListAuditLogsData: {
             logs: components["schemas"]["AuditLogEntry"][];
+            /** Format: int64 */
             total: number;
             page: number;
             perPage: number;

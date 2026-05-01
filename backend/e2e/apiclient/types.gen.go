@@ -394,7 +394,7 @@ type ListAuditLogsData struct {
 	Logs    []AuditLogEntry `json:"logs"`
 	Page    int             `json:"page"`
 	PerPage int             `json:"perPage"`
-	Total   int             `json:"total"`
+	Total   int64           `json:"total"`
 }
 
 // ListBrandsData defines model for ListBrandsData.

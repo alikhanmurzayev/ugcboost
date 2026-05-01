@@ -338,29 +338,34 @@ func TestServer_ResetPassword(t *testing.T) {
 func TestServer_Logout(t *testing.T) {
 	t.Parallel()
 
-	t.Run("no user in context", func(t *testing.T) {
+	t.Run("no refresh cookie still returns 200 with cleared cookie", func(t *testing.T) {
 		t.Parallel()
 		auth := mocks.NewMockAuthService(t)
+		auth.EXPECT().LogoutByRefresh(mock.Anything, "").Return(nil)
 		router := newTestRouter(t, NewServer(auth, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 
-		w, _ := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/auth/logout", nil)
-		require.Equal(t, http.StatusUnauthorized, w.Code)
+		w, resp := doJSON[api.MessageResponse](t, router, http.MethodPost, "/auth/logout", nil)
+		require.Equal(t, http.StatusOK, w.Code)
+		require.Equal(t, api.MessageResponse{
+			Data: api.MessageData{Message: "Logged out"},
+		}, resp)
+		cookie := refreshCookie(t, w.Result())
+		require.Equal(t, "", cookie.Value)
+		require.Equal(t, -1, cookie.MaxAge)
 	})
 
 	t.Run("service error still returns 200 with cleared cookie", func(t *testing.T) {
 		t.Parallel()
 		auth := mocks.NewMockAuthService(t)
-		// Logout handler deliberately logs errors but always clears the cookie
-		// and returns 200 — anything else would leak session state.
-		auth.EXPECT().Logout(mock.Anything, "u-admin").Return(errors.New("db error"))
+		auth.EXPECT().LogoutByRefresh(mock.Anything, "raw-token").Return(errors.New("db error"))
 		log := logmocks.NewMockLogger(t)
 		log.EXPECT().Error(mock.Anything, "failed to revoke refresh tokens on logout", mock.MatchedBy(func(args []any) bool {
-			return len(args) == 4 && args[0] == "error" && args[2] == "userID" && args[3] == "u-admin"
+			return len(args) == 2 && args[0] == "error"
 		})).Once()
 		router := newTestRouter(t, NewServer(auth, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, log))
 
 		w, resp := doJSON[api.MessageResponse](t, router, http.MethodPost, "/auth/logout", nil,
-			withRole("u-admin", api.Admin))
+			withRefreshCookie("raw-token"))
 		require.Equal(t, http.StatusOK, w.Code)
 		require.Equal(t, api.MessageResponse{
 			Data: api.MessageData{Message: "Logged out"},
@@ -374,11 +379,11 @@ func TestServer_Logout(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		t.Parallel()
 		auth := mocks.NewMockAuthService(t)
-		auth.EXPECT().Logout(mock.Anything, "u-admin").Return(nil)
+		auth.EXPECT().LogoutByRefresh(mock.Anything, "raw-token").Return(nil)
 		router := newTestRouter(t, NewServer(auth, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 
 		w, resp := doJSON[api.MessageResponse](t, router, http.MethodPost, "/auth/logout", nil,
-			withRole("u-admin", api.Admin))
+			withRefreshCookie("raw-token"))
 		require.Equal(t, http.StatusOK, w.Code)
 		require.Equal(t, api.MessageResponse{
 			Data: api.MessageData{Message: "Logged out"},

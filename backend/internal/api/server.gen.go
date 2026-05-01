@@ -401,7 +401,7 @@ type ListAuditLogsData struct {
 	Logs    []AuditLogEntry `json:"logs"`
 	Page    int             `json:"page"`
 	PerPage int             `json:"perPage"`
-	Total   int             `json:"total"`
+	Total   int64           `json:"total"`
 }
 
 // ListBrandsData defines model for ListBrandsData.
@@ -838,12 +838,6 @@ func (siw *ServerInterfaceWrapper) Login(w http.ResponseWriter, r *http.Request)
 
 // Logout operation middleware
 func (siw *ServerInterfaceWrapper) Logout(w http.ResponseWriter, r *http.Request) {
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
-
-	r = r.WithContext(ctx)
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.Logout(w, r)

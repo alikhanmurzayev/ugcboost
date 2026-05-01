@@ -63,15 +63,13 @@ func (s *Server) RefreshToken(ctx context.Context, _ api.RefreshTokenRequestObje
 	}, nil
 }
 
-// Logout handles POST /auth/logout.
+// Logout handles POST /auth/logout. Public endpoint — identity is derived from
+// the refresh-token cookie alone, so an expired access token cannot strand the
+// user with a live refresh token. The clear-cookie response is unconditional.
 func (s *Server) Logout(ctx context.Context, _ api.LogoutRequestObject) (api.LogoutResponseObject, error) {
-	userID := middleware.UserIDFromContext(ctx)
-	if userID == "" {
-		return nil, domain.ErrUnauthorized
-	}
-
-	if err := s.authService.Logout(ctx, userID); err != nil {
-		s.logger.Error(ctx, "failed to revoke refresh tokens on logout", "error", err, "userID", userID)
+	raw := middleware.RefreshCookieFromContext(ctx)
+	if err := s.authService.LogoutByRefresh(ctx, raw); err != nil {
+		s.logger.Error(ctx, "failed to revoke refresh tokens on logout", "error", err)
 	}
 
 	return api.Logout200JSONResponse{

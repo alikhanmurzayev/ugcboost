@@ -181,36 +181,36 @@ func (_c *MockAuthService_Login_Call) RunAndReturn(run func(ctx context.Context,
 	return _c
 }
 
-// Logout provides a mock function for the type MockAuthService
-func (_mock *MockAuthService) Logout(ctx context.Context, userID string) error {
-	ret := _mock.Called(ctx, userID)
+// LogoutByRefresh provides a mock function for the type MockAuthService
+func (_mock *MockAuthService) LogoutByRefresh(ctx context.Context, rawRefreshToken string) error {
+	ret := _mock.Called(ctx, rawRefreshToken)
 
 	if len(ret) == 0 {
-		panic("no return value specified for Logout")
+		panic("no return value specified for LogoutByRefresh")
 	}
 
 	var r0 error
 	if returnFunc, ok := ret.Get(0).(func(context.Context, string) error); ok {
-		r0 = returnFunc(ctx, userID)
+		r0 = returnFunc(ctx, rawRefreshToken)
 	} else {
 		r0 = ret.Error(0)
 	}
 	return r0
 }
 
-// MockAuthService_Logout_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Logout'
-type MockAuthService_Logout_Call struct {
+// MockAuthService_LogoutByRefresh_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'LogoutByRefresh'
+type MockAuthService_LogoutByRefresh_Call struct {
 	*mock.Call
 }
 
-// Logout is a helper method to define mock.On call
+// LogoutByRefresh is a helper method to define mock.On call
 //   - ctx context.Context
-//   - userID string
-func (_e *MockAuthService_Expecter) Logout(ctx interface{}, userID interface{}) *MockAuthService_Logout_Call {
-	return &MockAuthService_Logout_Call{Call: _e.mock.On("Logout", ctx, userID)}
+//   - rawRefreshToken string
+func (_e *MockAuthService_Expecter) LogoutByRefresh(ctx interface{}, rawRefreshToken interface{}) *MockAuthService_LogoutByRefresh_Call {
+	return &MockAuthService_LogoutByRefresh_Call{Call: _e.mock.On("LogoutByRefresh", ctx, rawRefreshToken)}
 }
 
-func (_c *MockAuthService_Logout_Call) Run(run func(ctx context.Context, userID string)) *MockAuthService_Logout_Call {
+func (_c *MockAuthService_LogoutByRefresh_Call) Run(run func(ctx context.Context, rawRefreshToken string)) *MockAuthService_LogoutByRefresh_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -228,12 +228,12 @@ func (_c *MockAuthService_Logout_Call) Run(run func(ctx context.Context, userID 
 	return _c
 }
 
-func (_c *MockAuthService_Logout_Call) Return(err error) *MockAuthService_Logout_Call {
+func (_c *MockAuthService_LogoutByRefresh_Call) Return(err error) *MockAuthService_LogoutByRefresh_Call {
 	_c.Call.Return(err)
 	return _c
 }
 
-func (_c *MockAuthService_Logout_Call) RunAndReturn(run func(ctx context.Context, userID string) error) *MockAuthService_Logout_Call {
+func (_c *MockAuthService_LogoutByRefresh_Call) RunAndReturn(run func(ctx context.Context, rawRefreshToken string) error) *MockAuthService_LogoutByRefresh_Call {
 	_c.Call.Return(run)
 	return _c
 }

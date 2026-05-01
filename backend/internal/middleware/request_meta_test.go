@@ -12,53 +12,38 @@ import (
 func TestRequestMeta(t *testing.T) {
 	t.Parallel()
 
-	t.Run("captures user agent and refresh cookie", func(t *testing.T) {
+	t.Run("captures user agent", func(t *testing.T) {
 		t.Parallel()
-		var (
-			seenUA     string
-			seenCookie string
-		)
+		var seenUA string
 		next := http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
 			seenUA = UserAgentFromContext(r.Context())
-			seenCookie = RefreshCookieFromContext(r.Context())
 		})
 
 		req := httptest.NewRequest(http.MethodGet, "/", nil)
 		req.Header.Set("User-Agent", "Mozilla/5.0")
-		req.AddCookie(&http.Cookie{Name: CookieRefreshToken, Value: "raw-token"})
 
 		RequestMeta(next).ServeHTTP(httptest.NewRecorder(), req)
 
 		require.Equal(t, "Mozilla/5.0", seenUA)
-		require.Equal(t, "raw-token", seenCookie)
 	})
 
-	t.Run("missing cookie yields empty value", func(t *testing.T) {
+	t.Run("user agent truncated to MaxUserAgentLength", func(t *testing.T) {
 		t.Parallel()
-		var seenCookie string
+		var seenUA string
 		next := http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
-			seenCookie = RefreshCookieFromContext(r.Context())
+			seenUA = UserAgentFromContext(r.Context())
 		})
 
+		oversized := make([]byte, MaxUserAgentLength+128)
+		for i := range oversized {
+			oversized[i] = 'a'
+		}
 		req := httptest.NewRequest(http.MethodGet, "/", nil)
-		RequestMeta(next).ServeHTTP(httptest.NewRecorder(), req)
-
-		require.Empty(t, seenCookie)
-	})
-
-	t.Run("empty cookie value treated as missing", func(t *testing.T) {
-		t.Parallel()
-		var seenCookie string
-		next := http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
-			seenCookie = RefreshCookieFromContext(r.Context())
-		})
-
-		req := httptest.NewRequest(http.MethodGet, "/", nil)
-		req.AddCookie(&http.Cookie{Name: CookieRefreshToken, Value: ""})
+		req.Header.Set("User-Agent", string(oversized))
 
 		RequestMeta(next).ServeHTTP(httptest.NewRecorder(), req)
 
-		require.Empty(t, seenCookie)
+		require.Len(t, seenUA, MaxUserAgentLength)
 	})
 }
 
@@ -74,20 +59,5 @@ func TestUserAgentFromContext(t *testing.T) {
 	t.Run("returns empty when absent", func(t *testing.T) {
 		t.Parallel()
 		require.Empty(t, UserAgentFromContext(context.Background()))
-	})
-}
-
-func TestRefreshCookieFromContext(t *testing.T) {
-	t.Parallel()
-
-	t.Run("returns stored value", func(t *testing.T) {
-		t.Parallel()
-		ctx := WithRefreshCookie(context.Background(), "explicit-token")
-		require.Equal(t, "explicit-token", RefreshCookieFromContext(ctx))
-	})
-
-	t.Run("returns empty when absent", func(t *testing.T) {
-		t.Parallel()
-		require.Empty(t, RefreshCookieFromContext(context.Background()))
 	})
 }

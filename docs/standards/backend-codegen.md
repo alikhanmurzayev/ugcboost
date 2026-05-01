@@ -12,6 +12,7 @@ Contract-first подход: OpenAPI YAML → кодогенерация для 
 - **Типы запросов/ответов** — только сгенерированные типы из `api/`. Анонимные структуры в хендлерах запрещены
 - **Query/path параметры** — парсятся автоматически через ServerInterfaceWrapper. Ручной `r.URL.Query().Get()` и `chi.URLParam()` запрещены для API-эндпоинтов
 - **Моки** — mockery с `all: true` для автообнаружения интерфейсов. Ручные моки запрещены
+- **Strict-server Set-Cookie — одно значение на ответ.** Сгенерированный wrapper пишет header через `w.Header().Set("Set-Cookie", value)` — повторный `Set` тихо перетрёт предыдущий. Если эндпоинту нужно вернуть две cookie сразу (CSRF + refresh) — strict-server не подойдёт; нужен либо отдельный middleware, дописывающий cookie через `w.Header().Add(...)` после strict-handler'а, либо chi-handler в обход generated wrapper'а
 
 ## Frontend
 
@@ -25,3 +26,4 @@ Contract-first подход: OpenAPI YAML → кодогенерация для 
 - [major] Хардкод-список enum-значений в switch / error message вместо `req.X.Valid()` от сгенерированного типа.
 - [minor] Ручной мок вместо mockery с `all: true`.
 - [blocker] Generated файл (`*.gen.go`, `frontend/*/generated/*` и др.) изменён в diff'е без правки yaml-источника (`api/openapi.yaml`) — нарушение codegen pipeline.
+- [major] Strict-server response отдаёт две Set-Cookie через `Headers` — generated wrapper делает `w.Header().Set(...)`, второе значение перетрёт первое; нужен workaround через middleware с `Add(...)`.

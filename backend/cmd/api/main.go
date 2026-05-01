@@ -124,6 +124,7 @@ func run() error {
 	r.Use(middleware.RealIP)
 	r.Use(middleware.ClientIP)
 	r.Use(middleware.RequestMeta)
+	r.Use(middleware.RefreshCookie)
 	r.Use(middleware.SecureHeaders)
 	r.Use(middleware.CORS(cfg.CORSOrigins))
 	r.Use(middleware.Logging(appLogger))
@@ -137,10 +138,6 @@ func run() error {
 		LegalPrivacyVersion:   cfg.LegalPrivacyVersion,
 	}, appLogger)
 
-	// Register API routes via generated handler. The strict-server adapter
-	// owns request body parsing and response sum-types; respondError is
-	// plugged in as both the body-decode error sink and the runtime-error
-	// sink, keeping domain → HTTP translation in one place.
 	api.HandlerWithOptions(handler.NewStrictAPIHandler(server), api.ChiServerOptions{
 		BaseRouter: r,
 		Middlewares: []api.MiddlewareFunc{

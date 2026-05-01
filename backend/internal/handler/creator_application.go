@@ -15,25 +15,9 @@ import (
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/middleware"
 )
 
-// maxUserAgentLength caps the User-Agent string persisted with consent rows.
-// Anything longer is truncated before the service layer touches it — the
-// attacker-controlled header should not balloon DB rows or stdout logs.
-const maxUserAgentLength = 1024
-
-// SubmitCreatorApplication handles POST /creators/applications.
-//
-// The endpoint is public (no auth, no RBAC check). The handler reads the
-// strict-parsed request body and hydrates domain.CreatorApplicationInput with
-// request metadata (client IP, User-Agent, legal document versions, current
-// time) before delegating to CreatorApplicationService. On success the response
-// includes the application id and the Telegram bot deep-link.
 func (s *Server) SubmitCreatorApplication(ctx context.Context, request api.SubmitCreatorApplicationRequestObject) (api.SubmitCreatorApplicationResponseObject, error) {
 	req := request.Body
 
-	ua := middleware.UserAgentFromContext(ctx)
-	if len(ua) > maxUserAgentLength {
-		ua = ua[:maxUserAgentLength]
-	}
 	input := domain.CreatorApplicationInput{
 		LastName:          req.LastName,
 		FirstName:         req.FirstName,
@@ -47,7 +31,7 @@ func (s *Server) SubmitCreatorApplication(ctx context.Context, request api.Submi
 		Socials:           apiSocialsToDomain(req.Socials),
 		Consents:          domain.ConsentsInput{AcceptedAll: req.AcceptedAll},
 		IPAddress:         middleware.ClientIPFromContext(ctx),
-		UserAgent:         ua,
+		UserAgent:         middleware.UserAgentFromContext(ctx),
 		AgreementVersion:  s.legalAgreementVersion,
 		PrivacyVersion:    s.legalPrivacyVersion,
 		Now:               time.Now().UTC(),

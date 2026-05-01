@@ -70,7 +70,7 @@ func (s *Server) ListAuditLogs(ctx context.Context, request api.ListAuditLogsReq
 			Logs:    items,
 			Page:    page,
 			PerPage: perPage,
-			Total:   int(total),
+			Total:   total,
 		},
 	}, nil
 }

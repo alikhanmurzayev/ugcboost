@@ -185,7 +185,7 @@ func TestServer_SubmitCreatorApplication(t *testing.T) {
 	t.Run("oversized user agent is truncated", func(t *testing.T) {
 		t.Parallel()
 		appID := uuid.MustParse("22222222-3333-4444-5555-666666666666")
-		oversized := strings.Repeat("x", maxUserAgentLength+128)
+		oversized := strings.Repeat("x", middleware.MaxUserAgentLength+128)
 
 		creator := mocks.NewMockCreatorApplicationService(t)
 		var captured domain.CreatorApplicationInput
@@ -203,7 +203,7 @@ func TestServer_SubmitCreatorApplication(t *testing.T) {
 			func(r *http.Request) { r.Header.Set("User-Agent", oversized) })
 
 		require.Equal(t, http.StatusCreated, w.Code)
-		require.Len(t, captured.UserAgent, maxUserAgentLength)
+		require.Len(t, captured.UserAgent, middleware.MaxUserAgentLength)
 	})
 
 	t.Run("service returns non-uuid application id yields 500", func(t *testing.T) {

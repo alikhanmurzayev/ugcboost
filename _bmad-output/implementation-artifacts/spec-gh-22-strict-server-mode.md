@@ -93,8 +93,21 @@ context:
   - `handler/constants.go` — `CookieRefreshToken` теперь алиас на `middleware.CookieRefreshToken` (single source of truth, был дубль).
   - `handler/auth_test.go` — добавлены `TestServer_refreshCookieString` (secure on/off ветки), `TestServer_clearRefreshCookieString` (Max-Age=0), captured-input тест `TestServer_RefreshToken/reads_refresh_cookie_from_middleware-context` через `middleware.WithRefreshCookie`.
   - `handler/creator_application.go` — устаревший комментарий про respondError исправлен.
-- **Defers** (вне scope этого PR): см. `deferred-work.md` — narrow refresh-cookie middleware на /auth/refresh, UA UTF-8 truncation, audit total int64, strict-server Set-Cookie single-value constraint в стандартах.
-- **KEEP**: 4-агентное ревью с делегацией standards-auditor отдельно от acceptance-auditor — даёт максимальное покрытие ортогональных классов findings (architectural / edge / acceptance / standards).
+
+### 2026-05-01 — Post-merge review patches (round 2)
+
+Алихан оставил 7 inline-комментариев на PR + meta-фидбек про избыточные комментарии. Все правки в одном раунде:
+
+- **`docs/standards/naming.md` § Комментарии** — два буллета переписаны, без новых разделов: «по умолчанию — без комментария, WHY-only»; «godoc — однострочник, многострочник только при неочевидных предусловиях». Покрывает повторяющийся паттерн избыточных godoc'ов.
+- **`docs/standards/backend-codegen.md`** — добавлен буллет про single-value Set-Cookie ограничение strict-server (генератор делает `w.Header().Set`, второе значение overwrite'нет).
+- **OpenAPI `ListAuditLogsData.total` → `int64`** — `audit.go` больше не делает `int(total)` cast; на 32-bit платформе нет overflow.
+- **`/auth/logout` стал public** — `security: []` в OpenAPI. Идентификация по refresh-cookie из ctx, не по Bearer. Клиент с истёкшим access всё равно может revoke. Clear-cookie response — безусловный.
+  - `AuthService.Logout(userID)` → `LogoutByRefresh(rawRefreshToken)`. Внутри: claim → delete all → audit, всё в одной tx. `sql.ErrNoRows` от claim — no-op (cookie unknown/expired/already-revoked); другие ошибки пробрасываются.
+  - E2E TestLogout: убран `no auth returns 401`, добавлен `no cookie returns 200 idempotent`. Header-комментарий перерасказан.
+- **Refresh cookie injection вынесен из `RequestMeta`** — отдельный middleware `RefreshCookie`, монтируется глобально, но whitelist'ит только `/auth/refresh` и `/auth/logout`. Любой downstream `ctx`-dump в логах больше не утечёт refresh token на остальных ручках.
+- **UA cap в `RequestMeta` middleware** — `MaxUserAgentLength = 1024`, truncate до записи в ctx. Дубль из `handler/creator_application.go` удалён.
+- **`main.go:140-143` и `handler/constants.go:5-7`** — длинные godoc'и удалены целиком (имена self-explanatory).
+- **KEEP**: Замена «один Logout-метод сервиса принимает userID» → «принимает refresh cookie» — service сам резолвит идентичность из секрета, поэтому handler не зависит от auth-middleware и эндпоинт можно сделать public без ослабления revoke.
 
 ## Verification
 
