@@ -15,10 +15,6 @@ import (
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/domain"
 )
 
-// CreatorApplicationsIINActiveIdx mirrors the partial unique index name
-// created by migration 20260420181753_creator_applications.sql. Used to
-// distinguish the "active IIN already present" race from other unique
-// violations that might appear on this table in the future.
 const CreatorApplicationsIINActiveIdx = "creator_applications_iin_active_idx"
 
 // Creator applications table and column names.

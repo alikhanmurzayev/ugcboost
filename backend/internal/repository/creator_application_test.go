@@ -19,7 +19,7 @@ import (
 func TestCreatorApplicationRepository_HasActiveByIIN(t *testing.T) {
 	t.Parallel()
 
-	const sqlStmt = "SELECT 1 FROM creator_applications WHERE iin = $1 AND status IN ($2,$3,$4) LIMIT 1"
+	const sqlStmt = "SELECT 1 FROM creator_applications WHERE iin = $1 AND status IN ($2,$3,$4,$5) LIMIT 1"
 
 	t.Run("found returns true", func(t *testing.T) {
 		t.Parallel()
@@ -27,7 +27,7 @@ func TestCreatorApplicationRepository_HasActiveByIIN(t *testing.T) {
 		repo := &creatorApplicationRepository{db: mock}
 
 		mock.ExpectQuery(sqlStmt).
-			WithArgs("950515312348", "pending", "approved", "blocked").
+			WithArgs("950515312348", "verification", "moderation", "awaiting_contract", "contract_sent").
 			WillReturnRows(pgxmock.NewRows([]string{"?column?"}).AddRow(1))
 
 		ok, err := repo.HasActiveByIIN(context.Background(), "950515312348")
@@ -41,7 +41,7 @@ func TestCreatorApplicationRepository_HasActiveByIIN(t *testing.T) {
 		repo := &creatorApplicationRepository{db: mock}
 
 		mock.ExpectQuery(sqlStmt).
-			WithArgs("950515312348", "pending", "approved", "blocked").
+			WithArgs("950515312348", "verification", "moderation", "awaiting_contract", "contract_sent").
 			WillReturnError(pgx.ErrNoRows)
 
 		ok, err := repo.HasActiveByIIN(context.Background(), "950515312348")
@@ -55,7 +55,7 @@ func TestCreatorApplicationRepository_HasActiveByIIN(t *testing.T) {
 		repo := &creatorApplicationRepository{db: mock}
 
 		mock.ExpectQuery(sqlStmt).
-			WithArgs("950515312348", "pending", "approved", "blocked").
+			WithArgs("950515312348", "verification", "moderation", "awaiting_contract", "contract_sent").
 			WillReturnError(errors.New("db exploded"))
 
 		ok, err := repo.HasActiveByIIN(context.Background(), "950515312348")
@@ -83,9 +83,9 @@ func TestCreatorApplicationRepository_Create(t *testing.T) {
 		// scanner which requires the source kind to match the destination kind
 		// (*string), so the address/middle/other columns are sourced as pointers.
 		mock.ExpectQuery(sqlStmt).
-			WithArgs("ул. Абая 1", birth, "Авторские ASMR-видео", "almaty", "Айдана", "950515312348", "Муратова", "Ивановна", "+77001234567", "pending").
+			WithArgs("ул. Абая 1", birth, "Авторские ASMR-видео", "almaty", "Айдана", "950515312348", "Муратова", "Ивановна", "+77001234567", "verification").
 			WillReturnRows(pgxmock.NewRows([]string{"address", "birth_date", "category_other_text", "city_code", "created_at", "first_name", "id", "iin", "last_name", "middle_name", "phone", "status", "updated_at"}).
-				AddRow(pointer.ToString("ул. Абая 1"), birth, pointer.ToString("Авторские ASMR-видео"), "almaty", created, "Айдана", "app-1", "950515312348", "Муратова", pointer.ToString("Ивановна"), "+77001234567", "pending", created))
+				AddRow(pointer.ToString("ул. Абая 1"), birth, pointer.ToString("Авторские ASMR-видео"), "almaty", created, "Айдана", "app-1", "950515312348", "Муратова", pointer.ToString("Ивановна"), "+77001234567", "verification", created))
 
 		row := CreatorApplicationRow{
 			LastName:          "Муратова",
@@ -97,7 +97,7 @@ func TestCreatorApplicationRepository_Create(t *testing.T) {
 			CityCode:          "almaty",
 			Address:           pointer.ToString("ул. Абая 1"),
 			CategoryOtherText: pointer.ToString("Авторские ASMR-видео"),
-			Status:            "pending",
+			Status:            "verification",
 		}
 		got, err := repo.Create(context.Background(), row)
 		require.NoError(t, err)
@@ -112,7 +112,7 @@ func TestCreatorApplicationRepository_Create(t *testing.T) {
 			CityCode:          "almaty",
 			Address:           pointer.ToString("ул. Абая 1"),
 			CategoryOtherText: pointer.ToString("Авторские ASMR-видео"),
-			Status:            "pending",
+			Status:            "verification",
 			CreatedAt:         created,
 			UpdatedAt:         created,
 		}, got)
@@ -125,7 +125,7 @@ func TestCreatorApplicationRepository_Create(t *testing.T) {
 		birth := time.Date(1995, 5, 15, 0, 0, 0, 0, time.UTC)
 
 		mock.ExpectQuery(sqlStmt).
-			WithArgs("ул. Абая 1", birth, nil, "almaty", "Айдана", "950515312348", "Муратова", nil, "+77001234567", "pending").
+			WithArgs("ул. Абая 1", birth, nil, "almaty", "Айдана", "950515312348", "Муратова", nil, "+77001234567", "verification").
 			WillReturnError(&pgconn.PgError{Code: "23505", ConstraintName: CreatorApplicationsIINActiveIdx})
 
 		_, err := repo.Create(context.Background(), CreatorApplicationRow{
@@ -136,7 +136,7 @@ func TestCreatorApplicationRepository_Create(t *testing.T) {
 			Phone:     "+77001234567",
 			CityCode:  "almaty",
 			Address:   pointer.ToString("ул. Абая 1"),
-			Status:    "pending",
+			Status:    "verification",
 		})
 		require.ErrorIs(t, err, domain.ErrCreatorApplicationDuplicate)
 	})
@@ -148,7 +148,7 @@ func TestCreatorApplicationRepository_Create(t *testing.T) {
 		birth := time.Date(1995, 5, 15, 0, 0, 0, 0, time.UTC)
 
 		mock.ExpectQuery(sqlStmt).
-			WithArgs("ул. Абая 1", birth, nil, "almaty", "Айдана", "950515312348", "Муратова", nil, "+77001234567", "pending").
+			WithArgs("ул. Абая 1", birth, nil, "almaty", "Айдана", "950515312348", "Муратова", nil, "+77001234567", "verification").
 			WillReturnError(&pgconn.PgError{Code: "23505", ConstraintName: "some_other_idx"})
 
 		_, err := repo.Create(context.Background(), CreatorApplicationRow{
@@ -159,7 +159,7 @@ func TestCreatorApplicationRepository_Create(t *testing.T) {
 			Phone:     "+77001234567",
 			CityCode:  "almaty",
 			Address:   pointer.ToString("ул. Абая 1"),
-			Status:    "pending",
+			Status:    "verification",
 		})
 		require.Error(t, err)
 		require.NotErrorIs(t, err, domain.ErrCreatorApplicationDuplicate)
@@ -175,9 +175,9 @@ func TestCreatorApplicationRepository_Create(t *testing.T) {
 		created := time.Date(2026, 4, 20, 18, 0, 0, 0, time.UTC)
 
 		mock.ExpectQuery(sqlStmt).
-			WithArgs(nil, birth, nil, "almaty", "Айдана", "950515312348", "Муратова", "Ивановна", "+77001234567", "pending").
+			WithArgs(nil, birth, nil, "almaty", "Айдана", "950515312348", "Муратова", "Ивановна", "+77001234567", "verification").
 			WillReturnRows(pgxmock.NewRows([]string{"address", "birth_date", "category_other_text", "city_code", "created_at", "first_name", "id", "iin", "last_name", "middle_name", "phone", "status", "updated_at"}).
-				AddRow(nil, birth, nil, "almaty", created, "Айдана", "app-2", "950515312348", "Муратова", pointer.ToString("Ивановна"), "+77001234567", "pending", created))
+				AddRow(nil, birth, nil, "almaty", created, "Айдана", "app-2", "950515312348", "Муратова", pointer.ToString("Ивановна"), "+77001234567", "verification", created))
 
 		got, err := repo.Create(context.Background(), CreatorApplicationRow{
 			LastName:   "Муратова",
@@ -187,7 +187,7 @@ func TestCreatorApplicationRepository_Create(t *testing.T) {
 			BirthDate:  birth,
 			Phone:      "+77001234567",
 			CityCode:   "almaty",
-			Status:     "pending",
+			Status:     "verification",
 		})
 		require.NoError(t, err)
 		require.Nil(t, got.Address)
@@ -210,7 +210,7 @@ func TestCreatorApplicationRepository_GetByID(t *testing.T) {
 		mock.ExpectQuery(sqlStmt).
 			WithArgs("app-1").
 			WillReturnRows(pgxmock.NewRows([]string{"address", "birth_date", "category_other_text", "city_code", "created_at", "first_name", "id", "iin", "last_name", "middle_name", "phone", "status", "updated_at"}).
-				AddRow(pointer.ToString("ул. Абая 1"), birth, pointer.ToString("Авторские ASMR"), "almaty", created, "Айдана", "app-1", "950515312348", "Муратова", pointer.ToString("Ивановна"), "+77001234567", "pending", updated))
+				AddRow(pointer.ToString("ул. Абая 1"), birth, pointer.ToString("Авторские ASMR"), "almaty", created, "Айдана", "app-1", "950515312348", "Муратова", pointer.ToString("Ивановна"), "+77001234567", "verification", updated))
 
 		got, err := repo.GetByID(context.Background(), "app-1")
 		require.NoError(t, err)
@@ -225,7 +225,7 @@ func TestCreatorApplicationRepository_GetByID(t *testing.T) {
 			CityCode:          "almaty",
 			Address:           pointer.ToString("ул. Абая 1"),
 			CategoryOtherText: pointer.ToString("Авторские ASMR"),
-			Status:            "pending",
+			Status:            "verification",
 			CreatedAt:         created,
 			UpdatedAt:         updated,
 		}, got)

@@ -115,7 +115,7 @@ func (s *CreatorApplicationService) Submit(ctx context.Context, in domain.Creato
 			CityCode:          trimmed.CityCode,
 			Address:           trimmed.Address,
 			CategoryOtherText: categoryOtherText,
-			Status:            domain.CreatorApplicationStatusPending,
+			Status:            domain.CreatorApplicationStatusVerification,
 		})
 		if err != nil {
 			if errors.Is(err, domain.ErrCreatorApplicationDuplicate) {
@@ -396,6 +396,7 @@ func (s *CreatorApplicationService) auditNewValue(in domain.CreatorApplicationIn
 	}
 	return map[string]any{
 		"application_id": applicationID,
+		"status":         domain.CreatorApplicationStatusVerification,
 		"city":           in.CityCode,
 		"categories":     in.CategoryCodes,
 		"platforms":      platforms,

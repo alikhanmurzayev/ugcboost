@@ -382,7 +382,7 @@ func TestServer_GetCreatorApplication(t *testing.T) {
 				CityCode:          "almaty",
 				Address:           pointer.ToString("ул. Абая 1"),
 				CategoryOtherText: pointer.ToString("Авторские ASMR"),
-				Status:            domain.CreatorApplicationStatusPending,
+				Status:            domain.CreatorApplicationStatusVerification,
 				CreatedAt:         created,
 				UpdatedAt:         updated,
 				// Domain returns codes in arbitrary order — the handler sorts
@@ -428,7 +428,7 @@ func TestServer_GetCreatorApplication(t *testing.T) {
 				City:              api.CreatorApplicationDetailCity{Code: "almaty", Name: "Алматы", SortOrder: 100},
 				Address:           pointer.ToString("ул. Абая 1"),
 				CategoryOtherText: pointer.ToString("Авторские ASMR"),
-				Status:            api.Pending,
+				Status:            api.Verification,
 				CreatedAt:         created,
 				UpdatedAt:         updated,
 				Categories: []api.CreatorApplicationDetailCategory{
@@ -468,7 +468,7 @@ func TestServer_GetCreatorApplication(t *testing.T) {
 				Phone:      "+77001234567",
 				CityCode:   "atyrau", // not present in the active dictionary below
 				Address:    pointer.ToString("ул. Абая 1"),
-				Status:     domain.CreatorApplicationStatusPending,
+				Status:     domain.CreatorApplicationStatusVerification,
 				CreatedAt:  created,
 				UpdatedAt:  created,
 				Categories: []string{"beauty", "vintage_asmr"}, // vintage_asmr deactivated
@@ -499,5 +499,36 @@ func TestServer_GetCreatorApplication(t *testing.T) {
 		require.Equal(t, api.CreatorApplicationDetailCity{
 			Code: "atyrau", Name: "atyrau", SortOrder: 0,
 		}, resp.Data.City)
+	})
+}
+
+func TestMapCreatorApplicationStatusToAPI(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		domainValue string
+		apiValue    api.CreatorApplicationDetailDataStatus
+	}{
+		{domain.CreatorApplicationStatusVerification, api.Verification},
+		{domain.CreatorApplicationStatusModeration, api.Moderation},
+		{domain.CreatorApplicationStatusAwaitingContract, api.AwaitingContract},
+		{domain.CreatorApplicationStatusContractSent, api.ContractSent},
+		{domain.CreatorApplicationStatusSigned, api.Signed},
+		{domain.CreatorApplicationStatusRejected, api.Rejected},
+		{domain.CreatorApplicationStatusWithdrawn, api.Withdrawn},
+	}
+	for _, tc := range cases {
+		t.Run(tc.domainValue, func(t *testing.T) {
+			t.Parallel()
+			got, err := mapCreatorApplicationStatusToAPI(tc.domainValue)
+			require.NoError(t, err)
+			require.Equal(t, tc.apiValue, got)
+		})
+	}
+
+	t.Run("unknown status returns error", func(t *testing.T) {
+		t.Parallel()
+		_, err := mapCreatorApplicationStatusToAPI("ghost")
+		require.ErrorContains(t, err, "ghost")
 	})
 }

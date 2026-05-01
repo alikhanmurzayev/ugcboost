@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
@@ -510,7 +511,7 @@ func TestCreatorApplicationService_Submit(t *testing.T) {
 			BirthDate:  birth,
 			Phone:      "+77001234567",
 			CityCode:   "almaty",
-			Status:     domain.CreatorApplicationStatusPending,
+			Status:     domain.CreatorApplicationStatusVerification,
 		}).Return(&repository.CreatorApplicationRow{
 			ID:         "app-1",
 			LastName:   "Муратова",
@@ -520,7 +521,7 @@ func TestCreatorApplicationService_Submit(t *testing.T) {
 			BirthDate:  birth,
 			Phone:      "+77001234567",
 			CityCode:   "almaty",
-			Status:     "pending",
+			Status:     "verification",
 			CreatedAt:  created,
 			UpdatedAt:  created,
 		}, nil)
@@ -539,10 +540,19 @@ func TestCreatorApplicationService_Submit(t *testing.T) {
 			{ApplicationID: "app-1", ConsentType: "terms", AcceptedAt: in.Now, DocumentVersion: "2026-04-20", IPAddress: "127.0.0.1", UserAgent: "ua/1"},
 		}).Return(nil)
 		rig.auditRepo.EXPECT().Create(mock.Anything, mock.MatchedBy(func(row repository.AuditLogRow) bool {
-			return row.Action == AuditActionCreatorApplicationSubmit &&
-				row.EntityType == AuditEntityTypeCreatorApplication &&
-				row.EntityID != nil && *row.EntityID == "app-1" &&
-				row.ActorID == nil
+			if row.Action != AuditActionCreatorApplicationSubmit ||
+				row.EntityType != AuditEntityTypeCreatorApplication ||
+				row.EntityID == nil || *row.EntityID != "app-1" ||
+				row.ActorID != nil {
+				return false
+			}
+			var payload struct {
+				Status string `json:"status"`
+			}
+			if err := json.Unmarshal(row.NewValue, &payload); err != nil {
+				return false
+			}
+			return payload.Status == domain.CreatorApplicationStatusVerification
 		})).Return(nil)
 		rig.logger.EXPECT().Info(mock.Anything, "creator application submitted", []any{"application_id", "app-1"}).Once()
 
@@ -866,7 +876,7 @@ func TestCreatorApplicationService_GetByID(t *testing.T) {
 				CityCode:          "almaty",
 				Address:           pointer.ToString("ул. Абая 1"),
 				CategoryOtherText: pointer.ToString("Авторские ASMR"),
-				Status:            domain.CreatorApplicationStatusPending,
+				Status:            domain.CreatorApplicationStatusVerification,
 				CreatedAt:         created,
 				UpdatedAt:         updated,
 			}, nil)
@@ -903,7 +913,7 @@ func TestCreatorApplicationService_GetByID(t *testing.T) {
 			CityCode:          "almaty",
 			Address:           pointer.ToString("ул. Абая 1"),
 			CategoryOtherText: pointer.ToString("Авторские ASMR"),
-			Status:            domain.CreatorApplicationStatusPending,
+			Status:            domain.CreatorApplicationStatusVerification,
 			CreatedAt:         created,
 			UpdatedAt:         updated,
 			Categories:        []string{"beauty", "fashion"},
