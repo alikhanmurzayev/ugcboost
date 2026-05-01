@@ -85,6 +85,24 @@ func TestRealIP(t *testing.T) {
 			want:       "9.9.9.9",
 		},
 		{
+			name:       "X-Forwarded-For with leading empty tokens",
+			hdr:        headers{xForwardedFor: ", , 1.2.3.4"},
+			remoteAddr: "127.0.0.1:1234",
+			want:       "1.2.3.4",
+		},
+		{
+			name:       "X-Forwarded-For with host:port token",
+			hdr:        headers{xForwardedFor: "1.2.3.4:5678, 5.6.7.8"},
+			remoteAddr: "127.0.0.1:1234",
+			want:       "1.2.3.4",
+		},
+		{
+			name:       "CF-Connecting-IP with host:port",
+			hdr:        headers{cfConnectingIP: "203.0.113.7:5555"},
+			remoteAddr: "127.0.0.1:1234",
+			want:       "203.0.113.7",
+		},
+		{
 			name:       "no headers falls back to RemoteAddr",
 			remoteAddr: "10.0.0.1:5555",
 			want:       "10.0.0.1",

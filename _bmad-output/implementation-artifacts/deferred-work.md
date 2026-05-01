@@ -17,15 +17,6 @@
 
 ---
 
-## GH-39 review (2026-05-01) — XFF tolerance
-
-- **Skip-empty leading tokens в X-Forwarded-For.** При `X-Forwarded-For: ", , 1.2.3.4"` текущая реализация берёт первый токен (`""`) и падает на fallback вместо итерации до первого валидного IP. CF/Dokploy не производят такой формат, но spec-замок «leftmost client IP» формально не выполняется на dirty input.
-- **Tolerate `host:port` в XFF.** RFC 7239 запрещает, но dirty proxies иногда добавляют порт. Сейчас `1.2.3.4:5678` отвергается ParseIP'ом. Можно сделать `SplitHostPort` fallback.
-
-**Trigger:** появление нестандартного прокси в цепочке (новый CDN, mid-box, экспериментальный edge).
-
----
-
 ## GH-39 review (2026-05-01) — middleware refactor
 
 - **Слить `RealIP` + `ClientIP` в один middleware.** Сейчас два уровня очистки: `RealIP` пишет резолвленный host в `r.RemoteAddr`, `ClientIP` ещё раз `SplitHostPort`'ит и кладёт в context. Работает, но дублирует логику и хрупко (если кто-то добавит валидацию в `RealIP` без trim'а порта, `ClientIP` сделает это незаметно).

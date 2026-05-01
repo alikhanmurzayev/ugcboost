@@ -70,8 +70,13 @@ func extractClientIP(r *http.Request) string {
 		}
 	}
 	if xff := r.Header.Get(HeaderXForwardedFor); xff != "" {
-		if ip := parseHeaderIP(strings.SplitN(xff, ",", 2)[0]); ip != "" {
-			return ip
+		// Iterate every comma-separated token: dirty proxies sometimes emit
+		// leading empty entries (", , 1.2.3.4") so the leftmost-non-empty
+		// must win, not the literal first token.
+		for _, raw := range strings.Split(xff, ",") {
+			if ip := parseHeaderIP(raw); ip != "" {
+				return ip
+			}
 		}
 	}
 	if host, _, err := net.SplitHostPort(r.RemoteAddr); err == nil {
@@ -81,17 +86,22 @@ func extractClientIP(r *http.Request) string {
 }
 
 // parseHeaderIP trims and validates an IP candidate from a proxy header.
-// Returns "" for empty, oversized, or unparseable inputs so callers can
-// fall through to the next priority source.
+// Accepts both bare IP and `host:port` (RFC 7239 forbids the suffix, but
+// dirty proxies emit it) — the host part is what we care about. Returns
+// "" for empty, oversized, or unparseable inputs so callers can fall
+// through to the next priority source.
 func parseHeaderIP(raw string) string {
 	v := strings.TrimSpace(raw)
 	if v == "" || len(v) > maxIPTextLen {
 		return ""
 	}
-	if net.ParseIP(v) == nil {
-		return ""
+	if net.ParseIP(v) != nil {
+		return v
 	}
-	return v
+	if host, _, err := net.SplitHostPort(v); err == nil && net.ParseIP(host) != nil {
+		return host
+	}
+	return ""
 }
 
 // ClientIP stores the client IP (already normalised by RealIP) on the
