@@ -6,11 +6,6 @@ import (
 	"time"
 )
 
-// CreatorApplicationStatus values stored in creator_applications.status.
-// Целевая 7-статусная стейт-машина — см.
-// _bmad-output/planning-artifacts/creator-application-state-machine.md.
-// "Active" statuses are the ones that block a duplicate IIN submission;
-// terminal applicants (rejected/withdrawn) may re-apply (FR17).
 const (
 	CreatorApplicationStatusVerification     = "verification"
 	CreatorApplicationStatusModeration       = "moderation"
@@ -21,9 +16,6 @@ const (
 	CreatorApplicationStatusWithdrawn        = "withdrawn"
 )
 
-// CreatorApplicationActiveStatuses lists statuses that count as "in progress"
-// for the IIN uniqueness rule. Mirrors the partial unique index in the
-// 20260501222829_creator_applications_state_machine.sql migration.
 var CreatorApplicationActiveStatuses = []string{
 	CreatorApplicationStatusVerification,
 	CreatorApplicationStatusModeration,

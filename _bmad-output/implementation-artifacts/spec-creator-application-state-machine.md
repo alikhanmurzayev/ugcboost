@@ -131,11 +131,15 @@ context:
 - Fail-fast guard на `approved/blocked` (review-time addition).
 - Audit-payload содержит `status` (review-time addition).
 
-**Deferred (вне этой итерации, см. `deferred-work.md`):**
-- CONCURRENTLY для перестройки partial unique index.
-- Прямой каст domain→api enum в `handler/creator_application.go:202`.
-- Concurrent race-test для partial unique index.
-- Migration-level integration tests.
+### 2026-05-01 — review iteration 2 (PR review feedback)
+
+**Trigger:** комментарии Alikhan на PR #46.
+
+**Patches applied:**
+- `handler/creator_application.go` — заменил прямой каст `api.CreatorApplicationDetailDataStatus(d.Status)` на explicit switch-case mapper `mapCreatorApplicationStatusToAPI` с `(value, error)` сигнатурой. `domainCreatorApplicationDetailToAPI` теперь возвращает `(api.CreatorApplicationDetailData, error)`; caller `GetCreatorApplication` пробрасывает.
+- Удалён `_bmad-output/implementation-artifacts/deferred-work.md` (отложенные пункты по фидбеку не нужны).
+- `openapi.yaml` — description у `status` без ссылки на md-файл.
+- `domain/creator_application.go`, `repository/creator_application.go` — лишние godoc-комменты удалены (имена констант говорят сами за себя).
 
 ## Design Notes
 
@@ -179,8 +183,8 @@ context:
 - OpenAPI enum `CreatorApplicationDetailData.status` → 7 целевых.
   [`openapi.yaml:1250`](../../backend/api/openapi.yaml#L1250)
 
-- Repo-комментарий партиал-индекса синхронизирован с миграцией и доменом.
-  [`creator_application.go:18`](../../backend/internal/repository/creator_application.go#L18)
+- Switch-case mapper `domain.Status → api.Status` с pass-through ошибки.
+  [`creator_application.go:212`](../../backend/internal/handler/creator_application.go#L212)
 
 **Тесты**
 
@@ -192,11 +196,3 @@ context:
 
 - E2E happy-path ассертит `apiclient.Verification` после Submit.
   [`creator_application_test.go:495`](../../backend/e2e/creator_application/creator_application_test.go#L495)
-
-**Сопровождающие артефакты**
-
-- Spec Change Log зафиксировал review-time patches и corrections.
-  [`spec-creator-application-state-machine.md`](./spec-creator-application-state-machine.md)
-
-- Deferred items (CONCURRENTLY, handler cast, race-test, migration tests).
-  [`deferred-work.md`](./deferred-work.md)

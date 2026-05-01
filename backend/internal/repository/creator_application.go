@@ -15,12 +15,6 @@ import (
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/domain"
 )
 
-// CreatorApplicationsIINActiveIdx mirrors the partial unique index name
-// rebuilt by migration 20260501222829_creator_applications_state_machine.sql
-// over the 4 active statuses: verification, moderation, awaiting_contract,
-// contract_sent (see domain.CreatorApplicationActiveStatuses). Used to
-// distinguish the "active IIN already present" race from other unique
-// violations that might appear on this table in the future.
 const CreatorApplicationsIINActiveIdx = "creator_applications_iin_active_idx"
 
 // Creator applications table and column names.

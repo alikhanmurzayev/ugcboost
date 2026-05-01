@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"fmt"
 	"net/url"
 	"slices"
 	"strings"
@@ -112,14 +113,16 @@ func (s *Server) GetCreatorApplication(ctx context.Context, request api.GetCreat
 		return nil, err
 	}
 
-	return api.GetCreatorApplication200JSONResponse{
-		Data: domainCreatorApplicationDetailToAPI(
-			request.Id,
-			detail,
-			indexDictionaryByCode(categoryEntries),
-			indexDictionaryByCode(cityEntries),
-		),
-	}, nil
+	data, err := domainCreatorApplicationDetailToAPI(
+		request.Id,
+		detail,
+		indexDictionaryByCode(categoryEntries),
+		indexDictionaryByCode(cityEntries),
+	)
+	if err != nil {
+		return nil, err
+	}
+	return api.GetCreatorApplication200JSONResponse{Data: data}, nil
 }
 
 // indexDictionaryByCode builds a code-keyed lookup over a freshly-fetched
@@ -135,21 +138,16 @@ func indexDictionaryByCode(entries []domain.DictionaryEntry) map[string]domain.D
 	return m
 }
 
-// domainCreatorApplicationDetailToAPI maps the domain aggregate onto the
-// generated response struct. Status, platform and consent_type cast directly —
-// OpenAPI enums and domain string constants share the same canonical values by
-// construction. Categories and city are resolved against the active
-// dictionary; codes that no longer exist (deactivated entries, legacy data)
-// degrade to `{code, name: code, sortOrder: 0}` so the response stays
-// well-formed instead of failing the whole read. Categories are sorted
-// in-memory by (sortOrder, code) to keep the response deterministic
-// independent of repo-side ordering.
 func domainCreatorApplicationDetailToAPI(
 	id openapi_types.UUID,
 	d *domain.CreatorApplicationDetail,
 	categoriesByCode map[string]domain.DictionaryEntry,
 	cityByCode map[string]domain.DictionaryEntry,
-) api.CreatorApplicationDetailData {
+) (api.CreatorApplicationDetailData, error) {
+	status, err := mapCreatorApplicationStatusToAPI(d.Status)
+	if err != nil {
+		return api.CreatorApplicationDetailData{}, err
+	}
 	cats := make([]api.CreatorApplicationDetailCategory, len(d.Categories))
 	for i, code := range d.Categories {
 		cats[i] = resolveCategory(code, categoriesByCode)
@@ -199,13 +197,34 @@ func domainCreatorApplicationDetailToAPI(
 		City:              resolveCity(d.CityCode, cityByCode),
 		Address:           d.Address,
 		CategoryOtherText: d.CategoryOtherText,
-		Status:            api.CreatorApplicationDetailDataStatus(d.Status),
+		Status:            status,
 		CreatedAt:         d.CreatedAt,
 		UpdatedAt:         d.UpdatedAt,
 		Categories:        cats,
 		Socials:           socs,
 		Consents:          cons,
 		TelegramLink:      tgLink,
+	}, nil
+}
+
+func mapCreatorApplicationStatusToAPI(s string) (api.CreatorApplicationDetailDataStatus, error) {
+	switch s {
+	case domain.CreatorApplicationStatusVerification:
+		return api.Verification, nil
+	case domain.CreatorApplicationStatusModeration:
+		return api.Moderation, nil
+	case domain.CreatorApplicationStatusAwaitingContract:
+		return api.AwaitingContract, nil
+	case domain.CreatorApplicationStatusContractSent:
+		return api.ContractSent, nil
+	case domain.CreatorApplicationStatusSigned:
+		return api.Signed, nil
+	case domain.CreatorApplicationStatusRejected:
+		return api.Rejected, nil
+	case domain.CreatorApplicationStatusWithdrawn:
+		return api.Withdrawn, nil
+	default:
+		return "", fmt.Errorf("unknown creator application status %q", s)
 	}
 }
 

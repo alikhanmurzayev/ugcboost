@@ -1248,7 +1248,7 @@ components:
         status:
           type: string
           enum: [verification, moderation, awaiting_contract, contract_sent, signed, rejected, withdrawn]
-          description: Application status (target 7-state machine, see creator-application-state-machine.md).
+          description: Application status.
         createdAt:
           type: string
           format: date-time

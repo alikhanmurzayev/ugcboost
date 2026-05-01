@@ -501,3 +501,34 @@ func TestServer_GetCreatorApplication(t *testing.T) {
 		}, resp.Data.City)
 	})
 }
+
+func TestMapCreatorApplicationStatusToAPI(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		domainValue string
+		apiValue    api.CreatorApplicationDetailDataStatus
+	}{
+		{domain.CreatorApplicationStatusVerification, api.Verification},
+		{domain.CreatorApplicationStatusModeration, api.Moderation},
+		{domain.CreatorApplicationStatusAwaitingContract, api.AwaitingContract},
+		{domain.CreatorApplicationStatusContractSent, api.ContractSent},
+		{domain.CreatorApplicationStatusSigned, api.Signed},
+		{domain.CreatorApplicationStatusRejected, api.Rejected},
+		{domain.CreatorApplicationStatusWithdrawn, api.Withdrawn},
+	}
+	for _, tc := range cases {
+		t.Run(tc.domainValue, func(t *testing.T) {
+			t.Parallel()
+			got, err := mapCreatorApplicationStatusToAPI(tc.domainValue)
+			require.NoError(t, err)
+			require.Equal(t, tc.apiValue, got)
+		})
+	}
+
+	t.Run("unknown status returns error", func(t *testing.T) {
+		t.Parallel()
+		_, err := mapCreatorApplicationStatusToAPI("ghost")
+		require.ErrorContains(t, err, "ghost")
+	})
+}
