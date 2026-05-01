@@ -10,13 +10,12 @@ import (
 	"github.com/alikhanmurzayev/ugcboost/backend/e2e/apiclient"
 )
 
-// AssertAuditEntry checks that an audit row matching (entityType, entityID,
-// action) exists. Uses the admin token to call GET /audit-logs with the
-// server-side filter, then asserts the action is present in the returned
-// page. Tests that need exhaustive verification of fields beyond presence
-// can read resp.JSON200 via the admin client directly.
-func AssertAuditEntry(t *testing.T, c *apiclient.ClientWithResponses,
-	adminToken, entityType, entityID, action string) {
+// FindAuditEntry fetches audit logs filtered by (entityType, entityID) using
+// the admin token, then returns the first entry matching the given action.
+// Fails the test if the entry is not found — callers can then assert on
+// any field (ipAddress, actorRole, etc.) without re-running the lookup.
+func FindAuditEntry(t *testing.T, c *apiclient.ClientWithResponses,
+	adminToken, entityType, entityID, action string) *apiclient.AuditLogEntry {
 	t.Helper()
 	resp, err := c.ListAuditLogsWithResponse(context.Background(),
 		&apiclient.ListAuditLogsParams{
@@ -26,8 +25,24 @@ func AssertAuditEntry(t *testing.T, c *apiclient.ClientWithResponses,
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, resp.StatusCode())
 	require.NotNil(t, resp.JSON200)
-	require.True(t, ContainsAction(resp.JSON200.Data.Logs, action),
-		"expected audit entry action=%q for %s/%s", action, entityType, entityID)
+	for i := range resp.JSON200.Data.Logs {
+		entry := &resp.JSON200.Data.Logs[i]
+		if entry.Action == action {
+			return entry
+		}
+	}
+	t.Fatalf("expected audit entry action=%q for %s/%s, got %d entries",
+		action, entityType, entityID, len(resp.JSON200.Data.Logs))
+	return nil
+}
+
+// AssertAuditEntry checks that an audit row matching (entityType, entityID,
+// action) exists. Tests that need exhaustive verification of fields beyond
+// presence should use FindAuditEntry directly.
+func AssertAuditEntry(t *testing.T, c *apiclient.ClientWithResponses,
+	adminToken, entityType, entityID, action string) {
+	t.Helper()
+	_ = FindAuditEntry(t, c, adminToken, entityType, entityID, action)
 }
 
 // ContainsAction reports whether logs contain at least one entry with the

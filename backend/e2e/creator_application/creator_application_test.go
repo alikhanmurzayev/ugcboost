@@ -38,6 +38,14 @@
 // та же сверка aggregate подтверждает, что эти граничные случаи дошли до
 // всех связанных таблиц.
 //
+// TestSubmitCreatorApplicationCFIP закрывает регрессию GH-39: за цепочкой
+// Cloudflare → Dokploy → Docker backend раньше писал в audit_logs.ip_address
+// IP edge-узла или Dokploy-прокси, а не реального клиента. Тест шлёт сырой
+// POST с заголовком CF-Connecting-IP и через ListAuditLogs API убеждается,
+// что IP из заголовка дошёл до audit-строки — это покрывает полную цепочку
+// middleware → service → repo → DB → API, которую unit-тесты middleware
+// изолированно поймать не могут.
+//
 // TestGetCreatorApplicationForbidden закрывает security-границу: brand_manager,
 // хоть и аутентифицирован, не может прочитать заявку по id (403). Тест
 // специально создаёт реальную заявку, чтобы убедиться: 403 возвращается
@@ -316,6 +324,50 @@ func TestSubmitCreatorApplicationOther(t *testing.T) {
 
 	adminClient, adminToken, _ := testutil.SetupAdminClient(t)
 	verifyCreatorApplicationByID(t, adminClient, adminToken, resp.JSON201.Data.ApplicationId.String(), req, other)
+}
+
+// TestSubmitCreatorApplicationCFIP closes the GH-39 regression: behind the
+// Cloudflare → Dokploy → Docker chain the backend used to log the edge or
+// proxy IP into audit_logs.ip_address instead of the real client IP. The
+// test sends a raw POST with CF-Connecting-IP set to a known fake address,
+// then reads the audit row via the admin ListAuditLogs API and asserts the
+// header value made it all the way through middleware → service → repo → DB.
+//
+// Skipped when E2E_BASE_URL points to a Cloudflare-fronted host: CF rewrites
+// CF-Connecting-IP at the edge, so a client-supplied value never reaches the
+// backend. The chain we want to validate is only observable against direct-
+// to-origin (local docker compose) targets — staging E2E in CI hits the
+// public Cloudflare hostname and would assert against the runner's IP.
+func TestSubmitCreatorApplicationCFIP(t *testing.T) {
+	t.Parallel()
+
+	if !strings.Contains(testutil.BaseURL, "localhost") &&
+		!strings.Contains(testutil.BaseURL, "127.0.0.1") {
+		t.Skipf("CF-Connecting-IP test requires direct-to-origin target; BaseURL=%q is fronted by Cloudflare", testutil.BaseURL)
+	}
+
+	const fakeClientIP = "203.0.113.7"
+
+	body := validRequestMap(testutil.UniqueIIN())
+	// Raw HTTP — typed client cannot attach arbitrary proxy-chain headers.
+	resp := testutil.PostRaw(t, "/creators/applications", body,
+		testutil.WithHeader(testutil.HeaderCFConnectingIP, fakeClientIP))
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusCreated, resp.StatusCode)
+
+	var envelope struct {
+		Data struct {
+			ApplicationID uuid.UUID `json:"applicationId"`
+		} `json:"data"`
+	}
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&envelope))
+	applicationID := envelope.Data.ApplicationID.String()
+	testutil.RegisterCreatorApplicationCleanup(t, applicationID)
+
+	adminClient, adminToken, _ := testutil.SetupAdminClient(t)
+	entry := testutil.FindAuditEntry(t, adminClient, adminToken,
+		"creator_application", applicationID, "creator_application_submit")
+	require.Equal(t, fakeClientIP, entry.IpAddress)
 }
 
 // TestGetCreatorApplicationForbidden verifies the security boundary: a

@@ -15,4 +15,9 @@ const (
 	// EnvCleanup is the env var that controls whether per-test cleanups run
 	// (default true). Set to "false" to keep test data for debugging.
 	EnvCleanup = "E2E_CLEANUP"
+
+	// HeaderCFConnectingIP is the Cloudflare-set header that carries the real
+	// client IP through the proxy chain. Tests send it via PostRaw to verify
+	// the backend's RealIP middleware picks it up over X-Forwarded-For.
+	HeaderCFConnectingIP = "CF-Connecting-IP"
 )
