@@ -16,7 +16,7 @@
 // таблицы.
 //
 // TestSubmitCreatorApplicationDuplicate закрывает инвариант из FR17: по ИИН
-// с активной заявкой (pending) повторная подача отвергается 409
+// с активной заявкой (verification) повторная подача отвергается 409
 // CREATOR_APPLICATION_DUPLICATE, и в базе остаётся только первая заявка.
 // Второй запрос не создаёт новых строк ни в одной из пяти таблиц —
 // rollback всей транзакции при конфликте гарантирован partial unique index
@@ -492,7 +492,7 @@ func buildExpectedDetail(t *testing.T, req apiclient.CreatorApplicationSubmitReq
 		City:              cityRef,
 		Address:           req.Address,
 		CategoryOtherText: otherPtr,
-		Status:            apiclient.Pending,
+		Status:            apiclient.Verification,
 		CreatedAt:         got.CreatedAt,
 		UpdatedAt:         got.UpdatedAt,
 		Categories:        catRefs,

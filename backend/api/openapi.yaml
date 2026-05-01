@@ -1247,8 +1247,8 @@ components:
           description: Free-text niche description when categories include "other".
         status:
           type: string
-          enum: [pending, approved, rejected, blocked]
-          description: Moderation status of the application.
+          enum: [verification, moderation, awaiting_contract, contract_sent, signed, rejected, withdrawn]
+          description: Application status (target 7-state machine, see creator-application-state-machine.md).
         createdAt:
           type: string
           format: date-time

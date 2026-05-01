@@ -39,22 +39,31 @@ func (e CreatorApplicationDetailConsentConsentType) Valid() bool {
 
 // Defines values for CreatorApplicationDetailDataStatus.
 const (
-	Approved CreatorApplicationDetailDataStatus = "approved"
-	Blocked  CreatorApplicationDetailDataStatus = "blocked"
-	Pending  CreatorApplicationDetailDataStatus = "pending"
-	Rejected CreatorApplicationDetailDataStatus = "rejected"
+	AwaitingContract CreatorApplicationDetailDataStatus = "awaiting_contract"
+	ContractSent     CreatorApplicationDetailDataStatus = "contract_sent"
+	Moderation       CreatorApplicationDetailDataStatus = "moderation"
+	Rejected         CreatorApplicationDetailDataStatus = "rejected"
+	Signed           CreatorApplicationDetailDataStatus = "signed"
+	Verification     CreatorApplicationDetailDataStatus = "verification"
+	Withdrawn        CreatorApplicationDetailDataStatus = "withdrawn"
 )
 
 // Valid indicates whether the value is a known member of the CreatorApplicationDetailDataStatus enum.
 func (e CreatorApplicationDetailDataStatus) Valid() bool {
 	switch e {
-	case Approved:
+	case AwaitingContract:
 		return true
-	case Blocked:
+	case ContractSent:
 		return true
-	case Pending:
+	case Moderation:
 		return true
 	case Rejected:
+		return true
+	case Signed:
+		return true
+	case Verification:
+		return true
+	case Withdrawn:
 		return true
 	default:
 		return false
@@ -280,7 +289,7 @@ type CreatorApplicationDetailData struct {
 	// Socials Social accounts attached to the application, sorted by platform then handle.
 	Socials []CreatorApplicationDetailSocial `json:"socials"`
 
-	// Status Moderation status of the application.
+	// Status Application status (target 7-state machine, see creator-application-state-machine.md).
 	Status CreatorApplicationDetailDataStatus `json:"status"`
 
 	// TelegramLink Telegram account linked to this application. Null when the creator
@@ -289,7 +298,7 @@ type CreatorApplicationDetailData struct {
 	UpdatedAt    time.Time     `json:"updatedAt"`
 }
 
-// CreatorApplicationDetailDataStatus Moderation status of the application.
+// CreatorApplicationDetailDataStatus Application status (target 7-state machine, see creator-application-state-machine.md).
 type CreatorApplicationDetailDataStatus string
 
 // CreatorApplicationDetailSocial defines model for CreatorApplicationDetailSocial.

@@ -382,7 +382,7 @@ func TestServer_GetCreatorApplication(t *testing.T) {
 				CityCode:          "almaty",
 				Address:           pointer.ToString("ул. Абая 1"),
 				CategoryOtherText: pointer.ToString("Авторские ASMR"),
-				Status:            domain.CreatorApplicationStatusPending,
+				Status:            domain.CreatorApplicationStatusVerification,
 				CreatedAt:         created,
 				UpdatedAt:         updated,
 				// Domain returns codes in arbitrary order — the handler sorts
@@ -428,7 +428,7 @@ func TestServer_GetCreatorApplication(t *testing.T) {
 				City:              api.CreatorApplicationDetailCity{Code: "almaty", Name: "Алматы", SortOrder: 100},
 				Address:           pointer.ToString("ул. Абая 1"),
 				CategoryOtherText: pointer.ToString("Авторские ASMR"),
-				Status:            api.Pending,
+				Status:            api.Verification,
 				CreatedAt:         created,
 				UpdatedAt:         updated,
 				Categories: []api.CreatorApplicationDetailCategory{
@@ -468,7 +468,7 @@ func TestServer_GetCreatorApplication(t *testing.T) {
 				Phone:      "+77001234567",
 				CityCode:   "atyrau", // not present in the active dictionary below
 				Address:    pointer.ToString("ул. Абая 1"),
-				Status:     domain.CreatorApplicationStatusPending,
+				Status:     domain.CreatorApplicationStatusVerification,
 				CreatedAt:  created,
 				UpdatedAt:  created,
 				Categories: []string{"beauty", "vintage_asmr"}, // vintage_asmr deactivated

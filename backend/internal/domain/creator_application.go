@@ -7,22 +7,28 @@ import (
 )
 
 // CreatorApplicationStatus values stored in creator_applications.status.
+// Целевая 7-статусная стейт-машина — см.
+// _bmad-output/planning-artifacts/creator-application-state-machine.md.
 // "Active" statuses are the ones that block a duplicate IIN submission;
-// rejected applicants may re-apply (FR17).
+// terminal applicants (rejected/withdrawn) may re-apply (FR17).
 const (
-	CreatorApplicationStatusPending  = "pending"
-	CreatorApplicationStatusApproved = "approved"
-	CreatorApplicationStatusRejected = "rejected"
-	CreatorApplicationStatusBlocked  = "blocked"
+	CreatorApplicationStatusVerification     = "verification"
+	CreatorApplicationStatusModeration       = "moderation"
+	CreatorApplicationStatusAwaitingContract = "awaiting_contract"
+	CreatorApplicationStatusContractSent     = "contract_sent"
+	CreatorApplicationStatusSigned           = "signed"
+	CreatorApplicationStatusRejected         = "rejected"
+	CreatorApplicationStatusWithdrawn        = "withdrawn"
 )
 
 // CreatorApplicationActiveStatuses lists statuses that count as "in progress"
 // for the IIN uniqueness rule. Mirrors the partial unique index in the
-// 20260420181753_creator_applications.sql migration.
+// 20260501222829_creator_applications_state_machine.sql migration.
 var CreatorApplicationActiveStatuses = []string{
-	CreatorApplicationStatusPending,
-	CreatorApplicationStatusApproved,
-	CreatorApplicationStatusBlocked,
+	CreatorApplicationStatusVerification,
+	CreatorApplicationStatusModeration,
+	CreatorApplicationStatusAwaitingContract,
+	CreatorApplicationStatusContractSent,
 }
 
 // SocialPlatform values mirror the enum in openapi.yaml. Adding a new value
@@ -90,9 +96,9 @@ const (
 
 // ErrCreatorApplicationDuplicate is the sentinel the repository raises when
 // the partial unique index on creator_applications(iin) WHERE status IN
-// ('pending','approved','blocked') rejects an INSERT (concurrent submit lost
-// the race after the service's HasActiveByIIN check). The service converts it
-// into a business error with CodeCreatorApplicationDuplicate.
+// CreatorApplicationActiveStatuses rejects an INSERT (concurrent submit lost
+// the race after the service's HasActiveByIIN check). The service converts
+// it into a business error with CodeCreatorApplicationDuplicate.
 var ErrCreatorApplicationDuplicate = errors.New("creator application with this iin is already active")
 
 // ErrTelegramApplicationLinkConflict is raised by the repo on a PRIMARY KEY

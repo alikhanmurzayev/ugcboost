@@ -83,7 +83,7 @@ func TestCreatorApplicationTelegramService_LinkTelegram(t *testing.T) {
 		expectTelegramTxBegin(rig)
 		expectTelegramFactoryWiring(rig)
 		rig.appRepo.EXPECT().GetByID(mock.Anything, appID).
-			Return(&repository.CreatorApplicationRow{ID: appID, Status: domain.CreatorApplicationStatusPending}, nil)
+			Return(&repository.CreatorApplicationRow{ID: appID, Status: domain.CreatorApplicationStatusVerification}, nil)
 		rig.linkRepo.EXPECT().GetByApplicationID(mock.Anything, appID).Return(nil, sql.ErrNoRows)
 		rig.linkRepo.EXPECT().Insert(mock.Anything, mock.Anything).Return(nil, domain.ErrNotFound)
 
@@ -100,7 +100,7 @@ func TestCreatorApplicationTelegramService_LinkTelegram(t *testing.T) {
 		linkedAt := time.Date(2026, 4, 29, 10, 0, 0, 0, time.UTC)
 
 		rig.appRepo.EXPECT().GetByID(mock.Anything, appID).
-			Return(&repository.CreatorApplicationRow{ID: appID, Status: domain.CreatorApplicationStatusPending}, nil)
+			Return(&repository.CreatorApplicationRow{ID: appID, Status: domain.CreatorApplicationStatusVerification}, nil)
 		rig.linkRepo.EXPECT().GetByApplicationID(mock.Anything, appID).
 			Return(&repository.CreatorApplicationTelegramLinkRow{
 				ApplicationID: appID, TelegramUserID: int64(123), LinkedAt: linkedAt,
@@ -120,7 +120,7 @@ func TestCreatorApplicationTelegramService_LinkTelegram(t *testing.T) {
 		expectTelegramFactoryWiring(rig)
 
 		rig.appRepo.EXPECT().GetByID(mock.Anything, appID).
-			Return(&repository.CreatorApplicationRow{ID: appID, Status: domain.CreatorApplicationStatusPending}, nil)
+			Return(&repository.CreatorApplicationRow{ID: appID, Status: domain.CreatorApplicationStatusVerification}, nil)
 		rig.linkRepo.EXPECT().GetByApplicationID(mock.Anything, appID).
 			Return(&repository.CreatorApplicationTelegramLinkRow{ApplicationID: appID, TelegramUserID: int64(999)}, nil)
 
@@ -138,7 +138,7 @@ func TestCreatorApplicationTelegramService_LinkTelegram(t *testing.T) {
 		expectTelegramTxBegin(rig)
 		expectTelegramFactoryWiring(rig)
 		rig.appRepo.EXPECT().GetByID(mock.Anything, appID).
-			Return(&repository.CreatorApplicationRow{ID: appID, Status: domain.CreatorApplicationStatusPending}, nil)
+			Return(&repository.CreatorApplicationRow{ID: appID, Status: domain.CreatorApplicationStatusVerification}, nil)
 		rig.linkRepo.EXPECT().GetByApplicationID(mock.Anything, appID).Return(nil, errors.New("preflight boom"))
 
 		svc := NewCreatorApplicationTelegramService(rig.pool, rig.factory, rig.logger)
@@ -154,7 +154,7 @@ func TestCreatorApplicationTelegramService_LinkTelegram(t *testing.T) {
 		expectTelegramFactoryWiring(rig)
 
 		rig.appRepo.EXPECT().GetByID(mock.Anything, appID).
-			Return(&repository.CreatorApplicationRow{ID: appID, Status: domain.CreatorApplicationStatusPending}, nil)
+			Return(&repository.CreatorApplicationRow{ID: appID, Status: domain.CreatorApplicationStatusVerification}, nil)
 		rig.linkRepo.EXPECT().GetByApplicationID(mock.Anything, appID).Return(nil, sql.ErrNoRows)
 		rig.linkRepo.EXPECT().Insert(mock.Anything, mock.AnythingOfType("repository.CreatorApplicationTelegramLinkRow")).
 			Run(func(ctx context.Context, row repository.CreatorApplicationTelegramLinkRow) {
@@ -193,7 +193,7 @@ func TestCreatorApplicationTelegramService_LinkTelegram(t *testing.T) {
 		expectTelegramFactoryWiring(rig)
 
 		rig.appRepo.EXPECT().GetByID(mock.Anything, appID).
-			Return(&repository.CreatorApplicationRow{ID: appID, Status: domain.CreatorApplicationStatusPending}, nil)
+			Return(&repository.CreatorApplicationRow{ID: appID, Status: domain.CreatorApplicationStatusVerification}, nil)
 		rig.linkRepo.EXPECT().GetByApplicationID(mock.Anything, appID).Return(nil, sql.ErrNoRows)
 		rig.linkRepo.EXPECT().Insert(mock.Anything, mock.Anything).
 			Return(nil, domain.ErrTelegramApplicationLinkConflict)
@@ -225,7 +225,7 @@ func TestCreatorApplicationTelegramService_LinkTelegram(t *testing.T) {
 		expectTelegramTxBegin(rig)
 		expectTelegramFactoryWiring(rig)
 		rig.appRepo.EXPECT().GetByID(mock.Anything, appID).
-			Return(&repository.CreatorApplicationRow{ID: appID, Status: domain.CreatorApplicationStatusPending}, nil)
+			Return(&repository.CreatorApplicationRow{ID: appID, Status: domain.CreatorApplicationStatusVerification}, nil)
 		rig.linkRepo.EXPECT().GetByApplicationID(mock.Anything, appID).Return(nil, sql.ErrNoRows)
 		rig.linkRepo.EXPECT().Insert(mock.Anything, mock.Anything).Return(nil, errors.New("insert boom"))
 
@@ -241,7 +241,7 @@ func TestCreatorApplicationTelegramService_LinkTelegram(t *testing.T) {
 		expectTelegramTxBegin(rig)
 		expectTelegramFactoryWiring(rig)
 		rig.appRepo.EXPECT().GetByID(mock.Anything, appID).
-			Return(&repository.CreatorApplicationRow{ID: appID, Status: domain.CreatorApplicationStatusPending}, nil)
+			Return(&repository.CreatorApplicationRow{ID: appID, Status: domain.CreatorApplicationStatusVerification}, nil)
 		rig.linkRepo.EXPECT().GetByApplicationID(mock.Anything, appID).Return(nil, sql.ErrNoRows)
 		rig.linkRepo.EXPECT().Insert(mock.Anything, mock.Anything).
 			Return(&repository.CreatorApplicationTelegramLinkRow{
@@ -274,7 +274,7 @@ func TestCreatorApplicationTelegramService_LinkTelegram(t *testing.T) {
 		}
 
 		rig.appRepo.EXPECT().GetByID(mock.Anything, appID).
-			Return(&repository.CreatorApplicationRow{ID: appID, Status: domain.CreatorApplicationStatusPending}, nil)
+			Return(&repository.CreatorApplicationRow{ID: appID, Status: domain.CreatorApplicationStatusVerification}, nil)
 		rig.linkRepo.EXPECT().GetByApplicationID(mock.Anything, appID).Return(nil, sql.ErrNoRows)
 		rig.linkRepo.EXPECT().Insert(mock.Anything, mock.AnythingOfType("repository.CreatorApplicationTelegramLinkRow")).
 			Run(func(_ context.Context, row repository.CreatorApplicationTelegramLinkRow) {

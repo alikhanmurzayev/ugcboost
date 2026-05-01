@@ -606,10 +606,10 @@ export interface components {
             /** @description Free-text niche description when categories include "other". */
             categoryOtherText?: string | null;
             /**
-             * @description Moderation status of the application.
+             * @description Application status (target 7-state machine, see creator-application-state-machine.md).
              * @enum {string}
              */
-            status: "pending" | "approved" | "rejected" | "blocked";
+            status: "verification" | "moderation" | "awaiting_contract" | "contract_sent" | "signed" | "rejected" | "withdrawn";
             /** Format: date-time */
             createdAt: string;
             /** Format: date-time */
