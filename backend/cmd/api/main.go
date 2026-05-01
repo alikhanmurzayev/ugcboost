@@ -96,6 +96,15 @@ func run() error {
 		return fmt.Errorf("seed admin: %w", err)
 	}
 
+	// Seed dev brand-manager + matching brand. Skipped in production via the
+	// EnableTestEndpoints guard, and skipped anywhere if BRAND_DEV_PASSWORD
+	// is empty. Idempotent — safe to run on every boot.
+	if cfg.EnableTestEndpoints && cfg.BrandDevPassword != "" {
+		if err := seedDevBrand(ctx, authSvc, brandSvc, cfg, appLogger); err != nil {
+			return fmt.Errorf("seed dev brand: %w", err)
+		}
+	}
+
 	// Router
 	r := chi.NewRouter()
 
@@ -173,4 +182,43 @@ func run() error {
 	defer cancel()
 
 	return cl.Close(shutdownCtx)
+}
+
+// seedDevBrand provisions a brand-manager account + a matching brand so the
+// /prototype brand-cabinet has something to show. Idempotent: skips when the
+// manager already manages at least one brand.
+func seedDevBrand(
+	ctx context.Context,
+	authSvc *service.AuthService,
+	brandSvc *service.BrandService,
+	cfg *config.Config,
+	log logger.Logger,
+) error {
+	user, err := authSvc.SeedBrandManager(ctx, cfg.BrandDevEmail, cfg.BrandDevPassword)
+	if err != nil {
+		return fmt.Errorf("seed brand-manager: %w", err)
+	}
+	if user == nil {
+		return nil
+	}
+
+	owned, err := brandSvc.ListBrands(ctx, &user.ID)
+	if err != nil {
+		return fmt.Errorf("list manager brands: %w", err)
+	}
+	if len(owned) > 0 {
+		log.Info(ctx, "dev brand already linked to manager", "email", user.Email, "brand", owned[0].Name)
+		return nil
+	}
+
+	brand, err := brandSvc.CreateBrand(ctx, cfg.BrandDevBrandName, nil)
+	if err != nil {
+		return fmt.Errorf("create dev brand: %w", err)
+	}
+	if _, _, err := brandSvc.AssignManager(ctx, brand.ID, user.Email); err != nil {
+		return fmt.Errorf("assign dev brand manager: %w", err)
+	}
+
+	log.Info(ctx, "dev brand seeded", "email", user.Email, "brand", brand.Name)
+	return nil
 }

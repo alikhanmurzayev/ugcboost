@@ -31,6 +31,13 @@ type Config struct {
 	AdminEmail    string `env:"ADMIN_EMAIL" envDefault:"admin@ugcboost.kz"`
 	AdminPassword string `env:"ADMIN_PASSWORD"`
 
+	// Dev brand seed — provisions a brand-manager account + matching brand so
+	// the prototype's brand cabinet can be exercised end-to-end on local/staging.
+	// Skipped in production (EnableTestEndpoints == false).
+	BrandDevEmail     string `env:"BRAND_DEV_EMAIL" envDefault:"brand@brand.kz"`
+	BrandDevPassword  string `env:"BRAND_DEV_PASSWORD"`
+	BrandDevBrandName string `env:"BRAND_DEV_BRAND_NAME" envDefault:"Demo Brand"`
+
 	// Securityв
 	BcryptCost    int           `env:"BCRYPT_COST" envDefault:"12"`
 	RefreshExpiry time.Duration `env:"REFRESH_EXPIRY" envDefault:"168h"`

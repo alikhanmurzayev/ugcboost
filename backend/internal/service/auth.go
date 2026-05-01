@@ -326,6 +326,48 @@ func (s *AuthService) SeedAdmin(ctx context.Context, email, password string) err
 	return nil
 }
 
+// SeedBrandManager creates a brand-manager user, or resets its password if it
+// already exists. Dev-only — used to provision a stable brand-cabinet login.
+// Always brings the password back to the configured value so it stays known.
+func (s *AuthService) SeedBrandManager(ctx context.Context, email, password string) (*domain.User, error) {
+	if email == "" || password == "" {
+		return nil, nil
+	}
+
+	userRepo := s.repoFactory.NewUserRepo(s.pool)
+
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), s.bcryptCost)
+	if err != nil {
+		return nil, fmt.Errorf("hash brand-manager password: %w", err)
+	}
+
+	exists, err := userRepo.ExistsByEmail(ctx, email)
+	if err != nil {
+		return nil, fmt.Errorf("check brand-manager exists: %w", err)
+	}
+	if exists {
+		row, err := userRepo.GetByEmail(ctx, email)
+		if err != nil {
+			return nil, fmt.Errorf("get existing brand-manager: %w", err)
+		}
+		if err := userRepo.UpdatePassword(ctx, row.ID, string(hash)); err != nil {
+			return nil, fmt.Errorf("reset brand-manager password: %w", err)
+		}
+		s.logger.Info(ctx, "brand-manager password reset to dev value", "email", email)
+		u := userRowToDomain(row)
+		return &u, nil
+	}
+
+	row, err := userRepo.Create(ctx, email, string(hash), string(api.BrandManager))
+	if err != nil {
+		return nil, fmt.Errorf("create brand-manager: %w", err)
+	}
+
+	s.logger.Info(ctx, "brand-manager user created", "email", email)
+	u := userRowToDomain(row)
+	return &u, nil
+}
+
 func userRowToDomain(row *repository.UserRow) domain.User {
 	return domain.User{
 		ID:        row.ID,
