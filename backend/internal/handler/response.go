@@ -12,7 +12,7 @@ import (
 )
 
 // encodeJSON writes v as JSON and logs (but does not fail) encoding errors.
-// All handler responses go through this helper so we never silently drop
+// All error responses go through this helper so we never silently drop
 // encoder failures with an errcheck bypass.
 func encodeJSON(w http.ResponseWriter, r *http.Request, v any, log logger.Logger) {
 	if err := json.NewEncoder(w).Encode(v); err != nil {
@@ -24,15 +24,9 @@ func encodeJSON(w http.ResponseWriter, r *http.Request, v any, log logger.Logger
 	}
 }
 
-// respondJSON writes a JSON response with the given status code.
-// The payload should be a typed API response struct (already contains Data field).
-func respondJSON(w http.ResponseWriter, r *http.Request, status int, v any, log logger.Logger) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	encodeJSON(w, r, v, log)
-}
-
-// respondError maps domain errors to HTTP responses.
+// respondError maps domain errors to HTTP responses. It is bound to the
+// Server's logger and plugged into strict-server's ResponseErrorHandlerFunc /
+// RequestErrorHandlerFunc — keeping domain → HTTP translation in one place.
 func respondError(w http.ResponseWriter, r *http.Request, err error, log logger.Logger) {
 	var ve *domain.ValidationError
 	if errors.As(err, &ve) {

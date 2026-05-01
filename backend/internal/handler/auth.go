@@ -1,7 +1,7 @@
 package handler
 
 import (
-	"encoding/json"
+	"context"
 	"net/http"
 	"strings"
 	"time"
@@ -13,161 +13,135 @@ import (
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/middleware"
 )
 
-// Login handles POST /auth/login
-func (s *Server) Login(w http.ResponseWriter, r *http.Request) {
-	var req api.LoginRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		respondError(w, r, domain.NewValidationError(domain.CodeValidation, "Invalid request body"), s.logger)
-		return
+// Login handles POST /auth/login.
+func (s *Server) Login(ctx context.Context, request api.LoginRequestObject) (api.LoginResponseObject, error) {
+	email := strings.TrimSpace(strings.ToLower(string(request.Body.Email)))
+	if email == "" || request.Body.Password == "" {
+		return nil, domain.NewValidationError(domain.CodeValidation, "Email and password are required")
 	}
 
-	email := strings.TrimSpace(strings.ToLower(string(req.Email)))
-
-	if email == "" || req.Password == "" {
-		respondError(w, r, domain.NewValidationError(domain.CodeValidation, "Email and password are required"), s.logger)
-		return
-	}
-
-	result, err := s.authService.Login(r.Context(), email, req.Password)
+	result, err := s.authService.Login(ctx, email, request.Body.Password)
 	if err != nil {
-		respondError(w, r, err, s.logger)
-		return
+		return nil, err
 	}
 
-	s.setRefreshCookie(w, result.RefreshTokenRaw, result.RefreshExpiresAt)
-
-	respondJSON(w, r, http.StatusOK, api.LoginResult{
-		Data: api.LoginData{
-			AccessToken: result.AccessToken,
-			User:        domainUserToAPI(result.User),
+	return api.Login200JSONResponse{
+		Body: api.LoginResult{
+			Data: api.LoginData{
+				AccessToken: result.AccessToken,
+				User:        domainUserToAPI(result.User),
+			},
 		},
-	}, s.logger)
+		Headers: api.Login200ResponseHeaders{
+			SetCookie: s.refreshCookieString(result.RefreshTokenRaw, result.RefreshExpiresAt),
+		},
+	}, nil
 }
 
-// RefreshToken handles POST /auth/refresh
-func (s *Server) RefreshToken(w http.ResponseWriter, r *http.Request) {
-	cookie, err := r.Cookie(CookieRefreshToken)
-	if err != nil || cookie.Value == "" {
-		respondError(w, r, domain.ErrUnauthorized, s.logger)
-		return
+// RefreshToken handles POST /auth/refresh.
+func (s *Server) RefreshToken(ctx context.Context, _ api.RefreshTokenRequestObject) (api.RefreshTokenResponseObject, error) {
+	rawCookie := middleware.RefreshCookieFromContext(ctx)
+	if rawCookie == "" {
+		return nil, domain.ErrUnauthorized
 	}
 
-	result, err := s.authService.Refresh(r.Context(), cookie.Value)
+	result, err := s.authService.Refresh(ctx, rawCookie)
 	if err != nil {
-		respondError(w, r, err, s.logger)
-		return
+		return nil, err
 	}
 
-	s.setRefreshCookie(w, result.RefreshTokenRaw, result.RefreshExpiresAt)
-
-	respondJSON(w, r, http.StatusOK, api.LoginResult{
-		Data: api.LoginData{
-			AccessToken: result.AccessToken,
-			User:        domainUserToAPI(result.User),
+	return api.RefreshToken200JSONResponse{
+		Body: api.LoginResult{
+			Data: api.LoginData{
+				AccessToken: result.AccessToken,
+				User:        domainUserToAPI(result.User),
+			},
 		},
-	}, s.logger)
+		Headers: api.RefreshToken200ResponseHeaders{
+			SetCookie: s.refreshCookieString(result.RefreshTokenRaw, result.RefreshExpiresAt),
+		},
+	}, nil
 }
 
-// Logout handles POST /auth/logout
-func (s *Server) Logout(w http.ResponseWriter, r *http.Request) {
-	userID := middleware.UserIDFromContext(r.Context())
+// Logout handles POST /auth/logout.
+func (s *Server) Logout(ctx context.Context, _ api.LogoutRequestObject) (api.LogoutResponseObject, error) {
+	userID := middleware.UserIDFromContext(ctx)
 	if userID == "" {
-		respondError(w, r, domain.ErrUnauthorized, s.logger)
-		return
+		return nil, domain.ErrUnauthorized
 	}
 
-	if err := s.authService.Logout(r.Context(), userID); err != nil {
-		s.logger.Error(r.Context(), "failed to revoke refresh tokens on logout", "error", err, "userID", userID)
+	if err := s.authService.Logout(ctx, userID); err != nil {
+		s.logger.Error(ctx, "failed to revoke refresh tokens on logout", "error", err, "userID", userID)
 	}
 
-	// Clear cookie
-	http.SetCookie(w, &http.Cookie{
-		Name:     CookieRefreshToken,
-		Value:    "",
-		Path:     "/",
-		MaxAge:   -1,
-		HttpOnly: true,
-		Secure:   s.cookieSecure,
-		SameSite: http.SameSiteStrictMode,
-	})
-
-	respondJSON(w, r, http.StatusOK, api.MessageResponse{
-		Data: api.MessageData{Message: "Logged out"},
-	}, s.logger)
+	return api.Logout200JSONResponse{
+		Body: api.MessageResponse{
+			Data: api.MessageData{Message: "Logged out"},
+		},
+		Headers: api.Logout200ResponseHeaders{
+			SetCookie: s.clearRefreshCookieString(),
+		},
+	}, nil
 }
 
-// RequestPasswordReset handles POST /auth/password-reset-request
-func (s *Server) RequestPasswordReset(w http.ResponseWriter, r *http.Request) {
-	var req api.PasswordResetRequestBody
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		respondError(w, r, domain.NewValidationError(domain.CodeValidation, "Invalid request body"), s.logger)
-		return
-	}
-
-	email := strings.TrimSpace(strings.ToLower(string(req.Email)))
+// RequestPasswordReset handles POST /auth/password-reset-request.
+func (s *Server) RequestPasswordReset(ctx context.Context, request api.RequestPasswordResetRequestObject) (api.RequestPasswordResetResponseObject, error) {
+	email := strings.TrimSpace(strings.ToLower(string(request.Body.Email)))
 	if email == "" {
-		respondError(w, r, domain.NewValidationError(domain.CodeValidation, "Email is required"), s.logger)
-		return
+		return nil, domain.NewValidationError(domain.CodeValidation, "Email is required")
 	}
 
-	// Always return 200 to prevent email enumeration
-	if err := s.authService.RequestPasswordReset(r.Context(), email); err != nil {
-		s.logger.Error(r.Context(), "password reset request failed", "error", err)
+	// Always return 200 to prevent email enumeration.
+	if err := s.authService.RequestPasswordReset(ctx, email); err != nil {
+		s.logger.Error(ctx, "password reset request failed", "error", err)
 	}
 
-	respondJSON(w, r, http.StatusOK, api.MessageResponse{
+	return api.RequestPasswordReset200JSONResponse{
 		Data: api.MessageData{Message: "If the email exists, a reset link has been sent"},
-	}, s.logger)
+	}, nil
 }
 
-// ResetPassword handles POST /auth/password-reset
-func (s *Server) ResetPassword(w http.ResponseWriter, r *http.Request) {
-	var req api.PasswordResetBody
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		respondError(w, r, domain.NewValidationError(domain.CodeValidation, "Invalid request body"), s.logger)
-		return
+// ResetPassword handles POST /auth/password-reset.
+func (s *Server) ResetPassword(ctx context.Context, request api.ResetPasswordRequestObject) (api.ResetPasswordResponseObject, error) {
+	if request.Body.Token == "" {
+		return nil, domain.NewValidationError(domain.CodeValidation, "Token is required")
+	}
+	if len(request.Body.NewPassword) < minPasswordLength {
+		return nil, domain.NewValidationError(domain.CodeValidation, "Password must be at least 6 characters")
 	}
 
-	if req.Token == "" {
-		respondError(w, r, domain.NewValidationError(domain.CodeValidation, "Token is required"), s.logger)
-		return
-	}
-	if len(req.NewPassword) < minPasswordLength {
-		respondError(w, r, domain.NewValidationError(domain.CodeValidation, "Password must be at least 6 characters"), s.logger)
-		return
+	if _, err := s.authService.ResetPassword(ctx, request.Body.Token, request.Body.NewPassword); err != nil {
+		return nil, err
 	}
 
-	if _, err := s.authService.ResetPassword(r.Context(), req.Token, req.NewPassword); err != nil {
-		respondError(w, r, err, s.logger)
-		return
-	}
-
-	respondJSON(w, r, http.StatusOK, api.MessageResponse{
+	return api.ResetPassword200JSONResponse{
 		Data: api.MessageData{Message: "Password updated successfully"},
-	}, s.logger)
+	}, nil
 }
 
-// GetMe handles GET /auth/me
-func (s *Server) GetMe(w http.ResponseWriter, r *http.Request) {
-	userID := middleware.UserIDFromContext(r.Context())
+// GetMe handles GET /auth/me.
+func (s *Server) GetMe(ctx context.Context, _ api.GetMeRequestObject) (api.GetMeResponseObject, error) {
+	userID := middleware.UserIDFromContext(ctx)
 	if userID == "" {
-		respondError(w, r, domain.ErrUnauthorized, s.logger)
-		return
+		return nil, domain.ErrUnauthorized
 	}
 
-	user, err := s.authService.GetUser(r.Context(), userID)
+	user, err := s.authService.GetUser(ctx, userID)
 	if err != nil {
-		respondError(w, r, err, s.logger)
-		return
+		return nil, err
 	}
 
-	respondJSON(w, r, http.StatusOK, api.UserResponse{
+	return api.GetMe200JSONResponse{
 		Data: domainUserToAPI(*user),
-	}, s.logger)
+	}, nil
 }
 
-func (s *Server) setRefreshCookie(w http.ResponseWriter, token string, expiresUnix int64) {
-	http.SetCookie(w, &http.Cookie{
+// refreshCookieString builds the Set-Cookie header value for a freshly minted
+// refresh token. We render the cookie via http.Cookie.String() instead of
+// http.SetCookie so the strict-server response variant carries the value
+// through Headers.SetCookie verbatim.
+func (s *Server) refreshCookieString(token string, expiresUnix int64) string {
+	c := http.Cookie{
 		Name:     CookieRefreshToken,
 		Value:    token,
 		Path:     "/",
@@ -175,7 +149,23 @@ func (s *Server) setRefreshCookie(w http.ResponseWriter, token string, expiresUn
 		HttpOnly: true,
 		Secure:   s.cookieSecure,
 		SameSite: http.SameSiteStrictMode,
-	})
+	}
+	return c.String()
+}
+
+// clearRefreshCookieString builds the Set-Cookie header value that clears the
+// refresh token on logout (MaxAge=-1, empty value).
+func (s *Server) clearRefreshCookieString() string {
+	c := http.Cookie{
+		Name:     CookieRefreshToken,
+		Value:    "",
+		Path:     "/",
+		MaxAge:   -1,
+		HttpOnly: true,
+		Secure:   s.cookieSecure,
+		SameSite: http.SameSiteStrictMode,
+	}
+	return c.String()
 }
 
 func domainUserToAPI(u domain.User) api.User {

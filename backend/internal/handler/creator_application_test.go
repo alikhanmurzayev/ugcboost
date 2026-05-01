@@ -249,14 +249,15 @@ func TestServer_SubmitCreatorApplication(t *testing.T) {
 	})
 }
 
-// newTestRouterWithClientIP wires the ClientIP middleware the same way
-// cmd/api does, so handler tests can verify that IPAddress flows from
-// r.RemoteAddr into the service input.
+// newTestRouterWithClientIP wires the ClientIP and RequestMeta middleware the
+// same way cmd/api does, so handler tests can verify that IPAddress and
+// User-Agent flow from r.RemoteAddr / r.Header into the service input.
 func newTestRouterWithClientIP(t *testing.T, s *Server) chi.Router {
 	t.Helper()
 	r := chi.NewRouter()
 	r.Use(middleware.ClientIP)
-	api.HandlerWithOptions(s, api.ChiServerOptions{
+	r.Use(middleware.RequestMeta)
+	api.HandlerWithOptions(NewStrictAPIHandler(s), api.ChiServerOptions{
 		BaseRouter:       r,
 		ErrorHandlerFunc: HandleParamError(logmocks.NewMockLogger(t)),
 	})

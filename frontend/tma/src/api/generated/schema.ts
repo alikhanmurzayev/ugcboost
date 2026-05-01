@@ -768,6 +768,8 @@ export interface operations {
             /** @description Logged out */
             200: {
                 headers: {
+                    /** @description Cleared refresh token cookie */
+                    "Set-Cookie"?: string;
                     [name: string]: unknown;
                 };
                 content: {

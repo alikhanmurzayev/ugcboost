@@ -4,11 +4,14 @@
 package testapi
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/oapi-codegen/runtime"
+	strictnethttp "github.com/oapi-codegen/runtime/strictmiddleware/nethttp"
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
@@ -419,4 +422,280 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 
 	return r
+}
+
+type CleanupEntityRequestObject struct {
+	Body *CleanupEntityJSONRequestBody
+}
+
+type CleanupEntityResponseObject interface {
+	VisitCleanupEntityResponse(w http.ResponseWriter) error
+}
+
+type CleanupEntity204Response struct {
+}
+
+func (response CleanupEntity204Response) VisitCleanupEntityResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type CleanupEntity404JSONResponse ErrorResponse
+
+func (response CleanupEntity404JSONResponse) VisitCleanupEntityResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type CleanupEntity422JSONResponse ErrorResponse
+
+func (response CleanupEntity422JSONResponse) VisitCleanupEntityResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(422)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetResetTokenRequestObject struct {
+	Params GetResetTokenParams
+}
+
+type GetResetTokenResponseObject interface {
+	VisitGetResetTokenResponse(w http.ResponseWriter) error
+}
+
+type GetResetToken200JSONResponse ResetTokenResult
+
+func (response GetResetToken200JSONResponse) VisitGetResetTokenResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetResetToken404JSONResponse ErrorResponse
+
+func (response GetResetToken404JSONResponse) VisitGetResetTokenResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type SeedUserRequestObject struct {
+	Body *SeedUserJSONRequestBody
+}
+
+type SeedUserResponseObject interface {
+	VisitSeedUserResponse(w http.ResponseWriter) error
+}
+
+type SeedUser201JSONResponse SeedUserResult
+
+func (response SeedUser201JSONResponse) VisitSeedUserResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type SeedUser422JSONResponse ErrorResponse
+
+func (response SeedUser422JSONResponse) VisitSeedUserResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(422)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type SendTelegramMessageRequestObject struct {
+	Body *SendTelegramMessageJSONRequestBody
+}
+
+type SendTelegramMessageResponseObject interface {
+	VisitSendTelegramMessageResponse(w http.ResponseWriter) error
+}
+
+type SendTelegramMessage200JSONResponse SendTelegramMessageResult
+
+func (response SendTelegramMessage200JSONResponse) VisitSendTelegramMessageResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type SendTelegramMessage422JSONResponse ErrorResponse
+
+func (response SendTelegramMessage422JSONResponse) VisitSendTelegramMessageResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(422)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+// StrictServerInterface represents all server handlers.
+type StrictServerInterface interface {
+	// Hard-delete a test entity (user or brand) and its references
+	// (POST /test/cleanup-entity)
+	CleanupEntity(ctx context.Context, request CleanupEntityRequestObject) (CleanupEntityResponseObject, error)
+	// Get the raw reset token captured for the given email
+	// (GET /test/reset-tokens)
+	GetResetToken(ctx context.Context, request GetResetTokenRequestObject) (GetResetTokenResponseObject, error)
+	// Create a test user with given credentials and role
+	// (POST /test/seed-user)
+	SeedUser(ctx context.Context, request SeedUserRequestObject) (SeedUserResponseObject, error)
+	// Inject a synthetic text message into the Telegram handler
+	// (POST /test/telegram/message)
+	SendTelegramMessage(ctx context.Context, request SendTelegramMessageRequestObject) (SendTelegramMessageResponseObject, error)
+}
+
+type StrictHandlerFunc = strictnethttp.StrictHTTPHandlerFunc
+type StrictMiddlewareFunc = strictnethttp.StrictHTTPMiddlewareFunc
+
+type StrictHTTPServerOptions struct {
+	RequestErrorHandlerFunc  func(w http.ResponseWriter, r *http.Request, err error)
+	ResponseErrorHandlerFunc func(w http.ResponseWriter, r *http.Request, err error)
+}
+
+func NewStrictHandler(ssi StrictServerInterface, middlewares []StrictMiddlewareFunc) ServerInterface {
+	return &strictHandler{ssi: ssi, middlewares: middlewares, options: StrictHTTPServerOptions{
+		RequestErrorHandlerFunc: func(w http.ResponseWriter, r *http.Request, err error) {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+		},
+		ResponseErrorHandlerFunc: func(w http.ResponseWriter, r *http.Request, err error) {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		},
+	}}
+}
+
+func NewStrictHandlerWithOptions(ssi StrictServerInterface, middlewares []StrictMiddlewareFunc, options StrictHTTPServerOptions) ServerInterface {
+	return &strictHandler{ssi: ssi, middlewares: middlewares, options: options}
+}
+
+type strictHandler struct {
+	ssi         StrictServerInterface
+	middlewares []StrictMiddlewareFunc
+	options     StrictHTTPServerOptions
+}
+
+// CleanupEntity operation middleware
+func (sh *strictHandler) CleanupEntity(w http.ResponseWriter, r *http.Request) {
+	var request CleanupEntityRequestObject
+
+	var body CleanupEntityJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CleanupEntity(ctx, request.(CleanupEntityRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CleanupEntity")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CleanupEntityResponseObject); ok {
+		if err := validResponse.VisitCleanupEntityResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetResetToken operation middleware
+func (sh *strictHandler) GetResetToken(w http.ResponseWriter, r *http.Request, params GetResetTokenParams) {
+	var request GetResetTokenRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetResetToken(ctx, request.(GetResetTokenRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetResetToken")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetResetTokenResponseObject); ok {
+		if err := validResponse.VisitGetResetTokenResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// SeedUser operation middleware
+func (sh *strictHandler) SeedUser(w http.ResponseWriter, r *http.Request) {
+	var request SeedUserRequestObject
+
+	var body SeedUserJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.SeedUser(ctx, request.(SeedUserRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "SeedUser")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(SeedUserResponseObject); ok {
+		if err := validResponse.VisitSeedUserResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// SendTelegramMessage operation middleware
+func (sh *strictHandler) SendTelegramMessage(w http.ResponseWriter, r *http.Request) {
+	var request SendTelegramMessageRequestObject
+
+	var body SendTelegramMessageJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.SendTelegramMessage(ctx, request.(SendTelegramMessageRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "SendTelegramMessage")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(SendTelegramMessageResponseObject); ok {
+		if err := validResponse.VisitSendTelegramMessageResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
 }

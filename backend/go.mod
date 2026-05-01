@@ -8,6 +8,7 @@ require (
 	github.com/caarlos0/env/v11 v11.4.0
 	github.com/elgris/stom v0.0.0-20160204063428-05ccb51a70bb
 	github.com/go-chi/chi/v5 v5.2.5
+	github.com/go-telegram/bot v1.20.0
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.9.1
@@ -23,7 +24,6 @@ require (
 	github.com/apapsch/go-jsonmerge/v2 v2.0.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/go-sql-driver/mysql v1.9.3 // indirect
-	github.com/go-telegram/bot v1.20.0 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
 	github.com/jackc/puddle/v2 v2.2.2 // indirect

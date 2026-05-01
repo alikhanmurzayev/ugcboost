@@ -112,6 +112,11 @@ paths:
       responses:
         "200":
           description: Logged out
+          headers:
+            Set-Cookie:
+              description: Cleared refresh token cookie
+              schema:
+                type: string
           content:
             application/json:
               schema:

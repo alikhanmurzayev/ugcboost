@@ -3,19 +3,18 @@ package handler
 import (
 	"context"
 	"encoding/json"
-	"net/http"
 
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/api"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/domain"
 )
 
-// ListAuditLogs handles GET /audit-logs
-func (s *Server) ListAuditLogs(w http.ResponseWriter, r *http.Request, params api.ListAuditLogsParams) {
-	if err := s.authzService.CanListAuditLogs(r.Context()); err != nil {
-		respondError(w, r, err, s.logger)
-		return
+// ListAuditLogs handles GET /audit-logs.
+func (s *Server) ListAuditLogs(ctx context.Context, request api.ListAuditLogsRequestObject) (api.ListAuditLogsResponseObject, error) {
+	if err := s.authzService.CanListAuditLogs(ctx); err != nil {
+		return nil, err
 	}
 
+	params := request.Params
 	f := domain.AuditFilter{}
 	if params.ActorId != nil {
 		f.ActorID = *params.ActorId
@@ -45,10 +44,9 @@ func (s *Server) ListAuditLogs(w http.ResponseWriter, r *http.Request, params ap
 		perPage = *params.PerPage
 	}
 
-	logs, total, err := s.auditService.List(r.Context(), f, page, perPage)
+	logs, total, err := s.auditService.List(ctx, f, page, perPage)
 	if err != nil {
-		respondError(w, r, err, s.logger)
-		return
+		return nil, err
 	}
 
 	items := make([]api.AuditLogEntry, len(logs))
@@ -60,21 +58,21 @@ func (s *Server) ListAuditLogs(w http.ResponseWriter, r *http.Request, params ap
 			Action:     l.Action,
 			EntityType: l.EntityType,
 			EntityId:   l.EntityID,
-			OldValue:   s.rawJSONToAny(r.Context(), l.ID, l.OldValue),
-			NewValue:   s.rawJSONToAny(r.Context(), l.ID, l.NewValue),
+			OldValue:   s.rawJSONToAny(ctx, l.ID, l.OldValue),
+			NewValue:   s.rawJSONToAny(ctx, l.ID, l.NewValue),
 			IpAddress:  l.IPAddress,
 			CreatedAt:  l.CreatedAt,
 		}
 	}
 
-	respondJSON(w, r, http.StatusOK, api.AuditLogsResult{
+	return api.ListAuditLogs200JSONResponse{
 		Data: api.ListAuditLogsData{
 			Logs:    items,
 			Page:    page,
 			PerPage: perPage,
 			Total:   int(total),
 		},
-	}, s.logger)
+	}, nil
 }
 
 // rawJSONToAny converts json.RawMessage to any for API serialization.

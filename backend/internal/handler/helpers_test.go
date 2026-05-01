@@ -24,14 +24,17 @@ func expectHandlerUnexpectedErrorLog(log *logmocks.MockLogger, path string) {
 	})).Once()
 }
 
-// newTestRouter registers the given Server behind the generated chi wrapper.
-// The returned router accepts requests exactly like the production router
-// (same ServerInterfaceWrapper, same param parsing), so unit tests exercise
-// the full handler contract instead of calling methods directly.
+// newTestRouter registers the given Server behind the generated strict-server
+// adapter and chi wrapper. The returned router accepts requests exactly like
+// the production router (same StrictHandler, same param parsing, same
+// RequestErrorHandlerFunc / ResponseErrorHandlerFunc, RequestMeta surfaces
+// User-Agent / refresh cookie into context), so unit tests exercise the full
+// handler contract instead of calling methods directly.
 func newTestRouter(t *testing.T, s *Server) chi.Router {
 	t.Helper()
 	r := chi.NewRouter()
-	api.HandlerWithOptions(s, api.ChiServerOptions{
+	r.Use(middleware.RequestMeta)
+	api.HandlerWithOptions(NewStrictAPIHandler(s), api.ChiServerOptions{
 		BaseRouter:       r,
 		ErrorHandlerFunc: HandleParamError(logmocks.NewMockLogger(t)),
 	})

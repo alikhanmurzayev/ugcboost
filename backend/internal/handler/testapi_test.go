@@ -24,11 +24,15 @@ import (
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/testapi"
 )
 
-// newTestAPIRouter registers a TestAPIHandler behind the generated testapi wrapper.
+// newTestAPIRouter registers a TestAPIHandler behind the generated strict
+// testapi adapter and chi wrapper, mirroring production wiring.
 func newTestAPIRouter(t *testing.T, h *TestAPIHandler) chi.Router {
 	t.Helper()
 	r := chi.NewRouter()
-	testapi.HandlerFromMux(h, r)
+	testapi.HandlerWithOptions(NewStrictTestAPIHandler(h), testapi.ChiServerOptions{
+		BaseRouter:       r,
+		ErrorHandlerFunc: HandleParamError(logmocks.NewMockLogger(t)),
+	})
 	return r
 }
 

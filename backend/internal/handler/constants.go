@@ -1,9 +1,11 @@
 package handler
 
-// Cookie names.
-const (
-	CookieRefreshToken = "refresh_token"
-)
+import "github.com/alikhanmurzayev/ugcboost/backend/internal/middleware"
+
+// Cookie names. CookieRefreshToken lives in middleware (which handler depends
+// on) to keep a single source of truth — RequestMeta extracts the cookie from
+// the request, and handler builds the corresponding Set-Cookie value.
+const CookieRefreshToken = middleware.CookieRefreshToken
 
 // HTTP header names.
 const (
