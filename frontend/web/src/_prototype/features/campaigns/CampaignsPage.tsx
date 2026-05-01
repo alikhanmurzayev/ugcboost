@@ -39,7 +39,7 @@ export default function CampaignsPage({ status }: Props) {
 
   function handleRowClick(row: Campaign) {
     navigate(
-      "/" +
+      "/prototype/" +
         (editable ? ROUTES.CAMPAIGN_EDIT(row.id) : ROUTES.CAMPAIGN_DETAIL(row.id)),
     );
   }
