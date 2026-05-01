@@ -3,8 +3,8 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { saveInternalNote } from "@/_prototype/api/creatorApplications";
 import { creatorApplicationKeys } from "@/_prototype/queryKeys";
-import { ApiError } from "@/api/client";
-import { getErrorMessage } from "@/shared/i18n/errors";
+import { ApiError } from "@/_prototype/api/client";
+import { getErrorMessage } from "@/_prototype/shared/i18n/errors";
 import type { Application } from "../types";
 
 interface Props {

@@ -1,14 +1,14 @@
-import { Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes } from "react-router-dom";
 import PrototypeLayout from "./PrototypeLayout";
 import { ROUTES } from "./routes";
-// Pages from the main src — reused as-is by the prototype's Dashboard / Brands / Audit screens.
-import DashboardPage from "@/features/dashboard/DashboardPage";
-import BrandsPage from "@/features/brands/BrandsPage";
-import BrandDetailPage from "@/features/brands/BrandDetailPage";
-import AuditLogPage from "@/features/audit/AuditLogPage";
-import RoleGuard from "@/features/auth/RoleGuard";
-import { Roles } from "@/shared/constants/roles";
-// Aidana's prototype pages — moved under _prototype.
+// All pages prototype-local — fully isolated from main src and the real
+// backend. Aidana's brand-cabinet pages (campaigns, creator-applications,
+// creators) use _prototype/api/* mocks; the dashboard / brands / audit
+// pages are static placeholders.
+import DashboardPage from "./features/dashboard/DashboardPage";
+import BrandsPage from "./features/brands/BrandsPage";
+import BrandDetailPage from "./features/brands/BrandDetailPage";
+import AuditLogPage from "./features/audit/AuditLogPage";
 import VerificationPage from "./features/creatorApplications/VerificationPage";
 import ModerationPage from "./features/creatorApplications/ModerationPage";
 import ContractsPage from "./features/creatorApplications/ContractsPage";
@@ -18,6 +18,10 @@ import CampaignsPage from "./features/campaigns/CampaignsPage";
 import CampaignDetailPage from "./features/campaigns/CampaignDetailPage";
 import CampaignNewPage from "./features/campaigns/CampaignNewPage";
 
+// All routes are flat — the role toggle in PrototypeLayout decides which
+// nav set to show, but the underlying URLs are accessible regardless of
+// the real auth role. RoleGuard is intentionally not used here so a real
+// admin can preview the brand cabinet (and vice versa) via the toggle.
 export default function PrototypeApp() {
   return (
     <Routes>
@@ -25,6 +29,11 @@ export default function PrototypeApp() {
         <Route index element={<DashboardPage />} />
         <Route path={ROUTES.BRANDS} element={<BrandsPage />} />
         <Route path={ROUTES.BRAND_DETAIL_PATTERN} element={<BrandDetailPage />} />
+        <Route path={ROUTES.AUDIT} element={<AuditLogPage />} />
+        <Route
+          path={ROUTES.CAMPAIGNS}
+          element={<Navigate to={"/prototype/" + ROUTES.CAMPAIGNS_ACTIVE} replace />}
+        />
         <Route path={ROUTES.CAMPAIGN_NEW} element={<CampaignNewPage />} />
         <Route path={ROUTES.CAMPAIGN_EDIT_PATTERN} element={<CampaignNewPage />} />
         <Route path={ROUTES.CAMPAIGNS_ACTIVE} element={<CampaignsPage status="active" />} />
@@ -33,14 +42,11 @@ export default function PrototypeApp() {
         <Route path={ROUTES.CAMPAIGNS_DRAFT} element={<CampaignsPage status="draft" />} />
         <Route path={ROUTES.CAMPAIGNS_COMPLETED} element={<CampaignsPage status="completed" />} />
         <Route path={ROUTES.CAMPAIGN_DETAIL_PATTERN} element={<CampaignDetailPage />} />
-        <Route element={<RoleGuard allowedRoles={[Roles.ADMIN]} />}>
-          <Route path={ROUTES.AUDIT} element={<AuditLogPage />} />
-          <Route path={ROUTES.CREATOR_APP_VERIFICATION} element={<VerificationPage />} />
-          <Route path={ROUTES.CREATOR_APP_MODERATION} element={<ModerationPage />} />
-          <Route path={ROUTES.CREATOR_APP_CONTRACTS} element={<ContractsPage />} />
-          <Route path={ROUTES.CREATOR_APP_REJECTED} element={<RejectedPage />} />
-          <Route path={ROUTES.CREATORS} element={<CreatorsPage />} />
-        </Route>
+        <Route path={ROUTES.CREATOR_APP_VERIFICATION} element={<VerificationPage />} />
+        <Route path={ROUTES.CREATOR_APP_MODERATION} element={<ModerationPage />} />
+        <Route path={ROUTES.CREATOR_APP_CONTRACTS} element={<ContractsPage />} />
+        <Route path={ROUTES.CREATOR_APP_REJECTED} element={<RejectedPage />} />
+        <Route path={ROUTES.CREATORS} element={<CreatorsPage />} />
       </Route>
     </Routes>
   );

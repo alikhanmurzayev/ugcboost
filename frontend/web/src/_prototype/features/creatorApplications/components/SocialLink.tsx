@@ -1,6 +1,4 @@
-import type { components } from "@/api/generated/schema";
-
-type SocialPlatform = components["schemas"]["SocialPlatform"];
+import type { SocialPlatform } from "@/_prototype/types/api";
 
 const PLATFORM_LABELS: Record<SocialPlatform, string> = {
   instagram: "Instagram",

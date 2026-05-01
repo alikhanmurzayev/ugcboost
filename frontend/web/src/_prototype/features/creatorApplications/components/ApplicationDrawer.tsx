@@ -1,6 +1,6 @@
 import { useEffect, useRef, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import Spinner from "@/shared/components/Spinner";
+import Spinner from "@/_prototype/shared/components/Spinner";
 import SocialLink from "./SocialLink";
 import QualityIndicatorDot from "./QualityIndicatorDot";
 import CategoryChip from "./CategoryChip";

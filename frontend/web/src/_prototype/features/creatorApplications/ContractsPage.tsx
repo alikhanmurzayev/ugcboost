@@ -8,10 +8,10 @@ import {
   sendContracts,
 } from "@/_prototype/api/creatorApplications";
 import { creatorApplicationKeys } from "@/_prototype/queryKeys";
-import { ApiError } from "@/api/client";
-import { getErrorMessage } from "@/shared/i18n/errors";
-import Spinner from "@/shared/components/Spinner";
-import ErrorState from "@/shared/components/ErrorState";
+import { ApiError } from "@/_prototype/api/client";
+import { getErrorMessage } from "@/_prototype/shared/i18n/errors";
+import Spinner from "@/_prototype/shared/components/Spinner";
+import ErrorState from "@/_prototype/shared/components/ErrorState";
 import ApplicationsTable, { type Column } from "./components/ApplicationsTable";
 import ApplicationDrawer from "./components/ApplicationDrawer";
 import ApplicationFilters from "./components/ApplicationFilters";

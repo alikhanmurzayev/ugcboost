@@ -1,18 +1,19 @@
-// 1-to-1 copy of Aidana's DashboardLayout from aidana/prototype-backup.
-// Only differences:
-//   - i18n namespaces for her mock data are prefixed `prototype_*`.
+// Aidana's brand-cabinet layout, copied 1-for-1 from her DashboardLayout in
+// aidana/prototype-backup. Two prototype-specific concerns layered on top:
+//   - i18n namespaces for her mock locales are prefixed `prototype_*`.
 //   - mock-backed counts come from @/_prototype/api/* and prototype queryKeys.
-//   - NavLink paths get a "/prototype" prefix so navigation stays inside the
-//     prototype subtree.
-//   - logout still redirects to the real /login outside the prototype.
-import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
+//   - NavLink targets are prefixed with /prototype so navigation stays inside
+//     the prototype subtree; logout still redirects to the real /login.
+//
+// Sidebar is driven by the *URL*, not by a separate toggle: admin URLs
+// (creator-applications/*, creators, audit) render the admin nav; everything
+// else renders the brand nav. The "Просмотр" toggle is a quick shortcut that
+// navigates between the two starting points; clicking it doesn't put the UI
+// into a state that mismatches the current URL.
+import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
 import { useAuthStore } from "@/stores/auth";
-import { logout } from "@/api/auth";
-import { listBrands } from "@/api/brands";
-import { brandKeys } from "@/shared/constants/queryKeys";
-import { Roles } from "@/shared/constants/roles";
 import { getQueueCounts } from "@/_prototype/api/creatorApplications";
 import { getCampaignCounts } from "@/_prototype/api/campaigns";
 import { ROUTES } from "@/_prototype/routes";
@@ -20,6 +21,13 @@ import {
   campaignKeys,
   creatorApplicationKeys,
 } from "@/_prototype/queryKeys";
+
+const DEMO_BRAND_NAME = "Demo Brand";
+const ADMIN_URL_PREFIXES = [
+  "/prototype/creator-applications",
+  "/prototype/creators",
+  "/prototype/audit",
+];
 
 interface NavItem {
   to: string;
@@ -37,6 +45,10 @@ function withPrototypePrefix(path: string): string {
   return "/prototype/" + path;
 }
 
+function isAdminUrl(pathname: string): boolean {
+  return ADMIN_URL_PREFIXES.some((prefix) => pathname.startsWith(prefix));
+}
+
 export default function PrototypeLayout() {
   const { t } = useTranslation([
     "auth",
@@ -50,27 +62,20 @@ export default function PrototypeLayout() {
   const user = useAuthStore((s) => s.user);
   const clearAuth = useAuthStore((s) => s.clearAuth);
   const navigate = useNavigate();
+  const location = useLocation();
 
-  const isAdmin = user?.role === Roles.ADMIN;
+  const isAdminView = isAdminUrl(location.pathname);
 
   const { data: counts } = useQuery({
     queryKey: creatorApplicationKeys.counts(),
     queryFn: getQueueCounts,
-    enabled: isAdmin,
+    enabled: isAdminView,
   });
-
-  const { data: myBrandsData } = useQuery({
-    queryKey: brandKeys.all(),
-    queryFn: () => listBrands(),
-    enabled: !!user && !isAdmin,
-    staleTime: 5 * 60 * 1000,
-  });
-  const primaryBrand = myBrandsData?.data.brands[0];
 
   const { data: campaignCounts } = useQuery({
     queryKey: campaignKeys.counts(),
     queryFn: getCampaignCounts,
-    enabled: !!user && !isAdmin,
+    enabled: !isAdminView,
   });
 
   const adminNav: NavGroup[] = [
@@ -150,14 +155,13 @@ export default function PrototypeLayout() {
     },
   ];
 
-  const navGroups = isAdmin ? adminNav : brandNav;
+  const navGroups = isAdminView ? adminNav : brandNav;
 
-  async function handleLogout() {
-    try {
-      await logout();
-    } catch {
-      // ignore — clear local state anyway
-    }
+  // Local-only logout — clear in-memory auth, redirect to /login. We
+  // intentionally don't call the real backend logout endpoint here so the
+  // prototype stays fully isolated. The refresh-token cookie may still be
+  // valid; that's fine for a demo, and the real /login flow handles it.
+  function handleLogout() {
     clearAuth();
     navigate(ROUTES.LOGIN, { replace: true });
   }
@@ -170,6 +174,34 @@ export default function PrototypeLayout() {
       >
         <div className="flex items-center border-b border-surface-300 px-5 py-3">
           <img src="/logo-ugcboost.png" alt="UGC boost" className="h-12 w-auto" />
+        </div>
+
+        <div className="border-b border-surface-300 px-3 py-3">
+          <p className="mb-1 px-1 text-[10px] font-semibold uppercase tracking-wider text-gray-400">
+            Просмотр от лица
+          </p>
+          <div className="flex rounded-button bg-surface-200 p-0.5" role="group">
+            <button
+              type="button"
+              onClick={() => navigate("/prototype/creator-applications/moderation")}
+              className={`flex-1 rounded-button px-2 py-1 text-xs font-medium transition ${
+                isAdminView ? "bg-white text-gray-900 shadow-sm" : "text-gray-600 hover:text-gray-900"
+              }`}
+              data-testid="prototype-view-admin"
+            >
+              Админ
+            </button>
+            <button
+              type="button"
+              onClick={() => navigate("/prototype/campaigns/active")}
+              className={`flex-1 rounded-button px-2 py-1 text-xs font-medium transition ${
+                !isAdminView ? "bg-white text-gray-900 shadow-sm" : "text-gray-600 hover:text-gray-900"
+              }`}
+              data-testid="prototype-view-brand"
+            >
+              Бренд
+            </button>
+          </div>
         </div>
 
         <nav className="flex-1 overflow-y-auto px-3 py-4">
@@ -226,11 +258,7 @@ export default function PrototypeLayout() {
           <div className="mb-3 px-3">
             <p className="truncate text-sm font-medium text-gray-900">{user?.email}</p>
             <p className="text-xs text-gray-500">
-              {isAdmin
-                ? t("auth:admin")
-                : primaryBrand
-                  ? `${t("auth:brandManager")} · ${primaryBrand.name}`
-                  : t("auth:brandManager")}
+              {isAdminView ? t("auth:admin") : `${t("auth:brandManager")} · ${DEMO_BRAND_NAME}`}
             </p>
           </div>
           <button
