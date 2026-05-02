@@ -73,6 +73,17 @@ type CleanupEntityRequest struct {
 // CleanupEntityRequestType defines model for CleanupEntityRequest.Type.
 type CleanupEntityRequestType string
 
+// CreatorApplicationVerificationCodeData defines model for CreatorApplicationVerificationCodeData.
+type CreatorApplicationVerificationCodeData struct {
+	// VerificationCode The UGC-NNNNNN code persisted on the application.
+	VerificationCode string `json:"verificationCode"`
+}
+
+// CreatorApplicationVerificationCodeResult defines model for CreatorApplicationVerificationCodeResult.
+type CreatorApplicationVerificationCodeResult struct {
+	Data CreatorApplicationVerificationCodeData `json:"data"`
+}
+
 // ErrorResponse defines model for ErrorResponse.
 type ErrorResponse struct {
 	Error struct {

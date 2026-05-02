@@ -290,6 +290,101 @@ func TestCreatorApplicationRepository_GetByID(t *testing.T) {
 	})
 }
 
+func TestCreatorApplicationRepository_GetByVerificationCodeAndStatus(t *testing.T) {
+	t.Parallel()
+
+	const sqlStmt = "SELECT address, birth_date, category_other_text, city_code, created_at, first_name, id, iin, last_name, middle_name, phone, status, updated_at, verification_code FROM creator_applications WHERE verification_code = $1 AND status = $2"
+
+	t.Run("success maps row", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &creatorApplicationRepository{db: mock}
+		birth := time.Date(1995, 5, 15, 0, 0, 0, 0, time.UTC)
+		created := time.Date(2026, 4, 20, 18, 0, 0, 0, time.UTC)
+
+		mock.ExpectQuery(sqlStmt).
+			WithArgs("UGC-111111", "verification").
+			WillReturnRows(pgxmock.NewRows([]string{"address", "birth_date", "category_other_text", "city_code", "created_at", "first_name", "id", "iin", "last_name", "middle_name", "phone", "status", "updated_at", "verification_code"}).
+				AddRow(nil, birth, nil, "almaty", created, "Айдана", "app-1", "950515312348", "Муратова", pointer.ToString("Ивановна"), "+77001234567", "verification", created, "UGC-111111"))
+
+		got, err := repo.GetByVerificationCodeAndStatus(context.Background(), "UGC-111111", "verification")
+		require.NoError(t, err)
+		require.Equal(t, "app-1", got.ID)
+		require.Equal(t, "UGC-111111", got.VerificationCode)
+		require.Equal(t, "verification", got.Status)
+	})
+
+	t.Run("not found returns wrapped sql.ErrNoRows", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &creatorApplicationRepository{db: mock}
+
+		mock.ExpectQuery(sqlStmt).
+			WithArgs("UGC-999999", "verification").
+			WillReturnError(pgx.ErrNoRows)
+
+		_, err := repo.GetByVerificationCodeAndStatus(context.Background(), "UGC-999999", "verification")
+		require.ErrorIs(t, err, sql.ErrNoRows)
+	})
+
+	t.Run("propagates db errors", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &creatorApplicationRepository{db: mock}
+
+		mock.ExpectQuery(sqlStmt).
+			WithArgs("UGC-111111", "verification").
+			WillReturnError(errors.New("db down"))
+
+		_, err := repo.GetByVerificationCodeAndStatus(context.Background(), "UGC-111111", "verification")
+		require.ErrorContains(t, err, "db down")
+	})
+}
+
+func TestCreatorApplicationRepository_UpdateStatus(t *testing.T) {
+	t.Parallel()
+
+	const sqlStmt = "UPDATE creator_applications SET status = $1, updated_at = NOW() WHERE id = $2"
+
+	t.Run("success returns nil", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &creatorApplicationRepository{db: mock}
+
+		mock.ExpectExec(sqlStmt).
+			WithArgs("moderation", "app-1").
+			WillReturnResult(pgxmock.NewResult("UPDATE", 1))
+
+		require.NoError(t, repo.UpdateStatus(context.Background(), "app-1", "moderation"))
+	})
+
+	t.Run("missing row returns sql.ErrNoRows", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &creatorApplicationRepository{db: mock}
+
+		mock.ExpectExec(sqlStmt).
+			WithArgs("moderation", "app-missing").
+			WillReturnResult(pgxmock.NewResult("UPDATE", 0))
+
+		err := repo.UpdateStatus(context.Background(), "app-missing", "moderation")
+		require.ErrorIs(t, err, sql.ErrNoRows)
+	})
+
+	t.Run("propagates db errors", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &creatorApplicationRepository{db: mock}
+
+		mock.ExpectExec(sqlStmt).
+			WithArgs("moderation", "app-1").
+			WillReturnError(errors.New("connection refused"))
+
+		err := repo.UpdateStatus(context.Background(), "app-1", "moderation")
+		require.ErrorContains(t, err, "connection refused")
+	})
+}
+
 func TestCreatorApplicationRepository_List(t *testing.T) {
 	t.Parallel()
 

@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	"github.com/alikhanmurzayev/ugcboost/backend/e2e/apiclient"
@@ -44,6 +45,22 @@ func SetupCreatorApplicationViaLanding(t *testing.T, mutate ...func(*apiclient.C
 	appID := resp.JSON201.Data.ApplicationId.String()
 	RegisterCreatorApplicationCleanup(t, appID)
 	return SetupCreatorApplicationViaLandingResult{ApplicationID: appID, Request: req}
+}
+
+// GetCreatorApplicationVerificationCode fetches the persisted verification
+// code for an application via the test-only endpoint. Used by SendPulse
+// webhook tests to construct realistic IG DM payloads — the production API
+// hides the column.
+func GetCreatorApplicationVerificationCode(t *testing.T, applicationID string) string {
+	t.Helper()
+	tc := NewTestClient(t)
+	id, err := uuid.Parse(applicationID)
+	require.NoError(t, err)
+	resp, err := tc.GetCreatorApplicationVerificationCodeWithResponse(context.Background(), id)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, resp.StatusCode())
+	require.NotNil(t, resp.JSON200)
+	return resp.JSON200.Data.VerificationCode
 }
 
 // LinkTelegramToApplication drives /start <applicationID> from a fresh

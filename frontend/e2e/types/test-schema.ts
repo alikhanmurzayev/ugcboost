@@ -62,6 +62,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/test/creator-applications/{id}/verification-code": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read the verification_code persisted on a creator application
+         * @description Test-only window into the verification_code column. The production
+         *     admin/creator API deliberately hides the code (it is the secret the
+         *     SendPulse webhook matches against), but the e2e webhook tests need
+         *     the value to construct a realistic IG DM payload. NEVER enabled in
+         *     production.
+         */
+        get: operations["getCreatorApplicationVerificationCode"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/test/telegram/message": {
         parameters: {
             query?: never;
@@ -142,6 +166,13 @@ export interface components {
         };
         SendTelegramMessageResult: {
             replies: components["schemas"]["TelegramReply"][];
+        };
+        CreatorApplicationVerificationCodeData: {
+            /** @description The UGC-NNNNNN code persisted on the application. */
+            verificationCode: string;
+        };
+        CreatorApplicationVerificationCodeResult: {
+            data: components["schemas"]["CreatorApplicationVerificationCodeData"];
         };
         ErrorResponse: {
             error: {
@@ -253,6 +284,37 @@ export interface operations {
             };
             /** @description Validation error */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getCreatorApplicationVerificationCode: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Verification code returned */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreatorApplicationVerificationCodeResult"];
+                };
+            };
+            /** @description Application not found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

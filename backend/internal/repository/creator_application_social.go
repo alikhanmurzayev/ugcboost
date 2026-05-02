@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"database/sql"
 	"time"
 
 	sq "github.com/Masterminds/squirrel"
@@ -52,6 +53,21 @@ type CreatorApplicationSocialRepo interface {
 	InsertMany(ctx context.Context, rows []CreatorApplicationSocialRow) error
 	ListByApplicationID(ctx context.Context, applicationID string) ([]*CreatorApplicationSocialRow, error)
 	ListByApplicationIDs(ctx context.Context, applicationIDs []string) (map[string][]*CreatorApplicationSocialRow, error)
+	UpdateVerification(ctx context.Context, params UpdateSocialVerificationParams) error
+}
+
+// UpdateSocialVerificationParams carries the four verification fields plus
+// the social id and the (possibly self-fixed) handle that
+// CreatorApplicationSocialRepo.UpdateVerification writes in a single UPDATE.
+// VerifiedByUserID is nil for auto-verification (SendPulse webhook); the
+// manual-verify endpoint (chunk 9) sets it to the admin's user id.
+type UpdateSocialVerificationParams struct {
+	ID               string
+	Handle           string
+	Verified         bool
+	Method           string
+	VerifiedByUserID *string
+	VerifiedAt       time.Time
 }
 
 type creatorApplicationSocialRepository struct {
@@ -80,6 +96,29 @@ func (r *creatorApplicationSocialRepository) ListByApplicationID(ctx context.Con
 		Where(sq.Eq{CreatorApplicationSocialColumnApplicationID: applicationID}).
 		OrderBy(CreatorApplicationSocialColumnPlatform+" ASC", CreatorApplicationSocialColumnHandle+" ASC")
 	return dbutil.Many[CreatorApplicationSocialRow](ctx, r.db, q)
+}
+
+// UpdateVerification flips the four verification columns on a single social
+// row and (for self-fix) overwrites the stored handle. The state-machine
+// guard around when this is allowed lives in the service layer; the repo is
+// a dumb SQL wrapper. Returns sql.ErrNoRows when the social id does not
+// exist (the race window between webhook lookup and update).
+func (r *creatorApplicationSocialRepository) UpdateVerification(ctx context.Context, params UpdateSocialVerificationParams) error {
+	q := sq.Update(TableCreatorApplicationSocials).
+		Set(CreatorApplicationSocialColumnHandle, params.Handle).
+		Set(CreatorApplicationSocialColumnVerified, params.Verified).
+		Set(CreatorApplicationSocialColumnMethod, params.Method).
+		Set(CreatorApplicationSocialColumnVerifiedByUserID, params.VerifiedByUserID).
+		Set(CreatorApplicationSocialColumnVerifiedAt, params.VerifiedAt).
+		Where(sq.Eq{CreatorApplicationSocialColumnID: params.ID})
+	n, err := dbutil.Exec(ctx, r.db, q)
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
 }
 
 // ListByApplicationIDs hydrates social accounts for every supplied application

@@ -19,6 +19,7 @@ import (
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/domain"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/handler/mocks"
 	logmocks "github.com/alikhanmurzayev/ugcboost/backend/internal/logger/mocks"
+	"github.com/alikhanmurzayev/ugcboost/backend/internal/repository"
 	repomocks "github.com/alikhanmurzayev/ugcboost/backend/internal/repository/mocks"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/telegram"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/testapi"
@@ -313,6 +314,69 @@ func TestTestAPIHandler_GetResetToken(t *testing.T) {
 		require.Equal(t, testapi.ResetTokenResult{
 			Data: testapi.ResetTokenData{Token: "raw-token-123"},
 		}, resp)
+	})
+}
+
+func TestTestAPIHandler_GetCreatorApplicationVerificationCode(t *testing.T) {
+	t.Parallel()
+
+	appUUID := openapi_types.UUID{}
+	require.NoError(t, appUUID.UnmarshalText([]byte("11111111-2222-3333-4444-555555555555")))
+
+	t.Run("success returns the persisted code", func(t *testing.T) {
+		t.Parallel()
+		auth := mocks.NewMockTestAPIAuthService(t)
+		repos := mocks.NewMockTestAPICleanupRepoFactory(t)
+		pool := dbutilmocks.NewMockPool(t)
+		creatorRepo := repomocks.NewMockCreatorApplicationRepo(t)
+		store := mocks.NewMockTokenStore(t)
+		log := logmocks.NewMockLogger(t)
+		repos.EXPECT().NewCreatorApplicationRepo(mock.Anything).Return(creatorRepo)
+		creatorRepo.EXPECT().GetByID(mock.Anything, appUUID.String()).
+			Return(&repository.CreatorApplicationRow{ID: appUUID.String(), VerificationCode: "UGC-123456"}, nil)
+		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, log), log))
+
+		w, resp := doJSON[testapi.CreatorApplicationVerificationCodeResult](t, router, http.MethodGet,
+			"/test/creator-applications/"+appUUID.String()+"/verification-code", nil)
+		require.Equal(t, http.StatusOK, w.Code)
+		require.Equal(t, "UGC-123456", resp.Data.VerificationCode)
+	})
+
+	t.Run("not found returns 404", func(t *testing.T) {
+		t.Parallel()
+		auth := mocks.NewMockTestAPIAuthService(t)
+		repos := mocks.NewMockTestAPICleanupRepoFactory(t)
+		pool := dbutilmocks.NewMockPool(t)
+		creatorRepo := repomocks.NewMockCreatorApplicationRepo(t)
+		store := mocks.NewMockTokenStore(t)
+		log := logmocks.NewMockLogger(t)
+		repos.EXPECT().NewCreatorApplicationRepo(mock.Anything).Return(creatorRepo)
+		creatorRepo.EXPECT().GetByID(mock.Anything, appUUID.String()).
+			Return(nil, sql.ErrNoRows)
+		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, log), log))
+
+		w, _ := doJSON[api.ErrorResponse](t, router, http.MethodGet,
+			"/test/creator-applications/"+appUUID.String()+"/verification-code", nil)
+		require.Equal(t, http.StatusNotFound, w.Code)
+	})
+
+	t.Run("repo error surfaces as 500", func(t *testing.T) {
+		t.Parallel()
+		auth := mocks.NewMockTestAPIAuthService(t)
+		repos := mocks.NewMockTestAPICleanupRepoFactory(t)
+		pool := dbutilmocks.NewMockPool(t)
+		creatorRepo := repomocks.NewMockCreatorApplicationRepo(t)
+		store := mocks.NewMockTokenStore(t)
+		log := logmocks.NewMockLogger(t)
+		repos.EXPECT().NewCreatorApplicationRepo(mock.Anything).Return(creatorRepo)
+		creatorRepo.EXPECT().GetByID(mock.Anything, appUUID.String()).
+			Return(nil, errors.New("db down"))
+		expectUnexpectedErrorLog(log, "/test/creator-applications/"+appUUID.String()+"/verification-code")
+		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, log), log))
+
+		w, _ := doJSON[api.ErrorResponse](t, router, http.MethodGet,
+			"/test/creator-applications/"+appUUID.String()+"/verification-code", nil)
+		require.Equal(t, http.StatusInternalServerError, w.Code)
 	})
 }
 

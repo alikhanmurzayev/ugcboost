@@ -2,7 +2,8 @@
 title: "SendPulse webhook auto-верификации Instagram + state-history таблица"
 type: feature
 created: "2026-05-02"
-status: ready-for-dev
+status: done
+baseline_commit: a99344c
 context:
   - docs/standards/
   - _bmad-output/planning-artifacts/creator-onboarding-roadmap.md
@@ -94,18 +95,18 @@ context:
 ## Tasks & Acceptance
 
 **Execution:**
-- [ ] OpenAPI: path + схемы → `make generate-api`.
-- [ ] Domain: парсер, нормализация handle, allowed transitions map, helper, sentinel, status-enum, transition-reason константы, audit-action const + table-driven unit-тесты.
-- [ ] Migration 1: `creator_application_status_transitions` (CREATE TABLE + INDEX).
-- [ ] Migration 2: `normalize_instagram_handles` (UPDATE для existing IG-socials).
-- [ ] Repository: `TransitionRepo` (новый файл) + `UpdateStatus` + `GetByVerificationCodeAndStatus` на `CreatorApplicationRepo` + `UpdateVerification` на `CreatorApplicationSocialRepo`. Расширение `RepoFactory`. pgxmock-тесты на SQL.
-- [ ] Config: новые env vars, обновление env-loader тестов.
-- [ ] Middleware: `sendpulse_auth` + unit-тесты.
-- [ ] Service: `applyTransition` + `VerifyInstagramByCode` (покрывает все ветки I/O matrix через mock'и). Нормализация handle в `Submit`.
-- [ ] Telegram: `MessageVerificationApproved` + `SendVerificationNotification` helper.
-- [ ] Handler: `webhook_sendpulse.go` + регистрация route + unit-тесты (captured-input — что username/lastMessage из payload корректно передаются в сервис).
-- [ ] TMA: `App.tsx` + `App.test.tsx`.
-- [ ] E2E: `webhooks/sendpulse_instagram_test.go` покрывает матрицу (audit-row через `/audit-logs`).
+- [x] OpenAPI: path + схемы → `make generate-api`.
+- [x] Domain: парсер, нормализация handle, allowed transitions map, helper, sentinel, status-enum, transition-reason константы, audit-action const + table-driven unit-тесты.
+- [x] Migration 1: `creator_application_status_transitions` (CREATE TABLE + INDEX).
+- [x] Migration 2: `normalize_instagram_handles` (UPDATE для existing IG-socials).
+- [x] Repository: `TransitionRepo` (новый файл) + `UpdateStatus` + `GetByVerificationCodeAndStatus` на `CreatorApplicationRepo` + `UpdateVerification` на `CreatorApplicationSocialRepo`. Расширение `RepoFactory`. pgxmock-тесты на SQL.
+- [x] Config: новые env vars, обновление env-loader тестов.
+- [x] Middleware: `sendpulse_auth` + unit-тесты.
+- [x] Service: `applyTransition` + `VerifyInstagramByCode` (покрывает все ветки I/O matrix через mock'и). Нормализация handle в `Submit`.
+- [x] Telegram: `MessageVerificationApproved` + `SendVerificationNotification` helper.
+- [x] Handler: `webhook_sendpulse.go` + регистрация route + unit-тесты (captured-input — что username/lastMessage из payload корректно передаются в сервис).
+- [x] TMA: `App.tsx` + `App.test.tsx`.
+- [x] E2E: `webhooks/sendpulse_instagram_test.go` покрывает матрицу (audit-row через `/audit-logs`).
 - [ ] Roadmap: `[~] → [x]` при merge.
 
 **Acceptance Criteria:**
@@ -127,9 +128,102 @@ context:
 - `make migrate-up` — обе миграции применяются на dev.
 - `make build-tma test-unit-tma lint-web` — frontend собирается.
 
+## Spec Change Log
+
+Логические правки спеки уже после первой полной реализации. Не трогаем `<frozen-after-approval>` без согласия Алихана.
+
+- **2026-05-02** — review iteration 1 patches:
+  - Audit action const stored as `creator_application_verification_auto` (underscores) вместо литеральной `creator_application.verification.auto` из спеки. Обоснование: соответствует существующим `AuditActionCreatorApplicationSubmit` / `AuditActionCreatorApplicationLinkTelegram` — единая convention auf domain-action vocabulary. Спека ниже не renegotiated; e2e-константа зеркалит фактическое значение.
+  - `applyTransition.actorID` тип `*string` вместо `*uuid.UUID` из спеки. Обоснование: codebase везде хранит UUID-as-string (`AuditLogRow.ActorID *string`, `CreatorApplicationTelegramLinkRow` и пр.) — переход на `*uuid.UUID` создал бы островок другой конвенции.
+  - `domain.NormalizeInstagramHandle` теперь strip'aет `@` с обеих сторон (`strings.Trim`), чтобы зеркалить SQL-миграцию `trim(BOTH '@' FROM handle)`. Спека предписывала только leading; разные правила нормализации между миграцией и live-кодом тихо ломают strict-equality сверку.
+  - `verificationCodeParseRegex` стал `(?i)\bUGC-[0-9]{6}\b`. Спека замораживала `(?i)UGC-[0-9]{6}`, но без word-boundary `UGC-1234567` (typo на 7-ю цифру) триггерил бы verify чужой заявки.
+  - Webhook handler не логирует `verification_code` ни в одной ветке. Это сделано контракт-pinning — testapi.go явно называет код «secret SendPulse matches against».
+  - Любой 4xx/5xx путь от `strict-server` для пути `/webhooks/sendpulse/instagram` подавляется в 200 `{}` через `suppressSendPulseError` — спека во `Never` фиксирует «никаких 4xx с подсказками злоумышленнику», а strict-server по умолчанию отдавал 422 на невалидный JSON.
+  - Telegram-нотификация запускается на `context.WithoutCancel(ctx)` + `WithTimeout(10s)` — иначе SendPulse, оборвавший HTTP-запрос между commit'ом и notify, тихо съедал бы user-facing сообщение.
+  - Empty `normalizedHandle` (только `@`/whitespace в payload) → не self-fix-овая запись пустой строки в `social.handle`, а early-return `VerifyInstagramStatusNotFound` с warn-логом.
+  - `Config.Load` теперь явно отвергает пустые значения `SENDPULSE_WEBHOOK_SECRET` / `TMA_PUBLIC_URL` — `,required` envconfig'а тривиально пропускает `KEY=` (set, but empty), что для security-critical secret превращалось бы в open-auth bypass.
+
 **Manual smoke локально (перед PR):**
 - `make compose-up && make migrate-up` — миграции применились без ошибок.
 - `psql` в локальный контейнер: `SELECT id, platform, handle, verified, method, verified_at FROM creator_application_socials WHERE platform='instagram';` — после migration handle в lowercase без `@`.
 - Подать тестовую заявку (через лендос или `make run-landing` форму) → дёрнуть `curl -X POST http://localhost:8082/webhooks/sendpulse/instagram -H "Authorization: Bearer $SENDPULSE_WEBHOOK_SECRET" -H "Content-Type: application/json" -d '{"username":"<handle-из-заявки>","lastMessage":"<verification_code-из-БД>"}'` — 200 `{}`, статус заявки `moderation`, social.verified=true.
 - `psql`: `SELECT * FROM creator_application_status_transitions ORDER BY created_at DESC LIMIT 10;` — появился row `(verification → moderation)`.
 - `psql`: `SELECT action, metadata, created_at FROM audit_logs WHERE action LIKE 'creator_application.verification%' ORDER BY created_at DESC LIMIT 10;` — появился audit-row.
+
+## Suggested Review Order
+
+**Service brain — orchestrates the verification pipeline**
+
+- Public entry: lookup → verify-or-noop → applyTransition → audit → schedule notify; new strict-order checks here.
+  [`creator_application.go:776`](../../backend/internal/service/creator_application.go#L776)
+- State-machine helper that every transition (current and future) must go through.
+  [`creator_application.go:888`](../../backend/internal/service/creator_application.go#L888)
+- Telegram fire-and-forget after commit (timeout + WithoutCancel so SendPulse disconnects cannot drop the message).
+  [`creator_application.go:937`](../../backend/internal/service/creator_application.go#L937)
+
+**Domain primitives**
+
+- Allowed-transitions map + sentinel + `VerifyInstagramStatus` enum + `TransitionReason*`.
+  [`creator_application.go:444`](../../backend/internal/domain/creator_application.go#L444)
+- Parser with word-boundary regex (rejects 7-digit typos).
+  [`creator_application.go:421`](../../backend/internal/domain/creator_application.go#L421)
+- Handle normalisation (mirrors `trim(BOTH '@')` from migration).
+  [`creator_application.go:436`](../../backend/internal/domain/creator_application.go#L436)
+
+**HTTP surface**
+
+- Dumb handler — outcome-only logs (`verification_code` deliberately omitted as a secret).
+  [`webhook_sendpulse.go:21`](../../backend/internal/handler/webhook_sendpulse.go#L21)
+- Suppress every non-200/401 from the strict-server adapter for this path (anti-fingerprinting).
+  [`server.go:154`](../../backend/internal/handler/server.go#L154)
+- Constant-time bearer auth, path-scoped middleware in the global chain.
+  [`sendpulse_auth.go:30`](../../backend/internal/middleware/sendpulse_auth.go#L30)
+
+**Repository + migrations**
+
+- New transitions repo + RepoFactory wiring.
+  [`creator_application_status_transition.go:50`](../../backend/internal/repository/creator_application_status_transition.go#L50)
+- `UpdateStatus` + `GetByVerificationCodeAndStatus` extensions on the application repo.
+  [`creator_application.go:225`](../../backend/internal/repository/creator_application.go#L225)
+- `UpdateVerification` extension on socials with a typed params struct.
+  [`creator_application_social.go:84`](../../backend/internal/repository/creator_application_social.go#L84)
+- CREATE TABLE + index for transitions; no backfill (history starts at first real transition).
+  [`20260502230053_creator_application_status_transitions.sql`](../../backend/migrations/20260502230053_creator_application_status_transitions.sql)
+- Backfill normalisation for legacy IG handles.
+  [`20260502230054_normalize_instagram_handles.sql`](../../backend/migrations/20260502230054_normalize_instagram_handles.sql)
+
+**OpenAPI contract**
+
+- `/webhooks/sendpulse/instagram` path + request/result schemas (200/401 both empty).
+  [`openapi.yaml:641`](../../backend/api/openapi.yaml#L641)
+- Test-only `verification-code` reader (lets the e2e helper construct realistic IG DM payloads).
+  [`openapi-test.yaml:98`](../../backend/api/openapi-test.yaml#L98)
+
+**Wiring + config**
+
+- `SendPulseAuth` registered as a global path-aware middleware; `Sender` injected into the service.
+  [`main.go:142`](../../backend/cmd/api/main.go#L142)
+- `SENDPULSE_WEBHOOK_SECRET` + `TMA_PUBLIC_URL` required + non-empty validation.
+  [`config.go:73`](../../backend/internal/config/config.go#L73)
+
+**Notifications**
+
+- Verification-approved message + WebApp inline-keyboard helper.
+  [`messages.go:30`](../../backend/internal/telegram/messages.go#L30)
+  [`notify.go:13`](../../backend/internal/telegram/notify.go#L13)
+
+**TMA placeholder**
+
+- Subtitle copy update + minimal smoke test.
+  [`App.tsx:23`](../../frontend/tma/src/App.tsx#L23)
+
+**Tests**
+
+- E2E matrix end-to-end (200 always, 401 on bad bearer, audit-row + status assertions).
+  [`sendpulse_instagram_test.go:65`](../../backend/e2e/webhooks/sendpulse_instagram_test.go#L65)
+- Service unit tests across the I/O matrix branches (incl. empty-handle no-op + Telegram-skip).
+  [`creator_application_test.go:1287`](../../backend/internal/service/creator_application_test.go#L1287)
+- Handler unit tests covering the suppressed-error contract.
+  [`webhook_sendpulse_test.go:35`](../../backend/internal/handler/webhook_sendpulse_test.go#L35)
+- Domain table-driven tests (parser word-boundary + normalisation symmetry).
+  [`creator_application_test.go:44`](../../backend/internal/domain/creator_application_test.go#L44)

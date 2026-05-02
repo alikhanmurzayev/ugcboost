@@ -81,6 +81,17 @@ type CleanupEntityRequest struct {
 // CleanupEntityRequestType defines model for CleanupEntityRequest.Type.
 type CleanupEntityRequestType string
 
+// CreatorApplicationVerificationCodeData defines model for CreatorApplicationVerificationCodeData.
+type CreatorApplicationVerificationCodeData struct {
+	// VerificationCode The UGC-NNNNNN code persisted on the application.
+	VerificationCode string `json:"verificationCode"`
+}
+
+// CreatorApplicationVerificationCodeResult defines model for CreatorApplicationVerificationCodeResult.
+type CreatorApplicationVerificationCodeResult struct {
+	Data CreatorApplicationVerificationCodeData `json:"data"`
+}
+
 // ErrorResponse defines model for ErrorResponse.
 type ErrorResponse struct {
 	Error struct {
@@ -171,6 +182,9 @@ type ServerInterface interface {
 	// Hard-delete a test entity (user or brand) and its references
 	// (POST /test/cleanup-entity)
 	CleanupEntity(w http.ResponseWriter, r *http.Request)
+	// Read the verification_code persisted on a creator application
+	// (GET /test/creator-applications/{id}/verification-code)
+	GetCreatorApplicationVerificationCode(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
 	// Get the raw reset token captured for the given email
 	// (GET /test/reset-tokens)
 	GetResetToken(w http.ResponseWriter, r *http.Request, params GetResetTokenParams)
@@ -189,6 +203,12 @@ type Unimplemented struct{}
 // Hard-delete a test entity (user or brand) and its references
 // (POST /test/cleanup-entity)
 func (_ Unimplemented) CleanupEntity(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Read the verification_code persisted on a creator application
+// (GET /test/creator-applications/{id}/verification-code)
+func (_ Unimplemented) GetCreatorApplicationVerificationCode(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -224,6 +244,31 @@ func (siw *ServerInterfaceWrapper) CleanupEntity(w http.ResponseWriter, r *http.
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.CleanupEntity(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetCreatorApplicationVerificationCode operation middleware
+func (siw *ServerInterfaceWrapper) GetCreatorApplicationVerificationCode(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetCreatorApplicationVerificationCode(w, r, id)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -412,6 +457,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Post(options.BaseURL+"/test/cleanup-entity", wrapper.CleanupEntity)
 	})
 	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/test/creator-applications/{id}/verification-code", wrapper.GetCreatorApplicationVerificationCode)
+	})
+	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/test/reset-tokens", wrapper.GetResetToken)
 	})
 	r.Group(func(r chi.Router) {
@@ -454,6 +502,32 @@ type CleanupEntity422JSONResponse ErrorResponse
 func (response CleanupEntity422JSONResponse) VisitCleanupEntityResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(422)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetCreatorApplicationVerificationCodeRequestObject struct {
+	Id openapi_types.UUID `json:"id"`
+}
+
+type GetCreatorApplicationVerificationCodeResponseObject interface {
+	VisitGetCreatorApplicationVerificationCodeResponse(w http.ResponseWriter) error
+}
+
+type GetCreatorApplicationVerificationCode200JSONResponse CreatorApplicationVerificationCodeResult
+
+func (response GetCreatorApplicationVerificationCode200JSONResponse) VisitGetCreatorApplicationVerificationCodeResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetCreatorApplicationVerificationCode404JSONResponse ErrorResponse
+
+func (response GetCreatorApplicationVerificationCode404JSONResponse) VisitGetCreatorApplicationVerificationCodeResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
 
 	return json.NewEncoder(w).Encode(response)
 }
@@ -541,6 +615,9 @@ type StrictServerInterface interface {
 	// Hard-delete a test entity (user or brand) and its references
 	// (POST /test/cleanup-entity)
 	CleanupEntity(ctx context.Context, request CleanupEntityRequestObject) (CleanupEntityResponseObject, error)
+	// Read the verification_code persisted on a creator application
+	// (GET /test/creator-applications/{id}/verification-code)
+	GetCreatorApplicationVerificationCode(ctx context.Context, request GetCreatorApplicationVerificationCodeRequestObject) (GetCreatorApplicationVerificationCodeResponseObject, error)
 	// Get the raw reset token captured for the given email
 	// (GET /test/reset-tokens)
 	GetResetToken(ctx context.Context, request GetResetTokenRequestObject) (GetResetTokenResponseObject, error)
@@ -605,6 +682,32 @@ func (sh *strictHandler) CleanupEntity(w http.ResponseWriter, r *http.Request) {
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(CleanupEntityResponseObject); ok {
 		if err := validResponse.VisitCleanupEntityResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetCreatorApplicationVerificationCode operation middleware
+func (sh *strictHandler) GetCreatorApplicationVerificationCode(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request GetCreatorApplicationVerificationCodeRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetCreatorApplicationVerificationCode(ctx, request.(GetCreatorApplicationVerificationCodeRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetCreatorApplicationVerificationCode")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetCreatorApplicationVerificationCodeResponseObject); ok {
+		if err := validResponse.VisitGetCreatorApplicationVerificationCodeResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

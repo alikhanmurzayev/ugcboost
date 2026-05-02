@@ -89,7 +89,21 @@ func run() error {
 	brandSvc := service.NewBrandService(pool, repoFactory, cfg.BcryptCost, appLogger)
 	auditSvc := service.NewAuditService(pool, repoFactory)
 	authzSvc := authz.NewAuthzService(brandSvc)
-	creatorApplicationSvc := service.NewCreatorApplicationService(pool, repoFactory, appLogger)
+
+	// Telegram Sender is shared between long-polling (handler.go) and the
+	// outbound notification path (creator verification → moderation message).
+	// A nil Sender is acceptable: the verification service skips the
+	// notification with a warn-level log instead of returning an error.
+	var tgSender telegram.Sender
+	if cfg.TelegramBotToken != "" {
+		tgBot, err := telegram.NewSendOnlyBot(cfg.TelegramBotToken)
+		if err != nil {
+			return fmt.Errorf("create telegram send-only bot: %w", err)
+		}
+		tgSender = tgBot
+	}
+
+	creatorApplicationSvc := service.NewCreatorApplicationService(pool, repoFactory, tgSender, cfg.TMAPublicURL, appLogger)
 	creatorApplicationTelegramSvc := service.NewCreatorApplicationTelegramService(pool, repoFactory, appLogger)
 	dictionarySvc := service.NewDictionaryService(pool, repoFactory, appLogger)
 
@@ -128,6 +142,9 @@ func run() error {
 	r.Use(middleware.SecureHeaders)
 	r.Use(middleware.CORS(cfg.CORSOrigins))
 	r.Use(middleware.Logging(appLogger))
+	// SendPulse webhook bearer auth — gates only the dedicated path; every
+	// other request flows through unchanged.
+	r.Use(middleware.SendPulseAuth(cfg.SendPulseWebhookSecret, appLogger))
 
 	// Create server implementing ServerInterface
 	server := handler.NewServer(authSvc, brandSvc, authzSvc, auditSvc, creatorApplicationSvc, dictionarySvc, handler.ServerConfig{

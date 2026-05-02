@@ -208,3 +208,21 @@ func (h *TestAPIHandler) GetResetToken(_ context.Context, request testapi.GetRes
 		Data: testapi.ResetTokenData{Token: token},
 	}, nil
 }
+
+// GetCreatorApplicationVerificationCode handles
+// GET /test/creator-applications/{id}/verification-code. The production API
+// hides the verification_code (it is the secret SendPulse matches against),
+// so e2e webhook tests need this test-only window to construct realistic
+// payloads.
+func (h *TestAPIHandler) GetCreatorApplicationVerificationCode(ctx context.Context, request testapi.GetCreatorApplicationVerificationCodeRequestObject) (testapi.GetCreatorApplicationVerificationCodeResponseObject, error) {
+	row, err := h.repos.NewCreatorApplicationRepo(h.pool).GetByID(ctx, request.Id.String())
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, domain.ErrNotFound
+		}
+		return nil, fmt.Errorf("get application: %w", err)
+	}
+	return testapi.GetCreatorApplicationVerificationCode200JSONResponse{
+		Data: testapi.CreatorApplicationVerificationCodeData{VerificationCode: row.VerificationCode},
+	}, nil
+}

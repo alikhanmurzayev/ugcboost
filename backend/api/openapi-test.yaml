@@ -95,6 +95,38 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /test/creator-applications/{id}/verification-code:
+    get:
+      operationId: getCreatorApplicationVerificationCode
+      summary: Read the verification_code persisted on a creator application
+      description: |
+        Test-only window into the verification_code column. The production
+        admin/creator API deliberately hides the code (it is the secret the
+        SendPulse webhook matches against), but the e2e webhook tests need
+        the value to construct a realistic IG DM payload. NEVER enabled in
+        production.
+      tags: [test]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Verification code returned
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreatorApplicationVerificationCodeResult"
+        "404":
+          description: Application not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /test/telegram/message:
     post:
       operationId: sendTelegramMessage
@@ -230,6 +262,21 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/TelegramReply"
+
+    CreatorApplicationVerificationCodeData:
+      type: object
+      required: [verificationCode]
+      properties:
+        verificationCode:
+          type: string
+          description: The UGC-NNNNNN code persisted on the application.
+
+    CreatorApplicationVerificationCodeResult:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: "#/components/schemas/CreatorApplicationVerificationCodeData"
 
     ErrorResponse:
       type: object

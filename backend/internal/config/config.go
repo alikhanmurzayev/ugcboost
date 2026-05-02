@@ -64,6 +64,15 @@ type Config struct {
 	// Empty value means long polling does not start.
 	TelegramBotToken string `env:"TELEGRAM_BOT_TOKEN" envDefault:""`
 
+	// Public URL of the Telegram Mini App, embedded into the WebApp button
+	// inside outbound bot notifications (verification approved etc.).
+	// Different per environment (local/staging/prod).
+	TMAPublicURL string `env:"TMA_PUBLIC_URL,required"`
+
+	// Bearer secret SendPulse signs the IG webhook with. Constant-time
+	// compared in middleware before the handler runs.
+	SendPulseWebhookSecret string `env:"SENDPULSE_WEBHOOK_SECRET,required"`
+
 	// Versions of the legal documents the user accepts at submission time.
 	// Stored alongside each consent row so that a future audit can show
 	// exactly which revision was in force.
@@ -94,6 +103,16 @@ func Load() (*Config, error) {
 		// valid
 	default:
 		return nil, fmt.Errorf("invalid ENVIRONMENT %q: must be one of local, staging, production", cfg.Environment)
+	}
+
+	// envconfig's `required` tag treats `KEY=` (set to empty) as satisfied;
+	// for security-critical secrets that's an open-auth bypass on misconfig.
+	// Re-validate non-empty here so a deploy with KEY= refuses to start.
+	if cfg.SendPulseWebhookSecret == "" {
+		return nil, fmt.Errorf("SENDPULSE_WEBHOOK_SECRET must be a non-empty value")
+	}
+	if cfg.TMAPublicURL == "" {
+		return nil, fmt.Errorf("TMA_PUBLIC_URL must be a non-empty value")
 	}
 
 	// Derive values from Environment
