@@ -31,3 +31,15 @@ func (a *AuthzService) CanListCreatorApplications(ctx context.Context) error {
 	}
 	return nil
 }
+
+// CanGetCreatorApplicationsCounts gates the admin counts endpoint
+// (GET /creators/applications/counts). The response carries no PII — only
+// (status, count) pairs — but the badge it powers is part of the moderation
+// dashboard, so admin role gates it consistently with the other moderation
+// endpoints (CanListCreatorApplications, CanViewCreatorApplication).
+func (a *AuthzService) CanGetCreatorApplicationsCounts(ctx context.Context) error {
+	if middleware.RoleFromContext(ctx) != api.Admin {
+		return domain.ErrForbidden
+	}
+	return nil
+}

@@ -6,7 +6,7 @@
 // действительно пишется в той же транзакции, что и создание бренда, и
 // пишет правильный entity_id. Фильтр по action=manager_assign после
 // POST /brands/{id}/managers обнаруживает ровно запись об ассайне.
-// Пагинация проверяется на трёх созданных админом брендах: per_page=2
+// Пагинация проверяется на трёх созданных админом брендах: perPage=2
 // урезает возвращаемый срез до двух элементов, а total продолжает считать
 // каждую подходящую строку (≥ 3) — это и есть контракт пагинации.
 // Фильтрация по actor_id в этом сценарии важна отдельно: параллельно
@@ -108,7 +108,7 @@ func TestAuditLogFiltering(t *testing.T) {
 		require.NotNil(t, resp.JSON200)
 
 		require.Len(t, resp.JSON200.Data.Logs, 2,
-			"per_page=2 must trim the returned slice to 2 entries")
+			"perPage=2 must trim the returned slice to 2 entries")
 		require.GreaterOrEqual(t, resp.JSON200.Data.Total, int64(3),
 			"total must count every matching brand_create row this admin produced")
 		require.Equal(t, page, resp.JSON200.Data.Page)

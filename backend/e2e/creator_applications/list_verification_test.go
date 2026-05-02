@@ -134,7 +134,7 @@ func TestCreatorApplicationsList(t *testing.T) {
 		second := testutil.SetupCreatorApplicationViaLanding(t)
 
 		body := validBody()
-		statuses := []apiclient.CreatorApplicationsListRequestStatuses{apiclient.Verification}
+		statuses := []apiclient.CreatorApplicationStatus{apiclient.Verification}
 		body.Statuses = &statuses
 		body.PerPage = 200
 
@@ -149,7 +149,7 @@ func TestCreatorApplicationsList(t *testing.T) {
 		require.Contains(t, ids, second.ApplicationID)
 		// Every returned item must satisfy the status filter — no leakage.
 		for _, item := range resp.JSON200.Data.Items {
-			require.Equal(t, apiclient.CreatorApplicationListItemStatusVerification, item.Status)
+			require.Equal(t, apiclient.Verification, item.Status)
 		}
 	})
 
@@ -605,7 +605,7 @@ func TestCreatorApplicationsList(t *testing.T) {
 		body := validBody()
 		// "rejected" is a valid status but no test seeds it, so the result
 		// is empty. The endpoint must answer 200 with items=[] and total=0.
-		statuses := []apiclient.CreatorApplicationsListRequestStatuses{apiclient.Rejected}
+		statuses := []apiclient.CreatorApplicationStatus{apiclient.Rejected}
 		body.Statuses = &statuses
 
 		c := testutil.NewAPIClient(t)

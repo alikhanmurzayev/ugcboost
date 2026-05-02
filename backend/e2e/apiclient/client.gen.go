@@ -149,6 +149,9 @@ type ClientInterface interface {
 
 	SubmitCreatorApplication(ctx context.Context, body SubmitCreatorApplicationJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// GetCreatorApplicationsCounts request
+	GetCreatorApplicationsCounts(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// ListCreatorApplicationsWithBody request with any body
 	ListCreatorApplicationsWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -428,6 +431,18 @@ func (c *Client) SubmitCreatorApplication(ctx context.Context, body SubmitCreato
 	return c.Client.Do(req)
 }
 
+func (c *Client) GetCreatorApplicationsCounts(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetCreatorApplicationsCountsRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 func (c *Client) ListCreatorApplicationsWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewListCreatorApplicationsRequestWithBody(c.Server, contentType, body)
 	if err != nil {
@@ -512,7 +527,7 @@ func NewListAuditLogsRequest(server string, params *ListAuditLogsParams) (*http.
 
 		if params.ActorId != nil {
 
-			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "actor_id", *params.ActorId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "actorId", *params.ActorId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
 				return nil, err
 			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
 				return nil, err
@@ -528,7 +543,7 @@ func NewListAuditLogsRequest(server string, params *ListAuditLogsParams) (*http.
 
 		if params.EntityType != nil {
 
-			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "entity_type", *params.EntityType, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "entityType", *params.EntityType, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
 				return nil, err
 			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
 				return nil, err
@@ -544,7 +559,7 @@ func NewListAuditLogsRequest(server string, params *ListAuditLogsParams) (*http.
 
 		if params.EntityId != nil {
 
-			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "entity_id", *params.EntityId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "entityId", *params.EntityId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
 				return nil, err
 			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
 				return nil, err
@@ -576,7 +591,7 @@ func NewListAuditLogsRequest(server string, params *ListAuditLogsParams) (*http.
 
 		if params.DateFrom != nil {
 
-			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "date_from", *params.DateFrom, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: "date-time"}); err != nil {
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "dateFrom", *params.DateFrom, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: "date-time"}); err != nil {
 				return nil, err
 			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
 				return nil, err
@@ -592,7 +607,7 @@ func NewListAuditLogsRequest(server string, params *ListAuditLogsParams) (*http.
 
 		if params.DateTo != nil {
 
-			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "date_to", *params.DateTo, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: "date-time"}); err != nil {
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "dateTo", *params.DateTo, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: "date-time"}); err != nil {
 				return nil, err
 			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
 				return nil, err
@@ -624,7 +639,7 @@ func NewListAuditLogsRequest(server string, params *ListAuditLogsParams) (*http.
 
 		if params.PerPage != nil {
 
-			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "per_page", *params.PerPage, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "perPage", *params.PerPage, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
 				return nil, err
 			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
 				return nil, err
@@ -1160,6 +1175,33 @@ func NewSubmitCreatorApplicationRequestWithBody(server string, contentType strin
 	return req, nil
 }
 
+// NewGetCreatorApplicationsCountsRequest generates requests for GetCreatorApplicationsCounts
+func NewGetCreatorApplicationsCountsRequest(server string) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/creators/applications/counts")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewListCreatorApplicationsRequest calls the generic ListCreatorApplications builder with application/json body
 func NewListCreatorApplicationsRequest(server string, body ListCreatorApplicationsJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
@@ -1397,6 +1439,9 @@ type ClientWithResponsesInterface interface {
 
 	SubmitCreatorApplicationWithResponse(ctx context.Context, body SubmitCreatorApplicationJSONRequestBody, reqEditors ...RequestEditorFn) (*SubmitCreatorApplicationResponse, error)
 
+	// GetCreatorApplicationsCountsWithResponse request
+	GetCreatorApplicationsCountsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetCreatorApplicationsCountsResponse, error)
+
 	// ListCreatorApplicationsWithBodyWithResponse request with any body
 	ListCreatorApplicationsWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ListCreatorApplicationsResponse, error)
 
@@ -1416,8 +1461,8 @@ type ListAuditLogsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *AuditLogsResult
-	JSON403      *ErrorResponse
-	JSONDefault  *ErrorResponse
+	JSON403      *Forbidden
+	JSONDefault  *UnexpectedError
 }
 
 // Status returns HTTPResponse.Status
@@ -1442,7 +1487,7 @@ type LoginResponse struct {
 	JSON200      *LoginResult
 	JSON401      *ErrorResponse
 	JSON422      *ErrorResponse
-	JSONDefault  *ErrorResponse
+	JSONDefault  *UnexpectedError
 }
 
 // Status returns HTTPResponse.Status
@@ -1465,7 +1510,7 @@ type LogoutResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *MessageResponse
-	JSONDefault  *ErrorResponse
+	JSONDefault  *UnexpectedError
 }
 
 // Status returns HTTPResponse.Status
@@ -1489,7 +1534,7 @@ type GetMeResponse struct {
 	HTTPResponse *http.Response
 	JSON200      *UserResponse
 	JSON401      *ErrorResponse
-	JSONDefault  *ErrorResponse
+	JSONDefault  *UnexpectedError
 }
 
 // Status returns HTTPResponse.Status
@@ -1514,7 +1559,7 @@ type ResetPasswordResponse struct {
 	JSON200      *MessageResponse
 	JSON401      *ErrorResponse
 	JSON422      *ErrorResponse
-	JSONDefault  *ErrorResponse
+	JSONDefault  *UnexpectedError
 }
 
 // Status returns HTTPResponse.Status
@@ -1537,7 +1582,7 @@ type RequestPasswordResetResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *MessageResponse
-	JSONDefault  *ErrorResponse
+	JSONDefault  *UnexpectedError
 }
 
 // Status returns HTTPResponse.Status
@@ -1561,7 +1606,7 @@ type RefreshTokenResponse struct {
 	HTTPResponse *http.Response
 	JSON200      *LoginResult
 	JSON401      *ErrorResponse
-	JSONDefault  *ErrorResponse
+	JSONDefault  *UnexpectedError
 }
 
 // Status returns HTTPResponse.Status
@@ -1584,7 +1629,7 @@ type ListBrandsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *ListBrandsResult
-	JSONDefault  *ErrorResponse
+	JSONDefault  *UnexpectedError
 }
 
 // Status returns HTTPResponse.Status
@@ -1607,9 +1652,9 @@ type CreateBrandResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON201      *BrandResult
-	JSON403      *ErrorResponse
+	JSON403      *Forbidden
 	JSON422      *ErrorResponse
-	JSONDefault  *ErrorResponse
+	JSONDefault  *UnexpectedError
 }
 
 // Status returns HTTPResponse.Status
@@ -1632,9 +1677,9 @@ type DeleteBrandResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *MessageResponse
-	JSON403      *ErrorResponse
+	JSON403      *Forbidden
 	JSON404      *ErrorResponse
-	JSONDefault  *ErrorResponse
+	JSONDefault  *UnexpectedError
 }
 
 // Status returns HTTPResponse.Status
@@ -1657,9 +1702,9 @@ type GetBrandResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *GetBrandResult
-	JSON403      *ErrorResponse
+	JSON403      *Forbidden
 	JSON404      *ErrorResponse
-	JSONDefault  *ErrorResponse
+	JSONDefault  *UnexpectedError
 }
 
 // Status returns HTTPResponse.Status
@@ -1682,9 +1727,9 @@ type UpdateBrandResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *BrandResult
-	JSON403      *ErrorResponse
+	JSON403      *Forbidden
 	JSON422      *ErrorResponse
-	JSONDefault  *ErrorResponse
+	JSONDefault  *UnexpectedError
 }
 
 // Status returns HTTPResponse.Status
@@ -1707,8 +1752,8 @@ type AssignManagerResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON201      *AssignManagerResult
-	JSON403      *ErrorResponse
-	JSONDefault  *ErrorResponse
+	JSON403      *Forbidden
+	JSONDefault  *UnexpectedError
 }
 
 // Status returns HTTPResponse.Status
@@ -1731,8 +1776,8 @@ type RemoveManagerResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *MessageResponse
-	JSON403      *ErrorResponse
-	JSONDefault  *ErrorResponse
+	JSON403      *Forbidden
+	JSONDefault  *UnexpectedError
 }
 
 // Status returns HTTPResponse.Status
@@ -1757,7 +1802,7 @@ type SubmitCreatorApplicationResponse struct {
 	JSON201      *CreatorApplicationSubmitResult
 	JSON409      *ErrorResponse
 	JSON422      *ErrorResponse
-	JSONDefault  *ErrorResponse
+	JSONDefault  *UnexpectedError
 }
 
 // Status returns HTTPResponse.Status
@@ -1776,14 +1821,39 @@ func (r SubmitCreatorApplicationResponse) StatusCode() int {
 	return 0
 }
 
+type GetCreatorApplicationsCountsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *CreatorApplicationsCountsResult
+	JSON401      *ErrorResponse
+	JSON403      *Forbidden
+	JSONDefault  *UnexpectedError
+}
+
+// Status returns HTTPResponse.Status
+func (r GetCreatorApplicationsCountsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetCreatorApplicationsCountsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type ListCreatorApplicationsResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *CreatorApplicationsListResult
 	JSON401      *ErrorResponse
-	JSON403      *ErrorResponse
+	JSON403      *Forbidden
 	JSON422      *ErrorResponse
-	JSONDefault  *ErrorResponse
+	JSONDefault  *UnexpectedError
 }
 
 // Status returns HTTPResponse.Status
@@ -1807,9 +1877,9 @@ type GetCreatorApplicationResponse struct {
 	HTTPResponse *http.Response
 	JSON200      *GetCreatorApplicationResult
 	JSON401      *ErrorResponse
-	JSON403      *ErrorResponse
+	JSON403      *Forbidden
 	JSON404      *ErrorResponse
-	JSONDefault  *ErrorResponse
+	JSONDefault  *UnexpectedError
 }
 
 // Status returns HTTPResponse.Status
@@ -1833,7 +1903,7 @@ type ListDictionaryResponse struct {
 	HTTPResponse *http.Response
 	JSON200      *DictionaryListResult
 	JSON404      *ErrorResponse
-	JSONDefault  *ErrorResponse
+	JSONDefault  *UnexpectedError
 }
 
 // Status returns HTTPResponse.Status
@@ -1856,7 +1926,7 @@ type HealthCheckResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON200      *HealthResponse
-	JSONDefault  *ErrorResponse
+	JSONDefault  *UnexpectedError
 }
 
 // Status returns HTTPResponse.Status
@@ -2066,6 +2136,15 @@ func (c *ClientWithResponses) SubmitCreatorApplicationWithResponse(ctx context.C
 	return ParseSubmitCreatorApplicationResponse(rsp)
 }
 
+// GetCreatorApplicationsCountsWithResponse request returning *GetCreatorApplicationsCountsResponse
+func (c *ClientWithResponses) GetCreatorApplicationsCountsWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*GetCreatorApplicationsCountsResponse, error) {
+	rsp, err := c.GetCreatorApplicationsCounts(ctx, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetCreatorApplicationsCountsResponse(rsp)
+}
+
 // ListCreatorApplicationsWithBodyWithResponse request with arbitrary body returning *ListCreatorApplicationsResponse
 func (c *ClientWithResponses) ListCreatorApplicationsWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ListCreatorApplicationsResponse, error) {
 	rsp, err := c.ListCreatorApplicationsWithBody(ctx, contentType, body, reqEditors...)
@@ -2132,14 +2211,14 @@ func ParseListAuditLogsResponse(rsp *http.Response) (*ListAuditLogsResponse, err
 		response.JSON200 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
-		var dest ErrorResponse
+		var dest Forbidden
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON403 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
-		var dest ErrorResponse
+		var dest UnexpectedError
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -2186,7 +2265,7 @@ func ParseLoginResponse(rsp *http.Response) (*LoginResponse, error) {
 		response.JSON422 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
-		var dest ErrorResponse
+		var dest UnexpectedError
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -2219,7 +2298,7 @@ func ParseLogoutResponse(rsp *http.Response) (*LogoutResponse, error) {
 		response.JSON200 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
-		var dest ErrorResponse
+		var dest UnexpectedError
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -2259,7 +2338,7 @@ func ParseGetMeResponse(rsp *http.Response) (*GetMeResponse, error) {
 		response.JSON401 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
-		var dest ErrorResponse
+		var dest UnexpectedError
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -2306,7 +2385,7 @@ func ParseResetPasswordResponse(rsp *http.Response) (*ResetPasswordResponse, err
 		response.JSON422 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
-		var dest ErrorResponse
+		var dest UnexpectedError
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -2339,7 +2418,7 @@ func ParseRequestPasswordResetResponse(rsp *http.Response) (*RequestPasswordRese
 		response.JSON200 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
-		var dest ErrorResponse
+		var dest UnexpectedError
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -2379,7 +2458,7 @@ func ParseRefreshTokenResponse(rsp *http.Response) (*RefreshTokenResponse, error
 		response.JSON401 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
-		var dest ErrorResponse
+		var dest UnexpectedError
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -2412,7 +2491,7 @@ func ParseListBrandsResponse(rsp *http.Response) (*ListBrandsResponse, error) {
 		response.JSON200 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
-		var dest ErrorResponse
+		var dest UnexpectedError
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -2445,7 +2524,7 @@ func ParseCreateBrandResponse(rsp *http.Response) (*CreateBrandResponse, error) 
 		response.JSON201 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
-		var dest ErrorResponse
+		var dest Forbidden
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -2459,7 +2538,7 @@ func ParseCreateBrandResponse(rsp *http.Response) (*CreateBrandResponse, error) 
 		response.JSON422 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
-		var dest ErrorResponse
+		var dest UnexpectedError
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -2492,7 +2571,7 @@ func ParseDeleteBrandResponse(rsp *http.Response) (*DeleteBrandResponse, error) 
 		response.JSON200 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
-		var dest ErrorResponse
+		var dest Forbidden
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -2506,7 +2585,7 @@ func ParseDeleteBrandResponse(rsp *http.Response) (*DeleteBrandResponse, error) 
 		response.JSON404 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
-		var dest ErrorResponse
+		var dest UnexpectedError
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -2539,7 +2618,7 @@ func ParseGetBrandResponse(rsp *http.Response) (*GetBrandResponse, error) {
 		response.JSON200 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
-		var dest ErrorResponse
+		var dest Forbidden
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -2553,7 +2632,7 @@ func ParseGetBrandResponse(rsp *http.Response) (*GetBrandResponse, error) {
 		response.JSON404 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
-		var dest ErrorResponse
+		var dest UnexpectedError
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -2586,7 +2665,7 @@ func ParseUpdateBrandResponse(rsp *http.Response) (*UpdateBrandResponse, error) 
 		response.JSON200 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
-		var dest ErrorResponse
+		var dest Forbidden
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -2600,7 +2679,7 @@ func ParseUpdateBrandResponse(rsp *http.Response) (*UpdateBrandResponse, error) 
 		response.JSON422 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
-		var dest ErrorResponse
+		var dest UnexpectedError
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -2633,14 +2712,14 @@ func ParseAssignManagerResponse(rsp *http.Response) (*AssignManagerResponse, err
 		response.JSON201 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
-		var dest ErrorResponse
+		var dest Forbidden
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON403 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
-		var dest ErrorResponse
+		var dest UnexpectedError
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -2673,14 +2752,14 @@ func ParseRemoveManagerResponse(rsp *http.Response) (*RemoveManagerResponse, err
 		response.JSON200 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
-		var dest ErrorResponse
+		var dest Forbidden
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
 		response.JSON403 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
-		var dest ErrorResponse
+		var dest UnexpectedError
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -2727,7 +2806,54 @@ func ParseSubmitCreatorApplicationResponse(rsp *http.Response) (*SubmitCreatorAp
 		response.JSON422 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest UnexpectedError
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetCreatorApplicationsCountsResponse parses an HTTP response from a GetCreatorApplicationsCountsWithResponse call
+func ParseGetCreatorApplicationsCountsResponse(rsp *http.Response) (*GetCreatorApplicationsCountsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetCreatorApplicationsCountsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest CreatorApplicationsCountsResult
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
 		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest UnexpectedError
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -2767,7 +2893,7 @@ func ParseListCreatorApplicationsResponse(rsp *http.Response) (*ListCreatorAppli
 		response.JSON401 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
-		var dest ErrorResponse
+		var dest Forbidden
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -2781,7 +2907,7 @@ func ParseListCreatorApplicationsResponse(rsp *http.Response) (*ListCreatorAppli
 		response.JSON422 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
-		var dest ErrorResponse
+		var dest UnexpectedError
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -2821,7 +2947,7 @@ func ParseGetCreatorApplicationResponse(rsp *http.Response) (*GetCreatorApplicat
 		response.JSON401 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
-		var dest ErrorResponse
+		var dest Forbidden
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -2835,7 +2961,7 @@ func ParseGetCreatorApplicationResponse(rsp *http.Response) (*GetCreatorApplicat
 		response.JSON404 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
-		var dest ErrorResponse
+		var dest UnexpectedError
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -2875,7 +3001,7 @@ func ParseListDictionaryResponse(rsp *http.Response) (*ListDictionaryResponse, e
 		response.JSON404 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
-		var dest ErrorResponse
+		var dest UnexpectedError
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
@@ -2908,7 +3034,7 @@ func ParseHealthCheckResponse(rsp *http.Response) (*HealthCheckResponse, error) 
 		response.JSON200 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
-		var dest ErrorResponse
+		var dest UnexpectedError
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}

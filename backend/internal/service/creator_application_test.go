@@ -1100,3 +1100,76 @@ func TestCreatorApplicationService_List(t *testing.T) {
 		}, page)
 	})
 }
+
+func TestCreatorApplicationService_Counts(t *testing.T) {
+	t.Parallel()
+
+	t.Run("repo error wrapped with context", func(t *testing.T) {
+		t.Parallel()
+		rig := newCreatorServiceRig(t)
+		rig.factory.EXPECT().NewCreatorApplicationRepo(mock.Anything).Return(rig.appRepo)
+		rig.appRepo.EXPECT().Counts(mock.Anything).Return(nil, errors.New("db down"))
+
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.logger)
+		got, err := svc.Counts(context.Background())
+		require.ErrorContains(t, err, "counts applications")
+		require.ErrorContains(t, err, "db down")
+		require.Nil(t, got)
+	})
+
+	t.Run("empty repo result returns empty map", func(t *testing.T) {
+		t.Parallel()
+		rig := newCreatorServiceRig(t)
+		rig.factory.EXPECT().NewCreatorApplicationRepo(mock.Anything).Return(rig.appRepo)
+		rig.appRepo.EXPECT().Counts(mock.Anything).Return(map[string]int64{}, nil)
+
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.logger)
+		got, err := svc.Counts(context.Background())
+		require.NoError(t, err)
+		require.Equal(t, map[string]int64{}, got)
+	})
+
+	t.Run("known statuses pass through verbatim", func(t *testing.T) {
+		t.Parallel()
+		rig := newCreatorServiceRig(t)
+		rig.factory.EXPECT().NewCreatorApplicationRepo(mock.Anything).Return(rig.appRepo)
+		rig.appRepo.EXPECT().Counts(mock.Anything).Return(map[string]int64{
+			domain.CreatorApplicationStatusVerification: 3,
+			domain.CreatorApplicationStatusModeration:   1,
+			domain.CreatorApplicationStatusRejected:     2,
+		}, nil)
+
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.logger)
+		got, err := svc.Counts(context.Background())
+		require.NoError(t, err)
+		require.Equal(t, map[string]int64{
+			domain.CreatorApplicationStatusVerification: 3,
+			domain.CreatorApplicationStatusModeration:   1,
+			domain.CreatorApplicationStatusRejected:     2,
+		}, got)
+	})
+
+	t.Run("unknown status from rolling deploy is dropped with warn log", func(t *testing.T) {
+		t.Parallel()
+		rig := newCreatorServiceRig(t)
+		rig.factory.EXPECT().NewCreatorApplicationRepo(mock.Anything).Return(rig.appRepo)
+		rig.appRepo.EXPECT().Counts(mock.Anything).Return(map[string]int64{
+			domain.CreatorApplicationStatusVerification: 5,
+			"future_status": 9,
+		}, nil)
+		rig.logger.EXPECT().Warn(mock.Anything,
+			"creator application counts: dropping unknown status",
+			mock.MatchedBy(func(args []any) bool {
+				return len(args) == 4 &&
+					args[0] == "status" && args[1] == "future_status" &&
+					args[2] == "count" && args[3] == int64(9)
+			})).Once()
+
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.logger)
+		got, err := svc.Counts(context.Background())
+		require.NoError(t, err)
+		require.Equal(t, map[string]int64{
+			domain.CreatorApplicationStatusVerification: 5,
+		}, got)
+	})
+}

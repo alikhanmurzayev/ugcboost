@@ -202,6 +202,57 @@ func (_c *MockAuthzService_CanDeleteBrand_Call) RunAndReturn(run func(ctx contex
 	return _c
 }
 
+// CanGetCreatorApplicationsCounts provides a mock function for the type MockAuthzService
+func (_mock *MockAuthzService) CanGetCreatorApplicationsCounts(ctx context.Context) error {
+	ret := _mock.Called(ctx)
+
+	if len(ret) == 0 {
+		panic("no return value specified for CanGetCreatorApplicationsCounts")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context) error); ok {
+		r0 = returnFunc(ctx)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockAuthzService_CanGetCreatorApplicationsCounts_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'CanGetCreatorApplicationsCounts'
+type MockAuthzService_CanGetCreatorApplicationsCounts_Call struct {
+	*mock.Call
+}
+
+// CanGetCreatorApplicationsCounts is a helper method to define mock.On call
+//   - ctx context.Context
+func (_e *MockAuthzService_Expecter) CanGetCreatorApplicationsCounts(ctx interface{}) *MockAuthzService_CanGetCreatorApplicationsCounts_Call {
+	return &MockAuthzService_CanGetCreatorApplicationsCounts_Call{Call: _e.mock.On("CanGetCreatorApplicationsCounts", ctx)}
+}
+
+func (_c *MockAuthzService_CanGetCreatorApplicationsCounts_Call) Run(run func(ctx context.Context)) *MockAuthzService_CanGetCreatorApplicationsCounts_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		run(
+			arg0,
+		)
+	})
+	return _c
+}
+
+func (_c *MockAuthzService_CanGetCreatorApplicationsCounts_Call) Return(err error) *MockAuthzService_CanGetCreatorApplicationsCounts_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockAuthzService_CanGetCreatorApplicationsCounts_Call) RunAndReturn(run func(ctx context.Context) error) *MockAuthzService_CanGetCreatorApplicationsCounts_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // CanListAuditLogs provides a mock function for the type MockAuthzService
 func (_mock *MockAuthzService) CanListAuditLogs(ctx context.Context) error {
 	ret := _mock.Called(ctx)

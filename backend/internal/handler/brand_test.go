@@ -25,7 +25,7 @@ func TestServer_CreateBrand(t *testing.T) {
 
 		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/brands",
-			api.CreateBrandRequest{Name: "Test"})
+			api.BrandInput{Name: "Test"})
 		require.Equal(t, http.StatusForbidden, w.Code)
 		require.Equal(t, domain.CodeForbidden, resp.Error.Code)
 	})
@@ -54,7 +54,7 @@ func TestServer_CreateBrand(t *testing.T) {
 
 		router := newTestRouter(t, NewServer(nil, brands, authz, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/brands",
-			api.CreateBrandRequest{Name: ""})
+			api.BrandInput{Name: ""})
 		require.Equal(t, http.StatusUnprocessableEntity, w.Code)
 		require.Equal(t, domain.CodeValidation, resp.Error.Code)
 	})
@@ -74,7 +74,7 @@ func TestServer_CreateBrand(t *testing.T) {
 
 		router := newTestRouter(t, NewServer(nil, brands, authz, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.BrandResult](t, router, http.MethodPost, "/brands",
-			api.CreateBrandRequest{Name: "Test Brand", LogoUrl: &logoURL})
+			api.BrandInput{Name: "Test Brand", LogoUrl: &logoURL})
 		require.Equal(t, http.StatusCreated, w.Code)
 		require.Equal(t, api.BrandResult{
 			Data: api.Brand{
@@ -240,7 +240,7 @@ func TestServer_UpdateBrand(t *testing.T) {
 
 		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, _ := doJSON[api.ErrorResponse](t, router, http.MethodPut, "/brands/b-1",
-			api.UpdateBrandRequest{Name: "X"})
+			api.BrandInput{Name: "X"})
 		require.Equal(t, http.StatusForbidden, w.Code)
 	})
 
@@ -266,7 +266,7 @@ func TestServer_UpdateBrand(t *testing.T) {
 
 		router := newTestRouter(t, NewServer(nil, brands, authz, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, _ := doJSON[api.ErrorResponse](t, router, http.MethodPut, "/brands/b-1",
-			api.UpdateBrandRequest{Name: "X"})
+			api.BrandInput{Name: "X"})
 		require.Equal(t, http.StatusNotFound, w.Code)
 	})
 
@@ -284,7 +284,7 @@ func TestServer_UpdateBrand(t *testing.T) {
 
 		router := newTestRouter(t, NewServer(nil, brands, authz, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.BrandResult](t, router, http.MethodPut, "/brands/b-1",
-			api.UpdateBrandRequest{Name: "New Name"})
+			api.BrandInput{Name: "New Name"})
 		require.Equal(t, http.StatusOK, w.Code)
 		require.Equal(t, api.BrandResult{
 			Data: api.Brand{

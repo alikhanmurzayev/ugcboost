@@ -101,8 +101,8 @@ func TestServer_ListAuditLogs(t *testing.T) {
 			}, int64(1), nil)
 
 		router := newTestRouter(t, NewServer(nil, nil, authz, audit, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
-		url := "/audit-logs?actor_id=u-1&entity_type=brand&entity_id=e-1&action=brand_update" +
-			"&date_from=2026-01-01T00:00:00Z&date_to=2026-12-31T23:59:59Z&page=2&per_page=50"
+		url := "/audit-logs?actorId=u-1&entityType=brand&entityId=e-1&action=brand_update" +
+			"&dateFrom=2026-01-01T00:00:00Z&dateTo=2026-12-31T23:59:59Z&page=2&perPage=50"
 		w, resp := doJSON[api.AuditLogsResult](t, router, http.MethodGet, url, nil)
 		require.Equal(t, http.StatusOK, w.Code)
 		require.Equal(t, api.AuditLogsResult{

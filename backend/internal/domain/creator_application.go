@@ -323,6 +323,34 @@ type CreatorApplicationListPage struct {
 	PerPage int
 }
 
+// CreatorApplicationAllStatuses is the canonical list of every legal status
+// value (active + terminal). Use this instead of an ad-hoc literal list when a
+// caller needs to validate that an external status string belongs to the
+// state machine — e.g. when filtering counts coming back from the DB during
+// a rolling deployment where a newer pod could have written a status the
+// older pod does not yet recognise.
+var CreatorApplicationAllStatuses = []string{
+	CreatorApplicationStatusVerification,
+	CreatorApplicationStatusModeration,
+	CreatorApplicationStatusAwaitingContract,
+	CreatorApplicationStatusContractSent,
+	CreatorApplicationStatusSigned,
+	CreatorApplicationStatusRejected,
+	CreatorApplicationStatusWithdrawn,
+}
+
+// IsValidCreatorApplicationStatus reports whether s is one of the seven
+// canonical lifecycle statuses. The check is whitelist-based so a typo or a
+// newly-added status (rolling deploy) is rejected, not silently accepted.
+func IsValidCreatorApplicationStatus(s string) bool {
+	for _, v := range CreatorApplicationAllStatuses {
+		if s == v {
+			return true
+		}
+	}
+	return false
+}
+
 // DocumentVersionFor returns the document version stamp recorded against the
 // given consent type. Both processing and third_party / cross_border consents
 // reference the privacy policy; terms references the user agreement.

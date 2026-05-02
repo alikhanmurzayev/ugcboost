@@ -499,13 +499,13 @@ func TestServer_GetCreatorApplication(t *testing.T) {
 				Iin:               "950515312348",
 				BirthDate:         openapi_types.Date{Time: birth},
 				Phone:             "+77001234567",
-				City:              api.CreatorApplicationDetailCity{Code: "almaty", Name: "Алматы", SortOrder: 100},
+				City:              api.DictionaryItem{Code: "almaty", Name: "Алматы", SortOrder: 100},
 				Address:           pointer.ToString("ул. Абая 1"),
 				CategoryOtherText: pointer.ToString("Авторские ASMR"),
-				Status:            api.CreatorApplicationDetailDataStatusVerification,
+				Status:            api.Verification,
 				CreatedAt:         created,
 				UpdatedAt:         updated,
-				Categories: []api.CreatorApplicationDetailCategory{
+				Categories: []api.DictionaryItem{
 					{Code: "beauty", Name: "Красота", SortOrder: 10},
 					{Code: "fashion", Name: "Мода", SortOrder: 20},
 				},
@@ -566,11 +566,11 @@ func TestServer_GetCreatorApplication(t *testing.T) {
 		// the active "beauty" still resolves correctly. After the in-memory
 		// sort by (sortOrder, code), the deactivated entry (sortOrder 0) wins
 		// over "beauty" (sortOrder 10) — vintage_asmr comes first.
-		require.Equal(t, []api.CreatorApplicationDetailCategory{
+		require.Equal(t, []api.DictionaryItem{
 			{Code: "vintage_asmr", Name: "vintage_asmr", SortOrder: 0},
 			{Code: "beauty", Name: "Красота", SortOrder: 10},
 		}, resp.Data.Categories)
-		require.Equal(t, api.CreatorApplicationDetailCity{
+		require.Equal(t, api.DictionaryItem{
 			Code: "atyrau", Name: "atyrau", SortOrder: 0,
 		}, resp.Data.City)
 	})
@@ -581,15 +581,15 @@ func TestMapCreatorApplicationStatusToAPI(t *testing.T) {
 
 	cases := []struct {
 		domainValue string
-		apiValue    api.CreatorApplicationDetailDataStatus
+		apiValue    api.CreatorApplicationStatus
 	}{
-		{domain.CreatorApplicationStatusVerification, api.CreatorApplicationDetailDataStatusVerification},
-		{domain.CreatorApplicationStatusModeration, api.CreatorApplicationDetailDataStatusModeration},
-		{domain.CreatorApplicationStatusAwaitingContract, api.CreatorApplicationDetailDataStatusAwaitingContract},
-		{domain.CreatorApplicationStatusContractSent, api.CreatorApplicationDetailDataStatusContractSent},
-		{domain.CreatorApplicationStatusSigned, api.CreatorApplicationDetailDataStatusSigned},
-		{domain.CreatorApplicationStatusRejected, api.CreatorApplicationDetailDataStatusRejected},
-		{domain.CreatorApplicationStatusWithdrawn, api.CreatorApplicationDetailDataStatusWithdrawn},
+		{domain.CreatorApplicationStatusVerification, api.Verification},
+		{domain.CreatorApplicationStatusModeration, api.Moderation},
+		{domain.CreatorApplicationStatusAwaitingContract, api.AwaitingContract},
+		{domain.CreatorApplicationStatusContractSent, api.ContractSent},
+		{domain.CreatorApplicationStatusSigned, api.Signed},
+		{domain.CreatorApplicationStatusRejected, api.Rejected},
+		{domain.CreatorApplicationStatusWithdrawn, api.Withdrawn},
 	}
 	for _, tc := range cases {
 		t.Run(tc.domainValue, func(t *testing.T) {
@@ -607,23 +607,6 @@ func TestMapCreatorApplicationStatusToAPI(t *testing.T) {
 	})
 }
 
-func TestMapCreatorApplicationStatusToListItemAPI(t *testing.T) {
-	t.Parallel()
-
-	t.Run("known status casts to list-item enum", func(t *testing.T) {
-		t.Parallel()
-		got, err := mapCreatorApplicationStatusToListItemAPI(domain.CreatorApplicationStatusVerification)
-		require.NoError(t, err)
-		require.Equal(t, api.CreatorApplicationListItemStatusVerification, got)
-	})
-
-	t.Run("unknown status surfaces error", func(t *testing.T) {
-		t.Parallel()
-		_, err := mapCreatorApplicationStatusToListItemAPI("ghost")
-		require.ErrorContains(t, err, "ghost")
-	})
-}
-
 func TestApiListStatusesToDomain(t *testing.T) {
 	t.Parallel()
 
@@ -636,7 +619,7 @@ func TestApiListStatusesToDomain(t *testing.T) {
 
 	t.Run("empty slice returns nil", func(t *testing.T) {
 		t.Parallel()
-		empty := []api.CreatorApplicationsListRequestStatuses{}
+		empty := []api.CreatorApplicationStatus{}
 		out, err := apiListStatusesToDomain(&empty)
 		require.NoError(t, err)
 		require.Nil(t, out)
@@ -644,7 +627,7 @@ func TestApiListStatusesToDomain(t *testing.T) {
 
 	t.Run("known statuses dedup preserved order", func(t *testing.T) {
 		t.Parallel()
-		in := []api.CreatorApplicationsListRequestStatuses{
+		in := []api.CreatorApplicationStatus{
 			api.Verification, api.Moderation, api.Verification,
 		}
 		out, err := apiListStatusesToDomain(&in)
@@ -654,7 +637,7 @@ func TestApiListStatusesToDomain(t *testing.T) {
 
 	t.Run("unknown status surfaces 422", func(t *testing.T) {
 		t.Parallel()
-		bad := []api.CreatorApplicationsListRequestStatuses{api.Verification, "ghost"}
+		bad := []api.CreatorApplicationStatus{api.Verification, "ghost"}
 		_, err := apiListStatusesToDomain(&bad)
 		var ve *domain.ValidationError
 		require.ErrorAs(t, err, &ve)
@@ -714,7 +697,7 @@ func TestServer_ListCreatorApplications(t *testing.T) {
 			b.DateTo = &to
 		}, "dateFrom"},
 		{"invalid status item returns 422", func(b *api.CreatorApplicationsListRequest) {
-			statuses := []api.CreatorApplicationsListRequestStatuses{api.Verification, "ghost"}
+			statuses := []api.CreatorApplicationStatus{api.Verification, "ghost"}
 			b.Statuses = &statuses
 		}, "ghost"},
 		{"validation: search > 128 runes returns 422", func(b *api.CreatorApplicationsListRequest) {
@@ -876,7 +859,7 @@ func TestServer_ListCreatorApplications(t *testing.T) {
 			}, nil)
 
 		body := validListBody()
-		statuses := []api.CreatorApplicationsListRequestStatuses{api.Verification, api.Moderation}
+		statuses := []api.CreatorApplicationStatus{api.Verification, api.Moderation}
 		cities := []string{"almaty", "astana"}
 		categories := []string{"beauty"}
 		body.Statuses = &statuses
@@ -915,13 +898,13 @@ func TestServer_ListCreatorApplications(t *testing.T) {
 			Data: api.CreatorApplicationsListData{
 				Items: []api.CreatorApplicationListItem{{
 					Id:         appID,
-					Status:     api.CreatorApplicationListItemStatusVerification,
+					Status:     api.Verification,
 					LastName:   "Муратова",
 					FirstName:  "Айдана",
 					MiddleName: pointer.ToString("Ивановна"),
 					BirthDate:  openapi_types.Date{Time: birth},
-					City:       api.CreatorApplicationDetailCity{Code: "almaty", Name: "Алматы", SortOrder: 100},
-					Categories: []api.CreatorApplicationDetailCategory{
+					City:       api.DictionaryItem{Code: "almaty", Name: "Алматы", SortOrder: 100},
+					Categories: []api.DictionaryItem{
 						{Code: "beauty", Name: "Красота", SortOrder: 10},
 						{Code: "fashion", Name: "Мода", SortOrder: 20},
 					},
@@ -1045,5 +1028,112 @@ func TestEscapeLikeWildcards_Handler(t *testing.T) {
 		out, err := validateCodeArray("cities", &in, 64)
 		require.NoError(t, err)
 		require.Equal(t, []string{"a", "b"}, out)
+	})
+}
+
+func TestSortDictionaryItem(t *testing.T) {
+	t.Parallel()
+
+	t.Run("different sort_order: lower comes first regardless of code", func(t *testing.T) {
+		t.Parallel()
+		got := sortDictionaryItem(
+			api.DictionaryItem{Code: "zzz", SortOrder: 1},
+			api.DictionaryItem{Code: "aaa", SortOrder: 5},
+		)
+		require.Negative(t, got)
+	})
+
+	t.Run("equal sort_order falls back to code asc", func(t *testing.T) {
+		t.Parallel()
+		got := sortDictionaryItem(
+			api.DictionaryItem{Code: "aaa", SortOrder: 1},
+			api.DictionaryItem{Code: "bbb", SortOrder: 1},
+		)
+		require.Negative(t, got)
+	})
+
+	t.Run("equal in both fields returns zero", func(t *testing.T) {
+		t.Parallel()
+		got := sortDictionaryItem(
+			api.DictionaryItem{Code: "x", SortOrder: 1},
+			api.DictionaryItem{Code: "x", SortOrder: 1},
+		)
+		require.Zero(t, got)
+	})
+}
+
+func TestServer_GetCreatorApplicationsCounts(t *testing.T) {
+	t.Parallel()
+
+	const countsPath = "/creators/applications/counts"
+
+	t.Run("forbidden for manager — service is not consulted", func(t *testing.T) {
+		t.Parallel()
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanGetCreatorApplicationsCounts(mock.Anything).Return(domain.ErrForbidden)
+
+		router := newTestRouter(t, serverWithAuthzAndCreatorAndDict(t, authz, nil, nil, logmocks.NewMockLogger(t)))
+		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodGet, countsPath, nil)
+		require.Equal(t, http.StatusForbidden, w.Code)
+		require.Equal(t, domain.CodeForbidden, resp.Error.Code)
+	})
+
+	t.Run("service error surfaces as 500", func(t *testing.T) {
+		t.Parallel()
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanGetCreatorApplicationsCounts(mock.Anything).Return(nil)
+		creator := mocks.NewMockCreatorApplicationService(t)
+		creator.EXPECT().Counts(mock.Anything).Return(nil, errors.New("db boom"))
+		log := logmocks.NewMockLogger(t)
+		expectHandlerUnexpectedErrorLog(log, countsPath)
+
+		router := newTestRouter(t, serverWithAuthzAndCreatorAndDict(t, authz, creator, nil, log))
+		w, _ := doJSON[api.ErrorResponse](t, router, http.MethodGet, countsPath, nil)
+		require.Equal(t, http.StatusInternalServerError, w.Code)
+	})
+
+	t.Run("admin success — empty map yields empty items", func(t *testing.T) {
+		t.Parallel()
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanGetCreatorApplicationsCounts(mock.Anything).Return(nil)
+		creator := mocks.NewMockCreatorApplicationService(t)
+		creator.EXPECT().Counts(mock.Anything).Return(map[string]int64{}, nil)
+
+		router := newTestRouter(t, serverWithAuthzAndCreatorAndDict(t, authz, creator, nil, logmocks.NewMockLogger(t)))
+		w, resp := doJSON[api.CreatorApplicationsCountsResult](t, router, http.MethodGet, countsPath, nil)
+		require.Equal(t, http.StatusOK, w.Code)
+		require.Equal(t, api.CreatorApplicationsCountsResult{
+			Data: api.CreatorApplicationsCountsData{
+				Items: []api.CreatorApplicationStatusCount{},
+			},
+		}, resp)
+	})
+
+	t.Run("admin success — items sorted alphabetically by status", func(t *testing.T) {
+		t.Parallel()
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanGetCreatorApplicationsCounts(mock.Anything).Return(nil)
+		creator := mocks.NewMockCreatorApplicationService(t)
+		// Map iteration order is non-deterministic — handler MUST sort the
+		// resulting slice. Mock returns three statuses out of order; assert
+		// the wire payload is alphabetically sorted.
+		creator.EXPECT().Counts(mock.Anything).Return(map[string]int64{
+			domain.CreatorApplicationStatusVerification: 5,
+			domain.CreatorApplicationStatusModeration:   2,
+			domain.CreatorApplicationStatusRejected:     1,
+		}, nil)
+
+		router := newTestRouter(t, serverWithAuthzAndCreatorAndDict(t, authz, creator, nil, logmocks.NewMockLogger(t)))
+		w, resp := doJSON[api.CreatorApplicationsCountsResult](t, router, http.MethodGet, countsPath, nil)
+		require.Equal(t, http.StatusOK, w.Code)
+		require.Equal(t, api.CreatorApplicationsCountsResult{
+			Data: api.CreatorApplicationsCountsData{
+				Items: []api.CreatorApplicationStatusCount{
+					{Status: api.Moderation, Count: 2},
+					{Status: api.Rejected, Count: 1},
+					{Status: api.Verification, Count: 5},
+				},
+			},
+		}, resp)
 	})
 }

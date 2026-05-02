@@ -686,6 +686,58 @@ func TestCreatorApplicationRepository_List(t *testing.T) {
 	})
 }
 
+func TestCreatorApplicationRepository_Counts(t *testing.T) {
+	t.Parallel()
+
+	const sqlStmt = "SELECT status, COUNT(*) AS count FROM creator_applications GROUP BY status"
+
+	t.Run("success returns map of status→count", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &creatorApplicationRepository{db: mock}
+
+		mock.ExpectQuery(sqlStmt).
+			WillReturnRows(pgxmock.NewRows([]string{"status", "count"}).
+				AddRow("verification", int64(3)).
+				AddRow("moderation", int64(1)).
+				AddRow("rejected", int64(2)))
+
+		got, err := repo.Counts(context.Background())
+		require.NoError(t, err)
+		require.Equal(t, map[string]int64{
+			"verification": 3,
+			"moderation":   1,
+			"rejected":     2,
+		}, got)
+	})
+
+	t.Run("empty table returns empty map", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &creatorApplicationRepository{db: mock}
+
+		mock.ExpectQuery(sqlStmt).
+			WillReturnRows(pgxmock.NewRows([]string{"status", "count"}))
+
+		got, err := repo.Counts(context.Background())
+		require.NoError(t, err)
+		require.Empty(t, got)
+	})
+
+	t.Run("query error is propagated wrapped", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &creatorApplicationRepository{db: mock}
+
+		mock.ExpectQuery(sqlStmt).
+			WillReturnError(errors.New("db exploded"))
+
+		got, err := repo.Counts(context.Background())
+		require.ErrorContains(t, err, "db exploded")
+		require.Nil(t, got)
+	})
+}
+
 func TestCreatorApplicationRepository_DeleteForTests(t *testing.T) {
 	t.Parallel()
 
