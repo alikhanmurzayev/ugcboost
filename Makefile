@@ -134,7 +134,7 @@ test-unit-tma:
 	cd frontend/tma && npm test -- --run
 
 test-unit-landing:
-	cd frontend/landing && npm test -- --run --passWithNoTests
+	cd frontend/landing && npm test -- --run
 
 test-e2e-backend: start-backend
 	cd backend/e2e && go test ./... -count=1 -v -race -timeout 5m
