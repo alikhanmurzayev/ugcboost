@@ -13,16 +13,16 @@ const (
 	BearerAuthScopes = "bearerAuth.Scopes"
 )
 
-// Defines values for CreatorApplicationDetailConsentConsentType.
+// Defines values for ConsentType.
 const (
-	CrossBorder CreatorApplicationDetailConsentConsentType = "cross_border"
-	Processing  CreatorApplicationDetailConsentConsentType = "processing"
-	Terms       CreatorApplicationDetailConsentConsentType = "terms"
-	ThirdParty  CreatorApplicationDetailConsentConsentType = "third_party"
+	CrossBorder ConsentType = "cross_border"
+	Processing  ConsentType = "processing"
+	Terms       ConsentType = "terms"
+	ThirdParty  ConsentType = "third_party"
 )
 
-// Valid indicates whether the value is a known member of the CreatorApplicationDetailConsentConsentType enum.
-func (e CreatorApplicationDetailConsentConsentType) Valid() bool {
+// Valid indicates whether the value is a known member of the ConsentType enum.
+func (e ConsentType) Valid() bool {
 	switch e {
 	case CrossBorder:
 		return true
@@ -31,72 +31,6 @@ func (e CreatorApplicationDetailConsentConsentType) Valid() bool {
 	case Terms:
 		return true
 	case ThirdParty:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for CreatorApplicationDetailDataStatus.
-const (
-	CreatorApplicationDetailDataStatusAwaitingContract CreatorApplicationDetailDataStatus = "awaiting_contract"
-	CreatorApplicationDetailDataStatusContractSent     CreatorApplicationDetailDataStatus = "contract_sent"
-	CreatorApplicationDetailDataStatusModeration       CreatorApplicationDetailDataStatus = "moderation"
-	CreatorApplicationDetailDataStatusRejected         CreatorApplicationDetailDataStatus = "rejected"
-	CreatorApplicationDetailDataStatusSigned           CreatorApplicationDetailDataStatus = "signed"
-	CreatorApplicationDetailDataStatusVerification     CreatorApplicationDetailDataStatus = "verification"
-	CreatorApplicationDetailDataStatusWithdrawn        CreatorApplicationDetailDataStatus = "withdrawn"
-)
-
-// Valid indicates whether the value is a known member of the CreatorApplicationDetailDataStatus enum.
-func (e CreatorApplicationDetailDataStatus) Valid() bool {
-	switch e {
-	case CreatorApplicationDetailDataStatusAwaitingContract:
-		return true
-	case CreatorApplicationDetailDataStatusContractSent:
-		return true
-	case CreatorApplicationDetailDataStatusModeration:
-		return true
-	case CreatorApplicationDetailDataStatusRejected:
-		return true
-	case CreatorApplicationDetailDataStatusSigned:
-		return true
-	case CreatorApplicationDetailDataStatusVerification:
-		return true
-	case CreatorApplicationDetailDataStatusWithdrawn:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for CreatorApplicationListItemStatus.
-const (
-	CreatorApplicationListItemStatusAwaitingContract CreatorApplicationListItemStatus = "awaiting_contract"
-	CreatorApplicationListItemStatusContractSent     CreatorApplicationListItemStatus = "contract_sent"
-	CreatorApplicationListItemStatusModeration       CreatorApplicationListItemStatus = "moderation"
-	CreatorApplicationListItemStatusRejected         CreatorApplicationListItemStatus = "rejected"
-	CreatorApplicationListItemStatusSigned           CreatorApplicationListItemStatus = "signed"
-	CreatorApplicationListItemStatusVerification     CreatorApplicationListItemStatus = "verification"
-	CreatorApplicationListItemStatusWithdrawn        CreatorApplicationListItemStatus = "withdrawn"
-)
-
-// Valid indicates whether the value is a known member of the CreatorApplicationListItemStatus enum.
-func (e CreatorApplicationListItemStatus) Valid() bool {
-	switch e {
-	case CreatorApplicationListItemStatusAwaitingContract:
-		return true
-	case CreatorApplicationListItemStatusContractSent:
-		return true
-	case CreatorApplicationListItemStatusModeration:
-		return true
-	case CreatorApplicationListItemStatusRejected:
-		return true
-	case CreatorApplicationListItemStatusSigned:
-		return true
-	case CreatorApplicationListItemStatusVerification:
-		return true
-	case CreatorApplicationListItemStatusWithdrawn:
 		return true
 	default:
 		return false
@@ -130,19 +64,19 @@ func (e CreatorApplicationListSortField) Valid() bool {
 	}
 }
 
-// Defines values for CreatorApplicationsListRequestStatuses.
+// Defines values for CreatorApplicationStatus.
 const (
-	AwaitingContract CreatorApplicationsListRequestStatuses = "awaiting_contract"
-	ContractSent     CreatorApplicationsListRequestStatuses = "contract_sent"
-	Moderation       CreatorApplicationsListRequestStatuses = "moderation"
-	Rejected         CreatorApplicationsListRequestStatuses = "rejected"
-	Signed           CreatorApplicationsListRequestStatuses = "signed"
-	Verification     CreatorApplicationsListRequestStatuses = "verification"
-	Withdrawn        CreatorApplicationsListRequestStatuses = "withdrawn"
+	AwaitingContract CreatorApplicationStatus = "awaiting_contract"
+	ContractSent     CreatorApplicationStatus = "contract_sent"
+	Moderation       CreatorApplicationStatus = "moderation"
+	Rejected         CreatorApplicationStatus = "rejected"
+	Signed           CreatorApplicationStatus = "signed"
+	Verification     CreatorApplicationStatus = "verification"
+	Withdrawn        CreatorApplicationStatus = "withdrawn"
 )
 
-// Valid indicates whether the value is a known member of the CreatorApplicationsListRequestStatuses enum.
-func (e CreatorApplicationsListRequestStatuses) Valid() bool {
+// Valid indicates whether the value is a known member of the CreatorApplicationStatus enum.
+func (e CreatorApplicationStatus) Valid() bool {
 	switch e {
 	case AwaitingContract:
 		return true
@@ -305,6 +239,12 @@ type BrandDetailData struct {
 	UpdatedAt time.Time     `json:"updatedAt"`
 }
 
+// BrandInput Mutable subset of a brand — used for create and update.
+type BrandInput struct {
+	LogoUrl *string `json:"logoUrl,omitempty"`
+	Name    string  `json:"name"`
+}
+
 // BrandListItem defines model for BrandListItem.
 type BrandListItem struct {
 	CreatedAt    time.Time `json:"createdAt"`
@@ -320,42 +260,15 @@ type BrandResult struct {
 	Data Brand `json:"data"`
 }
 
-// CreateBrandRequest defines model for CreateBrandRequest.
-type CreateBrandRequest struct {
-	LogoUrl *string `json:"logoUrl,omitempty"`
-	Name    string  `json:"name"`
-}
-
-// CreatorApplicationDetailCategory defines model for CreatorApplicationDetailCategory.
-type CreatorApplicationDetailCategory struct {
-	// Code Stable category code from the categories dictionary.
-	Code string `json:"code"`
-
-	// Name Display name at the time the read was served.
-	Name string `json:"name"`
-
-	// SortOrder Catalogue ordering hint copied from the dictionary row.
-	SortOrder int `json:"sortOrder"`
-}
-
-// CreatorApplicationDetailCity defines model for CreatorApplicationDetailCity.
-type CreatorApplicationDetailCity struct {
-	// Code Stable city code from the cities dictionary (or the raw stored value when the dictionary entry has been deactivated).
-	Code string `json:"code"`
-
-	// Name Display name resolved against the dictionary at read time. Falls back to the code when the dictionary entry no longer exists.
-	Name string `json:"name"`
-
-	// SortOrder Catalogue ordering hint from the dictionary row. Falls back to 0 for deactivated/unknown codes.
-	SortOrder int `json:"sortOrder"`
-}
+// ConsentType Canonical consent type captured at creator application submission.
+type ConsentType string
 
 // CreatorApplicationDetailConsent defines model for CreatorApplicationDetailConsent.
 type CreatorApplicationDetailConsent struct {
 	AcceptedAt time.Time `json:"acceptedAt"`
 
-	// ConsentType Canonical consent type captured at submission time.
-	ConsentType CreatorApplicationDetailConsentConsentType `json:"consentType"`
+	// ConsentType Canonical consent type captured at creator application submission.
+	ConsentType ConsentType `json:"consentType"`
 
 	// DocumentVersion Document version stamp recorded at the moment of consent.
 	DocumentVersion string `json:"documentVersion"`
@@ -367,9 +280,6 @@ type CreatorApplicationDetailConsent struct {
 	UserAgent string `json:"userAgent"`
 }
 
-// CreatorApplicationDetailConsentConsentType Canonical consent type captured at submission time.
-type CreatorApplicationDetailConsentConsentType string
-
 // CreatorApplicationDetailData defines model for CreatorApplicationDetailData.
 type CreatorApplicationDetailData struct {
 	Address *string `json:"address,omitempty"`
@@ -378,11 +288,17 @@ type CreatorApplicationDetailData struct {
 	BirthDate openapi_types.Date `json:"birthDate"`
 
 	// Categories Categories selected by the creator, sorted by sort_order then code.
-	Categories []CreatorApplicationDetailCategory `json:"categories"`
+	Categories []DictionaryItem `json:"categories"`
 
 	// CategoryOtherText Free-text niche description when categories include "other".
-	CategoryOtherText *string                      `json:"categoryOtherText,omitempty"`
-	City              CreatorApplicationDetailCity `json:"city"`
+	CategoryOtherText *string `json:"categoryOtherText,omitempty"`
+
+	// City Single entry from a public dictionary (categories, cities, etc.).
+	// Reused for the dictionary-listing endpoint and for hydrated dictionary
+	// references on creator-application reads, where the backend falls back
+	// to `(code, code, 0)` when the underlying dictionary row has been
+	// deactivated.
+	City DictionaryItem `json:"city"`
 
 	// Consents Consents in canonical order (processing → third_party → cross_border → terms),
 	// independent of the order they appear in the database.
@@ -400,17 +316,15 @@ type CreatorApplicationDetailData struct {
 	// Socials Social accounts attached to the application, sorted by platform then handle.
 	Socials []CreatorApplicationDetailSocial `json:"socials"`
 
-	// Status Application status.
-	Status CreatorApplicationDetailDataStatus `json:"status"`
+	// Status Lifecycle status of a creator application. Values follow the state
+	// machine described in `_bmad-output/planning-artifacts/creator-application-state-machine.md`.
+	Status CreatorApplicationStatus `json:"status"`
 
 	// TelegramLink Telegram account linked to this application. Null when the creator
 	// has not yet opened the bot.
 	TelegramLink *TelegramLink `json:"telegramLink,omitempty"`
 	UpdatedAt    time.Time     `json:"updatedAt"`
 }
-
-// CreatorApplicationDetailDataStatus Application status.
-type CreatorApplicationDetailDataStatus string
 
 // CreatorApplicationDetailSocial defines model for CreatorApplicationDetailSocial.
 type CreatorApplicationDetailSocial struct {
@@ -425,29 +339,49 @@ type CreatorApplicationListItem struct {
 	BirthDate openapi_types.Date `json:"birthDate"`
 
 	// Categories Categories selected by the creator, sorted by sort_order then code.
-	Categories []CreatorApplicationDetailCategory `json:"categories"`
-	City       CreatorApplicationDetailCity       `json:"city"`
-	CreatedAt  time.Time                          `json:"createdAt"`
-	FirstName  string                             `json:"firstName"`
-	Id         openapi_types.UUID                 `json:"id"`
-	LastName   string                             `json:"lastName"`
-	MiddleName *string                            `json:"middleName,omitempty"`
+	Categories []DictionaryItem `json:"categories"`
+
+	// City Single entry from a public dictionary (categories, cities, etc.).
+	// Reused for the dictionary-listing endpoint and for hydrated dictionary
+	// references on creator-application reads, where the backend falls back
+	// to `(code, code, 0)` when the underlying dictionary row has been
+	// deactivated.
+	City       DictionaryItem     `json:"city"`
+	CreatedAt  time.Time          `json:"createdAt"`
+	FirstName  string             `json:"firstName"`
+	Id         openapi_types.UUID `json:"id"`
+	LastName   string             `json:"lastName"`
+	MiddleName *string            `json:"middleName,omitempty"`
 
 	// Socials Social accounts attached to the application, sorted by platform then handle.
 	Socials []CreatorApplicationDetailSocial `json:"socials"`
-	Status  CreatorApplicationListItemStatus `json:"status"`
+
+	// Status Lifecycle status of a creator application. Values follow the state
+	// machine described in `_bmad-output/planning-artifacts/creator-application-state-machine.md`.
+	Status CreatorApplicationStatus `json:"status"`
 
 	// TelegramLinked True when the creator has bound a Telegram account via /start.
 	TelegramLinked bool      `json:"telegramLinked"`
 	UpdatedAt      time.Time `json:"updatedAt"`
 }
 
-// CreatorApplicationListItemStatus defines model for CreatorApplicationListItem.Status.
-type CreatorApplicationListItemStatus string
-
 // CreatorApplicationListSortField Sort field for the admin list. Mapped to a SQL column / expression on
 // the backend. Unknown values are rejected with 422.
 type CreatorApplicationListSortField string
+
+// CreatorApplicationStatus Lifecycle status of a creator application. Values follow the state
+// machine described in `_bmad-output/planning-artifacts/creator-application-state-machine.md`.
+type CreatorApplicationStatus string
+
+// CreatorApplicationStatusCount Single (status, count) pair returned by GET /creators/applications/counts.
+type CreatorApplicationStatusCount struct {
+	// Count Number of creator applications currently in this status.
+	Count int64 `json:"count"`
+
+	// Status Lifecycle status of a creator application. Values follow the state
+	// machine described in `_bmad-output/planning-artifacts/creator-application-state-machine.md`.
+	Status CreatorApplicationStatus `json:"status"`
+}
 
 // CreatorApplicationSubmitData defines model for CreatorApplicationSubmitData.
 type CreatorApplicationSubmitData struct {
@@ -500,6 +434,22 @@ type CreatorApplicationSubmitResult struct {
 	Data CreatorApplicationSubmitData `json:"data"`
 }
 
+// CreatorApplicationsCountsData Sparse counts payload — see the operation description on the
+// `getCreatorApplicationsCounts` endpoint for the contract details.
+// `items` is alphabetically sorted by `status` for deterministic output.
+type CreatorApplicationsCountsData struct {
+	// Items Sparse list — only statuses with at least one application appear here.
+	Items []CreatorApplicationStatusCount `json:"items"`
+}
+
+// CreatorApplicationsCountsResult defines model for CreatorApplicationsCountsResult.
+type CreatorApplicationsCountsResult struct {
+	// Data Sparse counts payload — see the operation description on the
+	// `getCreatorApplicationsCounts` endpoint for the contract details.
+	// `items` is alphabetically sorted by `status` for deterministic output.
+	Data CreatorApplicationsCountsData `json:"data"`
+}
+
 // CreatorApplicationsListData defines model for CreatorApplicationsListData.
 type CreatorApplicationsListData struct {
 	Items   []CreatorApplicationListItem `json:"items"`
@@ -510,9 +460,7 @@ type CreatorApplicationsListData struct {
 	Total int64 `json:"total"`
 }
 
-// CreatorApplicationsListRequest Filter, search, sort and pagination payload for the admin list. All
-// filter fields are optional and combined with AND between fields, OR
-// (any-of) within a single array. Empty/whitespace `search` is ignored.
+// CreatorApplicationsListRequest defines model for CreatorApplicationsListRequest.
 type CreatorApplicationsListRequest struct {
 	// AgeFrom Inclusive lower bound for the creator's age in full years (computed from birth_date).
 	AgeFrom *int `json:"ageFrom,omitempty"`
@@ -552,7 +500,7 @@ type CreatorApplicationsListRequest struct {
 	Sort CreatorApplicationListSortField `json:"sort"`
 
 	// Statuses Match any of these statuses. Empty/missing → all statuses.
-	Statuses *[]CreatorApplicationsListRequestStatuses `json:"statuses,omitempty"`
+	Statuses *[]CreatorApplicationStatus `json:"statuses,omitempty"`
 
 	// TelegramLinked When true, only applications already bound to a Telegram account
 	// are returned. When false, only those still without a link.
@@ -560,16 +508,17 @@ type CreatorApplicationsListRequest struct {
 	TelegramLinked *bool `json:"telegramLinked,omitempty"`
 }
 
-// CreatorApplicationsListRequestStatuses defines model for CreatorApplicationsListRequest.Statuses.
-type CreatorApplicationsListRequestStatuses string
-
 // CreatorApplicationsListResult defines model for CreatorApplicationsListResult.
 type CreatorApplicationsListResult struct {
 	Data CreatorApplicationsListData `json:"data"`
 }
 
-// DictionaryEntry Single entry in a public dictionary (category, city, etc.).
-type DictionaryEntry struct {
+// DictionaryItem Single entry from a public dictionary (categories, cities, etc.).
+// Reused for the dictionary-listing endpoint and for hydrated dictionary
+// references on creator-application reads, where the backend falls back
+// to `(code, code, 0)` when the underlying dictionary row has been
+// deactivated.
+type DictionaryItem struct {
 	// Code Stable machine-readable identifier (snake_case).
 	Code string `json:"code"`
 
@@ -626,7 +575,7 @@ type ListBrandsResult struct {
 
 // ListDictionaryData defines model for ListDictionaryData.
 type ListDictionaryData struct {
-	Items []DictionaryEntry `json:"items"`
+	Items []DictionaryItem `json:"items"`
 
 	// Type Dictionary type echoed back to the client.
 	Type string `json:"type"`
@@ -664,6 +613,15 @@ type MessageData struct {
 // MessageResponse defines model for MessageResponse.
 type MessageResponse struct {
 	Data MessageData `json:"data"`
+}
+
+// PaginationInput Shared 1-based pagination payload for body-paginated list endpoints.
+type PaginationInput struct {
+	// Page 1-based page index.
+	Page int `json:"page"`
+
+	// PerPage Page size, between 1 and 200 inclusive.
+	PerPage int `json:"perPage"`
 }
 
 // PasswordResetBody defines model for PasswordResetBody.
@@ -710,37 +668,49 @@ type TelegramLink struct {
 	TelegramUsername *string `json:"telegramUsername,omitempty"`
 }
 
-// UpdateBrandRequest defines model for UpdateBrandRequest.
-type UpdateBrandRequest struct {
-	LogoUrl *string `json:"logoUrl,omitempty"`
-	Name    string  `json:"name"`
-}
-
 // User defines model for User.
 type User struct {
 	Email openapi_types.Email `json:"email"`
 	Id    string              `json:"id"`
-	Role  UserRole            `json:"role"`
-}
 
-// UserRole defines model for User.Role.
-type UserRole string
+	// Role Role of an authenticated user.
+	Role UserRole `json:"role"`
+}
 
 // UserResponse defines model for UserResponse.
 type UserResponse struct {
 	Data User `json:"data"`
 }
 
+// UserRole Role of an authenticated user.
+type UserRole string
+
+// PageQueryParam defines model for PageQueryParam.
+type PageQueryParam = int
+
+// PerPageQueryParam defines model for PerPageQueryParam.
+type PerPageQueryParam = int
+
+// Forbidden defines model for Forbidden.
+type Forbidden = ErrorResponse
+
+// UnexpectedError defines model for UnexpectedError.
+type UnexpectedError = ErrorResponse
+
 // ListAuditLogsParams defines parameters for ListAuditLogs.
 type ListAuditLogsParams struct {
-	ActorId    *string    `form:"actor_id,omitempty" json:"actor_id,omitempty"`
-	EntityType *string    `form:"entity_type,omitempty" json:"entity_type,omitempty"`
-	EntityId   *string    `form:"entity_id,omitempty" json:"entity_id,omitempty"`
+	ActorId    *string    `form:"actorId,omitempty" json:"actorId,omitempty"`
+	EntityType *string    `form:"entityType,omitempty" json:"entityType,omitempty"`
+	EntityId   *string    `form:"entityId,omitempty" json:"entityId,omitempty"`
 	Action     *string    `form:"action,omitempty" json:"action,omitempty"`
-	DateFrom   *time.Time `form:"date_from,omitempty" json:"date_from,omitempty"`
-	DateTo     *time.Time `form:"date_to,omitempty" json:"date_to,omitempty"`
-	Page       *int       `form:"page,omitempty" json:"page,omitempty"`
-	PerPage    *int       `form:"per_page,omitempty" json:"per_page,omitempty"`
+	DateFrom   *time.Time `form:"dateFrom,omitempty" json:"dateFrom,omitempty"`
+	DateTo     *time.Time `form:"dateTo,omitempty" json:"dateTo,omitempty"`
+
+	// Page 1-based page index.
+	Page *PageQueryParam `form:"page,omitempty" json:"page,omitempty"`
+
+	// PerPage Page size, between 1 and 200 inclusive.
+	PerPage *PerPageQueryParam `form:"perPage,omitempty" json:"perPage,omitempty"`
 }
 
 // ListDictionaryParamsType defines parameters for ListDictionary.
@@ -756,10 +726,10 @@ type ResetPasswordJSONRequestBody = PasswordResetBody
 type RequestPasswordResetJSONRequestBody = PasswordResetRequestBody
 
 // CreateBrandJSONRequestBody defines body for CreateBrand for application/json ContentType.
-type CreateBrandJSONRequestBody = CreateBrandRequest
+type CreateBrandJSONRequestBody = BrandInput
 
 // UpdateBrandJSONRequestBody defines body for UpdateBrand for application/json ContentType.
-type UpdateBrandJSONRequestBody = UpdateBrandRequest
+type UpdateBrandJSONRequestBody = BrandInput
 
 // AssignManagerJSONRequestBody defines body for AssignManager for application/json ContentType.
 type AssignManagerJSONRequestBody = AssignManagerRequest

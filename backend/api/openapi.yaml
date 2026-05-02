@@ -24,11 +24,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/HealthResponse"
         default:
-          description: Unexpected error
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
+          $ref: "#/components/responses/UnexpectedError"
 
   /auth/login:
     post:
@@ -66,11 +62,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         default:
-          description: Unexpected error
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
+          $ref: "#/components/responses/UnexpectedError"
 
   /auth/refresh:
     post:
@@ -96,11 +88,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         default:
-          description: Unexpected error
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
+          $ref: "#/components/responses/UnexpectedError"
 
   /auth/logout:
     post:
@@ -126,11 +114,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/MessageResponse"
         default:
-          description: Unexpected error
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
+          $ref: "#/components/responses/UnexpectedError"
 
   /auth/password-reset-request:
     post:
@@ -151,11 +135,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/MessageResponse"
         default:
-          description: Unexpected error
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
+          $ref: "#/components/responses/UnexpectedError"
 
   /auth/password-reset:
     post:
@@ -188,11 +168,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         default:
-          description: Unexpected error
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
+          $ref: "#/components/responses/UnexpectedError"
 
   /auth/me:
     get:
@@ -215,11 +191,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         default:
-          description: Unexpected error
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
+          $ref: "#/components/responses/UnexpectedError"
 
   /brands:
     post:
@@ -233,7 +205,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/CreateBrandRequest"
+              $ref: "#/components/schemas/BrandInput"
       responses:
         "201":
           description: Brand created
@@ -242,11 +214,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/BrandResult"
         "403":
-          description: Forbidden
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
+          $ref: "#/components/responses/Forbidden"
         "422":
           description: Validation error
           content:
@@ -254,11 +222,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         default:
-          description: Unexpected error
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
+          $ref: "#/components/responses/UnexpectedError"
     get:
       operationId: listBrands
       summary: List brands (admin sees all, manager sees own)
@@ -273,11 +237,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ListBrandsResult"
         default:
-          description: Unexpected error
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
+          $ref: "#/components/responses/UnexpectedError"
 
   /brands/{brandID}:
     parameters:
@@ -300,11 +260,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/GetBrandResult"
         "403":
-          description: Forbidden
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
+          $ref: "#/components/responses/Forbidden"
         "404":
           description: Not found
           content:
@@ -312,11 +268,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         default:
-          description: Unexpected error
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
+          $ref: "#/components/responses/UnexpectedError"
     put:
       operationId: updateBrand
       summary: Update brand
@@ -328,7 +280,7 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/UpdateBrandRequest"
+              $ref: "#/components/schemas/BrandInput"
       responses:
         "200":
           description: Brand updated
@@ -337,11 +289,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/BrandResult"
         "403":
-          description: Forbidden
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
+          $ref: "#/components/responses/Forbidden"
         "422":
           description: Validation error
           content:
@@ -349,11 +297,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         default:
-          description: Unexpected error
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
+          $ref: "#/components/responses/UnexpectedError"
     delete:
       operationId: deleteBrand
       summary: Delete brand
@@ -368,11 +312,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/MessageResponse"
         "403":
-          description: Forbidden
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
+          $ref: "#/components/responses/Forbidden"
         "404":
           description: Not found
           content:
@@ -380,11 +320,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         default:
-          description: Unexpected error
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
+          $ref: "#/components/responses/UnexpectedError"
 
   /brands/{brandID}/managers:
     parameters:
@@ -413,17 +349,9 @@ paths:
               schema:
                 $ref: "#/components/schemas/AssignManagerResult"
         "403":
-          description: Forbidden
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
+          $ref: "#/components/responses/Forbidden"
         default:
-          description: Unexpected error
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
+          $ref: "#/components/responses/UnexpectedError"
 
   /audit-logs:
     get:
@@ -433,15 +361,15 @@ paths:
       security:
         - bearerAuth: []
       parameters:
-        - name: actor_id
+        - name: actorId
           in: query
           schema:
             type: string
-        - name: entity_type
+        - name: entityType
           in: query
           schema:
             type: string
-        - name: entity_id
+        - name: entityId
           in: query
           schema:
             type: string
@@ -449,24 +377,18 @@ paths:
           in: query
           schema:
             type: string
-        - name: date_from
+        - name: dateFrom
           in: query
           schema:
             type: string
             format: date-time
-        - name: date_to
+        - name: dateTo
           in: query
           schema:
             type: string
             format: date-time
-        - name: page
-          in: query
-          schema:
-            type: integer
-        - name: per_page
-          in: query
-          schema:
-            type: integer
+        - $ref: "#/components/parameters/PageQueryParam"
+        - $ref: "#/components/parameters/PerPageQueryParam"
       responses:
         "200":
           description: Audit logs
@@ -475,17 +397,9 @@ paths:
               schema:
                 $ref: "#/components/schemas/AuditLogsResult"
         "403":
-          description: Forbidden
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
+          $ref: "#/components/responses/Forbidden"
         default:
-          description: Unexpected error
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
+          $ref: "#/components/responses/UnexpectedError"
 
   /brands/{brandID}/managers/{userID}:
     parameters:
@@ -513,17 +427,9 @@ paths:
               schema:
                 $ref: "#/components/schemas/MessageResponse"
         "403":
-          description: Forbidden
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
+          $ref: "#/components/responses/Forbidden"
         default:
-          description: Unexpected error
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
+          $ref: "#/components/responses/UnexpectedError"
 
   /dictionaries/{type}:
     get:
@@ -557,11 +463,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         default:
-          description: Unexpected error
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
+          $ref: "#/components/responses/UnexpectedError"
 
   /creators/applications:
     post:
@@ -602,11 +504,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         default:
-          description: Unexpected error
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
+          $ref: "#/components/responses/UnexpectedError"
 
   /creators/applications/list:
     post:
@@ -646,11 +544,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "403":
-          description: Forbidden
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
+          $ref: "#/components/responses/Forbidden"
         "422":
           description: Validation error (unknown sort/order, page/perPage out of range, missing required field)
           content:
@@ -658,11 +552,47 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         default:
-          description: Unexpected error
+          $ref: "#/components/responses/UnexpectedError"
+
+  /creators/applications/counts:
+    get:
+      operationId: getCreatorApplicationsCounts
+      summary: Counts of creator applications grouped by status (admin only)
+      description: |
+        Admin-only read-only endpoint that returns the number of creator
+        applications grouped by their current status. Powers the moderation UI
+        notification badge: clients pick which statuses to sum (default —
+        verification + moderation + awaiting_contract).
+
+        The response is **sparse**: only statuses that currently have at least
+        one application are present in `items`. Statuses without any rows are
+        omitted entirely (the frontend should look up its known status with
+        `find(c => c.status === STATUS_X)?.count ?? 0`). This keeps responses
+        compact and makes "no applications in this status" semantically explicit.
+
+        Authorisation is evaluated before any business logic, so non-admin
+        callers receive 403 regardless of the underlying counts. No audit log
+        is written for this read-only call.
+      tags: [creators]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Sparse list of (status, count) pairs, alphabetically sorted by status.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreatorApplicationsCountsResult"
+        "401":
+          description: Authentication required
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        default:
+          $ref: "#/components/responses/UnexpectedError"
 
   /creators/applications/{id}:
     parameters:
@@ -698,11 +628,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "403":
-          description: Forbidden
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
+          $ref: "#/components/responses/Forbidden"
         "404":
           description: Application not found
           content:
@@ -710,13 +636,40 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         default:
-          description: Unexpected error
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
+          $ref: "#/components/responses/UnexpectedError"
 
 components:
+  parameters:
+    PageQueryParam:
+      name: page
+      in: query
+      description: 1-based page index.
+      schema:
+        type: integer
+        minimum: 1
+    PerPageQueryParam:
+      name: perPage
+      in: query
+      description: Page size, between 1 and 200 inclusive.
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 200
+
+  responses:
+    UnexpectedError:
+      description: Unexpected error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    Forbidden:
+      description: Forbidden
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+
   schemas:
     HealthResponse:
       type: object
@@ -763,6 +716,77 @@ components:
       properties:
         data:
           $ref: "#/components/schemas/MessageData"
+
+    UserRole:
+      type: string
+      description: Role of an authenticated user.
+      enum: [admin, brand_manager]
+
+    ConsentType:
+      type: string
+      description: Canonical consent type captured at creator application submission.
+      enum: [processing, third_party, cross_border, terms]
+
+    CreatorApplicationStatus:
+      type: string
+      description: |
+        Lifecycle status of a creator application. Values follow the state
+        machine described in `_bmad-output/planning-artifacts/creator-application-state-machine.md`.
+      enum: [verification, moderation, awaiting_contract, contract_sent, signed, rejected, withdrawn]
+
+    PaginationInput:
+      type: object
+      description: Shared 1-based pagination payload for body-paginated list endpoints.
+      required: [page, perPage]
+      properties:
+        page:
+          type: integer
+          minimum: 1
+          description: 1-based page index.
+        perPage:
+          type: integer
+          minimum: 1
+          maximum: 200
+          description: Page size, between 1 and 200 inclusive.
+
+    DictionaryItem:
+      type: object
+      description: |
+        Single entry from a public dictionary (categories, cities, etc.).
+        Reused for the dictionary-listing endpoint and for hydrated dictionary
+        references on creator-application reads, where the backend falls back
+        to `(code, code, 0)` when the underlying dictionary row has been
+        deactivated.
+      required: [code, name, sortOrder]
+      properties:
+        code:
+          type: string
+          description: Stable machine-readable identifier (snake_case).
+        name:
+          type: string
+          description: Human-readable label rendered to the user.
+        sortOrder:
+          type: integer
+          description: Sort key — lower values appear first in the UI.
+
+    DictionaryListResult:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: "#/components/schemas/ListDictionaryData"
+
+    ListDictionaryData:
+      type: object
+      required: [type, items]
+      properties:
+        type:
+          type: string
+          description: Dictionary type echoed back to the client.
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/DictionaryItem"
 
     LoginRequest:
       type: object
@@ -821,8 +845,7 @@ components:
           type: string
           format: email
         role:
-          type: string
-          enum: [admin, brand_manager]
+          $ref: "#/components/schemas/UserRole"
 
     UserResponse:
       type: object
@@ -831,17 +854,9 @@ components:
         data:
           $ref: "#/components/schemas/User"
 
-    CreateBrandRequest:
+    BrandInput:
       type: object
-      required: [name]
-      properties:
-        name:
-          type: string
-        logoUrl:
-          type: string
-
-    UpdateBrandRequest:
-      type: object
+      description: Mutable subset of a brand — used for create and update.
       required: [name]
       properties:
         name:
@@ -1024,40 +1039,6 @@ components:
         data:
           $ref: "#/components/schemas/ListAuditLogsData"
 
-    DictionaryEntry:
-      type: object
-      description: Single entry in a public dictionary (category, city, etc.).
-      required: [code, name, sortOrder]
-      properties:
-        code:
-          type: string
-          description: Stable machine-readable identifier (snake_case).
-        name:
-          type: string
-          description: Human-readable label rendered to the user.
-        sortOrder:
-          type: integer
-          description: Sort key — lower values appear first in the UI.
-
-    ListDictionaryData:
-      type: object
-      required: [type, items]
-      properties:
-        type:
-          type: string
-          description: Dictionary type echoed back to the client.
-        items:
-          type: array
-          items:
-            $ref: "#/components/schemas/DictionaryEntry"
-
-    DictionaryListResult:
-      type: object
-      required: [data]
-      properties:
-        data:
-          $ref: "#/components/schemas/ListDictionaryData"
-
     SocialPlatform:
       type: string
       description: Supported social network for creator accounts (MVP scope).
@@ -1172,34 +1153,6 @@ components:
         data:
           $ref: "#/components/schemas/CreatorApplicationSubmitData"
 
-    CreatorApplicationDetailCategory:
-      type: object
-      required: [code, name, sortOrder]
-      properties:
-        code:
-          type: string
-          description: Stable category code from the categories dictionary.
-        name:
-          type: string
-          description: Display name at the time the read was served.
-        sortOrder:
-          type: integer
-          description: Catalogue ordering hint copied from the dictionary row.
-
-    CreatorApplicationDetailCity:
-      type: object
-      required: [code, name, sortOrder]
-      properties:
-        code:
-          type: string
-          description: Stable city code from the cities dictionary (or the raw stored value when the dictionary entry has been deactivated).
-        name:
-          type: string
-          description: Display name resolved against the dictionary at read time. Falls back to the code when the dictionary entry no longer exists.
-        sortOrder:
-          type: integer
-          description: Catalogue ordering hint from the dictionary row. Falls back to 0 for deactivated/unknown codes.
-
     CreatorApplicationDetailSocial:
       type: object
       required: [platform, handle]
@@ -1214,9 +1167,7 @@ components:
       required: [consentType, acceptedAt, documentVersion, ipAddress, userAgent]
       properties:
         consentType:
-          type: string
-          enum: [processing, third_party, cross_border, terms]
-          description: Canonical consent type captured at submission time.
+          $ref: "#/components/schemas/ConsentType"
         acceptedAt:
           type: string
           format: date-time
@@ -1293,7 +1244,7 @@ components:
         phone:
           type: string
         city:
-          $ref: "#/components/schemas/CreatorApplicationDetailCity"
+          $ref: "#/components/schemas/DictionaryItem"
         address:
           type: string
           nullable: true
@@ -1302,9 +1253,7 @@ components:
           nullable: true
           description: Free-text niche description when categories include "other".
         status:
-          type: string
-          enum: [verification, moderation, awaiting_contract, contract_sent, signed, rejected, withdrawn]
-          description: Application status.
+          $ref: "#/components/schemas/CreatorApplicationStatus"
         createdAt:
           type: string
           format: date-time
@@ -1315,7 +1264,7 @@ components:
           type: array
           description: Categories selected by the creator, sorted by sort_order then code.
           items:
-            $ref: "#/components/schemas/CreatorApplicationDetailCategory"
+            $ref: "#/components/schemas/DictionaryItem"
         socials:
           type: array
           description: Social accounts attached to the application, sorted by platform then handle.
@@ -1356,78 +1305,70 @@ components:
       enum: [asc, desc]
 
     CreatorApplicationsListRequest:
-      type: object
-      required: [sort, order, page, perPage]
       description: |
         Filter, search, sort and pagination payload for the admin list. All
         filter fields are optional and combined with AND between fields, OR
         (any-of) within a single array. Empty/whitespace `search` is ignored.
-      properties:
-        statuses:
-          type: array
-          description: Match any of these statuses. Empty/missing → all statuses.
-          items:
-            type: string
-            enum: [verification, moderation, awaiting_contract, contract_sent, signed, rejected, withdrawn]
-        cities:
-          type: array
-          description: Match any of these city codes (from the cities dictionary).
-          items:
-            type: string
-            minLength: 1
-            maxLength: 64
-        categories:
-          type: array
-          description: Match applications that include any of these category codes.
-          items:
-            type: string
-            minLength: 1
-            maxLength: 64
-        dateFrom:
-          type: string
-          format: date-time
-          description: Inclusive lower bound for `created_at`.
-        dateTo:
-          type: string
-          format: date-time
-          description: Inclusive upper bound for `created_at`.
-        ageFrom:
-          type: integer
-          minimum: 0
-          maximum: 120
-          description: Inclusive lower bound for the creator's age in full years (computed from birth_date).
-        ageTo:
-          type: integer
-          minimum: 0
-          maximum: 120
-          description: Inclusive upper bound for the creator's age in full years.
-        telegramLinked:
-          type: boolean
-          description: |
-            When true, only applications already bound to a Telegram account
-            are returned. When false, only those still without a link.
-            Missing/null disables the filter.
-        search:
-          type: string
-          maxLength: 128
-          description: |
-            Free-text search across last_name, first_name, middle_name, IIN
-            (case-insensitive) and social-account handles. Trimmed; empty/blank
-            after trim disables the filter. Carries PII — the endpoint is POST
-            so this never lands in URL params.
-        sort:
-          $ref: "#/components/schemas/CreatorApplicationListSortField"
-        order:
-          $ref: "#/components/schemas/SortOrder"
-        page:
-          type: integer
-          minimum: 1
-          description: 1-based page index.
-        perPage:
-          type: integer
-          minimum: 1
-          maximum: 200
-          description: Page size, between 1 and 200 inclusive.
+      allOf:
+        - $ref: "#/components/schemas/PaginationInput"
+        - type: object
+          required: [sort, order]
+          properties:
+            statuses:
+              type: array
+              description: Match any of these statuses. Empty/missing → all statuses.
+              items:
+                $ref: "#/components/schemas/CreatorApplicationStatus"
+            cities:
+              type: array
+              description: Match any of these city codes (from the cities dictionary).
+              items:
+                type: string
+                minLength: 1
+                maxLength: 64
+            categories:
+              type: array
+              description: Match applications that include any of these category codes.
+              items:
+                type: string
+                minLength: 1
+                maxLength: 64
+            dateFrom:
+              type: string
+              format: date-time
+              description: Inclusive lower bound for `created_at`.
+            dateTo:
+              type: string
+              format: date-time
+              description: Inclusive upper bound for `created_at`.
+            ageFrom:
+              type: integer
+              minimum: 0
+              maximum: 120
+              description: Inclusive lower bound for the creator's age in full years (computed from birth_date).
+            ageTo:
+              type: integer
+              minimum: 0
+              maximum: 120
+              description: Inclusive upper bound for the creator's age in full years.
+            telegramLinked:
+              type: boolean
+              description: |
+                When true, only applications already bound to a Telegram account
+                are returned. When false, only those still without a link.
+                Missing/null disables the filter.
+            search:
+              type: string
+              maxLength: 128
+              description: |
+                Free-text search across last_name, first_name, middle_name, IIN
+                (case-insensitive) and social-account handles. Trimmed; empty/blank
+                after trim disables the filter. Carries PII — the endpoint is POST
+                so this never lands in URL params.
+            sort:
+              $ref: "#/components/schemas/CreatorApplicationListSortField"
+            order:
+              $ref: "#/components/schemas/SortOrder"
 
     CreatorApplicationListItem:
       type: object
@@ -1448,8 +1389,7 @@ components:
           type: string
           format: uuid
         status:
-          type: string
-          enum: [verification, moderation, awaiting_contract, contract_sent, signed, rejected, withdrawn]
+          $ref: "#/components/schemas/CreatorApplicationStatus"
         lastName:
           type: string
         firstName:
@@ -1461,12 +1401,12 @@ components:
           type: string
           format: date
         city:
-          $ref: "#/components/schemas/CreatorApplicationDetailCity"
+          $ref: "#/components/schemas/DictionaryItem"
         categories:
           type: array
           description: Categories selected by the creator, sorted by sort_order then code.
           items:
-            $ref: "#/components/schemas/CreatorApplicationDetailCategory"
+            $ref: "#/components/schemas/DictionaryItem"
         socials:
           type: array
           description: Social accounts attached to the application, sorted by platform then handle.
@@ -1505,6 +1445,40 @@ components:
       properties:
         data:
           $ref: "#/components/schemas/CreatorApplicationsListData"
+
+    CreatorApplicationStatusCount:
+      type: object
+      description: Single (status, count) pair returned by GET /creators/applications/counts.
+      required: [status, count]
+      properties:
+        status:
+          $ref: "#/components/schemas/CreatorApplicationStatus"
+        count:
+          type: integer
+          format: int64
+          minimum: 0
+          description: Number of creator applications currently in this status.
+
+    CreatorApplicationsCountsData:
+      type: object
+      description: |
+        Sparse counts payload — see the operation description on the
+        `getCreatorApplicationsCounts` endpoint for the contract details.
+        `items` is alphabetically sorted by `status` for deterministic output.
+      required: [items]
+      properties:
+        items:
+          type: array
+          description: Sparse list — only statuses with at least one application appear here.
+          items:
+            $ref: "#/components/schemas/CreatorApplicationStatusCount"
+
+    CreatorApplicationsCountsResult:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: "#/components/schemas/CreatorApplicationsCountsData"
 
   securitySchemes:
     bearerAuth:

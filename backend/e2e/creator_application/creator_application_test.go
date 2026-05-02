@@ -493,7 +493,7 @@ func buildExpectedDetail(t *testing.T, req apiclient.CreatorApplicationSubmitReq
 		City:              cityRef,
 		Address:           req.Address,
 		CategoryOtherText: otherPtr,
-		Status:            apiclient.CreatorApplicationDetailDataStatusVerification,
+		Status:            apiclient.Verification,
 		CreatedAt:         got.CreatedAt,
 		UpdatedAt:         got.UpdatedAt,
 		Categories:        catRefs,
@@ -534,7 +534,7 @@ func iinBirthDate(t *testing.T, iin string) string {
 // resolveCityRef looks the city up in the public cities dictionary and
 // returns the same struct the GET handler would emit. Uses the same data
 // source as the server, so name/sortOrder match exactly.
-func resolveCityRef(t *testing.T, c *apiclient.ClientWithResponses, code string) apiclient.CreatorApplicationDetailCity {
+func resolveCityRef(t *testing.T, c *apiclient.ClientWithResponses, code string) apiclient.DictionaryItem {
 	t.Helper()
 	resp, err := c.ListDictionaryWithResponse(context.Background(), apiclient.Cities)
 	require.NoError(t, err)
@@ -542,32 +542,32 @@ func resolveCityRef(t *testing.T, c *apiclient.ClientWithResponses, code string)
 	require.NotNil(t, resp.JSON200)
 	for _, item := range resp.JSON200.Data.Items {
 		if item.Code == code {
-			return apiclient.CreatorApplicationDetailCity{Code: item.Code, Name: item.Name, SortOrder: item.SortOrder}
+			return apiclient.DictionaryItem{Code: item.Code, Name: item.Name, SortOrder: item.SortOrder}
 		}
 	}
 	require.Failf(t, "city not found in dictionary", "code=%q", code)
-	return apiclient.CreatorApplicationDetailCity{}
+	return apiclient.DictionaryItem{}
 }
 
 // resolveCategoryRefs maps the requested category codes to their dictionary
 // entries and returns them in the same (sortOrder, code) order the GET
 // handler does. Failures here mean the test is asking for codes that do not
 // (yet) exist in the seed.
-func resolveCategoryRefs(t *testing.T, c *apiclient.ClientWithResponses, codes []string) []apiclient.CreatorApplicationDetailCategory {
+func resolveCategoryRefs(t *testing.T, c *apiclient.ClientWithResponses, codes []string) []apiclient.DictionaryItem {
 	t.Helper()
 	resp, err := c.ListDictionaryWithResponse(context.Background(), apiclient.Categories)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, resp.StatusCode())
 	require.NotNil(t, resp.JSON200)
-	byCode := make(map[string]apiclient.DictionaryEntry, len(resp.JSON200.Data.Items))
+	byCode := make(map[string]apiclient.DictionaryItem, len(resp.JSON200.Data.Items))
 	for _, item := range resp.JSON200.Data.Items {
 		byCode[item.Code] = item
 	}
-	out := make([]apiclient.CreatorApplicationDetailCategory, 0, len(codes))
+	out := make([]apiclient.DictionaryItem, 0, len(codes))
 	for _, code := range codes {
 		entry, ok := byCode[code]
 		require.Truef(t, ok, "category %q not found in dictionary", code)
-		out = append(out, apiclient.CreatorApplicationDetailCategory{
+		out = append(out, apiclient.DictionaryItem{
 			Code:      entry.Code,
 			Name:      entry.Name,
 			SortOrder: entry.SortOrder,
@@ -587,7 +587,7 @@ func resolveCategoryRefs(t *testing.T, c *apiclient.ClientWithResponses, codes [
 // from `got` after the caller has validated them — the read-side reorders to
 // canonical sequence regardless of how Postgres stored them.
 func buildExpectedConsents(got []apiclient.CreatorApplicationDetailConsent) []apiclient.CreatorApplicationDetailConsent {
-	canonical := []apiclient.CreatorApplicationDetailConsentConsentType{
+	canonical := []apiclient.ConsentType{
 		apiclient.Processing,
 		apiclient.ThirdParty,
 		apiclient.CrossBorder,

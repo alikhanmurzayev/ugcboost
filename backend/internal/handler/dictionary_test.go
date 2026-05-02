@@ -37,7 +37,7 @@ func TestServer_ListDictionary(t *testing.T) {
 		require.Equal(t, api.DictionaryListResult{
 			Data: api.ListDictionaryData{
 				Type: "categories",
-				Items: []api.DictionaryEntry{
+				Items: []api.DictionaryItem{
 					{Code: "fashion", Name: "Мода / Стиль", SortOrder: 10},
 					{Code: "beauty", Name: "Бьюти (макияж, уход)", SortOrder: 20},
 				},

@@ -148,16 +148,11 @@ func domainCreatorApplicationDetailToAPI(
 	if err != nil {
 		return api.CreatorApplicationDetailData{}, err
 	}
-	cats := make([]api.CreatorApplicationDetailCategory, len(d.Categories))
+	cats := make([]api.DictionaryItem, len(d.Categories))
 	for i, code := range d.Categories {
-		cats[i] = resolveCategory(code, categoriesByCode)
+		cats[i] = resolveDictionaryItem(code, categoriesByCode)
 	}
-	slices.SortFunc(cats, func(a, b api.CreatorApplicationDetailCategory) int {
-		if a.SortOrder != b.SortOrder {
-			return a.SortOrder - b.SortOrder
-		}
-		return strings.Compare(a.Code, b.Code)
-	})
+	slices.SortFunc(cats, sortDictionaryItem)
 
 	socs := make([]api.CreatorApplicationDetailSocial, len(d.Socials))
 	for i, sc := range d.Socials {
@@ -169,7 +164,7 @@ func domainCreatorApplicationDetailToAPI(
 	cons := make([]api.CreatorApplicationDetailConsent, len(d.Consents))
 	for i, c := range d.Consents {
 		cons[i] = api.CreatorApplicationDetailConsent{
-			ConsentType:     api.CreatorApplicationDetailConsentConsentType(c.ConsentType),
+			ConsentType:     api.ConsentType(c.ConsentType),
 			AcceptedAt:      c.AcceptedAt,
 			DocumentVersion: c.DocumentVersion,
 			IpAddress:       c.IPAddress,
@@ -194,7 +189,7 @@ func domainCreatorApplicationDetailToAPI(
 		Iin:               d.IIN,
 		BirthDate:         openapi_types.Date{Time: d.BirthDate},
 		Phone:             d.Phone,
-		City:              resolveCity(d.CityCode, cityByCode),
+		City:              resolveDictionaryItem(d.CityCode, cityByCode),
 		Address:           d.Address,
 		CategoryOtherText: d.CategoryOtherText,
 		Status:            status,
@@ -207,54 +202,68 @@ func domainCreatorApplicationDetailToAPI(
 	}, nil
 }
 
-func mapCreatorApplicationStatusToAPI(s string) (api.CreatorApplicationDetailDataStatus, error) {
-	switch s {
-	case domain.CreatorApplicationStatusVerification:
-		return api.CreatorApplicationDetailDataStatusVerification, nil
-	case domain.CreatorApplicationStatusModeration:
-		return api.CreatorApplicationDetailDataStatusModeration, nil
-	case domain.CreatorApplicationStatusAwaitingContract:
-		return api.CreatorApplicationDetailDataStatusAwaitingContract, nil
-	case domain.CreatorApplicationStatusContractSent:
-		return api.CreatorApplicationDetailDataStatusContractSent, nil
-	case domain.CreatorApplicationStatusSigned:
-		return api.CreatorApplicationDetailDataStatusSigned, nil
-	case domain.CreatorApplicationStatusRejected:
-		return api.CreatorApplicationDetailDataStatusRejected, nil
-	case domain.CreatorApplicationStatusWithdrawn:
-		return api.CreatorApplicationDetailDataStatusWithdrawn, nil
-	default:
+func mapCreatorApplicationStatusToAPI(s string) (api.CreatorApplicationStatus, error) {
+	status := api.CreatorApplicationStatus(s)
+	if !status.Valid() {
 		return "", fmt.Errorf("unknown creator application status %q", s)
 	}
+	return status, nil
 }
 
-// resolveCategory looks up a category code in the dictionary index and falls
-// back to a code-only stub when the entry has been deactivated. The stub
-// keeps the JSON shape identical so admins still see something meaningful
-// instead of getting a 500 when a creator's historical category was retired.
-func resolveCategory(code string, byCode map[string]domain.DictionaryEntry) api.CreatorApplicationDetailCategory {
+// resolveDictionaryItem looks up a dictionary code (category or city) in the
+// indexed dictionary and falls back to a code-only stub when the entry has
+// been deactivated. The stub keeps the JSON shape identical so admins still
+// see something meaningful instead of getting a 500 when a creator's
+// historical reference was retired.
+func resolveDictionaryItem(code string, byCode map[string]domain.DictionaryEntry) api.DictionaryItem {
 	if entry, ok := byCode[code]; ok {
-		return api.CreatorApplicationDetailCategory{
+		return api.DictionaryItem{
 			Code:      entry.Code,
 			Name:      entry.Name,
 			SortOrder: entry.SortOrder,
 		}
 	}
-	return api.CreatorApplicationDetailCategory{Code: code, Name: code, SortOrder: 0}
+	return api.DictionaryItem{Code: code, Name: code, SortOrder: 0}
 }
 
-// resolveCity mirrors resolveCategory for the single city stored against the
-// application. Same fallback rule: a city that has been removed from the
-// dictionary still surfaces under its raw code so the read does not fail.
-func resolveCity(code string, byCode map[string]domain.DictionaryEntry) api.CreatorApplicationDetailCity {
-	if entry, ok := byCode[code]; ok {
-		return api.CreatorApplicationDetailCity{
-			Code:      entry.Code,
-			Name:      entry.Name,
-			SortOrder: entry.SortOrder,
-		}
+// sortDictionaryItem sorts dictionary items by (sortOrder, code) so the
+// detail and list responses share a deterministic order.
+func sortDictionaryItem(a, b api.DictionaryItem) int {
+	if a.SortOrder != b.SortOrder {
+		return a.SortOrder - b.SortOrder
 	}
-	return api.CreatorApplicationDetailCity{Code: code, Name: code, SortOrder: 0}
+	return strings.Compare(a.Code, b.Code)
+}
+
+// GetCreatorApplicationsCounts handles GET /creators/applications/counts
+// (admin-only). It returns one (status, count) pair per status that currently
+// has at least one application — the response is **sparse** by design, see the
+// operation description in openapi.yaml. Sorting items alphabetically by
+// `status` keeps the wire output deterministic so frontends and tests can
+// reason about the ordering without extra plumbing. Authorization is checked
+// before any DB call: a non-admin caller gets 403 regardless of the underlying
+// counts.
+func (s *Server) GetCreatorApplicationsCounts(ctx context.Context, _ api.GetCreatorApplicationsCountsRequestObject) (api.GetCreatorApplicationsCountsResponseObject, error) {
+	if err := s.authzService.CanGetCreatorApplicationsCounts(ctx); err != nil {
+		return nil, err
+	}
+	counts, err := s.creatorApplicationService.Counts(ctx)
+	if err != nil {
+		return nil, err
+	}
+	items := make([]api.CreatorApplicationStatusCount, 0, len(counts))
+	for status, count := range counts {
+		items = append(items, api.CreatorApplicationStatusCount{
+			Status: api.CreatorApplicationStatus(status),
+			Count:  count,
+		})
+	}
+	slices.SortFunc(items, func(a, b api.CreatorApplicationStatusCount) int {
+		return strings.Compare(string(a.Status), string(b.Status))
+	})
+	return api.GetCreatorApplicationsCounts200JSONResponse{
+		Data: api.CreatorApplicationsCountsData{Items: items},
+	}, nil
 }
 
 // ListCreatorApplications handles POST /creators/applications/list (admin-only).
@@ -475,7 +484,7 @@ func validateCodeArray(field string, p *[]string, maxLen int) ([]string, error) 
 // the deduplicated set of canonical status strings. Unknown values surface as
 // 422 — we don't silently drop them, otherwise a typo would degrade to "no
 // filter" with no signal to the operator.
-func apiListStatusesToDomain(in *[]api.CreatorApplicationsListRequestStatuses) ([]string, error) {
+func apiListStatusesToDomain(in *[]api.CreatorApplicationStatus) ([]string, error) {
 	if in == nil || len(*in) == 0 {
 		return nil, nil
 	}
@@ -512,21 +521,16 @@ func domainCreatorApplicationListPageToAPI(
 		if err != nil {
 			return api.CreatorApplicationsListData{}, fmt.Errorf("parse application id %q: %w", item.ID, err)
 		}
-		status, err := mapCreatorApplicationStatusToListItemAPI(item.Status)
+		status, err := mapCreatorApplicationStatusToAPI(item.Status)
 		if err != nil {
 			return api.CreatorApplicationsListData{}, err
 		}
 
-		cats := make([]api.CreatorApplicationDetailCategory, len(item.Categories))
+		cats := make([]api.DictionaryItem, len(item.Categories))
 		for j, code := range item.Categories {
-			cats[j] = resolveCategory(code, categoriesByCode)
+			cats[j] = resolveDictionaryItem(code, categoriesByCode)
 		}
-		slices.SortFunc(cats, func(a, b api.CreatorApplicationDetailCategory) int {
-			if a.SortOrder != b.SortOrder {
-				return a.SortOrder - b.SortOrder
-			}
-			return strings.Compare(a.Code, b.Code)
-		})
+		slices.SortFunc(cats, sortDictionaryItem)
 
 		socials := make([]api.CreatorApplicationDetailSocial, len(item.Socials))
 		for j, sc := range item.Socials {
@@ -543,7 +547,7 @@ func domainCreatorApplicationListPageToAPI(
 			FirstName:      item.FirstName,
 			MiddleName:     item.MiddleName,
 			BirthDate:      openapi_types.Date{Time: item.BirthDate},
-			City:           resolveCity(item.CityCode, cityByCode),
+			City:           resolveDictionaryItem(item.CityCode, cityByCode),
 			Categories:     cats,
 			Socials:        socials,
 			TelegramLinked: item.TelegramLinked,
@@ -557,16 +561,4 @@ func domainCreatorApplicationListPageToAPI(
 		Page:    page.Page,
 		PerPage: page.PerPage,
 	}, nil
-}
-
-// mapCreatorApplicationStatusToListItemAPI reuses the detail mapper and casts
-// to the list-item enum type. Both API enums share the same string values, so
-// the cast is safe; routing through the existing function keeps the
-// "unknown status" branch in one place.
-func mapCreatorApplicationStatusToListItemAPI(s string) (api.CreatorApplicationListItemStatus, error) {
-	detail, err := mapCreatorApplicationStatusToAPI(s)
-	if err != nil {
-		return "", err
-	}
-	return api.CreatorApplicationListItemStatus(detail), nil
 }

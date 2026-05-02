@@ -24,9 +24,9 @@ func (s *Server) ListDictionary(ctx context.Context, request api.ListDictionaryR
 		}
 		return nil, err
 	}
-	items := make([]api.DictionaryEntry, len(entries))
+	items := make([]api.DictionaryItem, len(entries))
 	for i, e := range entries {
-		items[i] = api.DictionaryEntry{Code: e.Code, Name: e.Name, SortOrder: e.SortOrder}
+		items[i] = api.DictionaryItem{Code: e.Code, Name: e.Name, SortOrder: e.SortOrder}
 	}
 	return api.ListDictionary200JSONResponse{
 		Data: api.ListDictionaryData{Type: string(pType), Items: items},

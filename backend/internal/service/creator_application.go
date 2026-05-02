@@ -551,6 +551,33 @@ func (s *CreatorApplicationService) List(ctx context.Context, in domain.CreatorA
 	}, nil
 }
 
+// Counts returns the application count grouped by status. Read-only; runs
+// against the pool, no transaction, no audit log. Statuses returned by the
+// repo that are not part of the canonical state machine are dropped (with a
+// warn-level log) instead of failing the request — this keeps the endpoint
+// resilient during rolling deploys where a newer pod could persist a status
+// the older pod does not yet know about. Empty DB → empty map; the handler
+// owns map→slice conversion plus alphabetical ordering for the wire response.
+func (s *CreatorApplicationService) Counts(ctx context.Context) (map[string]int64, error) {
+	raw, err := s.repoFactory.NewCreatorApplicationRepo(s.pool).Counts(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("counts applications: %w", err)
+	}
+	if len(raw) == 0 {
+		return map[string]int64{}, nil
+	}
+	out := make(map[string]int64, len(raw))
+	for status, count := range raw {
+		if !domain.IsValidCreatorApplicationStatus(status) {
+			s.logger.Warn(ctx, "creator application counts: dropping unknown status",
+				"status", status, "count", count)
+			continue
+		}
+		out[status] = count
+	}
+	return out, nil
+}
+
 // creatorApplicationDetailFromRows maps the four repo result sets onto the
 // domain aggregate. Categories arrive as plain codes — name/sortOrder are
 // resolved by the handler against DictionaryService at presentation time,

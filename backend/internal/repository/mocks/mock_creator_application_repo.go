@@ -38,6 +38,68 @@ func (_m *MockCreatorApplicationRepo) EXPECT() *MockCreatorApplicationRepo_Expec
 	return &MockCreatorApplicationRepo_Expecter{mock: &_m.Mock}
 }
 
+// Counts provides a mock function for the type MockCreatorApplicationRepo
+func (_mock *MockCreatorApplicationRepo) Counts(ctx context.Context) (map[string]int64, error) {
+	ret := _mock.Called(ctx)
+
+	if len(ret) == 0 {
+		panic("no return value specified for Counts")
+	}
+
+	var r0 map[string]int64
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context) (map[string]int64, error)); ok {
+		return returnFunc(ctx)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context) map[string]int64); ok {
+		r0 = returnFunc(ctx)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(map[string]int64)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context) error); ok {
+		r1 = returnFunc(ctx)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockCreatorApplicationRepo_Counts_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Counts'
+type MockCreatorApplicationRepo_Counts_Call struct {
+	*mock.Call
+}
+
+// Counts is a helper method to define mock.On call
+//   - ctx context.Context
+func (_e *MockCreatorApplicationRepo_Expecter) Counts(ctx interface{}) *MockCreatorApplicationRepo_Counts_Call {
+	return &MockCreatorApplicationRepo_Counts_Call{Call: _e.mock.On("Counts", ctx)}
+}
+
+func (_c *MockCreatorApplicationRepo_Counts_Call) Run(run func(ctx context.Context)) *MockCreatorApplicationRepo_Counts_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		run(
+			arg0,
+		)
+	})
+	return _c
+}
+
+func (_c *MockCreatorApplicationRepo_Counts_Call) Return(stringToInt64 map[string]int64, err error) *MockCreatorApplicationRepo_Counts_Call {
+	_c.Call.Return(stringToInt64, err)
+	return _c
+}
+
+func (_c *MockCreatorApplicationRepo_Counts_Call) RunAndReturn(run func(ctx context.Context) (map[string]int64, error)) *MockCreatorApplicationRepo_Counts_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Create provides a mock function for the type MockCreatorApplicationRepo
 func (_mock *MockCreatorApplicationRepo) Create(ctx context.Context, row repository.CreatorApplicationRow) (*repository.CreatorApplicationRow, error) {
 	ret := _mock.Called(ctx, row)

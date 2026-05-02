@@ -93,7 +93,17 @@ type CreatorApplicationRepo interface {
 	Create(ctx context.Context, row CreatorApplicationRow) (*CreatorApplicationRow, error)
 	GetByID(ctx context.Context, id string) (*CreatorApplicationRow, error)
 	List(ctx context.Context, params CreatorApplicationListParams) ([]*CreatorApplicationListRow, int64, error)
+	Counts(ctx context.Context) (map[string]int64, error)
 	DeleteForTests(ctx context.Context, id string) error
+}
+
+// CreatorApplicationCountRow is the projected row shape of the GROUP BY status
+// query used by Counts. Status values are unique by construction — `GROUP BY
+// status` collapses duplicates at the SQL level — so a future map insert never
+// overwrites a previous bucket.
+type CreatorApplicationCountRow struct {
+	Status string `db:"status"`
+	Count  int64  `db:"count"`
 }
 
 // Aliases for the multi-table list query — composing column references via
@@ -271,6 +281,27 @@ func (r *creatorApplicationRepository) List(ctx context.Context, params CreatorA
 		return nil, 0, err
 	}
 	return rows, total, nil
+}
+
+// Counts returns the number of creator applications grouped by status. The
+// result is a sparse map — only statuses that currently have at least one row
+// in the table are present. Empty table → empty map. The single SQL
+// `SELECT status, COUNT(*) FROM creator_applications GROUP BY status` is
+// cheap (status is part of the partial unique index, status enum is small)
+// and fits the read-only, no-filter contract of the admin counts endpoint.
+func (r *creatorApplicationRepository) Counts(ctx context.Context) (map[string]int64, error) {
+	q := sq.Select(CreatorApplicationColumnStatus, "COUNT(*) AS count").
+		From(TableCreatorApplications).
+		GroupBy(CreatorApplicationColumnStatus)
+	rows, err := dbutil.Many[CreatorApplicationCountRow](ctx, r.db, q)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]int64, len(rows))
+	for _, row := range rows {
+		out[row.Status] = row.Count
+	}
+	return out, nil
 }
 
 func creatorApplicationListTelegramJoin() string {

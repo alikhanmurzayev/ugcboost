@@ -20,16 +20,16 @@ const (
 	BearerAuthScopes = "bearerAuth.Scopes"
 )
 
-// Defines values for CreatorApplicationDetailConsentConsentType.
+// Defines values for ConsentType.
 const (
-	CrossBorder CreatorApplicationDetailConsentConsentType = "cross_border"
-	Processing  CreatorApplicationDetailConsentConsentType = "processing"
-	Terms       CreatorApplicationDetailConsentConsentType = "terms"
-	ThirdParty  CreatorApplicationDetailConsentConsentType = "third_party"
+	CrossBorder ConsentType = "cross_border"
+	Processing  ConsentType = "processing"
+	Terms       ConsentType = "terms"
+	ThirdParty  ConsentType = "third_party"
 )
 
-// Valid indicates whether the value is a known member of the CreatorApplicationDetailConsentConsentType enum.
-func (e CreatorApplicationDetailConsentConsentType) Valid() bool {
+// Valid indicates whether the value is a known member of the ConsentType enum.
+func (e ConsentType) Valid() bool {
 	switch e {
 	case CrossBorder:
 		return true
@@ -38,72 +38,6 @@ func (e CreatorApplicationDetailConsentConsentType) Valid() bool {
 	case Terms:
 		return true
 	case ThirdParty:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for CreatorApplicationDetailDataStatus.
-const (
-	CreatorApplicationDetailDataStatusAwaitingContract CreatorApplicationDetailDataStatus = "awaiting_contract"
-	CreatorApplicationDetailDataStatusContractSent     CreatorApplicationDetailDataStatus = "contract_sent"
-	CreatorApplicationDetailDataStatusModeration       CreatorApplicationDetailDataStatus = "moderation"
-	CreatorApplicationDetailDataStatusRejected         CreatorApplicationDetailDataStatus = "rejected"
-	CreatorApplicationDetailDataStatusSigned           CreatorApplicationDetailDataStatus = "signed"
-	CreatorApplicationDetailDataStatusVerification     CreatorApplicationDetailDataStatus = "verification"
-	CreatorApplicationDetailDataStatusWithdrawn        CreatorApplicationDetailDataStatus = "withdrawn"
-)
-
-// Valid indicates whether the value is a known member of the CreatorApplicationDetailDataStatus enum.
-func (e CreatorApplicationDetailDataStatus) Valid() bool {
-	switch e {
-	case CreatorApplicationDetailDataStatusAwaitingContract:
-		return true
-	case CreatorApplicationDetailDataStatusContractSent:
-		return true
-	case CreatorApplicationDetailDataStatusModeration:
-		return true
-	case CreatorApplicationDetailDataStatusRejected:
-		return true
-	case CreatorApplicationDetailDataStatusSigned:
-		return true
-	case CreatorApplicationDetailDataStatusVerification:
-		return true
-	case CreatorApplicationDetailDataStatusWithdrawn:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for CreatorApplicationListItemStatus.
-const (
-	CreatorApplicationListItemStatusAwaitingContract CreatorApplicationListItemStatus = "awaiting_contract"
-	CreatorApplicationListItemStatusContractSent     CreatorApplicationListItemStatus = "contract_sent"
-	CreatorApplicationListItemStatusModeration       CreatorApplicationListItemStatus = "moderation"
-	CreatorApplicationListItemStatusRejected         CreatorApplicationListItemStatus = "rejected"
-	CreatorApplicationListItemStatusSigned           CreatorApplicationListItemStatus = "signed"
-	CreatorApplicationListItemStatusVerification     CreatorApplicationListItemStatus = "verification"
-	CreatorApplicationListItemStatusWithdrawn        CreatorApplicationListItemStatus = "withdrawn"
-)
-
-// Valid indicates whether the value is a known member of the CreatorApplicationListItemStatus enum.
-func (e CreatorApplicationListItemStatus) Valid() bool {
-	switch e {
-	case CreatorApplicationListItemStatusAwaitingContract:
-		return true
-	case CreatorApplicationListItemStatusContractSent:
-		return true
-	case CreatorApplicationListItemStatusModeration:
-		return true
-	case CreatorApplicationListItemStatusRejected:
-		return true
-	case CreatorApplicationListItemStatusSigned:
-		return true
-	case CreatorApplicationListItemStatusVerification:
-		return true
-	case CreatorApplicationListItemStatusWithdrawn:
 		return true
 	default:
 		return false
@@ -137,19 +71,19 @@ func (e CreatorApplicationListSortField) Valid() bool {
 	}
 }
 
-// Defines values for CreatorApplicationsListRequestStatuses.
+// Defines values for CreatorApplicationStatus.
 const (
-	AwaitingContract CreatorApplicationsListRequestStatuses = "awaiting_contract"
-	ContractSent     CreatorApplicationsListRequestStatuses = "contract_sent"
-	Moderation       CreatorApplicationsListRequestStatuses = "moderation"
-	Rejected         CreatorApplicationsListRequestStatuses = "rejected"
-	Signed           CreatorApplicationsListRequestStatuses = "signed"
-	Verification     CreatorApplicationsListRequestStatuses = "verification"
-	Withdrawn        CreatorApplicationsListRequestStatuses = "withdrawn"
+	AwaitingContract CreatorApplicationStatus = "awaiting_contract"
+	ContractSent     CreatorApplicationStatus = "contract_sent"
+	Moderation       CreatorApplicationStatus = "moderation"
+	Rejected         CreatorApplicationStatus = "rejected"
+	Signed           CreatorApplicationStatus = "signed"
+	Verification     CreatorApplicationStatus = "verification"
+	Withdrawn        CreatorApplicationStatus = "withdrawn"
 )
 
-// Valid indicates whether the value is a known member of the CreatorApplicationsListRequestStatuses enum.
-func (e CreatorApplicationsListRequestStatuses) Valid() bool {
+// Valid indicates whether the value is a known member of the CreatorApplicationStatus enum.
+func (e CreatorApplicationStatus) Valid() bool {
 	switch e {
 	case AwaitingContract:
 		return true
@@ -312,6 +246,12 @@ type BrandDetailData struct {
 	UpdatedAt time.Time     `json:"updatedAt"`
 }
 
+// BrandInput Mutable subset of a brand — used for create and update.
+type BrandInput struct {
+	LogoUrl *string `json:"logoUrl,omitempty"`
+	Name    string  `json:"name"`
+}
+
 // BrandListItem defines model for BrandListItem.
 type BrandListItem struct {
 	CreatedAt    time.Time `json:"createdAt"`
@@ -327,42 +267,15 @@ type BrandResult struct {
 	Data Brand `json:"data"`
 }
 
-// CreateBrandRequest defines model for CreateBrandRequest.
-type CreateBrandRequest struct {
-	LogoUrl *string `json:"logoUrl,omitempty"`
-	Name    string  `json:"name"`
-}
-
-// CreatorApplicationDetailCategory defines model for CreatorApplicationDetailCategory.
-type CreatorApplicationDetailCategory struct {
-	// Code Stable category code from the categories dictionary.
-	Code string `json:"code"`
-
-	// Name Display name at the time the read was served.
-	Name string `json:"name"`
-
-	// SortOrder Catalogue ordering hint copied from the dictionary row.
-	SortOrder int `json:"sortOrder"`
-}
-
-// CreatorApplicationDetailCity defines model for CreatorApplicationDetailCity.
-type CreatorApplicationDetailCity struct {
-	// Code Stable city code from the cities dictionary (or the raw stored value when the dictionary entry has been deactivated).
-	Code string `json:"code"`
-
-	// Name Display name resolved against the dictionary at read time. Falls back to the code when the dictionary entry no longer exists.
-	Name string `json:"name"`
-
-	// SortOrder Catalogue ordering hint from the dictionary row. Falls back to 0 for deactivated/unknown codes.
-	SortOrder int `json:"sortOrder"`
-}
+// ConsentType Canonical consent type captured at creator application submission.
+type ConsentType string
 
 // CreatorApplicationDetailConsent defines model for CreatorApplicationDetailConsent.
 type CreatorApplicationDetailConsent struct {
 	AcceptedAt time.Time `json:"acceptedAt"`
 
-	// ConsentType Canonical consent type captured at submission time.
-	ConsentType CreatorApplicationDetailConsentConsentType `json:"consentType"`
+	// ConsentType Canonical consent type captured at creator application submission.
+	ConsentType ConsentType `json:"consentType"`
 
 	// DocumentVersion Document version stamp recorded at the moment of consent.
 	DocumentVersion string `json:"documentVersion"`
@@ -374,9 +287,6 @@ type CreatorApplicationDetailConsent struct {
 	UserAgent string `json:"userAgent"`
 }
 
-// CreatorApplicationDetailConsentConsentType Canonical consent type captured at submission time.
-type CreatorApplicationDetailConsentConsentType string
-
 // CreatorApplicationDetailData defines model for CreatorApplicationDetailData.
 type CreatorApplicationDetailData struct {
 	Address *string `json:"address,omitempty"`
@@ -385,11 +295,17 @@ type CreatorApplicationDetailData struct {
 	BirthDate openapi_types.Date `json:"birthDate"`
 
 	// Categories Categories selected by the creator, sorted by sort_order then code.
-	Categories []CreatorApplicationDetailCategory `json:"categories"`
+	Categories []DictionaryItem `json:"categories"`
 
 	// CategoryOtherText Free-text niche description when categories include "other".
-	CategoryOtherText *string                      `json:"categoryOtherText,omitempty"`
-	City              CreatorApplicationDetailCity `json:"city"`
+	CategoryOtherText *string `json:"categoryOtherText,omitempty"`
+
+	// City Single entry from a public dictionary (categories, cities, etc.).
+	// Reused for the dictionary-listing endpoint and for hydrated dictionary
+	// references on creator-application reads, where the backend falls back
+	// to `(code, code, 0)` when the underlying dictionary row has been
+	// deactivated.
+	City DictionaryItem `json:"city"`
 
 	// Consents Consents in canonical order (processing → third_party → cross_border → terms),
 	// independent of the order they appear in the database.
@@ -407,17 +323,15 @@ type CreatorApplicationDetailData struct {
 	// Socials Social accounts attached to the application, sorted by platform then handle.
 	Socials []CreatorApplicationDetailSocial `json:"socials"`
 
-	// Status Application status.
-	Status CreatorApplicationDetailDataStatus `json:"status"`
+	// Status Lifecycle status of a creator application. Values follow the state
+	// machine described in `_bmad-output/planning-artifacts/creator-application-state-machine.md`.
+	Status CreatorApplicationStatus `json:"status"`
 
 	// TelegramLink Telegram account linked to this application. Null when the creator
 	// has not yet opened the bot.
 	TelegramLink *TelegramLink `json:"telegramLink,omitempty"`
 	UpdatedAt    time.Time     `json:"updatedAt"`
 }
-
-// CreatorApplicationDetailDataStatus Application status.
-type CreatorApplicationDetailDataStatus string
 
 // CreatorApplicationDetailSocial defines model for CreatorApplicationDetailSocial.
 type CreatorApplicationDetailSocial struct {
@@ -432,29 +346,49 @@ type CreatorApplicationListItem struct {
 	BirthDate openapi_types.Date `json:"birthDate"`
 
 	// Categories Categories selected by the creator, sorted by sort_order then code.
-	Categories []CreatorApplicationDetailCategory `json:"categories"`
-	City       CreatorApplicationDetailCity       `json:"city"`
-	CreatedAt  time.Time                          `json:"createdAt"`
-	FirstName  string                             `json:"firstName"`
-	Id         openapi_types.UUID                 `json:"id"`
-	LastName   string                             `json:"lastName"`
-	MiddleName *string                            `json:"middleName,omitempty"`
+	Categories []DictionaryItem `json:"categories"`
+
+	// City Single entry from a public dictionary (categories, cities, etc.).
+	// Reused for the dictionary-listing endpoint and for hydrated dictionary
+	// references on creator-application reads, where the backend falls back
+	// to `(code, code, 0)` when the underlying dictionary row has been
+	// deactivated.
+	City       DictionaryItem     `json:"city"`
+	CreatedAt  time.Time          `json:"createdAt"`
+	FirstName  string             `json:"firstName"`
+	Id         openapi_types.UUID `json:"id"`
+	LastName   string             `json:"lastName"`
+	MiddleName *string            `json:"middleName,omitempty"`
 
 	// Socials Social accounts attached to the application, sorted by platform then handle.
 	Socials []CreatorApplicationDetailSocial `json:"socials"`
-	Status  CreatorApplicationListItemStatus `json:"status"`
+
+	// Status Lifecycle status of a creator application. Values follow the state
+	// machine described in `_bmad-output/planning-artifacts/creator-application-state-machine.md`.
+	Status CreatorApplicationStatus `json:"status"`
 
 	// TelegramLinked True when the creator has bound a Telegram account via /start.
 	TelegramLinked bool      `json:"telegramLinked"`
 	UpdatedAt      time.Time `json:"updatedAt"`
 }
 
-// CreatorApplicationListItemStatus defines model for CreatorApplicationListItem.Status.
-type CreatorApplicationListItemStatus string
-
 // CreatorApplicationListSortField Sort field for the admin list. Mapped to a SQL column / expression on
 // the backend. Unknown values are rejected with 422.
 type CreatorApplicationListSortField string
+
+// CreatorApplicationStatus Lifecycle status of a creator application. Values follow the state
+// machine described in `_bmad-output/planning-artifacts/creator-application-state-machine.md`.
+type CreatorApplicationStatus string
+
+// CreatorApplicationStatusCount Single (status, count) pair returned by GET /creators/applications/counts.
+type CreatorApplicationStatusCount struct {
+	// Count Number of creator applications currently in this status.
+	Count int64 `json:"count"`
+
+	// Status Lifecycle status of a creator application. Values follow the state
+	// machine described in `_bmad-output/planning-artifacts/creator-application-state-machine.md`.
+	Status CreatorApplicationStatus `json:"status"`
+}
 
 // CreatorApplicationSubmitData defines model for CreatorApplicationSubmitData.
 type CreatorApplicationSubmitData struct {
@@ -507,6 +441,22 @@ type CreatorApplicationSubmitResult struct {
 	Data CreatorApplicationSubmitData `json:"data"`
 }
 
+// CreatorApplicationsCountsData Sparse counts payload — see the operation description on the
+// `getCreatorApplicationsCounts` endpoint for the contract details.
+// `items` is alphabetically sorted by `status` for deterministic output.
+type CreatorApplicationsCountsData struct {
+	// Items Sparse list — only statuses with at least one application appear here.
+	Items []CreatorApplicationStatusCount `json:"items"`
+}
+
+// CreatorApplicationsCountsResult defines model for CreatorApplicationsCountsResult.
+type CreatorApplicationsCountsResult struct {
+	// Data Sparse counts payload — see the operation description on the
+	// `getCreatorApplicationsCounts` endpoint for the contract details.
+	// `items` is alphabetically sorted by `status` for deterministic output.
+	Data CreatorApplicationsCountsData `json:"data"`
+}
+
 // CreatorApplicationsListData defines model for CreatorApplicationsListData.
 type CreatorApplicationsListData struct {
 	Items   []CreatorApplicationListItem `json:"items"`
@@ -517,9 +467,7 @@ type CreatorApplicationsListData struct {
 	Total int64 `json:"total"`
 }
 
-// CreatorApplicationsListRequest Filter, search, sort and pagination payload for the admin list. All
-// filter fields are optional and combined with AND between fields, OR
-// (any-of) within a single array. Empty/whitespace `search` is ignored.
+// CreatorApplicationsListRequest defines model for CreatorApplicationsListRequest.
 type CreatorApplicationsListRequest struct {
 	// AgeFrom Inclusive lower bound for the creator's age in full years (computed from birth_date).
 	AgeFrom *int `json:"ageFrom,omitempty"`
@@ -559,7 +507,7 @@ type CreatorApplicationsListRequest struct {
 	Sort CreatorApplicationListSortField `json:"sort"`
 
 	// Statuses Match any of these statuses. Empty/missing → all statuses.
-	Statuses *[]CreatorApplicationsListRequestStatuses `json:"statuses,omitempty"`
+	Statuses *[]CreatorApplicationStatus `json:"statuses,omitempty"`
 
 	// TelegramLinked When true, only applications already bound to a Telegram account
 	// are returned. When false, only those still without a link.
@@ -567,16 +515,17 @@ type CreatorApplicationsListRequest struct {
 	TelegramLinked *bool `json:"telegramLinked,omitempty"`
 }
 
-// CreatorApplicationsListRequestStatuses defines model for CreatorApplicationsListRequest.Statuses.
-type CreatorApplicationsListRequestStatuses string
-
 // CreatorApplicationsListResult defines model for CreatorApplicationsListResult.
 type CreatorApplicationsListResult struct {
 	Data CreatorApplicationsListData `json:"data"`
 }
 
-// DictionaryEntry Single entry in a public dictionary (category, city, etc.).
-type DictionaryEntry struct {
+// DictionaryItem Single entry from a public dictionary (categories, cities, etc.).
+// Reused for the dictionary-listing endpoint and for hydrated dictionary
+// references on creator-application reads, where the backend falls back
+// to `(code, code, 0)` when the underlying dictionary row has been
+// deactivated.
+type DictionaryItem struct {
 	// Code Stable machine-readable identifier (snake_case).
 	Code string `json:"code"`
 
@@ -633,7 +582,7 @@ type ListBrandsResult struct {
 
 // ListDictionaryData defines model for ListDictionaryData.
 type ListDictionaryData struct {
-	Items []DictionaryEntry `json:"items"`
+	Items []DictionaryItem `json:"items"`
 
 	// Type Dictionary type echoed back to the client.
 	Type string `json:"type"`
@@ -671,6 +620,15 @@ type MessageData struct {
 // MessageResponse defines model for MessageResponse.
 type MessageResponse struct {
 	Data MessageData `json:"data"`
+}
+
+// PaginationInput Shared 1-based pagination payload for body-paginated list endpoints.
+type PaginationInput struct {
+	// Page 1-based page index.
+	Page int `json:"page"`
+
+	// PerPage Page size, between 1 and 200 inclusive.
+	PerPage int `json:"perPage"`
 }
 
 // PasswordResetBody defines model for PasswordResetBody.
@@ -717,37 +675,49 @@ type TelegramLink struct {
 	TelegramUsername *string `json:"telegramUsername,omitempty"`
 }
 
-// UpdateBrandRequest defines model for UpdateBrandRequest.
-type UpdateBrandRequest struct {
-	LogoUrl *string `json:"logoUrl,omitempty"`
-	Name    string  `json:"name"`
-}
-
 // User defines model for User.
 type User struct {
 	Email openapi_types.Email `json:"email"`
 	Id    string              `json:"id"`
-	Role  UserRole            `json:"role"`
-}
 
-// UserRole defines model for User.Role.
-type UserRole string
+	// Role Role of an authenticated user.
+	Role UserRole `json:"role"`
+}
 
 // UserResponse defines model for UserResponse.
 type UserResponse struct {
 	Data User `json:"data"`
 }
 
+// UserRole Role of an authenticated user.
+type UserRole string
+
+// PageQueryParam defines model for PageQueryParam.
+type PageQueryParam = int
+
+// PerPageQueryParam defines model for PerPageQueryParam.
+type PerPageQueryParam = int
+
+// Forbidden defines model for Forbidden.
+type Forbidden = ErrorResponse
+
+// UnexpectedError defines model for UnexpectedError.
+type UnexpectedError = ErrorResponse
+
 // ListAuditLogsParams defines parameters for ListAuditLogs.
 type ListAuditLogsParams struct {
-	ActorId    *string    `form:"actor_id,omitempty" json:"actor_id,omitempty"`
-	EntityType *string    `form:"entity_type,omitempty" json:"entity_type,omitempty"`
-	EntityId   *string    `form:"entity_id,omitempty" json:"entity_id,omitempty"`
+	ActorId    *string    `form:"actorId,omitempty" json:"actorId,omitempty"`
+	EntityType *string    `form:"entityType,omitempty" json:"entityType,omitempty"`
+	EntityId   *string    `form:"entityId,omitempty" json:"entityId,omitempty"`
 	Action     *string    `form:"action,omitempty" json:"action,omitempty"`
-	DateFrom   *time.Time `form:"date_from,omitempty" json:"date_from,omitempty"`
-	DateTo     *time.Time `form:"date_to,omitempty" json:"date_to,omitempty"`
-	Page       *int       `form:"page,omitempty" json:"page,omitempty"`
-	PerPage    *int       `form:"per_page,omitempty" json:"per_page,omitempty"`
+	DateFrom   *time.Time `form:"dateFrom,omitempty" json:"dateFrom,omitempty"`
+	DateTo     *time.Time `form:"dateTo,omitempty" json:"dateTo,omitempty"`
+
+	// Page 1-based page index.
+	Page *PageQueryParam `form:"page,omitempty" json:"page,omitempty"`
+
+	// PerPage Page size, between 1 and 200 inclusive.
+	PerPage *PerPageQueryParam `form:"perPage,omitempty" json:"perPage,omitempty"`
 }
 
 // ListDictionaryParamsType defines parameters for ListDictionary.
@@ -763,10 +733,10 @@ type ResetPasswordJSONRequestBody = PasswordResetBody
 type RequestPasswordResetJSONRequestBody = PasswordResetRequestBody
 
 // CreateBrandJSONRequestBody defines body for CreateBrand for application/json ContentType.
-type CreateBrandJSONRequestBody = CreateBrandRequest
+type CreateBrandJSONRequestBody = BrandInput
 
 // UpdateBrandJSONRequestBody defines body for UpdateBrand for application/json ContentType.
-type UpdateBrandJSONRequestBody = UpdateBrandRequest
+type UpdateBrandJSONRequestBody = BrandInput
 
 // AssignManagerJSONRequestBody defines body for AssignManager for application/json ContentType.
 type AssignManagerJSONRequestBody = AssignManagerRequest
@@ -824,6 +794,9 @@ type ServerInterface interface {
 	// Submit a creator application from the public landing page
 	// (POST /creators/applications)
 	SubmitCreatorApplication(w http.ResponseWriter, r *http.Request)
+	// Counts of creator applications grouped by status (admin only)
+	// (GET /creators/applications/counts)
+	GetCreatorApplicationsCounts(w http.ResponseWriter, r *http.Request)
 	// List creator applications with filters, search, sorting and pagination (admin only)
 	// (POST /creators/applications/list)
 	ListCreatorApplications(w http.ResponseWriter, r *http.Request)
@@ -932,6 +905,12 @@ func (_ Unimplemented) SubmitCreatorApplication(w http.ResponseWriter, r *http.R
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// Counts of creator applications grouped by status (admin only)
+// (GET /creators/applications/counts)
+func (_ Unimplemented) GetCreatorApplicationsCounts(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // List creator applications with filters, search, sorting and pagination (admin only)
 // (POST /creators/applications/list)
 func (_ Unimplemented) ListCreatorApplications(w http.ResponseWriter, r *http.Request) {
@@ -979,27 +958,27 @@ func (siw *ServerInterfaceWrapper) ListAuditLogs(w http.ResponseWriter, r *http.
 	// Parameter object where we will unmarshal all parameters from the context
 	var params ListAuditLogsParams
 
-	// ------------- Optional query parameter "actor_id" -------------
+	// ------------- Optional query parameter "actorId" -------------
 
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "actor_id", r.URL.Query(), &params.ActorId, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "actorId", r.URL.Query(), &params.ActorId, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
 	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "actor_id", Err: err})
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "actorId", Err: err})
 		return
 	}
 
-	// ------------- Optional query parameter "entity_type" -------------
+	// ------------- Optional query parameter "entityType" -------------
 
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "entity_type", r.URL.Query(), &params.EntityType, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "entityType", r.URL.Query(), &params.EntityType, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
 	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "entity_type", Err: err})
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "entityType", Err: err})
 		return
 	}
 
-	// ------------- Optional query parameter "entity_id" -------------
+	// ------------- Optional query parameter "entityId" -------------
 
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "entity_id", r.URL.Query(), &params.EntityId, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "entityId", r.URL.Query(), &params.EntityId, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
 	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "entity_id", Err: err})
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "entityId", Err: err})
 		return
 	}
 
@@ -1011,19 +990,19 @@ func (siw *ServerInterfaceWrapper) ListAuditLogs(w http.ResponseWriter, r *http.
 		return
 	}
 
-	// ------------- Optional query parameter "date_from" -------------
+	// ------------- Optional query parameter "dateFrom" -------------
 
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "date_from", r.URL.Query(), &params.DateFrom, runtime.BindQueryParameterOptions{Type: "string", Format: "date-time"})
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "dateFrom", r.URL.Query(), &params.DateFrom, runtime.BindQueryParameterOptions{Type: "string", Format: "date-time"})
 	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "date_from", Err: err})
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "dateFrom", Err: err})
 		return
 	}
 
-	// ------------- Optional query parameter "date_to" -------------
+	// ------------- Optional query parameter "dateTo" -------------
 
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "date_to", r.URL.Query(), &params.DateTo, runtime.BindQueryParameterOptions{Type: "string", Format: "date-time"})
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "dateTo", r.URL.Query(), &params.DateTo, runtime.BindQueryParameterOptions{Type: "string", Format: "date-time"})
 	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "date_to", Err: err})
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "dateTo", Err: err})
 		return
 	}
 
@@ -1035,11 +1014,11 @@ func (siw *ServerInterfaceWrapper) ListAuditLogs(w http.ResponseWriter, r *http.
 		return
 	}
 
-	// ------------- Optional query parameter "per_page" -------------
+	// ------------- Optional query parameter "perPage" -------------
 
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "per_page", r.URL.Query(), &params.PerPage, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "perPage", r.URL.Query(), &params.PerPage, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
 	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "per_page", Err: err})
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "perPage", Err: err})
 		return
 	}
 
@@ -1362,6 +1341,26 @@ func (siw *ServerInterfaceWrapper) SubmitCreatorApplication(w http.ResponseWrite
 	handler.ServeHTTP(w, r)
 }
 
+// GetCreatorApplicationsCounts operation middleware
+func (siw *ServerInterfaceWrapper) GetCreatorApplicationsCounts(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetCreatorApplicationsCounts(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListCreatorApplications operation middleware
 func (siw *ServerInterfaceWrapper) ListCreatorApplications(w http.ResponseWriter, r *http.Request) {
 
@@ -1611,6 +1610,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Post(options.BaseURL+"/creators/applications", wrapper.SubmitCreatorApplication)
 	})
 	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/creators/applications/counts", wrapper.GetCreatorApplicationsCounts)
+	})
+	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/creators/applications/list", wrapper.ListCreatorApplications)
 	})
 	r.Group(func(r chi.Router) {
@@ -1625,6 +1627,10 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 
 	return r
 }
+
+type ForbiddenJSONResponse ErrorResponse
+
+type UnexpectedErrorJSONResponse ErrorResponse
 
 type ListAuditLogsRequestObject struct {
 	Params ListAuditLogsParams
@@ -1643,7 +1649,7 @@ func (response ListAuditLogs200JSONResponse) VisitListAuditLogsResponse(w http.R
 	return json.NewEncoder(w).Encode(response)
 }
 
-type ListAuditLogs403JSONResponse ErrorResponse
+type ListAuditLogs403JSONResponse struct{ ForbiddenJSONResponse }
 
 func (response ListAuditLogs403JSONResponse) VisitListAuditLogsResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
@@ -1958,7 +1964,7 @@ func (response CreateBrand201JSONResponse) VisitCreateBrandResponse(w http.Respo
 	return json.NewEncoder(w).Encode(response)
 }
 
-type CreateBrand403JSONResponse ErrorResponse
+type CreateBrand403JSONResponse struct{ ForbiddenJSONResponse }
 
 func (response CreateBrand403JSONResponse) VisitCreateBrandResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
@@ -2005,7 +2011,7 @@ func (response DeleteBrand200JSONResponse) VisitDeleteBrandResponse(w http.Respo
 	return json.NewEncoder(w).Encode(response)
 }
 
-type DeleteBrand403JSONResponse ErrorResponse
+type DeleteBrand403JSONResponse struct{ ForbiddenJSONResponse }
 
 func (response DeleteBrand403JSONResponse) VisitDeleteBrandResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
@@ -2052,7 +2058,7 @@ func (response GetBrand200JSONResponse) VisitGetBrandResponse(w http.ResponseWri
 	return json.NewEncoder(w).Encode(response)
 }
 
-type GetBrand403JSONResponse ErrorResponse
+type GetBrand403JSONResponse struct{ ForbiddenJSONResponse }
 
 func (response GetBrand403JSONResponse) VisitGetBrandResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
@@ -2100,7 +2106,7 @@ func (response UpdateBrand200JSONResponse) VisitUpdateBrandResponse(w http.Respo
 	return json.NewEncoder(w).Encode(response)
 }
 
-type UpdateBrand403JSONResponse ErrorResponse
+type UpdateBrand403JSONResponse struct{ ForbiddenJSONResponse }
 
 func (response UpdateBrand403JSONResponse) VisitUpdateBrandResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
@@ -2148,7 +2154,7 @@ func (response AssignManager201JSONResponse) VisitAssignManagerResponse(w http.R
 	return json.NewEncoder(w).Encode(response)
 }
 
-type AssignManager403JSONResponse ErrorResponse
+type AssignManager403JSONResponse struct{ ForbiddenJSONResponse }
 
 func (response AssignManager403JSONResponse) VisitAssignManagerResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
@@ -2187,7 +2193,7 @@ func (response RemoveManager200JSONResponse) VisitRemoveManagerResponse(w http.R
 	return json.NewEncoder(w).Encode(response)
 }
 
-type RemoveManager403JSONResponse ErrorResponse
+type RemoveManager403JSONResponse struct{ ForbiddenJSONResponse }
 
 func (response RemoveManager403JSONResponse) VisitRemoveManagerResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
@@ -2255,6 +2261,52 @@ func (response SubmitCreatorApplicationdefaultJSONResponse) VisitSubmitCreatorAp
 	return json.NewEncoder(w).Encode(response.Body)
 }
 
+type GetCreatorApplicationsCountsRequestObject struct {
+}
+
+type GetCreatorApplicationsCountsResponseObject interface {
+	VisitGetCreatorApplicationsCountsResponse(w http.ResponseWriter) error
+}
+
+type GetCreatorApplicationsCounts200JSONResponse CreatorApplicationsCountsResult
+
+func (response GetCreatorApplicationsCounts200JSONResponse) VisitGetCreatorApplicationsCountsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetCreatorApplicationsCounts401JSONResponse ErrorResponse
+
+func (response GetCreatorApplicationsCounts401JSONResponse) VisitGetCreatorApplicationsCountsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetCreatorApplicationsCounts403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response GetCreatorApplicationsCounts403JSONResponse) VisitGetCreatorApplicationsCountsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetCreatorApplicationsCountsdefaultJSONResponse struct {
+	Body       ErrorResponse
+	StatusCode int
+}
+
+func (response GetCreatorApplicationsCountsdefaultJSONResponse) VisitGetCreatorApplicationsCountsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+
+	return json.NewEncoder(w).Encode(response.Body)
+}
+
 type ListCreatorApplicationsRequestObject struct {
 	Body *ListCreatorApplicationsJSONRequestBody
 }
@@ -2281,7 +2333,7 @@ func (response ListCreatorApplications401JSONResponse) VisitListCreatorApplicati
 	return json.NewEncoder(w).Encode(response)
 }
 
-type ListCreatorApplications403JSONResponse ErrorResponse
+type ListCreatorApplications403JSONResponse struct{ ForbiddenJSONResponse }
 
 func (response ListCreatorApplications403JSONResponse) VisitListCreatorApplicationsResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
@@ -2337,7 +2389,7 @@ func (response GetCreatorApplication401JSONResponse) VisitGetCreatorApplicationR
 	return json.NewEncoder(w).Encode(response)
 }
 
-type GetCreatorApplication403JSONResponse ErrorResponse
+type GetCreatorApplication403JSONResponse struct{ ForbiddenJSONResponse }
 
 func (response GetCreatorApplication403JSONResponse) VisitGetCreatorApplicationResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
@@ -2480,6 +2532,9 @@ type StrictServerInterface interface {
 	// Submit a creator application from the public landing page
 	// (POST /creators/applications)
 	SubmitCreatorApplication(ctx context.Context, request SubmitCreatorApplicationRequestObject) (SubmitCreatorApplicationResponseObject, error)
+	// Counts of creator applications grouped by status (admin only)
+	// (GET /creators/applications/counts)
+	GetCreatorApplicationsCounts(ctx context.Context, request GetCreatorApplicationsCountsRequestObject) (GetCreatorApplicationsCountsResponseObject, error)
 	// List creator applications with filters, search, sorting and pagination (admin only)
 	// (POST /creators/applications/list)
 	ListCreatorApplications(ctx context.Context, request ListCreatorApplicationsRequestObject) (ListCreatorApplicationsResponseObject, error)
@@ -2938,6 +2993,30 @@ func (sh *strictHandler) SubmitCreatorApplication(w http.ResponseWriter, r *http
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(SubmitCreatorApplicationResponseObject); ok {
 		if err := validResponse.VisitSubmitCreatorApplicationResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetCreatorApplicationsCounts operation middleware
+func (sh *strictHandler) GetCreatorApplicationsCounts(w http.ResponseWriter, r *http.Request) {
+	var request GetCreatorApplicationsCountsRequestObject
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetCreatorApplicationsCounts(ctx, request.(GetCreatorApplicationsCountsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetCreatorApplicationsCounts")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetCreatorApplicationsCountsResponseObject); ok {
+		if err := validResponse.VisitGetCreatorApplicationsCountsResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

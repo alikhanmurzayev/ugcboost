@@ -300,6 +300,39 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/creators/applications/counts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Counts of creator applications grouped by status (admin only)
+         * @description Admin-only read-only endpoint that returns the number of creator
+         *     applications grouped by their current status. Powers the moderation UI
+         *     notification badge: clients pick which statuses to sum (default —
+         *     verification + moderation + awaiting_contract).
+         *
+         *     The response is **sparse**: only statuses that currently have at least
+         *     one application are present in `items`. Statuses without any rows are
+         *     omitted entirely (the frontend should look up its known status with
+         *     `find(c => c.status === STATUS_X)?.count ?? 0`). This keeps responses
+         *     compact and makes "no applications in this status" semantically explicit.
+         *
+         *     Authorisation is evaluated before any business logic, so non-admin
+         *     callers receive 403 regardless of the underlying counts. No audit log
+         *     is written for this read-only call.
+         */
+        get: operations["getCreatorApplicationsCounts"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/creators/applications/{id}": {
         parameters: {
             query?: never;
@@ -358,6 +391,52 @@ export interface components {
         MessageResponse: {
             data: components["schemas"]["MessageData"];
         };
+        /**
+         * @description Role of an authenticated user.
+         * @enum {string}
+         */
+        UserRole: "admin" | "brand_manager";
+        /**
+         * @description Canonical consent type captured at creator application submission.
+         * @enum {string}
+         */
+        ConsentType: "processing" | "third_party" | "cross_border" | "terms";
+        /**
+         * @description Lifecycle status of a creator application. Values follow the state
+         *     machine described in `_bmad-output/planning-artifacts/creator-application-state-machine.md`.
+         * @enum {string}
+         */
+        CreatorApplicationStatus: "verification" | "moderation" | "awaiting_contract" | "contract_sent" | "signed" | "rejected" | "withdrawn";
+        /** @description Shared 1-based pagination payload for body-paginated list endpoints. */
+        PaginationInput: {
+            /** @description 1-based page index. */
+            page: number;
+            /** @description Page size, between 1 and 200 inclusive. */
+            perPage: number;
+        };
+        /**
+         * @description Single entry from a public dictionary (categories, cities, etc.).
+         *     Reused for the dictionary-listing endpoint and for hydrated dictionary
+         *     references on creator-application reads, where the backend falls back
+         *     to `(code, code, 0)` when the underlying dictionary row has been
+         *     deactivated.
+         */
+        DictionaryItem: {
+            /** @description Stable machine-readable identifier (snake_case). */
+            code: string;
+            /** @description Human-readable label rendered to the user. */
+            name: string;
+            /** @description Sort key — lower values appear first in the UI. */
+            sortOrder: number;
+        };
+        DictionaryListResult: {
+            data: components["schemas"]["ListDictionaryData"];
+        };
+        ListDictionaryData: {
+            /** @description Dictionary type echoed back to the client. */
+            type: string;
+            items: components["schemas"]["DictionaryItem"][];
+        };
         LoginRequest: {
             /**
              * Format: email
@@ -386,17 +465,13 @@ export interface components {
             id: string;
             /** Format: email */
             email: string;
-            /** @enum {string} */
-            role: "admin" | "brand_manager";
+            role: components["schemas"]["UserRole"];
         };
         UserResponse: {
             data: components["schemas"]["User"];
         };
-        CreateBrandRequest: {
-            name: string;
-            logoUrl?: string;
-        };
-        UpdateBrandRequest: {
+        /** @description Mutable subset of a brand — used for create and update. */
+        BrandInput: {
             name: string;
             logoUrl?: string;
         };
@@ -483,23 +558,6 @@ export interface components {
         AuditLogsResult: {
             data: components["schemas"]["ListAuditLogsData"];
         };
-        /** @description Single entry in a public dictionary (category, city, etc.). */
-        DictionaryEntry: {
-            /** @description Stable machine-readable identifier (snake_case). */
-            code: string;
-            /** @description Human-readable label rendered to the user. */
-            name: string;
-            /** @description Sort key — lower values appear first in the UI. */
-            sortOrder: number;
-        };
-        ListDictionaryData: {
-            /** @description Dictionary type echoed back to the client. */
-            type: string;
-            items: components["schemas"]["DictionaryEntry"][];
-        };
-        DictionaryListResult: {
-            data: components["schemas"]["ListDictionaryData"];
-        };
         /**
          * @description Supported social network for creator accounts (MVP scope).
          * @enum {string}
@@ -562,32 +620,12 @@ export interface components {
         CreatorApplicationSubmitResult: {
             data: components["schemas"]["CreatorApplicationSubmitData"];
         };
-        CreatorApplicationDetailCategory: {
-            /** @description Stable category code from the categories dictionary. */
-            code: string;
-            /** @description Display name at the time the read was served. */
-            name: string;
-            /** @description Catalogue ordering hint copied from the dictionary row. */
-            sortOrder: number;
-        };
-        CreatorApplicationDetailCity: {
-            /** @description Stable city code from the cities dictionary (or the raw stored value when the dictionary entry has been deactivated). */
-            code: string;
-            /** @description Display name resolved against the dictionary at read time. Falls back to the code when the dictionary entry no longer exists. */
-            name: string;
-            /** @description Catalogue ordering hint from the dictionary row. Falls back to 0 for deactivated/unknown codes. */
-            sortOrder: number;
-        };
         CreatorApplicationDetailSocial: {
             platform: components["schemas"]["SocialPlatform"];
             handle: string;
         };
         CreatorApplicationDetailConsent: {
-            /**
-             * @description Canonical consent type captured at submission time.
-             * @enum {string}
-             */
-            consentType: "processing" | "third_party" | "cross_border" | "terms";
+            consentType: components["schemas"]["ConsentType"];
             /** Format: date-time */
             acceptedAt: string;
             /** @description Document version stamp recorded at the moment of consent. */
@@ -630,21 +668,17 @@ export interface components {
              */
             birthDate: string;
             phone: string;
-            city: components["schemas"]["CreatorApplicationDetailCity"];
+            city: components["schemas"]["DictionaryItem"];
             address?: string | null;
             /** @description Free-text niche description when categories include "other". */
             categoryOtherText?: string | null;
-            /**
-             * @description Application status.
-             * @enum {string}
-             */
-            status: "verification" | "moderation" | "awaiting_contract" | "contract_sent" | "signed" | "rejected" | "withdrawn";
+            status: components["schemas"]["CreatorApplicationStatus"];
             /** Format: date-time */
             createdAt: string;
             /** Format: date-time */
             updatedAt: string;
             /** @description Categories selected by the creator, sorted by sort_order then code. */
-            categories: components["schemas"]["CreatorApplicationDetailCategory"][];
+            categories: components["schemas"]["DictionaryItem"][];
             /** @description Social accounts attached to the application, sorted by platform then handle. */
             socials: components["schemas"]["CreatorApplicationDetailSocial"][];
             /**
@@ -677,9 +711,9 @@ export interface components {
          *     filter fields are optional and combined with AND between fields, OR
          *     (any-of) within a single array. Empty/whitespace `search` is ignored.
          */
-        CreatorApplicationsListRequest: {
+        CreatorApplicationsListRequest: components["schemas"]["PaginationInput"] & {
             /** @description Match any of these statuses. Empty/missing → all statuses. */
-            statuses?: ("verification" | "moderation" | "awaiting_contract" | "contract_sent" | "signed" | "rejected" | "withdrawn")[];
+            statuses?: components["schemas"]["CreatorApplicationStatus"][];
             /** @description Match any of these city codes (from the cities dictionary). */
             cities?: string[];
             /** @description Match applications that include any of these category codes. */
@@ -713,24 +747,19 @@ export interface components {
             search?: string;
             sort: components["schemas"]["CreatorApplicationListSortField"];
             order: components["schemas"]["SortOrder"];
-            /** @description 1-based page index. */
-            page: number;
-            /** @description Page size, between 1 and 200 inclusive. */
-            perPage: number;
         };
         CreatorApplicationListItem: {
             /** Format: uuid */
             id: string;
-            /** @enum {string} */
-            status: "verification" | "moderation" | "awaiting_contract" | "contract_sent" | "signed" | "rejected" | "withdrawn";
+            status: components["schemas"]["CreatorApplicationStatus"];
             lastName: string;
             firstName: string;
             middleName?: string | null;
             /** Format: date */
             birthDate: string;
-            city: components["schemas"]["CreatorApplicationDetailCity"];
+            city: components["schemas"]["DictionaryItem"];
             /** @description Categories selected by the creator, sorted by sort_order then code. */
-            categories: components["schemas"]["CreatorApplicationDetailCategory"][];
+            categories: components["schemas"]["DictionaryItem"][];
             /** @description Social accounts attached to the application, sorted by platform then handle. */
             socials: components["schemas"]["CreatorApplicationDetailSocial"][];
             /** @description True when the creator has bound a Telegram account via /start. */
@@ -753,9 +782,54 @@ export interface components {
         CreatorApplicationsListResult: {
             data: components["schemas"]["CreatorApplicationsListData"];
         };
+        /** @description Single (status, count) pair returned by GET /creators/applications/counts. */
+        CreatorApplicationStatusCount: {
+            status: components["schemas"]["CreatorApplicationStatus"];
+            /**
+             * Format: int64
+             * @description Number of creator applications currently in this status.
+             */
+            count: number;
+        };
+        /**
+         * @description Sparse counts payload — see the operation description on the
+         *     `getCreatorApplicationsCounts` endpoint for the contract details.
+         *     `items` is alphabetically sorted by `status` for deterministic output.
+         */
+        CreatorApplicationsCountsData: {
+            /** @description Sparse list — only statuses with at least one application appear here. */
+            items: components["schemas"]["CreatorApplicationStatusCount"][];
+        };
+        CreatorApplicationsCountsResult: {
+            data: components["schemas"]["CreatorApplicationsCountsData"];
+        };
     };
-    responses: never;
-    parameters: never;
+    responses: {
+        /** @description Unexpected error */
+        UnexpectedError: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
+        /** @description Forbidden */
+        Forbidden: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/json": components["schemas"]["ErrorResponse"];
+            };
+        };
+    };
+    parameters: {
+        /** @description 1-based page index. */
+        PageQueryParam: number;
+        /** @description Page size, between 1 and 200 inclusive. */
+        PerPageQueryParam: number;
+    };
     requestBodies: never;
     headers: never;
     pathItems: never;
@@ -780,15 +854,7 @@ export interface operations {
                     "application/json": components["schemas"]["HealthResponse"];
                 };
             };
-            /** @description Unexpected error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
+            default: components["responses"]["UnexpectedError"];
         };
     };
     login: {
@@ -833,15 +899,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unexpected error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
+            default: components["responses"]["UnexpectedError"];
         };
     };
     refreshToken: {
@@ -873,15 +931,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unexpected error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
+            default: components["responses"]["UnexpectedError"];
         };
     };
     logout: {
@@ -904,15 +954,7 @@ export interface operations {
                     "application/json": components["schemas"]["MessageResponse"];
                 };
             };
-            /** @description Unexpected error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
+            default: components["responses"]["UnexpectedError"];
         };
     };
     requestPasswordReset: {
@@ -937,15 +979,7 @@ export interface operations {
                     "application/json": components["schemas"]["MessageResponse"];
                 };
             };
-            /** @description Unexpected error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
+            default: components["responses"]["UnexpectedError"];
         };
     };
     resetPassword: {
@@ -988,15 +1022,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unexpected error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
+            default: components["responses"]["UnexpectedError"];
         };
     };
     getMe: {
@@ -1026,15 +1052,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unexpected error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
+            default: components["responses"]["UnexpectedError"];
         };
     };
     listBrands: {
@@ -1055,15 +1073,7 @@ export interface operations {
                     "application/json": components["schemas"]["ListBrandsResult"];
                 };
             };
-            /** @description Unexpected error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
+            default: components["responses"]["UnexpectedError"];
         };
     };
     createBrand: {
@@ -1075,7 +1085,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["CreateBrandRequest"];
+                "application/json": components["schemas"]["BrandInput"];
             };
         };
         responses: {
@@ -1088,15 +1098,7 @@ export interface operations {
                     "application/json": components["schemas"]["BrandResult"];
                 };
             };
-            /** @description Forbidden */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
+            403: components["responses"]["Forbidden"];
             /** @description Validation error */
             422: {
                 headers: {
@@ -1106,15 +1108,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unexpected error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
+            default: components["responses"]["UnexpectedError"];
         };
     };
     getBrand: {
@@ -1137,15 +1131,7 @@ export interface operations {
                     "application/json": components["schemas"]["GetBrandResult"];
                 };
             };
-            /** @description Forbidden */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
+            403: components["responses"]["Forbidden"];
             /** @description Not found */
             404: {
                 headers: {
@@ -1155,15 +1141,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unexpected error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
+            default: components["responses"]["UnexpectedError"];
         };
     };
     updateBrand: {
@@ -1177,7 +1155,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["UpdateBrandRequest"];
+                "application/json": components["schemas"]["BrandInput"];
             };
         };
         responses: {
@@ -1190,15 +1168,7 @@ export interface operations {
                     "application/json": components["schemas"]["BrandResult"];
                 };
             };
-            /** @description Forbidden */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
+            403: components["responses"]["Forbidden"];
             /** @description Validation error */
             422: {
                 headers: {
@@ -1208,15 +1178,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unexpected error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
+            default: components["responses"]["UnexpectedError"];
         };
     };
     deleteBrand: {
@@ -1239,15 +1201,7 @@ export interface operations {
                     "application/json": components["schemas"]["MessageResponse"];
                 };
             };
-            /** @description Forbidden */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
+            403: components["responses"]["Forbidden"];
             /** @description Not found */
             404: {
                 headers: {
@@ -1257,15 +1211,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unexpected error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
+            default: components["responses"]["UnexpectedError"];
         };
     };
     assignManager: {
@@ -1292,37 +1238,23 @@ export interface operations {
                     "application/json": components["schemas"]["AssignManagerResult"];
                 };
             };
-            /** @description Forbidden */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Unexpected error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
+            403: components["responses"]["Forbidden"];
+            default: components["responses"]["UnexpectedError"];
         };
     };
     listAuditLogs: {
         parameters: {
             query?: {
-                actor_id?: string;
-                entity_type?: string;
-                entity_id?: string;
+                actorId?: string;
+                entityType?: string;
+                entityId?: string;
                 action?: string;
-                date_from?: string;
-                date_to?: string;
-                page?: number;
-                per_page?: number;
+                dateFrom?: string;
+                dateTo?: string;
+                /** @description 1-based page index. */
+                page?: components["parameters"]["PageQueryParam"];
+                /** @description Page size, between 1 and 200 inclusive. */
+                perPage?: components["parameters"]["PerPageQueryParam"];
             };
             header?: never;
             path?: never;
@@ -1339,24 +1271,8 @@ export interface operations {
                     "application/json": components["schemas"]["AuditLogsResult"];
                 };
             };
-            /** @description Forbidden */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Unexpected error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
+            403: components["responses"]["Forbidden"];
+            default: components["responses"]["UnexpectedError"];
         };
     };
     removeManager: {
@@ -1380,24 +1296,8 @@ export interface operations {
                     "application/json": components["schemas"]["MessageResponse"];
                 };
             };
-            /** @description Forbidden */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
-            /** @description Unexpected error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
+            403: components["responses"]["Forbidden"];
+            default: components["responses"]["UnexpectedError"];
         };
     };
     listDictionary: {
@@ -1430,15 +1330,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unexpected error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
+            default: components["responses"]["UnexpectedError"];
         };
     };
     submitCreatorApplication: {
@@ -1481,15 +1373,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unexpected error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
+            default: components["responses"]["UnexpectedError"];
         };
     };
     listCreatorApplications: {
@@ -1523,15 +1407,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Forbidden */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
+            403: components["responses"]["Forbidden"];
             /** @description Validation error (unknown sort/order, page/perPage out of range, missing required field) */
             422: {
                 headers: {
@@ -1541,8 +1417,29 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unexpected error */
-            default: {
+            default: components["responses"]["UnexpectedError"];
+        };
+    };
+    getCreatorApplicationsCounts: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Sparse list of (status, count) pairs, alphabetically sorted by status. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreatorApplicationsCountsResult"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -1550,6 +1447,8 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
+            403: components["responses"]["Forbidden"];
+            default: components["responses"]["UnexpectedError"];
         };
     };
     getCreatorApplication: {
@@ -1581,15 +1480,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Forbidden */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
+            403: components["responses"]["Forbidden"];
             /** @description Application not found */
             404: {
                 headers: {
@@ -1599,15 +1490,7 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Unexpected error */
-            default: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
-                };
-            };
+            default: components["responses"]["UnexpectedError"];
         };
     };
 }
