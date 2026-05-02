@@ -691,6 +691,14 @@ export interface components {
              *     has not yet opened the bot.
              */
             telegramLink?: components["schemas"]["TelegramLink"] | null;
+            /**
+             * @description Deep-link in form `https://t.me/{bot}?start={applicationId}`. The
+             *     admin shares it with the creator (e.g. via WhatsApp) when
+             *     `telegramLink` is null. Always returned regardless of link state so
+             *     the response shape stays stable; the frontend renders the copy
+             *     action only when not yet bound.
+             */
+            telegramBotUrl: string;
         };
         GetCreatorApplicationResult: {
             data: components["schemas"]["CreatorApplicationDetailData"];

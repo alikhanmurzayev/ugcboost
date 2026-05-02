@@ -1223,6 +1223,7 @@ components:
         - categories
         - socials
         - consents
+        - telegramBotUrl
       properties:
         id:
           type: string
@@ -1284,6 +1285,14 @@ components:
           description: |
             Telegram account linked to this application. Null when the creator
             has not yet opened the bot.
+        telegramBotUrl:
+          type: string
+          description: |
+            Deep-link in form `https://t.me/{bot}?start={applicationId}`. The
+            admin shares it with the creator (e.g. via WhatsApp) when
+            `telegramLink` is null. Always returned regardless of link state so
+            the response shape stays stable; the frontend renders the copy
+            action only when not yet bound.
 
     GetCreatorApplicationResult:
       type: object

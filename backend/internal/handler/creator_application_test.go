@@ -267,7 +267,8 @@ func newTestRouterWithClientIP(t *testing.T, s *Server) chi.Router {
 func serverWithAuthzAndCreatorAndDict(t *testing.T, authz AuthzService, creator CreatorApplicationService, dict DictionaryService, log *logmocks.MockLogger) *Server {
 	t.Helper()
 	return NewServer(nil, nil, authz, nil, creator, dict, ServerConfig{
-		Version: "test-version",
+		Version:             "test-version",
+		TelegramBotUsername: "ugcboost_test_bot",
 	}, log)
 }
 
@@ -519,8 +520,39 @@ func TestServer_GetCreatorApplication(t *testing.T) {
 					{ConsentType: api.CrossBorder, AcceptedAt: acceptedAt, DocumentVersion: "2026-04-20", IpAddress: "127.0.0.1", UserAgent: "ua/1"},
 					{ConsentType: api.Terms, AcceptedAt: acceptedAt, DocumentVersion: "2026-04-20", IpAddress: "127.0.0.1", UserAgent: "ua/1"},
 				},
+				TelegramBotUrl: "https://t.me/ugcboost_test_bot?start=" + appID.String(),
 			},
 		}, resp)
+	})
+
+	t.Run("exposes telegramBotUrl built from configured bot username", func(t *testing.T) {
+		t.Parallel()
+		appID := uuid.MustParse("11111111-2222-3333-4444-555555555555")
+		birth := time.Date(1995, 5, 15, 0, 0, 0, 0, time.UTC)
+		created := time.Date(2026, 4, 20, 18, 0, 0, 0, time.UTC)
+
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanViewCreatorApplication(mock.Anything).Return(nil)
+		creator := mocks.NewMockCreatorApplicationService(t)
+		creator.EXPECT().GetByID(mock.Anything, appID.String()).
+			Return(&domain.CreatorApplicationDetail{
+				ID:       appID.String(),
+				LastName: "Тест", FirstName: "Тест",
+				IIN:       "950515312348",
+				BirthDate: birth, Phone: "+77001234567",
+				CityCode:  "almaty",
+				Status:    domain.CreatorApplicationStatusVerification,
+				CreatedAt: created, UpdatedAt: created,
+			}, nil)
+		dict := mocks.NewMockDictionaryService(t)
+		dict.EXPECT().List(mock.Anything, domain.DictionaryTypeCategories).Return(nil, nil)
+		dict.EXPECT().List(mock.Anything, domain.DictionaryTypeCities).
+			Return([]domain.DictionaryEntry{{Code: "almaty", Name: "Алматы", SortOrder: 100}}, nil)
+
+		router := newTestRouter(t, serverWithAuthzAndCreatorAndDict(t, authz, creator, dict, logmocks.NewMockLogger(t)))
+		w, resp := doJSON[api.GetCreatorApplicationResult](t, router, http.MethodGet, appPath, nil)
+		require.Equal(t, http.StatusOK, w.Code)
+		require.Equal(t, "https://t.me/ugcboost_test_bot?start="+appID.String(), resp.Data.TelegramBotUrl)
 	})
 
 	t.Run("deactivated category and city fall back to code", func(t *testing.T) {

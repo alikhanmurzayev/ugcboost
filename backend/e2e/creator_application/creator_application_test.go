@@ -439,6 +439,10 @@ func verifyCreatorApplicationByID(t *testing.T, c *apiclient.ClientWithResponses
 	require.Equal(t, applicationID, got.Id.String())
 	require.WithinDuration(t, time.Now().UTC(), got.CreatedAt, 5*time.Minute)
 	require.WithinDuration(t, time.Now().UTC(), got.UpdatedAt, 5*time.Minute)
+	require.True(t, strings.HasPrefix(got.TelegramBotUrl, "https://t.me/"),
+		"telegram bot url should start with https://t.me/, got %q", got.TelegramBotUrl)
+	require.Contains(t, got.TelegramBotUrl, "?start="+applicationID,
+		"telegram bot url must carry the application id as start parameter")
 	require.Len(t, got.Consents, 4)
 	for i := range got.Consents {
 		require.WithinDuration(t, time.Now().UTC(), got.Consents[i].AcceptedAt, 5*time.Minute,
@@ -499,6 +503,10 @@ func buildExpectedDetail(t *testing.T, req apiclient.CreatorApplicationSubmitReq
 		Categories:        catRefs,
 		Socials:           socs,
 		Consents:          buildExpectedConsents(got.Consents),
+		// telegramBotUrl shape (https://t.me/{bot}?start={id}) is asserted in
+		// verifyCreatorApplicationByID against the live TELEGRAM_BOT_USERNAME;
+		// the username itself is environment-specific so we copy through here.
+		TelegramBotUrl: got.TelegramBotUrl,
 	}
 
 	// Verify birth_date derives from the IIN's YYMMDD prefix so a regression

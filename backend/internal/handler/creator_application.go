@@ -118,6 +118,7 @@ func (s *Server) GetCreatorApplication(ctx context.Context, request api.GetCreat
 		detail,
 		indexDictionaryByCode(categoryEntries),
 		indexDictionaryByCode(cityEntries),
+		s.buildTelegramBotURL(request.Id.String()),
 	)
 	if err != nil {
 		return nil, err
@@ -143,6 +144,7 @@ func domainCreatorApplicationDetailToAPI(
 	d *domain.CreatorApplicationDetail,
 	categoriesByCode map[string]domain.DictionaryEntry,
 	cityByCode map[string]domain.DictionaryEntry,
+	telegramBotURL string,
 ) (api.CreatorApplicationDetailData, error) {
 	status, err := mapCreatorApplicationStatusToAPI(d.Status)
 	if err != nil {
@@ -199,6 +201,7 @@ func domainCreatorApplicationDetailToAPI(
 		Socials:           socs,
 		Consents:          cons,
 		TelegramLink:      tgLink,
+		TelegramBotUrl:    telegramBotURL,
 	}, nil
 }
 

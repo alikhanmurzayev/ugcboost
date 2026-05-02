@@ -6,6 +6,7 @@ import auth from "./locales/ru/auth.json";
 import brands from "./locales/ru/brands.json";
 import audit from "./locales/ru/audit.json";
 import dashboard from "./locales/ru/dashboard.json";
+import creatorApplications from "./locales/ru/creatorApplications.json";
 
 // Prototype namespaces — Aidana's brand-cabinet mock. Kept under prefixed names
 // (prototype_*) so they don't collide with future real namespaces.
@@ -22,6 +23,7 @@ void i18n.use(initReactI18next).init({
     "brands",
     "audit",
     "dashboard",
+    "creatorApplications",
     "prototype_campaigns",
     "prototype_creatorApplications",
     "prototype_creators",
@@ -34,6 +36,7 @@ void i18n.use(initReactI18next).init({
       brands,
       audit,
       dashboard,
+      creatorApplications,
       prototype_campaigns: prototypeCampaigns,
       prototype_creatorApplications: prototypeCreatorApplications,
       prototype_creators: prototypeCreators,
