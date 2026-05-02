@@ -2,29 +2,46 @@ package testutil
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/binary"
 	"fmt"
 	"net/http"
 	"strconv"
-	"sync/atomic"
 	"testing"
 
 	"github.com/alikhanmurzayev/ugcboost/backend/e2e/testclient"
 )
 
-// iinSerialCounter backs UniqueIIN so parallel tests never collide on the
-// partial unique index guarding active creator applications.
-var iinSerialCounter uint64
-
-// UniqueIIN returns a fresh, checksum-valid Kazakhstani IIN. The birthdate is
-// fixed to 1995-05-15 (well over 18 years old on any reasonable test run) and
-// only the 4-digit serial portion varies. Rare serials that end up with a
-// checksum collision (both passes yield 10) are simply skipped.
+// UniqueIIN returns a fresh, checksum-valid Kazakhstani IIN. Birth year (1985..2005),
+// month, day (1..28 to dodge calendar edge cases), and 4-digit serial are
+// drawn from crypto/rand. The pool of valid IINs is on the order of 70M, so
+// concurrent test runs across multiple go test processes (each with its own
+// memory) are extremely unlikely to collide on the partial unique index that
+// guards active creator applications. Atomic counters were rejected because
+// they reset to zero in every fresh test process and produce identical IINs
+// across parallel package runs.
+//
+// Rare prefixes whose checksum hits the "both passes yield 10" corner are
+// simply re-rolled.
 func UniqueIIN() string {
 	for {
-		serialInt := atomic.AddUint64(&iinSerialCounter, 1) % 10000
-		serial := fmt.Sprintf("%04d", serialInt)
-		// YYMMDD = 950515, century byte 3 = male, 1900s.
-		prefix := "950515" + "3" + serial
+		var b [8]byte
+		if _, err := rand.Read(b[:]); err != nil {
+			panic(fmt.Errorf("crypto/rand failed: %w", err))
+		}
+		year := 1985 + int(b[0])%21
+		month := 1 + int(b[1])%12
+		day := 1 + int(b[2])%28
+		serial := int(binary.BigEndian.Uint32(b[3:7])) % 10000
+		// IIN encodes year as YY (last two digits); the century byte (3 here)
+		// disambiguates 1900s vs 2000s, so a 1985 / 2005 / 1995 etc. pair is
+		// distinguishable by the seventh digit, not the YY prefix alone.
+		century := 3
+		if year >= 2000 {
+			century = 4
+		}
+		yy := year % 100
+		prefix := fmt.Sprintf("%02d%02d%02d%d%04d", yy, month, day, century, serial)
 		if control, ok := iinControl(prefix); ok {
 			return prefix + strconv.Itoa(control)
 		}

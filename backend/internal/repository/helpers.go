@@ -46,3 +46,14 @@ func sortColumns(columns []string) []string {
 func returningClause(cols []string) string {
 	return "RETURNING " + strings.Join(cols, ", ")
 }
+
+// aliasedColumns prefixes each column with the given table alias and appends
+// "AS <col>" so multi-table SELECTs project unambiguous, pgx-friendly names.
+// Both alias and cols come from package-level constants — never user input.
+func aliasedColumns(alias string, cols []string) []string {
+	out := make([]string, len(cols))
+	for i, c := range cols {
+		out[i] = alias + "." + c + " AS " + c
+	}
+	return out
+}

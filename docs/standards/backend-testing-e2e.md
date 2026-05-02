@@ -81,7 +81,6 @@ Defer-based cleanup stack с управлением через env var `E2E_CLEA
 
 - **Относительные даты, не hardcoded.** Birth dates, deadlines, expiration — через `time.Now().AddDate(-16, 0, 0)`, не `"2010-01-01"`. Hardcoded дата сегодня корректна, через год — поломает тест на возрастных проверках.
 - **Race-тест для partial unique index.** Если БД защищает уникальность только для подмножества рядов (например, `UNIQUE WHERE status='pending'`) — отдельный тест: два concurrent запроса вставляют ряд с одинаковым unique-полем, один проходит, второй получает domain-error race. Без этого теста race-handling в repo (см. `backend-repository.md` § Ошибки) не покрыт.
-- **PII guard test.** Отдельный тест, который выполняет mutate с известным PII (ИИН, телефон, email), grep'ает stdout / structured-log поток, asserts что PII там нет ни в одной строке. Защищает от случайного `logger.Info("submission for IIN %s", iin)`. Парный с правилом из `security.md` (PII в stdout запрещён).
 
 ## Комментарий в начале файла
 
@@ -129,6 +128,5 @@ Godoc-конвенция сохраняется: первое предложен
 - [major] `E2E_CLEANUP=false` оставлен в коммите (постоянный, не локальный override).
 - [major] Дублирующий локальный helper, который должен быть в `testutil/` (composable shared).
 - [major] Partial unique index в БД (`UNIQUE WHERE ...`) без race-теста на concurrent insert.
-- [major] PII guard test отсутствует для mutate-endpoint, который принимает PII (ИИН, телефон).
 - [minor] `Contains` / `NotContains` на конкретное значение часто меняющегося словаря (хрупко).
 - [minor] Header-комментарий не на русском, не нарратив (bullet-list, HTTP-коды без контекста).

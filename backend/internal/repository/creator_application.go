@@ -57,9 +57,34 @@ type CreatorApplicationRow struct {
 }
 
 var (
-	creatorApplicationSelectColumns = sortColumns(stom.MustNewStom(CreatorApplicationRow{}).SetTag(string(tagSelect)).TagValues())
-	creatorApplicationInsertMapper  = stom.MustNewStom(CreatorApplicationRow{}).SetTag(string(tagInsert))
+	creatorApplicationSelectColumns  = sortColumns(stom.MustNewStom(CreatorApplicationRow{}).SetTag(string(tagSelect)).TagValues())
+	creatorApplicationInsertMapper   = stom.MustNewStom(CreatorApplicationRow{}).SetTag(string(tagInsert))
+	creatorApplicationListRowColumns = sortColumns(stom.MustNewStom(CreatorApplicationListRow{}).SetTag(string(tagSelect)).TagValues())
+	// telegramLinked is a derived projection ((tgl.application_id IS NOT NULL))
+	// rather than a real column on creator_applications; aliasing it as ca.* would
+	// blow up the page query, so it is split off and emitted as an explicit
+	// expression below.
+	creatorApplicationListTableColumns = filterOutColumn(creatorApplicationListRowColumns, creatorApplicationListTelegramLinkedAs)
+	creatorApplicationListProjection   = append(
+		aliasedColumns(creatorApplicationListAlias, creatorApplicationListTableColumns),
+		"("+creatorApplicationListTelegramAlias+"."+CreatorApplicationTelegramLinkColumnApplicationID+
+			" IS NOT NULL) AS "+creatorApplicationListTelegramLinkedAs,
+	)
 )
+
+// filterOutColumn returns cols without the given column, preserving order. The
+// list-projection above relies on this to keep telegram_linked out of the
+// alias-prefixed table columns.
+func filterOutColumn(cols []string, drop string) []string {
+	out := make([]string, 0, len(cols))
+	for _, c := range cols {
+		if c == drop {
+			continue
+		}
+		out = append(out, c)
+	}
+	return out
+}
 
 // CreatorApplicationRepo lists all public methods of the creator application
 // repository.
@@ -212,13 +237,12 @@ func (r *creatorApplicationRepository) List(ctx context.Context, params CreatorA
 		return nil, 0, fmt.Errorf("creator_application_repository.List: invalid pagination page=%d perPage=%d", params.Page, params.PerPage)
 	}
 
-	countQ := sq.Select("COUNT(*)").
-		From(TableCreatorApplications + " " + creatorApplicationListAlias).
-		LeftJoin(creatorApplicationListTelegramJoin())
-	countQ, err := applyCreatorApplicationListFilters(countQ, params)
-	if err != nil {
-		return nil, 0, err
-	}
+	countQ := applyCreatorApplicationListFilters(
+		sq.Select("COUNT(*)").
+			From(TableCreatorApplications+" "+creatorApplicationListAlias).
+			LeftJoin(creatorApplicationListTelegramJoin()),
+		params,
+	)
 	total, err := dbutil.Val[int64](ctx, r.db, countQ)
 	if err != nil {
 		return nil, 0, err
@@ -227,17 +251,17 @@ func (r *creatorApplicationRepository) List(ctx context.Context, params CreatorA
 		return nil, 0, nil
 	}
 
-	q := sq.Select(creatorApplicationListSelectColumns()...).
+	q := sq.Select(creatorApplicationListProjection...).
 		From(TableCreatorApplications + " " + creatorApplicationListAlias).
 		LeftJoin(creatorApplicationListTelegramJoin())
 	if params.Sort == domain.CreatorApplicationSortCityName {
 		q = q.LeftJoin(creatorApplicationListCityJoin())
 	}
-	q, err = applyCreatorApplicationListFilters(q, params)
+	q = applyCreatorApplicationListFilters(q, params)
+	q, err = applyCreatorApplicationListOrder(q, params.Sort, params.Order)
 	if err != nil {
 		return nil, 0, err
 	}
-	q = applyCreatorApplicationListOrder(q, params.Sort, params.Order)
 
 	offset := (params.Page - 1) * params.PerPage
 	q = q.Limit(uint64(params.PerPage)).Offset(uint64(offset))
@@ -247,30 +271,6 @@ func (r *creatorApplicationRepository) List(ctx context.Context, params CreatorA
 		return nil, 0, err
 	}
 	return rows, total, nil
-}
-
-// creatorApplicationListSelectColumns builds the explicit projection list for
-// the page query. Every column from the table comes prefixed with the alias
-// so the LEFT JOINs cannot accidentally introduce ambiguity, and the derived
-// boolean is exposed under the column name pgx looks for via `db:"telegram_linked"`.
-func creatorApplicationListSelectColumns() []string {
-	caCol := func(c string) string {
-		return creatorApplicationListAlias + "." + c + " AS " + c
-	}
-	return []string{
-		caCol(CreatorApplicationColumnID),
-		caCol(CreatorApplicationColumnLastName),
-		caCol(CreatorApplicationColumnFirstName),
-		caCol(CreatorApplicationColumnMiddleName),
-		caCol(CreatorApplicationColumnBirthDate),
-		caCol(CreatorApplicationColumnCityCode),
-		caCol(CreatorApplicationColumnStatus),
-		caCol(CreatorApplicationColumnCreatedAt),
-		caCol(CreatorApplicationColumnUpdatedAt),
-		"(" + creatorApplicationListTelegramAlias + "." +
-			CreatorApplicationTelegramLinkColumnApplicationID + " IS NOT NULL) AS " +
-			creatorApplicationListTelegramLinkedAs,
-	}
 }
 
 func creatorApplicationListTelegramJoin() string {
@@ -292,10 +292,10 @@ func creatorApplicationListCityJoin() string {
 // the four PII columns plus an EXISTS on socials.handle. Search is escaped
 // for ILIKE wildcards (`%`, `_`, `\`) so an admin searching for "100%" or
 // "_test" gets a literal substring match instead of Postgres' wildcard
-// semantics. Returning an error mirrors the squirrel ToSql() contract — the
-// categories sub-builder can theoretically fail on misuse, and we never
-// want to silently feed `EXISTS ()` to Postgres.
-func applyCreatorApplicationListFilters(q sq.SelectBuilder, p CreatorApplicationListParams) (sq.SelectBuilder, error) {
+// semantics. Subqueries are passed to squirrel as Sqlizer objects (no manual
+// ToSql round-trip), which keeps argument numbering correct and avoids
+// silently feeding `EXISTS ()` to Postgres on a misuse.
+func applyCreatorApplicationListFilters(q sq.SelectBuilder, p CreatorApplicationListParams) sq.SelectBuilder {
 	caStatus := creatorApplicationListAlias + "." + CreatorApplicationColumnStatus
 	caCity := creatorApplicationListAlias + "." + CreatorApplicationColumnCityCode
 	caCreatedAt := creatorApplicationListAlias + "." + CreatorApplicationColumnCreatedAt
@@ -314,13 +314,12 @@ func applyCreatorApplicationListFilters(q sq.SelectBuilder, p CreatorApplication
 		cacCode := creatorApplicationListCategoryAlias + "." + CreatorApplicationCategoryColumnCategoryCode
 		sub := sq.Select("1").
 			From(TableCreatorApplicationCategories + " " + creatorApplicationListCategoryAlias).
+			// Cross-column equality — squirrel.Eq parameterises the RHS, so a
+			// raw Where with column-name constants is the only way to express
+			// it. Both sides are package constants; user input never enters.
 			Where(cacAppID + " = " + caID).
 			Where(sq.Eq{cacCode: p.Categories})
-		subSQL, subArgs, err := sub.ToSql()
-		if err != nil {
-			return q, fmt.Errorf("build categories EXISTS subquery: %w", err)
-		}
-		q = q.Where(sq.Expr("EXISTS ("+subSQL+")", subArgs...))
+		q = q.Where(sq.Expr("EXISTS (?)", sub))
 	}
 	if p.DateFrom != nil {
 		q = q.Where(sq.GtOrEq{caCreatedAt: *p.DateFrom})
@@ -349,17 +348,19 @@ func applyCreatorApplicationListFilters(q sq.SelectBuilder, p CreatorApplication
 		casAppID := creatorApplicationListSocialAlias + "." + CreatorApplicationSocialColumnApplicationID
 		casHandle := creatorApplicationListSocialAlias + "." + CreatorApplicationSocialColumnHandle
 		pattern := "%" + escapeLikeWildcards(p.Search) + "%"
-		q = q.Where(sq.Expr(
-			"("+caLastName+` ILIKE ? ESCAPE '\' OR `+
-				caFirstName+` ILIKE ? ESCAPE '\' OR `+
-				caMiddleName+` ILIKE ? ESCAPE '\' OR `+
-				caIIN+` ILIKE ? ESCAPE '\' OR `+
-				"EXISTS (SELECT 1 FROM "+TableCreatorApplicationSocials+" "+creatorApplicationListSocialAlias+
-				" WHERE "+casAppID+" = "+caID+
-				` AND `+casHandle+` ILIKE ? ESCAPE '\'))`,
-			pattern, pattern, pattern, pattern, pattern))
+		socialsSub := sq.Select("1").
+			From(TableCreatorApplicationSocials + " " + creatorApplicationListSocialAlias).
+			Where(casAppID + " = " + caID).
+			Where(sq.Expr(casHandle+` ILIKE ? ESCAPE '\'`, pattern))
+		q = q.Where(sq.Or{
+			sq.Expr(caLastName+` ILIKE ? ESCAPE '\'`, pattern),
+			sq.Expr(caFirstName+` ILIKE ? ESCAPE '\'`, pattern),
+			sq.Expr(caMiddleName+` ILIKE ? ESCAPE '\'`, pattern),
+			sq.Expr(caIIN+` ILIKE ? ESCAPE '\'`, pattern),
+			sq.Expr("EXISTS (?)", socialsSub),
+		})
 	}
-	return q, nil
+	return q
 }
 
 // escapeLikeWildcards neutralises the three special characters in Postgres
@@ -381,7 +382,11 @@ func escapeLikeWildcards(s string) string {
 // across direction flips — fixing the tie-breaker direction independently
 // of the main sort means a page boundary captured at sort=DESC stays in the
 // same place when the same query is later run with sort=ASC.
-func applyCreatorApplicationListOrder(q sq.SelectBuilder, sort, order string) sq.SelectBuilder {
+//
+// Unknown sort returns a wrapped error rather than a silent fallback: the
+// service+handler reject unknown sort upstream, so reaching this branch means
+// a code-level drift, and silently sorting by created_at would mask the bug.
+func applyCreatorApplicationListOrder(q sq.SelectBuilder, sort, order string) (sq.SelectBuilder, error) {
 	dir := "ASC"
 	if order == domain.SortOrderDesc {
 		dir = "DESC"
@@ -390,27 +395,22 @@ func applyCreatorApplicationListOrder(q sq.SelectBuilder, sort, order string) sq
 	switch sort {
 	case domain.CreatorApplicationSortCreatedAt:
 		col := creatorApplicationListAlias + "." + CreatorApplicationColumnCreatedAt
-		return q.OrderBy(col+" "+dir, tieBreaker)
+		return q.OrderBy(col+" "+dir, tieBreaker), nil
 	case domain.CreatorApplicationSortUpdatedAt:
 		col := creatorApplicationListAlias + "." + CreatorApplicationColumnUpdatedAt
-		return q.OrderBy(col+" "+dir, tieBreaker)
+		return q.OrderBy(col+" "+dir, tieBreaker), nil
 	case domain.CreatorApplicationSortBirthDate:
 		col := creatorApplicationListAlias + "." + CreatorApplicationColumnBirthDate
-		return q.OrderBy(col+" "+dir, tieBreaker)
+		return q.OrderBy(col+" "+dir, tieBreaker), nil
 	case domain.CreatorApplicationSortFullName:
 		last := creatorApplicationListAlias + "." + CreatorApplicationColumnLastName
 		first := creatorApplicationListAlias + "." + CreatorApplicationColumnFirstName
 		middle := creatorApplicationListAlias + "." + CreatorApplicationColumnMiddleName
-		return q.OrderBy(last+" "+dir, first+" "+dir, middle+" "+dir, tieBreaker)
+		return q.OrderBy(last+" "+dir, first+" "+dir, middle+" "+dir, tieBreaker), nil
 	case domain.CreatorApplicationSortCityName:
 		name := creatorApplicationListCityAlias + "." + DictionaryColumnName
-		return q.OrderBy(name+" "+dir, tieBreaker)
+		return q.OrderBy(name+" "+dir, tieBreaker), nil
 	default:
-		// Service+handler reject unknown sort upstream; this branch is a
-		// defensive fallback so a future drift never produces an unsorted
-		// page. Logging here would require plumbing a logger into the repo —
-		// out of scope; the validation layer is the right place to catch it.
-		col := creatorApplicationListAlias + "." + CreatorApplicationColumnCreatedAt
-		return q.OrderBy(col+" DESC", tieBreaker)
+		return q, fmt.Errorf("creator_application_repository.applyCreatorApplicationListOrder: unsupported sort %q", sort)
 	}
 }

@@ -266,7 +266,7 @@ func TestCreatorApplicationRepository_List(t *testing.T) {
 	// join is conditional on sort=city_name, so two `pageFrom` variants live
 	// here.
 	const countSQLNoFilters = "SELECT COUNT(*) FROM creator_applications ca LEFT JOIN creator_application_telegram_links tgl ON tgl.application_id = ca.id"
-	const pageSelectCols = "SELECT ca.id AS id, ca.last_name AS last_name, ca.first_name AS first_name, ca.middle_name AS middle_name, ca.birth_date AS birth_date, ca.city_code AS city_code, ca.status AS status, ca.created_at AS created_at, ca.updated_at AS updated_at, (tgl.application_id IS NOT NULL) AS telegram_linked"
+	const pageSelectCols = "SELECT ca.birth_date AS birth_date, ca.city_code AS city_code, ca.created_at AS created_at, ca.first_name AS first_name, ca.id AS id, ca.last_name AS last_name, ca.middle_name AS middle_name, ca.status AS status, ca.updated_at AS updated_at, (tgl.application_id IS NOT NULL) AS telegram_linked"
 	const pageFrom = " FROM creator_applications ca LEFT JOIN creator_application_telegram_links tgl ON tgl.application_id = ca.id"
 	const pageFromWithCity = pageFrom + " LEFT JOIN cities ct ON ct.code = ca.city_code"
 
@@ -665,23 +665,24 @@ func TestCreatorApplicationRepository_List(t *testing.T) {
 		require.NoError(t, err)
 	})
 
-	t.Run("sort: unknown value falls back to created_at desc (defensive)", func(t *testing.T) {
+	t.Run("sort: unknown value returns error after count succeeds", func(t *testing.T) {
 		t.Parallel()
 		mock := newPgxmock(t)
 		repo := &creatorApplicationRepository{db: mock}
 
+		// COUNT runs first and succeeds; the page query is never built because
+		// applyOrder rejects the sort value. The expectation list contains only
+		// COUNT — pgxmock will fail if a stray page query slips through.
 		mock.ExpectQuery(countSQLNoFilters).
 			WillReturnRows(pgxmock.NewRows([]string{"count"}).AddRow(int64(1)))
-		mock.ExpectQuery(pageSelectCols + pageFrom + " ORDER BY ca.created_at DESC, ca.id ASC LIMIT 10 OFFSET 0").
-			WillReturnRows(pgxmock.NewRows([]string{"id", "last_name", "first_name", "middle_name", "birth_date", "city_code", "status", "created_at", "updated_at", "telegram_linked"}))
 
 		_, _, err := repo.List(context.Background(), CreatorApplicationListParams{
-			Sort:    "rating", // service rejects this; repo defensively falls back
+			Sort:    "rating", // service rejects this; repo must surface the drift, not silently fall back
 			Order:   domain.SortOrderAsc,
 			Page:    1,
 			PerPage: 10,
 		})
-		require.NoError(t, err)
+		require.ErrorContains(t, err, `unsupported sort "rating"`)
 	})
 }
 
