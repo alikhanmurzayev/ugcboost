@@ -563,6 +563,13 @@ export interface components {
          * @enum {string}
          */
         SocialPlatform: "instagram" | "tiktok" | "threads";
+        /**
+         * @description How a social account was verified. `auto` — webhook from SendPulse caught
+         *     the verification code in an Instagram DM. `manual` — admin marked the
+         *     social as verified from the application drawer.
+         * @enum {string}
+         */
+        SocialVerificationMethod: "auto" | "manual";
         SocialAccountInput: {
             platform: components["schemas"]["SocialPlatform"];
             /** @description Account handle or public identifier on the given platform. */
@@ -623,6 +630,20 @@ export interface components {
         CreatorApplicationDetailSocial: {
             platform: components["schemas"]["SocialPlatform"];
             handle: string;
+            /** @description Whether the creator's ownership of this social account has been confirmed. */
+            verified: boolean;
+            /** @description Path used to verify ownership; null while the account is unverified. */
+            method?: components["schemas"]["SocialVerificationMethod"];
+            /**
+             * Format: uuid
+             * @description Admin who pressed the manual-verify button. Null on auto and on unverified rows.
+             */
+            verifiedByUserId?: string | null;
+            /**
+             * Format: date-time
+             * @description When verification succeeded; null while the account is unverified.
+             */
+            verifiedAt?: string | null;
         };
         CreatorApplicationDetailConsent: {
             consentType: components["schemas"]["ConsentType"];

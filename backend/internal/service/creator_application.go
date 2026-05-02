@@ -6,6 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
+
+	"github.com/cenkalti/backoff/v5"
 
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/dbutil"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/domain"
@@ -68,6 +71,14 @@ func NewCreatorApplicationService(pool dbutil.Pool, repoFactory CreatorApplicati
 // UNKNOWN_CATEGORY / VALIDATION_ERROR). Nothing about the personal data lands
 // in stdout-логах приложения — only the generated application id is logged on
 // success. Audit_logs may carry PII per the spec (administrator-read only).
+//
+// The DB-touching block is wrapped in cenkalti/backoff/v5 with a constant 0
+// back-off. The only retry-able failure is a verification_code collision
+// against the partial unique index — every other error (validation, IIN
+// duplicate, dictionary lookups, db transients) is wrapped in
+// backoff.Permanent so it bubbles up immediately. Each retry runs a fresh
+// transaction with a freshly-generated code; pre-flight validations stay
+// outside the retry loop because they are deterministic and cheap.
 func (s *CreatorApplicationService) Submit(ctx context.Context, in domain.CreatorApplicationInput) (*domain.CreatorApplicationSubmission, error) {
 	if !in.Consents.AcceptedAll {
 		return nil, domain.NewValidationError(domain.CodeMissingConsent,
@@ -98,6 +109,45 @@ func (s *CreatorApplicationService) Submit(ctx context.Context, in domain.Creato
 	normalisedSocials, err := s.normaliseSocials(in.Socials)
 	if err != nil {
 		return nil, err
+	}
+
+	// WithMaxElapsedTime(0) disables the library's default 15-minute deadline,
+	// which would otherwise short-circuit before WithMaxTries is exhausted on
+	// a slow DB. Retry budget here is bounded purely by attempt count.
+	submission, err := backoff.Retry(ctx, func() (*domain.CreatorApplicationSubmission, error) {
+		return s.submitOnce(ctx, in, trimmed, birth, categoryOtherText, normalisedSocials)
+	},
+		backoff.WithBackOff(backoff.NewConstantBackOff(0)),
+		backoff.WithMaxTries(domain.VerificationCodeMaxGenerationAttempts),
+		backoff.WithMaxElapsedTime(0),
+	)
+	if err != nil {
+		if errors.Is(err, domain.ErrCreatorApplicationVerificationCodeConflict) {
+			return nil, fmt.Errorf("failed to generate unique verification code after %d attempts: %w", domain.VerificationCodeMaxGenerationAttempts, err)
+		}
+		return nil, err
+	}
+	// Log after the transaction commits so the "submitted" signal can never
+	// lie about a rolled-back request.
+	s.logger.Info(ctx, "creator application submitted", "application_id", submission.ApplicationID)
+	return submission, nil
+}
+
+// submitOnce is a single attempt of the retry-wrapped submit pipeline. It
+// generates a fresh verification code, opens a transaction, runs every write,
+// and returns either the submission (success), the verification-code conflict
+// (retry-able), or any other error wrapped in backoff.Permanent (terminal).
+func (s *CreatorApplicationService) submitOnce(
+	ctx context.Context,
+	in domain.CreatorApplicationInput,
+	trimmed trimmedCreatorApplicationInput,
+	birth time.Time,
+	categoryOtherText *string,
+	normalisedSocials []domain.SocialAccountInput,
+) (*domain.CreatorApplicationSubmission, error) {
+	verificationCode, err := domain.GenerateVerificationCode()
+	if err != nil {
+		return nil, backoff.Permanent(fmt.Errorf("generate verification code: %w", err))
 	}
 
 	var submission *domain.CreatorApplicationSubmission
@@ -139,10 +189,14 @@ func (s *CreatorApplicationService) Submit(ctx context.Context, in domain.Creato
 			Address:           trimmed.Address,
 			CategoryOtherText: categoryOtherText,
 			Status:            domain.CreatorApplicationStatusVerification,
+			VerificationCode:  verificationCode,
 		})
 		if err != nil {
 			if errors.Is(err, domain.ErrCreatorApplicationDuplicate) {
 				return s.duplicateError()
+			}
+			if errors.Is(err, domain.ErrCreatorApplicationVerificationCodeConflict) {
+				return err
 			}
 			return fmt.Errorf("create application: %w", err)
 		}
@@ -189,11 +243,11 @@ func (s *CreatorApplicationService) Submit(ctx context.Context, in domain.Creato
 	})
 
 	if err != nil {
-		return nil, err
+		if errors.Is(err, domain.ErrCreatorApplicationVerificationCodeConflict) {
+			return nil, err
+		}
+		return nil, backoff.Permanent(err)
 	}
-	// Log after the transaction commits so the "submitted" signal can never
-	// lie about a rolled-back request.
-	s.logger.Info(ctx, "creator application submitted", "application_id", submission.ApplicationID)
 	return submission, nil
 }
 
@@ -523,8 +577,12 @@ func (s *CreatorApplicationService) List(ctx context.Context, in domain.CreatorA
 		socials := make([]domain.CreatorApplicationDetailSocial, len(socialRows))
 		for j, sr := range socialRows {
 			socials[j] = domain.CreatorApplicationDetailSocial{
-				Platform: sr.Platform,
-				Handle:   sr.Handle,
+				Platform:         sr.Platform,
+				Handle:           sr.Handle,
+				Verified:         sr.Verified,
+				Method:           sr.Method,
+				VerifiedByUserID: sr.VerifiedByUserID,
+				VerifiedAt:       sr.VerifiedAt,
 			}
 		}
 		items[i] = &domain.CreatorApplicationListItem{
@@ -598,8 +656,12 @@ func (s *CreatorApplicationService) creatorApplicationDetailFromRows(
 	socs := make([]domain.CreatorApplicationDetailSocial, len(socials))
 	for i, s := range socials {
 		socs[i] = domain.CreatorApplicationDetailSocial{
-			Platform: s.Platform,
-			Handle:   s.Handle,
+			Platform:         s.Platform,
+			Handle:           s.Handle,
+			Verified:         s.Verified,
+			Method:           s.Method,
+			VerifiedByUserID: s.VerifiedByUserID,
+			VerifiedAt:       s.VerifiedAt,
 		}
 	}
 

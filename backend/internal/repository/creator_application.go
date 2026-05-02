@@ -16,7 +16,10 @@ import (
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/domain"
 )
 
-const CreatorApplicationsIINActiveIdx = "creator_applications_iin_active_idx"
+const (
+	CreatorApplicationsIINActiveIdx                    = "creator_applications_iin_active_idx"
+	CreatorApplicationsVerificationCodeVerificationIdx = "creator_applications_verification_code_verification_idx"
+)
 
 // Creator applications table and column names.
 const (
@@ -32,14 +35,15 @@ const (
 	CreatorApplicationColumnAddress           = "address"
 	CreatorApplicationColumnCategoryOtherText = "category_other_text"
 	CreatorApplicationColumnStatus            = "status"
+	CreatorApplicationColumnVerificationCode  = "verification_code"
 	CreatorApplicationColumnCreatedAt         = "created_at"
 	CreatorApplicationColumnUpdatedAt         = "updated_at"
 )
 
-// CreatorApplicationRow maps to the creator_applications table. Status is
-// passed in by the service layer (no DB DEFAULT after the relax_constraints
-// migration), so it carries an insert tag. Future moderation flows update the
-// column via dedicated endpoints, not via the standard INSERT path.
+// CreatorApplicationRow maps to the creator_applications table. Status and
+// VerificationCode are passed in by the service (no DB DEFAULT) and carry
+// insert tags. Future moderation flows update those columns via dedicated
+// endpoints, not via the standard INSERT path.
 type CreatorApplicationRow struct {
 	ID                string    `db:"id"`
 	LastName          string    `db:"last_name"           insert:"last_name"`
@@ -52,6 +56,7 @@ type CreatorApplicationRow struct {
 	Address           *string   `db:"address"             insert:"address"`
 	CategoryOtherText *string   `db:"category_other_text" insert:"category_other_text"`
 	Status            string    `db:"status"              insert:"status"`
+	VerificationCode  string    `db:"verification_code"   insert:"verification_code"`
 	CreatedAt         time.Time `db:"created_at"`
 	UpdatedAt         time.Time `db:"updated_at"`
 }
@@ -180,11 +185,13 @@ func (r *creatorApplicationRepository) HasActiveByIIN(ctx context.Context, iin s
 }
 
 // Create inserts a new application row and returns the persisted row with
-// DB-generated fields populated (id, status, created_at, updated_at).
-// Concurrent submits with the same IIN can pass HasActiveByIIN and race on
-// INSERT — the partial unique index fires and pgx returns SQLSTATE 23505. We
-// translate that specific case into domain.ErrCreatorApplicationDuplicate so
-// the service can still answer 409, not 500.
+// DB-generated fields populated (id, created_at, updated_at).
+//
+// Two partial unique indexes can fire SQLSTATE 23505 here: the IIN-active
+// index (concurrent submit lost the race after HasActiveByIIN) and the
+// verification_code-verification index (random 6-digit code happened to clash
+// with another verification-status row). Each maps to a distinct domain
+// sentinel — the service answers 409 on the first and retries on the second.
 func (r *creatorApplicationRepository) Create(ctx context.Context, row CreatorApplicationRow) (*CreatorApplicationRow, error) {
 	q := sq.Insert(TableCreatorApplications).
 		SetMap(toMap(row, creatorApplicationInsertMapper)).
@@ -192,8 +199,13 @@ func (r *creatorApplicationRepository) Create(ctx context.Context, row CreatorAp
 	result, err := dbutil.One[CreatorApplicationRow](ctx, r.db, q)
 	if err != nil {
 		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == "23505" && strings.Contains(pgErr.ConstraintName, CreatorApplicationsIINActiveIdx) {
-			return nil, domain.ErrCreatorApplicationDuplicate
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			switch pgErr.ConstraintName {
+			case CreatorApplicationsIINActiveIdx:
+				return nil, domain.ErrCreatorApplicationDuplicate
+			case CreatorApplicationsVerificationCodeVerificationIdx:
+				return nil, domain.ErrCreatorApplicationVerificationCodeConflict
+			}
 		}
 		return nil, err
 	}

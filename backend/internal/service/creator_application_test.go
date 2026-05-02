@@ -117,6 +117,25 @@ func expectCityLookupSuccess(rig creatorServiceRig, code string) {
 		Return([]*repository.DictionaryEntryRow{{Code: code, Active: true}}, nil)
 }
 
+// hasValidVerificationCodeFormat confirms a verification_code looks like
+// "UGC-NNNNNN" — used by Submit-mock matchers so they can assert the rest of
+// the row exactly without freezing the random digit sequence.
+func hasValidVerificationCodeFormat(code string) bool {
+	if !strings.HasPrefix(code, domain.VerificationCodePrefix) {
+		return false
+	}
+	rest := code[len(domain.VerificationCodePrefix):]
+	if len(rest) != domain.VerificationCodeDigits {
+		return false
+	}
+	for _, c := range rest {
+		if c < '0' || c > '9' {
+			return false
+		}
+	}
+	return true
+}
+
 func TestCreatorApplicationService_Submit(t *testing.T) {
 	t.Parallel()
 
@@ -503,16 +522,21 @@ func TestCreatorApplicationService_Submit(t *testing.T) {
 				{Code: "fashion", Active: true},
 			}, nil)
 		expectCityLookupSuccess(rig, "almaty")
-		rig.appRepo.EXPECT().Create(mock.Anything, repository.CreatorApplicationRow{
-			LastName:   "Муратова",
-			FirstName:  "Айдана",
-			MiddleName: pointer.ToString("Ивановна"),
-			IIN:        "950515312348",
-			BirthDate:  birth,
-			Phone:      "+77001234567",
-			CityCode:   "almaty",
-			Status:     domain.CreatorApplicationStatusVerification,
-		}).Return(&repository.CreatorApplicationRow{
+		rig.appRepo.EXPECT().Create(mock.Anything, mock.MatchedBy(func(got repository.CreatorApplicationRow) bool {
+			if !hasValidVerificationCodeFormat(got.VerificationCode) {
+				return false
+			}
+			return got.LastName == "Муратова" &&
+				got.FirstName == "Айдана" &&
+				got.MiddleName != nil && *got.MiddleName == "Ивановна" &&
+				got.IIN == "950515312348" &&
+				got.BirthDate.Equal(birth) &&
+				got.Phone == "+77001234567" &&
+				got.CityCode == "almaty" &&
+				got.Address == nil &&
+				got.CategoryOtherText == nil &&
+				got.Status == domain.CreatorApplicationStatusVerification
+		})).Return(&repository.CreatorApplicationRow{
 			ID:         "app-1",
 			LastName:   "Муратова",
 			FirstName:  "Айдана",
@@ -546,13 +570,18 @@ func TestCreatorApplicationService_Submit(t *testing.T) {
 				row.ActorID != nil {
 				return false
 			}
-			var payload struct {
-				Status string `json:"status"`
-			}
-			if err := json.Unmarshal(row.NewValue, &payload); err != nil {
+			var raw map[string]any
+			if err := json.Unmarshal(row.NewValue, &raw); err != nil {
 				return false
 			}
-			return payload.Status == domain.CreatorApplicationStatusVerification
+			// Pin the Always rule: verification_code is quasi-PII and must
+			// never leak into the audit payload — chunk-7 spec carves it out
+			// explicitly.
+			if _, leaked := raw["verification_code"]; leaked {
+				return false
+			}
+			status, _ := raw["status"].(string)
+			return status == domain.CreatorApplicationStatusVerification
 		})).Return(nil)
 		rig.logger.EXPECT().Info(mock.Anything, "creator application submitted", []any{"application_id", "app-1"}).Once()
 
@@ -727,6 +756,70 @@ func TestCreatorApplicationService_Submit(t *testing.T) {
 		var ve *domain.ValidationError
 		require.ErrorAs(t, err, &ve)
 		require.Equal(t, domain.CodeValidation, ve.Code)
+	})
+
+	t.Run("verification code conflict on first attempt — service retries with a fresh code", func(t *testing.T) {
+		t.Parallel()
+		rig := newCreatorServiceRig(t)
+		in := validCreatorInput(t)
+
+		rig.pool.EXPECT().Begin(mock.Anything).Return(testTx{}, nil).Times(2)
+		rig.factory.EXPECT().NewCreatorApplicationRepo(mock.Anything).Return(rig.appRepo).Times(2)
+		rig.factory.EXPECT().NewCreatorApplicationCategoryRepo(mock.Anything).Return(rig.appCategoryRepo).Times(2)
+		rig.factory.EXPECT().NewCreatorApplicationSocialRepo(mock.Anything).Return(rig.appSocialRepo).Times(2)
+		rig.factory.EXPECT().NewCreatorApplicationConsentRepo(mock.Anything).Return(rig.appConsentRepo).Times(2)
+		rig.factory.EXPECT().NewAuditRepo(mock.Anything).Return(rig.auditRepo).Times(2)
+		rig.factory.EXPECT().NewDictionaryRepo(mock.Anything).Return(rig.dictRepo).Times(2)
+		rig.appRepo.EXPECT().HasActiveByIIN(mock.Anything, in.IIN).Return(false, nil).Times(2)
+		rig.dictRepo.EXPECT().GetActiveByCodes(mock.Anything, repository.TableCategories, []string{"beauty", "fashion"}).
+			Return([]*repository.DictionaryEntryRow{{Code: "beauty", Active: true}, {Code: "fashion", Active: true}}, nil).Times(2)
+		rig.dictRepo.EXPECT().GetActiveByCodes(mock.Anything, repository.TableCities, []string{"almaty"}).
+			Return([]*repository.DictionaryEntryRow{{Code: "almaty", Active: true}}, nil).Times(2)
+
+		// First Create — verification_code collision sentinel; expected to retry.
+		rig.appRepo.EXPECT().Create(mock.Anything, mock.Anything).
+			Return((*repository.CreatorApplicationRow)(nil), domain.ErrCreatorApplicationVerificationCodeConflict).Once()
+		// Second Create — success on the retry attempt.
+		rig.appRepo.EXPECT().Create(mock.Anything, mock.Anything).
+			Return(&repository.CreatorApplicationRow{ID: "app-retry", BirthDate: time.Date(1995, 5, 15, 0, 0, 0, 0, time.UTC)}, nil).Once()
+
+		rig.appCategoryRepo.EXPECT().InsertMany(mock.Anything, mock.Anything).Return(nil).Once()
+		rig.appSocialRepo.EXPECT().InsertMany(mock.Anything, mock.Anything).Return(nil).Once()
+		rig.appConsentRepo.EXPECT().InsertMany(mock.Anything, mock.Anything).Return(nil).Once()
+		rig.auditRepo.EXPECT().Create(mock.Anything, mock.Anything).Return(nil).Once()
+		rig.logger.EXPECT().Info(mock.Anything, "creator application submitted", []any{"application_id", "app-retry"}).Once()
+
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.logger)
+		got, err := svc.Submit(context.Background(), in)
+		require.NoError(t, err)
+		require.Equal(t, "app-retry", got.ApplicationID)
+	})
+
+	t.Run("verification code conflicts exhaust max attempts — service returns 5xx-bound error", func(t *testing.T) {
+		t.Parallel()
+		rig := newCreatorServiceRig(t)
+		in := validCreatorInput(t)
+		const tries = domain.VerificationCodeMaxGenerationAttempts
+
+		rig.pool.EXPECT().Begin(mock.Anything).Return(testTx{}, nil).Times(tries)
+		rig.factory.EXPECT().NewCreatorApplicationRepo(mock.Anything).Return(rig.appRepo).Times(tries)
+		rig.factory.EXPECT().NewCreatorApplicationCategoryRepo(mock.Anything).Return(rig.appCategoryRepo).Times(tries)
+		rig.factory.EXPECT().NewCreatorApplicationSocialRepo(mock.Anything).Return(rig.appSocialRepo).Times(tries)
+		rig.factory.EXPECT().NewCreatorApplicationConsentRepo(mock.Anything).Return(rig.appConsentRepo).Times(tries)
+		rig.factory.EXPECT().NewAuditRepo(mock.Anything).Return(rig.auditRepo).Times(tries)
+		rig.factory.EXPECT().NewDictionaryRepo(mock.Anything).Return(rig.dictRepo).Times(tries)
+		rig.appRepo.EXPECT().HasActiveByIIN(mock.Anything, in.IIN).Return(false, nil).Times(tries)
+		rig.dictRepo.EXPECT().GetActiveByCodes(mock.Anything, repository.TableCategories, []string{"beauty", "fashion"}).
+			Return([]*repository.DictionaryEntryRow{{Code: "beauty", Active: true}, {Code: "fashion", Active: true}}, nil).Times(tries)
+		rig.dictRepo.EXPECT().GetActiveByCodes(mock.Anything, repository.TableCities, []string{"almaty"}).
+			Return([]*repository.DictionaryEntryRow{{Code: "almaty", Active: true}}, nil).Times(tries)
+		rig.appRepo.EXPECT().Create(mock.Anything, mock.Anything).
+			Return((*repository.CreatorApplicationRow)(nil), domain.ErrCreatorApplicationVerificationCodeConflict).Times(tries)
+
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.logger)
+		_, err := svc.Submit(context.Background(), in)
+		require.Error(t, err)
+		require.ErrorContains(t, err, "failed to generate unique verification code after")
 	})
 
 	t.Run("repo returns duplicate sentinel under race — service answers 409", func(t *testing.T) {

@@ -676,6 +676,15 @@ func TestCreatorApplicationsList(t *testing.T) {
 		// Socials shape: platform + handle, lowercased after normalisation.
 		require.NotEmpty(t, item.Socials)
 		require.Equal(t, app.Request.Socials[0].Platform, item.Socials[0].Platform)
+		// Default verification state on a freshly submitted application: every
+		// social row carries verified=false plus three nil companions until
+		// chunk 8 (auto webhook) or chunk 9 (manual verify) flips them.
+		for i, soc := range item.Socials {
+			require.False(t, soc.Verified, "list socials[%d].verified must default to false", i)
+			require.Nil(t, soc.Method, "list socials[%d].method must be nil for an unverified row", i)
+			require.Nil(t, soc.VerifiedByUserId, "list socials[%d].verifiedByUserId must be nil for an unverified row", i)
+			require.Nil(t, soc.VerifiedAt, "list socials[%d].verifiedAt must be nil for an unverified row", i)
+		}
 	})
 }
 

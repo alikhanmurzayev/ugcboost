@@ -158,10 +158,11 @@ func domainCreatorApplicationDetailToAPI(
 
 	socs := make([]api.CreatorApplicationDetailSocial, len(d.Socials))
 	for i, sc := range d.Socials {
-		socs[i] = api.CreatorApplicationDetailSocial{
-			Platform: api.SocialPlatform(sc.Platform),
-			Handle:   sc.Handle,
+		mapped, err := domainCreatorApplicationDetailSocialToAPI(sc)
+		if err != nil {
+			return api.CreatorApplicationDetailData{}, err
 		}
+		socs[i] = mapped
 	}
 	cons := make([]api.CreatorApplicationDetailConsent, len(d.Consents))
 	for i, c := range d.Consents {
@@ -227,6 +228,35 @@ func resolveDictionaryItem(code string, byCode map[string]domain.DictionaryEntry
 		}
 	}
 	return api.DictionaryItem{Code: code, Name: code, SortOrder: 0}
+}
+
+// domainCreatorApplicationDetailSocialToAPI maps a domain social row onto its
+// API DTO, including the four verification fields. UUID parsing failure on
+// VerifiedByUserID surfaces as a wrapped error so the strict-server adapter
+// converts it into 500 — that field comes from a DB UUID column, so a parse
+// failure is genuine corruption, not user input.
+func domainCreatorApplicationDetailSocialToAPI(s domain.CreatorApplicationDetailSocial) (api.CreatorApplicationDetailSocial, error) {
+	out := api.CreatorApplicationDetailSocial{
+		Platform: api.SocialPlatform(s.Platform),
+		Handle:   s.Handle,
+		Verified: s.Verified,
+	}
+	if s.Method != nil {
+		m := api.SocialVerificationMethod(*s.Method)
+		out.Method = &m
+	}
+	if s.VerifiedByUserID != nil {
+		u, err := uuid.Parse(*s.VerifiedByUserID)
+		if err != nil {
+			return api.CreatorApplicationDetailSocial{}, fmt.Errorf("parse verified_by_user_id %q: %w", *s.VerifiedByUserID, err)
+		}
+		out.VerifiedByUserId = &u
+	}
+	if s.VerifiedAt != nil {
+		t := *s.VerifiedAt
+		out.VerifiedAt = &t
+	}
+	return out, nil
 }
 
 // sortDictionaryItem sorts dictionary items by (sortOrder, code) so the
@@ -537,10 +567,11 @@ func domainCreatorApplicationListPageToAPI(
 
 		socials := make([]api.CreatorApplicationDetailSocial, len(item.Socials))
 		for j, sc := range item.Socials {
-			socials[j] = api.CreatorApplicationDetailSocial{
-				Platform: api.SocialPlatform(sc.Platform),
-				Handle:   sc.Handle,
+			mapped, err := domainCreatorApplicationDetailSocialToAPI(sc)
+			if err != nil {
+				return api.CreatorApplicationsListData{}, err
 			}
+			socials[j] = mapped
 		}
 
 		items[i] = api.CreatorApplicationListItem{

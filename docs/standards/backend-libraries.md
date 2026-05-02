@@ -22,6 +22,7 @@
 | Pgx-моки в unit-тестах репо | `github.com/pashagolub/pgxmock/v4` |
 | Telegram Bot API клиент | `github.com/go-telegram/bot` |
 | Случайные значения (id, токены, фикстуры) | `crypto/rand` (stdlib) |
+| Retry с backoff'ом (transient errors) | `github.com/cenkalti/backoff/v5` |
 
 ### Правила
 

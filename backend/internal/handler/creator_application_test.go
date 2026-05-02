@@ -1063,6 +1063,81 @@ func TestEscapeLikeWildcards_Handler(t *testing.T) {
 	})
 }
 
+func TestDomainCreatorApplicationDetailSocialToAPI(t *testing.T) {
+	t.Parallel()
+
+	t.Run("unverified default — verified=false plus three nils pass through", func(t *testing.T) {
+		t.Parallel()
+		got, err := domainCreatorApplicationDetailSocialToAPI(domain.CreatorApplicationDetailSocial{
+			Platform: domain.SocialPlatformInstagram,
+			Handle:   "aidana",
+		})
+		require.NoError(t, err)
+		require.Equal(t, api.CreatorApplicationDetailSocial{
+			Platform: api.SocialPlatform(domain.SocialPlatformInstagram),
+			Handle:   "aidana",
+			Verified: false,
+		}, got)
+	})
+
+	t.Run("manual verification — every field maps", func(t *testing.T) {
+		t.Parallel()
+		method := domain.SocialVerificationMethodManual
+		adminID := "11111111-2222-3333-4444-555555555555"
+		when := time.Date(2026, 5, 1, 12, 0, 0, 0, time.UTC)
+
+		got, err := domainCreatorApplicationDetailSocialToAPI(domain.CreatorApplicationDetailSocial{
+			Platform:         domain.SocialPlatformInstagram,
+			Handle:           "aidana",
+			Verified:         true,
+			Method:           &method,
+			VerifiedByUserID: &adminID,
+			VerifiedAt:       &when,
+		})
+		require.NoError(t, err)
+		require.True(t, got.Verified)
+		require.NotNil(t, got.Method)
+		require.Equal(t, api.SocialVerificationMethod(method), *got.Method)
+		require.NotNil(t, got.VerifiedByUserId)
+		require.Equal(t, adminID, got.VerifiedByUserId.String())
+		require.NotNil(t, got.VerifiedAt)
+		require.True(t, got.VerifiedAt.Equal(when))
+	})
+
+	t.Run("auto verification — verified true with no admin uuid", func(t *testing.T) {
+		t.Parallel()
+		method := domain.SocialVerificationMethodAuto
+		when := time.Date(2026, 5, 1, 12, 0, 0, 0, time.UTC)
+
+		got, err := domainCreatorApplicationDetailSocialToAPI(domain.CreatorApplicationDetailSocial{
+			Platform:   domain.SocialPlatformInstagram,
+			Handle:     "aidana",
+			Verified:   true,
+			Method:     &method,
+			VerifiedAt: &when,
+		})
+		require.NoError(t, err)
+		require.True(t, got.Verified)
+		require.NotNil(t, got.Method)
+		require.Equal(t, api.SocialVerificationMethod(method), *got.Method)
+		require.Nil(t, got.VerifiedByUserId)
+		require.NotNil(t, got.VerifiedAt)
+	})
+
+	t.Run("invalid VerifiedByUserID — error wraps the bad value", func(t *testing.T) {
+		t.Parallel()
+		bad := "not-a-uuid"
+		_, err := domainCreatorApplicationDetailSocialToAPI(domain.CreatorApplicationDetailSocial{
+			Platform:         domain.SocialPlatformInstagram,
+			Handle:           "aidana",
+			VerifiedByUserID: &bad,
+		})
+		require.Error(t, err)
+		require.ErrorContains(t, err, "verified_by_user_id")
+		require.ErrorContains(t, err, bad)
+	})
+}
+
 func TestSortDictionaryItem(t *testing.T) {
 	t.Parallel()
 
