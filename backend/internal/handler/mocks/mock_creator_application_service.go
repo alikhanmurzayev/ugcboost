@@ -106,6 +106,74 @@ func (_c *MockCreatorApplicationService_GetByID_Call) RunAndReturn(run func(ctx 
 	return _c
 }
 
+// List provides a mock function for the type MockCreatorApplicationService
+func (_mock *MockCreatorApplicationService) List(ctx context.Context, in domain.CreatorApplicationListInput) (*domain.CreatorApplicationListPage, error) {
+	ret := _mock.Called(ctx, in)
+
+	if len(ret) == 0 {
+		panic("no return value specified for List")
+	}
+
+	var r0 *domain.CreatorApplicationListPage
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, domain.CreatorApplicationListInput) (*domain.CreatorApplicationListPage, error)); ok {
+		return returnFunc(ctx, in)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, domain.CreatorApplicationListInput) *domain.CreatorApplicationListPage); ok {
+		r0 = returnFunc(ctx, in)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*domain.CreatorApplicationListPage)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, domain.CreatorApplicationListInput) error); ok {
+		r1 = returnFunc(ctx, in)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockCreatorApplicationService_List_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'List'
+type MockCreatorApplicationService_List_Call struct {
+	*mock.Call
+}
+
+// List is a helper method to define mock.On call
+//   - ctx context.Context
+//   - in domain.CreatorApplicationListInput
+func (_e *MockCreatorApplicationService_Expecter) List(ctx interface{}, in interface{}) *MockCreatorApplicationService_List_Call {
+	return &MockCreatorApplicationService_List_Call{Call: _e.mock.On("List", ctx, in)}
+}
+
+func (_c *MockCreatorApplicationService_List_Call) Run(run func(ctx context.Context, in domain.CreatorApplicationListInput)) *MockCreatorApplicationService_List_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 domain.CreatorApplicationListInput
+		if args[1] != nil {
+			arg1 = args[1].(domain.CreatorApplicationListInput)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockCreatorApplicationService_List_Call) Return(creatorApplicationListPage *domain.CreatorApplicationListPage, err error) *MockCreatorApplicationService_List_Call {
+	_c.Call.Return(creatorApplicationListPage, err)
+	return _c
+}
+
+func (_c *MockCreatorApplicationService_List_Call) RunAndReturn(run func(ctx context.Context, in domain.CreatorApplicationListInput) (*domain.CreatorApplicationListPage, error)) *MockCreatorApplicationService_List_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Submit provides a mock function for the type MockCreatorApplicationService
 func (_mock *MockCreatorApplicationService) Submit(ctx context.Context, in domain.CreatorApplicationInput) (*domain.CreatorApplicationSubmission, error) {
 	ret := _mock.Called(ctx, in)

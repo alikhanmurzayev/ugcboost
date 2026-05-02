@@ -40,6 +40,7 @@ var (
 type CreatorApplicationSocialRepo interface {
 	InsertMany(ctx context.Context, rows []CreatorApplicationSocialRow) error
 	ListByApplicationID(ctx context.Context, applicationID string) ([]*CreatorApplicationSocialRow, error)
+	ListByApplicationIDs(ctx context.Context, applicationIDs []string) (map[string][]*CreatorApplicationSocialRow, error)
 }
 
 type creatorApplicationSocialRepository struct {
@@ -68,4 +69,31 @@ func (r *creatorApplicationSocialRepository) ListByApplicationID(ctx context.Con
 		Where(sq.Eq{CreatorApplicationSocialColumnApplicationID: applicationID}).
 		OrderBy(CreatorApplicationSocialColumnPlatform+" ASC", CreatorApplicationSocialColumnHandle+" ASC")
 	return dbutil.Many[CreatorApplicationSocialRow](ctx, r.db, q)
+}
+
+// ListByApplicationIDs hydrates social accounts for every supplied application
+// id in a single query. The returned map is keyed by application id, and each
+// slice keeps the same (platform, handle) ordering as ListByApplicationID so
+// the handler hydration is deterministic. An empty input set is a no-op.
+func (r *creatorApplicationSocialRepository) ListByApplicationIDs(ctx context.Context, applicationIDs []string) (map[string][]*CreatorApplicationSocialRow, error) {
+	if len(applicationIDs) == 0 {
+		return map[string][]*CreatorApplicationSocialRow{}, nil
+	}
+	q := sq.Select(creatorApplicationSocialSelectColumns...).
+		From(TableCreatorApplicationSocials).
+		Where(sq.Eq{CreatorApplicationSocialColumnApplicationID: applicationIDs}).
+		OrderBy(
+			CreatorApplicationSocialColumnApplicationID+" ASC",
+			CreatorApplicationSocialColumnPlatform+" ASC",
+			CreatorApplicationSocialColumnHandle+" ASC",
+		)
+	rows, err := dbutil.Many[CreatorApplicationSocialRow](ctx, r.db, q)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string][]*CreatorApplicationSocialRow, len(applicationIDs))
+	for _, row := range rows {
+		out[row.ApplicationID] = append(out[row.ApplicationID], row)
+	}
+	return out, nil
 }

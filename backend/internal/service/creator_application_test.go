@@ -930,3 +930,173 @@ func TestCreatorApplicationService_GetByID(t *testing.T) {
 		}, got)
 	})
 }
+
+func TestCreatorApplicationService_List(t *testing.T) {
+	t.Parallel()
+
+	baseInput := func() domain.CreatorApplicationListInput {
+		return domain.CreatorApplicationListInput{
+			Sort:    domain.CreatorApplicationSortCreatedAt,
+			Order:   domain.SortOrderDesc,
+			Page:    1,
+			PerPage: 20,
+		}
+	}
+
+	t.Run("trims search before delegating to repo", func(t *testing.T) {
+		t.Parallel()
+		rig := newCreatorServiceRig(t)
+		rig.factory.EXPECT().NewCreatorApplicationRepo(mock.Anything).Return(rig.appRepo)
+		rig.appRepo.EXPECT().List(mock.Anything, mock.MatchedBy(func(p repository.CreatorApplicationListParams) bool {
+			return p.Search == "aidana" && p.Sort == domain.CreatorApplicationSortCreatedAt && p.Order == domain.SortOrderDesc && p.Page == 1 && p.PerPage == 20
+		})).Return(nil, int64(0), nil)
+
+		in := baseInput()
+		in.Search = "   aidana   "
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.logger)
+		page, err := svc.List(context.Background(), in)
+		require.NoError(t, err)
+		require.Equal(t, &domain.CreatorApplicationListPage{
+			Items:   nil,
+			Total:   0,
+			Page:    1,
+			PerPage: 20,
+		}, page)
+	})
+
+	t.Run("repo error wrapped with context", func(t *testing.T) {
+		t.Parallel()
+		rig := newCreatorServiceRig(t)
+		rig.factory.EXPECT().NewCreatorApplicationRepo(mock.Anything).Return(rig.appRepo)
+		rig.appRepo.EXPECT().List(mock.Anything, mock.Anything).Return(nil, int64(0), errors.New("db down"))
+
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.logger)
+		_, err := svc.List(context.Background(), baseInput())
+		require.ErrorContains(t, err, "list applications")
+		require.ErrorContains(t, err, "db down")
+	})
+
+	t.Run("category hydration error wrapped", func(t *testing.T) {
+		t.Parallel()
+		rig := newCreatorServiceRig(t)
+		rig.factory.EXPECT().NewCreatorApplicationRepo(mock.Anything).Return(rig.appRepo)
+		rig.factory.EXPECT().NewCreatorApplicationCategoryRepo(mock.Anything).Return(rig.appCategoryRepo)
+		rig.appRepo.EXPECT().List(mock.Anything, mock.Anything).Return(
+			[]*repository.CreatorApplicationListRow{{ID: "app-1"}}, int64(1), nil)
+		rig.appCategoryRepo.EXPECT().ListByApplicationIDs(mock.Anything, []string{"app-1"}).
+			Return(nil, errors.New("cat boom"))
+
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.logger)
+		_, err := svc.List(context.Background(), baseInput())
+		require.ErrorContains(t, err, "hydrate categories")
+		require.ErrorContains(t, err, "cat boom")
+	})
+
+	t.Run("social hydration error wrapped", func(t *testing.T) {
+		t.Parallel()
+		rig := newCreatorServiceRig(t)
+		rig.factory.EXPECT().NewCreatorApplicationRepo(mock.Anything).Return(rig.appRepo)
+		rig.factory.EXPECT().NewCreatorApplicationCategoryRepo(mock.Anything).Return(rig.appCategoryRepo)
+		rig.factory.EXPECT().NewCreatorApplicationSocialRepo(mock.Anything).Return(rig.appSocialRepo)
+		rig.appRepo.EXPECT().List(mock.Anything, mock.Anything).Return(
+			[]*repository.CreatorApplicationListRow{{ID: "app-1"}}, int64(1), nil)
+		rig.appCategoryRepo.EXPECT().ListByApplicationIDs(mock.Anything, []string{"app-1"}).
+			Return(map[string][]string{"app-1": {"beauty"}}, nil)
+		rig.appSocialRepo.EXPECT().ListByApplicationIDs(mock.Anything, []string{"app-1"}).
+			Return(nil, errors.New("soc boom"))
+
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.logger)
+		_, err := svc.List(context.Background(), baseInput())
+		require.ErrorContains(t, err, "hydrate socials")
+		require.ErrorContains(t, err, "soc boom")
+	})
+
+	t.Run("zero results — short-circuits without hydration", func(t *testing.T) {
+		t.Parallel()
+		rig := newCreatorServiceRig(t)
+		rig.factory.EXPECT().NewCreatorApplicationRepo(mock.Anything).Return(rig.appRepo)
+		rig.appRepo.EXPECT().List(mock.Anything, mock.Anything).Return(nil, int64(0), nil)
+
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.logger)
+		page, err := svc.List(context.Background(), baseInput())
+		require.NoError(t, err)
+		require.Equal(t, &domain.CreatorApplicationListPage{
+			Items:   nil,
+			Total:   0,
+			Page:    1,
+			PerPage: 20,
+		}, page)
+	})
+
+	t.Run("success — assembles page with batch-hydrated categories and socials", func(t *testing.T) {
+		t.Parallel()
+		rig := newCreatorServiceRig(t)
+		birth := time.Date(1995, 5, 15, 0, 0, 0, 0, time.UTC)
+		created := time.Date(2026, 4, 20, 18, 0, 0, 0, time.UTC)
+		updated := time.Date(2026, 4, 21, 9, 0, 0, 0, time.UTC)
+		rig.factory.EXPECT().NewCreatorApplicationRepo(mock.Anything).Return(rig.appRepo)
+		rig.factory.EXPECT().NewCreatorApplicationCategoryRepo(mock.Anything).Return(rig.appCategoryRepo)
+		rig.factory.EXPECT().NewCreatorApplicationSocialRepo(mock.Anything).Return(rig.appSocialRepo)
+
+		rig.appRepo.EXPECT().List(mock.Anything, mock.Anything).Return(
+			[]*repository.CreatorApplicationListRow{
+				{
+					ID: "app-1", LastName: "Муратова", FirstName: "Айдана",
+					MiddleName: pointer.ToString("Ивановна"),
+					BirthDate:  birth, CityCode: "almaty",
+					Status:    domain.CreatorApplicationStatusVerification,
+					CreatedAt: created, UpdatedAt: updated,
+					TelegramLinked: true,
+				},
+				{
+					ID: "app-2", LastName: "Иванова", FirstName: "Анна",
+					BirthDate: birth, CityCode: "astana",
+					Status:    domain.CreatorApplicationStatusModeration,
+					CreatedAt: created, UpdatedAt: updated,
+				},
+			}, int64(2), nil)
+		rig.appCategoryRepo.EXPECT().ListByApplicationIDs(mock.Anything, []string{"app-1", "app-2"}).
+			Return(map[string][]string{
+				"app-1": {"beauty", "fashion"},
+				"app-2": {"food"},
+			}, nil)
+		rig.appSocialRepo.EXPECT().ListByApplicationIDs(mock.Anything, []string{"app-1", "app-2"}).
+			Return(map[string][]*repository.CreatorApplicationSocialRow{
+				"app-1": {
+					{Platform: domain.SocialPlatformInstagram, Handle: "aidana"},
+				},
+			}, nil)
+
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.logger)
+		page, err := svc.List(context.Background(), baseInput())
+		require.NoError(t, err)
+		require.Equal(t, &domain.CreatorApplicationListPage{
+			Items: []*domain.CreatorApplicationListItem{
+				{
+					ID: "app-1", Status: domain.CreatorApplicationStatusVerification,
+					LastName: "Муратова", FirstName: "Айдана",
+					MiddleName: pointer.ToString("Ивановна"),
+					BirthDate:  birth, CityCode: "almaty",
+					Categories: []string{"beauty", "fashion"},
+					Socials: []domain.CreatorApplicationDetailSocial{
+						{Platform: domain.SocialPlatformInstagram, Handle: "aidana"},
+					},
+					TelegramLinked: true,
+					CreatedAt:      created, UpdatedAt: updated,
+				},
+				{
+					ID: "app-2", Status: domain.CreatorApplicationStatusModeration,
+					LastName: "Иванова", FirstName: "Анна",
+					BirthDate: birth, CityCode: "astana",
+					Categories:     []string{"food"},
+					Socials:        []domain.CreatorApplicationDetailSocial{},
+					TelegramLinked: false,
+					CreatedAt:      created, UpdatedAt: updated,
+				},
+			},
+			Total:   2,
+			Page:    1,
+			PerPage: 20,
+		}, page)
+	})
+}

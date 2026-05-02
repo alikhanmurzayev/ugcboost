@@ -296,3 +296,77 @@ func (_c *MockCreatorApplicationRepo_HasActiveByIIN_Call) RunAndReturn(run func(
 	_c.Call.Return(run)
 	return _c
 }
+
+// List provides a mock function for the type MockCreatorApplicationRepo
+func (_mock *MockCreatorApplicationRepo) List(ctx context.Context, params repository.CreatorApplicationListParams) ([]*repository.CreatorApplicationListRow, int64, error) {
+	ret := _mock.Called(ctx, params)
+
+	if len(ret) == 0 {
+		panic("no return value specified for List")
+	}
+
+	var r0 []*repository.CreatorApplicationListRow
+	var r1 int64
+	var r2 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, repository.CreatorApplicationListParams) ([]*repository.CreatorApplicationListRow, int64, error)); ok {
+		return returnFunc(ctx, params)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, repository.CreatorApplicationListParams) []*repository.CreatorApplicationListRow); ok {
+		r0 = returnFunc(ctx, params)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]*repository.CreatorApplicationListRow)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, repository.CreatorApplicationListParams) int64); ok {
+		r1 = returnFunc(ctx, params)
+	} else {
+		r1 = ret.Get(1).(int64)
+	}
+	if returnFunc, ok := ret.Get(2).(func(context.Context, repository.CreatorApplicationListParams) error); ok {
+		r2 = returnFunc(ctx, params)
+	} else {
+		r2 = ret.Error(2)
+	}
+	return r0, r1, r2
+}
+
+// MockCreatorApplicationRepo_List_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'List'
+type MockCreatorApplicationRepo_List_Call struct {
+	*mock.Call
+}
+
+// List is a helper method to define mock.On call
+//   - ctx context.Context
+//   - params repository.CreatorApplicationListParams
+func (_e *MockCreatorApplicationRepo_Expecter) List(ctx interface{}, params interface{}) *MockCreatorApplicationRepo_List_Call {
+	return &MockCreatorApplicationRepo_List_Call{Call: _e.mock.On("List", ctx, params)}
+}
+
+func (_c *MockCreatorApplicationRepo_List_Call) Run(run func(ctx context.Context, params repository.CreatorApplicationListParams)) *MockCreatorApplicationRepo_List_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 repository.CreatorApplicationListParams
+		if args[1] != nil {
+			arg1 = args[1].(repository.CreatorApplicationListParams)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockCreatorApplicationRepo_List_Call) Return(creatorApplicationListRows []*repository.CreatorApplicationListRow, n int64, err error) *MockCreatorApplicationRepo_List_Call {
+	_c.Call.Return(creatorApplicationListRows, n, err)
+	return _c
+}
+
+func (_c *MockCreatorApplicationRepo_List_Call) RunAndReturn(run func(ctx context.Context, params repository.CreatorApplicationListParams) ([]*repository.CreatorApplicationListRow, int64, error)) *MockCreatorApplicationRepo_List_Call {
+	_c.Call.Return(run)
+	return _c
+}

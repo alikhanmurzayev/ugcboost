@@ -70,6 +70,7 @@ import (
 	"fmt"
 	"net/http"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -487,12 +488,12 @@ func buildExpectedDetail(t *testing.T, req apiclient.CreatorApplicationSubmitReq
 		FirstName:         req.FirstName,
 		MiddleName:        req.MiddleName,
 		Iin:               req.Iin,
-		BirthDate:         got.BirthDate, // already verified to be 1995-05-15 via the IIN; trust the parsed value
+		BirthDate:         got.BirthDate, // verified below to match the IIN's YYMMDD prefix; trust the parsed value
 		Phone:             req.Phone,
 		City:              cityRef,
 		Address:           req.Address,
 		CategoryOtherText: otherPtr,
-		Status:            apiclient.Verification,
+		Status:            apiclient.CreatorApplicationDetailDataStatusVerification,
 		CreatedAt:         got.CreatedAt,
 		UpdatedAt:         got.UpdatedAt,
 		Categories:        catRefs,
@@ -500,12 +501,34 @@ func buildExpectedDetail(t *testing.T, req apiclient.CreatorApplicationSubmitReq
 		Consents:          buildExpectedConsents(got.Consents),
 	}
 
-	// All UniqueIIN values share birthdate 1995-05-15 — pin it once so a
-	// regression in the IIN→date derivation surfaces here, not silently in
-	// the require.Equal copy from `got`.
-	require.Equal(t, "1995-05-15", got.BirthDate.Format("2006-01-02"))
+	// Verify birth_date derives from the IIN's YYMMDD prefix so a regression
+	// in the IIN→date conversion path surfaces here, not silently in the
+	// require.Equal copy from `got`. UniqueIIN draws year/month/day at random,
+	// so we read the expected date out of the IIN itself.
+	require.Equal(t, iinBirthDate(t, req.Iin), got.BirthDate.Format("2006-01-02"))
 
 	return expected
+}
+
+// iinBirthDate decodes the YYMMDD prefix and century byte (positions 0..6) of
+// a Kazakhstani IIN into the canonical YYYY-MM-DD string. Century byte 3..4
+// flags 1900s, 5..6 flags 2000s — matching the format produced by
+// testutil.UniqueIIN.
+func iinBirthDate(t *testing.T, iin string) string {
+	t.Helper()
+	require.Len(t, iin, 12)
+	yy, err := strconv.Atoi(iin[0:2])
+	require.NoError(t, err)
+	mm, err := strconv.Atoi(iin[2:4])
+	require.NoError(t, err)
+	dd, err := strconv.Atoi(iin[4:6])
+	require.NoError(t, err)
+	century := iin[6]
+	year := 1900 + yy
+	if century == '5' || century == '6' {
+		year = 2000 + yy
+	}
+	return fmt.Sprintf("%04d-%02d-%02d", year, mm, dd)
 }
 
 // resolveCityRef looks the city up in the public cities dictionary and

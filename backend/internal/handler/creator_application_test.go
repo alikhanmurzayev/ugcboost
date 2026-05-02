@@ -271,6 +271,80 @@ func serverWithAuthzAndCreatorAndDict(t *testing.T, authz AuthzService, creator 
 	}, log)
 }
 
+// validListBody returns the canonical list-request body shared by the list
+// endpoint test cases. Each case mutates one field to exercise its branch.
+func validListBody() api.CreatorApplicationsListRequest {
+	return api.CreatorApplicationsListRequest{
+		Sort:    api.CreatedAt,
+		Order:   api.Desc,
+		Page:    1,
+		PerPage: 20,
+	}
+}
+
+// runListValidation422 wires a fresh authz mock that approves the call,
+// applies `mutate` to a valid list body, and asserts the handler answers 422
+// with CodeValidation and a message containing wantFragment. Service and
+// dictionary mocks are intentionally nil — validation must reject before they
+// are touched.
+func runListValidation422(t *testing.T, mutate func(*api.CreatorApplicationsListRequest), wantFragment string) {
+	t.Helper()
+	authz := mocks.NewMockAuthzService(t)
+	authz.EXPECT().CanListCreatorApplications(mock.Anything).Return(nil)
+
+	body := validListBody()
+	mutate(&body)
+
+	router := newTestRouter(t, serverWithAuthzAndCreatorAndDict(t, authz, nil, nil, logmocks.NewMockLogger(t)))
+	w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/creators/applications/list", body)
+	require.Equal(t, http.StatusUnprocessableEntity, w.Code)
+	require.Equal(t, domain.CodeValidation, resp.Error.Code)
+	if wantFragment != "" {
+		require.Contains(t, resp.Error.Message, wantFragment)
+	}
+}
+
+// runListInternal500 wires authz+creator+dict+logger mocks via the supplied
+// configurators and asserts the handler answers 500 for the given body. The
+// configurator sets up whatever mock expectation triggers the 500 path
+// (service error, dictionary error, invalid status from service, etc.) — only
+// non-nil mocks are passed to the server.
+func runListInternal500(t *testing.T,
+	body api.CreatorApplicationsListRequest,
+	configureCreator func(*mocks.MockCreatorApplicationService),
+	configureDict func(*mocks.MockDictionaryService),
+) {
+	t.Helper()
+	authz := mocks.NewMockAuthzService(t)
+	authz.EXPECT().CanListCreatorApplications(mock.Anything).Return(nil)
+
+	var creator *mocks.MockCreatorApplicationService
+	if configureCreator != nil {
+		creator = mocks.NewMockCreatorApplicationService(t)
+		configureCreator(creator)
+	}
+	var dict *mocks.MockDictionaryService
+	if configureDict != nil {
+		dict = mocks.NewMockDictionaryService(t)
+		configureDict(dict)
+	}
+
+	log := logmocks.NewMockLogger(t)
+	expectHandlerUnexpectedErrorLog(log, "/creators/applications/list")
+
+	var creatorIface CreatorApplicationService
+	if creator != nil {
+		creatorIface = creator
+	}
+	var dictIface DictionaryService
+	if dict != nil {
+		dictIface = dict
+	}
+	router := newTestRouter(t, serverWithAuthzAndCreatorAndDict(t, authz, creatorIface, dictIface, log))
+	w, _ := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/creators/applications/list", body)
+	require.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
 func TestServer_GetCreatorApplication(t *testing.T) {
 	t.Parallel()
 
@@ -297,7 +371,7 @@ func TestServer_GetCreatorApplication(t *testing.T) {
 			Return(nil, sql.ErrNoRows)
 
 		// Dictionary service is not consulted on the not-found path: respondError
-		// short-circuits before the maptter runs, so dict stays nil.
+		// short-circuits before the mapper runs, so dict stays nil.
 		router := newTestRouter(t, serverWithAuthzAndCreatorAndDict(t, authz, creator, nil, logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodGet, appPath, nil)
 		require.Equal(t, http.StatusNotFound, w.Code)
@@ -428,7 +502,7 @@ func TestServer_GetCreatorApplication(t *testing.T) {
 				City:              api.CreatorApplicationDetailCity{Code: "almaty", Name: "Алматы", SortOrder: 100},
 				Address:           pointer.ToString("ул. Абая 1"),
 				CategoryOtherText: pointer.ToString("Авторские ASMR"),
-				Status:            api.Verification,
+				Status:            api.CreatorApplicationDetailDataStatusVerification,
 				CreatedAt:         created,
 				UpdatedAt:         updated,
 				Categories: []api.CreatorApplicationDetailCategory{
@@ -509,13 +583,13 @@ func TestMapCreatorApplicationStatusToAPI(t *testing.T) {
 		domainValue string
 		apiValue    api.CreatorApplicationDetailDataStatus
 	}{
-		{domain.CreatorApplicationStatusVerification, api.Verification},
-		{domain.CreatorApplicationStatusModeration, api.Moderation},
-		{domain.CreatorApplicationStatusAwaitingContract, api.AwaitingContract},
-		{domain.CreatorApplicationStatusContractSent, api.ContractSent},
-		{domain.CreatorApplicationStatusSigned, api.Signed},
-		{domain.CreatorApplicationStatusRejected, api.Rejected},
-		{domain.CreatorApplicationStatusWithdrawn, api.Withdrawn},
+		{domain.CreatorApplicationStatusVerification, api.CreatorApplicationDetailDataStatusVerification},
+		{domain.CreatorApplicationStatusModeration, api.CreatorApplicationDetailDataStatusModeration},
+		{domain.CreatorApplicationStatusAwaitingContract, api.CreatorApplicationDetailDataStatusAwaitingContract},
+		{domain.CreatorApplicationStatusContractSent, api.CreatorApplicationDetailDataStatusContractSent},
+		{domain.CreatorApplicationStatusSigned, api.CreatorApplicationDetailDataStatusSigned},
+		{domain.CreatorApplicationStatusRejected, api.CreatorApplicationDetailDataStatusRejected},
+		{domain.CreatorApplicationStatusWithdrawn, api.CreatorApplicationDetailDataStatusWithdrawn},
 	}
 	for _, tc := range cases {
 		t.Run(tc.domainValue, func(t *testing.T) {
@@ -530,5 +604,446 @@ func TestMapCreatorApplicationStatusToAPI(t *testing.T) {
 		t.Parallel()
 		_, err := mapCreatorApplicationStatusToAPI("ghost")
 		require.ErrorContains(t, err, "ghost")
+	})
+}
+
+func TestMapCreatorApplicationStatusToListItemAPI(t *testing.T) {
+	t.Parallel()
+
+	t.Run("known status casts to list-item enum", func(t *testing.T) {
+		t.Parallel()
+		got, err := mapCreatorApplicationStatusToListItemAPI(domain.CreatorApplicationStatusVerification)
+		require.NoError(t, err)
+		require.Equal(t, api.CreatorApplicationListItemStatusVerification, got)
+	})
+
+	t.Run("unknown status surfaces error", func(t *testing.T) {
+		t.Parallel()
+		_, err := mapCreatorApplicationStatusToListItemAPI("ghost")
+		require.ErrorContains(t, err, "ghost")
+	})
+}
+
+func TestApiListStatusesToDomain(t *testing.T) {
+	t.Parallel()
+
+	t.Run("nil pointer returns nil", func(t *testing.T) {
+		t.Parallel()
+		out, err := apiListStatusesToDomain(nil)
+		require.NoError(t, err)
+		require.Nil(t, out)
+	})
+
+	t.Run("empty slice returns nil", func(t *testing.T) {
+		t.Parallel()
+		empty := []api.CreatorApplicationsListRequestStatuses{}
+		out, err := apiListStatusesToDomain(&empty)
+		require.NoError(t, err)
+		require.Nil(t, out)
+	})
+
+	t.Run("known statuses dedup preserved order", func(t *testing.T) {
+		t.Parallel()
+		in := []api.CreatorApplicationsListRequestStatuses{
+			api.Verification, api.Moderation, api.Verification,
+		}
+		out, err := apiListStatusesToDomain(&in)
+		require.NoError(t, err)
+		require.Equal(t, []string{"verification", "moderation"}, out)
+	})
+
+	t.Run("unknown status surfaces 422", func(t *testing.T) {
+		t.Parallel()
+		bad := []api.CreatorApplicationsListRequestStatuses{api.Verification, "ghost"}
+		_, err := apiListStatusesToDomain(&bad)
+		var ve *domain.ValidationError
+		require.ErrorAs(t, err, &ve)
+		require.Equal(t, domain.CodeValidation, ve.Code)
+		require.Contains(t, ve.Message, "ghost")
+	})
+}
+
+func TestServer_ListCreatorApplications(t *testing.T) {
+	t.Parallel()
+
+	const listPath = "/creators/applications/list"
+
+	t.Run("forbidden for manager — service is not consulted", func(t *testing.T) {
+		t.Parallel()
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanListCreatorApplications(mock.Anything).Return(domain.ErrForbidden)
+
+		router := newTestRouter(t, serverWithAuthzAndCreatorAndDict(t, authz, nil, nil, logmocks.NewMockLogger(t)))
+		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, listPath, validListBody())
+		require.Equal(t, http.StatusForbidden, w.Code)
+		require.Equal(t, domain.CodeForbidden, resp.Error.Code)
+	})
+
+	t.Run("invalid body returns 422 (strict-server decode error)", func(t *testing.T) {
+		t.Parallel()
+		// strict-server intercepts JSON decode failures BEFORE the handler runs,
+		// so authz never sees this request — the wrapper short-circuits to 422.
+		router := newTestRouter(t, serverWithAuthzAndCreatorAndDict(t, nil, nil, nil, logmocks.NewMockLogger(t)))
+		req := httptest.NewRequest(http.MethodPost, listPath, bytes.NewReader([]byte("not json")))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		require.Equal(t, http.StatusUnprocessableEntity, w.Code)
+	})
+
+	// Validation cases — all share the same harness: authz approves, the
+	// handler-side validators reject before the service is ever called.
+	validationCases := []struct {
+		name     string
+		mutate   func(*api.CreatorApplicationsListRequest)
+		fragment string
+	}{
+		{"invalid sort returns 422", func(b *api.CreatorApplicationsListRequest) { b.Sort = "rating" }, "sort"},
+		{"invalid order returns 422", func(b *api.CreatorApplicationsListRequest) { b.Order = "random" }, "order"},
+		{"page below 1 returns 422", func(b *api.CreatorApplicationsListRequest) { b.Page = 0 }, "page"},
+		{"perPage below 1 returns 422", func(b *api.CreatorApplicationsListRequest) { b.PerPage = 0 }, "perPage"},
+		{"perPage above 200 returns 422", func(b *api.CreatorApplicationsListRequest) { b.PerPage = 201 }, ""},
+		{"ageFrom > ageTo returns 422", func(b *api.CreatorApplicationsListRequest) {
+			b.AgeFrom = pointer.ToInt(40)
+			b.AgeTo = pointer.ToInt(20)
+		}, "ageFrom"},
+		{"dateFrom after dateTo returns 422", func(b *api.CreatorApplicationsListRequest) {
+			from := time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC)
+			to := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+			b.DateFrom = &from
+			b.DateTo = &to
+		}, "dateFrom"},
+		{"invalid status item returns 422", func(b *api.CreatorApplicationsListRequest) {
+			statuses := []api.CreatorApplicationsListRequestStatuses{api.Verification, "ghost"}
+			b.Statuses = &statuses
+		}, "ghost"},
+		{"validation: search > 128 runes returns 422", func(b *api.CreatorApplicationsListRequest) {
+			b.Search = pointer.ToString(strings.Repeat("a", domain.CreatorApplicationListSearchMaxLen+1))
+		}, "search"},
+		{"validation: ageFrom < 0 returns 422", func(b *api.CreatorApplicationsListRequest) {
+			b.AgeFrom = pointer.ToInt(-1)
+		}, "ageFrom"},
+		{"validation: ageTo > 120 returns 422", func(b *api.CreatorApplicationsListRequest) {
+			b.AgeTo = pointer.ToInt(domain.CreatorApplicationListAgeMax + 1)
+		}, "ageTo"},
+		{"validation: page above max returns 422", func(b *api.CreatorApplicationsListRequest) {
+			b.Page = domain.CreatorApplicationListPageMax + 1
+		}, "page"},
+		{"validation: dateFrom = zero time returns 422", func(b *api.CreatorApplicationsListRequest) {
+			zero := time.Time{}
+			b.DateFrom = &zero
+		}, "dateFrom"},
+		{"validation: cities[] empty element returns 422", func(b *api.CreatorApplicationsListRequest) {
+			bad := []string{"almaty", ""}
+			b.Cities = &bad
+		}, "cities"},
+		{"validation: cities[] item over 64 chars returns 422", func(b *api.CreatorApplicationsListRequest) {
+			bad := []string{strings.Repeat("a", domain.CreatorApplicationListCityCodeMaxLen+1)}
+			b.Cities = &bad
+		}, "cities"},
+		{"validation: categories[] over array max returns 422", func(b *api.CreatorApplicationsListRequest) {
+			bad := make([]string, domain.CreatorApplicationListFilterArrayMax+1)
+			for i := range bad {
+				bad[i] = "x"
+			}
+			b.Categories = &bad
+		}, "categories"},
+	}
+	for _, tc := range validationCases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			runListValidation422(t, tc.mutate, tc.fragment)
+		})
+	}
+
+	// 500-class cases — service or dictionary error path. nonEmptyPage builds
+	// the canonical "one item, dictionaries called" page so the dictionary
+	// branch is reachable (the empty-page short-circuit would skip it).
+	nonEmptyPage := func() *domain.CreatorApplicationListPage {
+		return &domain.CreatorApplicationListPage{
+			Items: []*domain.CreatorApplicationListItem{
+				{ID: "11111111-2222-3333-4444-555555555555", Status: domain.CreatorApplicationStatusVerification},
+			},
+			Total: 1, Page: 1, PerPage: 20,
+		}
+	}
+
+	t.Run("service error returns 500", func(t *testing.T) {
+		t.Parallel()
+		runListInternal500(t, validListBody(), func(c *mocks.MockCreatorApplicationService) {
+			c.EXPECT().List(mock.Anything, mock.Anything).Return(nil, errors.New("db down"))
+		}, nil)
+	})
+
+	t.Run("dictionary categories error returns 500", func(t *testing.T) {
+		t.Parallel()
+		runListInternal500(t, validListBody(),
+			func(c *mocks.MockCreatorApplicationService) {
+				c.EXPECT().List(mock.Anything, mock.Anything).Return(nonEmptyPage(), nil)
+			},
+			func(d *mocks.MockDictionaryService) {
+				d.EXPECT().List(mock.Anything, domain.DictionaryTypeCategories).Return(nil, errors.New("dict down"))
+			})
+	})
+
+	t.Run("dictionary cities error returns 500", func(t *testing.T) {
+		t.Parallel()
+		runListInternal500(t, validListBody(),
+			func(c *mocks.MockCreatorApplicationService) {
+				c.EXPECT().List(mock.Anything, mock.Anything).Return(nonEmptyPage(), nil)
+			},
+			func(d *mocks.MockDictionaryService) {
+				d.EXPECT().List(mock.Anything, domain.DictionaryTypeCategories).Return(nil, nil)
+				d.EXPECT().List(mock.Anything, domain.DictionaryTypeCities).Return(nil, errors.New("dict down"))
+			})
+	})
+
+	t.Run("invalid status from service triggers 500", func(t *testing.T) {
+		t.Parallel()
+		// Domain status is normally one of seven canonical strings — if a future
+		// migration leaves a stale value, the mapper must surface a 500 rather
+		// than silently emit an empty enum to the client.
+		runListInternal500(t, validListBody(),
+			func(c *mocks.MockCreatorApplicationService) {
+				c.EXPECT().List(mock.Anything, mock.Anything).Return(&domain.CreatorApplicationListPage{
+					Items: []*domain.CreatorApplicationListItem{{ID: "11111111-2222-3333-4444-555555555555", Status: "ghost"}},
+					Total: 1, Page: 1, PerPage: 20,
+				}, nil)
+			},
+			func(d *mocks.MockDictionaryService) {
+				d.EXPECT().List(mock.Anything, domain.DictionaryTypeCategories).Return(nil, nil)
+				d.EXPECT().List(mock.Anything, domain.DictionaryTypeCities).Return(nil, nil)
+			})
+	})
+
+	t.Run("invalid uuid from service triggers 500", func(t *testing.T) {
+		t.Parallel()
+		runListInternal500(t, validListBody(),
+			func(c *mocks.MockCreatorApplicationService) {
+				c.EXPECT().List(mock.Anything, mock.Anything).Return(&domain.CreatorApplicationListPage{
+					Items: []*domain.CreatorApplicationListItem{{ID: "not-a-uuid", Status: domain.CreatorApplicationStatusVerification}},
+					Total: 1, Page: 1, PerPage: 20,
+				}, nil)
+			},
+			func(d *mocks.MockDictionaryService) {
+				d.EXPECT().List(mock.Anything, domain.DictionaryTypeCategories).Return(nil, nil)
+				d.EXPECT().List(mock.Anything, domain.DictionaryTypeCities).Return(nil, nil)
+			})
+	})
+
+	t.Run("happy path: forwards filters, hydrates, returns shape", func(t *testing.T) {
+		t.Parallel()
+		appID := uuid.MustParse("11111111-2222-3333-4444-555555555555")
+		birth := time.Date(1995, 5, 15, 0, 0, 0, 0, time.UTC)
+		created := time.Date(2026, 4, 20, 18, 0, 0, 0, time.UTC)
+		updated := time.Date(2026, 4, 21, 9, 0, 0, 0, time.UTC)
+		dateFrom := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+		dateTo := time.Date(2026, 12, 31, 0, 0, 0, 0, time.UTC)
+
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanListCreatorApplications(mock.Anything).Return(nil)
+		creator := mocks.NewMockCreatorApplicationService(t)
+		var captured domain.CreatorApplicationListInput
+		creator.EXPECT().List(mock.Anything, mock.Anything).
+			Run(func(_ context.Context, in domain.CreatorApplicationListInput) {
+				captured = in
+			}).
+			Return(&domain.CreatorApplicationListPage{
+				Items: []*domain.CreatorApplicationListItem{{
+					ID: appID.String(), Status: domain.CreatorApplicationStatusVerification,
+					LastName: "Муратова", FirstName: "Айдана",
+					MiddleName: pointer.ToString("Ивановна"),
+					BirthDate:  birth, CityCode: "almaty",
+					Categories: []string{"fashion", "beauty"},
+					Socials: []domain.CreatorApplicationDetailSocial{
+						{Platform: domain.SocialPlatformInstagram, Handle: "aidana"},
+					},
+					TelegramLinked: true,
+					CreatedAt:      created, UpdatedAt: updated,
+				}},
+				Total: 1, Page: 1, PerPage: 20,
+			}, nil)
+		dict := mocks.NewMockDictionaryService(t)
+		dict.EXPECT().List(mock.Anything, domain.DictionaryTypeCategories).
+			Return([]domain.DictionaryEntry{
+				{Code: "beauty", Name: "Красота", SortOrder: 10},
+				{Code: "fashion", Name: "Мода", SortOrder: 20},
+			}, nil)
+		dict.EXPECT().List(mock.Anything, domain.DictionaryTypeCities).
+			Return([]domain.DictionaryEntry{
+				{Code: "almaty", Name: "Алматы", SortOrder: 100},
+			}, nil)
+
+		body := validListBody()
+		statuses := []api.CreatorApplicationsListRequestStatuses{api.Verification, api.Moderation}
+		cities := []string{"almaty", "astana"}
+		categories := []string{"beauty"}
+		body.Statuses = &statuses
+		body.Cities = &cities
+		body.Categories = &categories
+		body.DateFrom = &dateFrom
+		body.DateTo = &dateTo
+		body.AgeFrom = pointer.ToInt(18)
+		body.AgeTo = pointer.ToInt(40)
+		body.TelegramLinked = pointer.ToBool(true)
+		body.Search = pointer.ToString("aidana")
+
+		router := newTestRouter(t, serverWithAuthzAndCreatorAndDict(t, authz, creator, dict, logmocks.NewMockLogger(t)))
+		w, resp := doJSON[api.CreatorApplicationsListResult](t, router, http.MethodPost, listPath, body)
+		require.Equal(t, http.StatusOK, w.Code)
+
+		// Captured input — the handler hands the trimmed/typed values to the service.
+		require.Equal(t, domain.CreatorApplicationListInput{
+			Statuses:       []string{"verification", "moderation"},
+			Cities:         []string{"almaty", "astana"},
+			Categories:     []string{"beauty"},
+			DateFrom:       &dateFrom,
+			DateTo:         &dateTo,
+			AgeFrom:        pointer.ToInt(18),
+			AgeTo:          pointer.ToInt(40),
+			TelegramLinked: pointer.ToBool(true),
+			Search:         "aidana",
+			Sort:           "created_at",
+			Order:          "desc",
+			Page:           1,
+			PerPage:        20,
+		}, captured)
+
+		// Response shape — categories sorted by (sortOrder, code), city resolved.
+		require.Equal(t, api.CreatorApplicationsListResult{
+			Data: api.CreatorApplicationsListData{
+				Items: []api.CreatorApplicationListItem{{
+					Id:         appID,
+					Status:     api.CreatorApplicationListItemStatusVerification,
+					LastName:   "Муратова",
+					FirstName:  "Айдана",
+					MiddleName: pointer.ToString("Ивановна"),
+					BirthDate:  openapi_types.Date{Time: birth},
+					City:       api.CreatorApplicationDetailCity{Code: "almaty", Name: "Алматы", SortOrder: 100},
+					Categories: []api.CreatorApplicationDetailCategory{
+						{Code: "beauty", Name: "Красота", SortOrder: 10},
+						{Code: "fashion", Name: "Мода", SortOrder: 20},
+					},
+					Socials: []api.CreatorApplicationDetailSocial{
+						{Platform: api.Instagram, Handle: "aidana"},
+					},
+					TelegramLinked: true,
+					CreatedAt:      created,
+					UpdatedAt:      updated,
+				}},
+				Total:   1,
+				Page:    1,
+				PerPage: 20,
+			},
+		}, resp)
+	})
+
+	t.Run("happy empty: zero items skips dictionary round-trips", func(t *testing.T) {
+		t.Parallel()
+		// Empty pages do not need dictionary names — the handler short-
+		// circuits to avoid two unnecessary round-trips per poll. The mock
+		// dictionary service is wired but configured WITHOUT EXPECT — any
+		// call would fail the test (mockery's strict mode).
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanListCreatorApplications(mock.Anything).Return(nil)
+		creator := mocks.NewMockCreatorApplicationService(t)
+		creator.EXPECT().List(mock.Anything, mock.Anything).Return(&domain.CreatorApplicationListPage{
+			Items: nil, Total: 0, Page: 1, PerPage: 20,
+		}, nil)
+		dict := mocks.NewMockDictionaryService(t)
+
+		router := newTestRouter(t, serverWithAuthzAndCreatorAndDict(t, authz, creator, dict, logmocks.NewMockLogger(t)))
+		w, resp := doJSON[api.CreatorApplicationsListResult](t, router, http.MethodPost, listPath, validListBody())
+		require.Equal(t, http.StatusOK, w.Code)
+		require.Equal(t, api.CreatorApplicationsListResult{
+			Data: api.CreatorApplicationsListData{
+				Items:   []api.CreatorApplicationListItem{},
+				Total:   0,
+				Page:    1,
+				PerPage: 20,
+			},
+		}, resp)
+	})
+
+	t.Run("validation: search > 128 runes returns 422", func(t *testing.T) {
+		t.Parallel()
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanListCreatorApplications(mock.Anything).Return(nil)
+		router := newTestRouter(t, serverWithAuthzAndCreatorAndDict(t, authz, nil, nil, logmocks.NewMockLogger(t)))
+		body := validListBody()
+		body.Search = pointer.ToString(strings.Repeat("a", domain.CreatorApplicationListSearchMaxLen+1))
+		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, listPath, body)
+		require.Equal(t, http.StatusUnprocessableEntity, w.Code)
+		require.Equal(t, domain.CodeValidation, resp.Error.Code)
+		require.Contains(t, resp.Error.Message, "search")
+	})
+
+	t.Run("validation: search trims whitespace before length check", func(t *testing.T) {
+		t.Parallel()
+		// Padding of pure whitespace must not push the search into rejection
+		// — trimming happens first, then the length test.
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanListCreatorApplications(mock.Anything).Return(nil)
+		creator := mocks.NewMockCreatorApplicationService(t)
+		var captured domain.CreatorApplicationListInput
+		creator.EXPECT().List(mock.Anything, mock.Anything).
+			Run(func(_ context.Context, in domain.CreatorApplicationListInput) {
+				captured = in
+			}).Return(&domain.CreatorApplicationListPage{Total: 0, Page: 1, PerPage: 20}, nil)
+		dict := mocks.NewMockDictionaryService(t)
+		router := newTestRouter(t, serverWithAuthzAndCreatorAndDict(t, authz, creator, dict, logmocks.NewMockLogger(t)))
+		body := validListBody()
+		body.Search = pointer.ToString("    aidana    ")
+		w, _ := doJSON[api.CreatorApplicationsListResult](t, router, http.MethodPost, listPath, body)
+		require.Equal(t, http.StatusOK, w.Code)
+		require.Equal(t, "aidana", captured.Search)
+	})
+
+	t.Run("validation: cities[] dedup keeps order, drops duplicates", func(t *testing.T) {
+		t.Parallel()
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanListCreatorApplications(mock.Anything).Return(nil)
+		creator := mocks.NewMockCreatorApplicationService(t)
+		var captured domain.CreatorApplicationListInput
+		creator.EXPECT().List(mock.Anything, mock.Anything).
+			Run(func(_ context.Context, in domain.CreatorApplicationListInput) {
+				captured = in
+			}).Return(&domain.CreatorApplicationListPage{Total: 0, Page: 1, PerPage: 20}, nil)
+		dict := mocks.NewMockDictionaryService(t)
+		router := newTestRouter(t, serverWithAuthzAndCreatorAndDict(t, authz, creator, dict, logmocks.NewMockLogger(t)))
+		body := validListBody()
+		dup := []string{"almaty", "  astana  ", "almaty"}
+		body.Cities = &dup
+		w, _ := doJSON[api.CreatorApplicationsListResult](t, router, http.MethodPost, listPath, body)
+		require.Equal(t, http.StatusOK, w.Code)
+		require.Equal(t, []string{"almaty", "astana"}, captured.Cities)
+	})
+}
+
+func TestEscapeLikeWildcards_Handler(t *testing.T) {
+	// This is the handler-side "validateCodeArray + validateSearch + dedup
+	// behaviour" snapshot. The repo-level escape lives in the repo package,
+	// but the handler also exercises whitespace trim + dedup.
+	t.Parallel()
+	t.Run("nil pointer returns nil", func(t *testing.T) {
+		t.Parallel()
+		out, err := validateCodeArray("cities", nil, 64)
+		require.NoError(t, err)
+		require.Nil(t, out)
+	})
+	t.Run("empty slice returns nil", func(t *testing.T) {
+		t.Parallel()
+		empty := []string{}
+		out, err := validateCodeArray("cities", &empty, 64)
+		require.NoError(t, err)
+		require.Nil(t, out)
+	})
+	t.Run("trims and dedups", func(t *testing.T) {
+		t.Parallel()
+		in := []string{"a", "  a  ", " b "}
+		out, err := validateCodeArray("cities", &in, 64)
+		require.NoError(t, err)
+		require.Equal(t, []string{"a", "b"}, out)
 	})
 }

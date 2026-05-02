@@ -271,6 +271,35 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/creators/applications/list": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * List creator applications with filters, search, sorting and pagination (admin only)
+         * @description Admin-only paginated list endpoint backing the moderation UI. POST is
+         *     used (not GET) because the search field carries PII (IIN, names, social
+         *     handles) which `security.md` forbids in URL params. Authorisation is
+         *     evaluated before any business logic so non-admin callers get 403
+         *     regardless of whether matching applications exist. Pagination, sort
+         *     field and sort order are required — there are no server-side defaults,
+         *     the client must explicitly choose. The item shape is intentionally lean:
+         *     list-views never expose phone, address, consents or the full Telegram
+         *     link aggregate (only a `telegramLinked` boolean) — full PII is reserved
+         *     for `GET /creators/applications/{id}`.
+         */
+        post: operations["listCreatorApplications"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/creators/applications/{id}": {
         parameters: {
             query?: never;
@@ -606,7 +635,7 @@ export interface components {
             /** @description Free-text niche description when categories include "other". */
             categoryOtherText?: string | null;
             /**
-             * @description Application status (target 7-state machine, see creator-application-state-machine.md).
+             * @description Application status.
              * @enum {string}
              */
             status: "verification" | "moderation" | "awaiting_contract" | "contract_sent" | "signed" | "rejected" | "withdrawn";
@@ -631,6 +660,98 @@ export interface components {
         };
         GetCreatorApplicationResult: {
             data: components["schemas"]["CreatorApplicationDetailData"];
+        };
+        /**
+         * @description Sort field for the admin list. Mapped to a SQL column / expression on
+         *     the backend. Unknown values are rejected with 422.
+         * @enum {string}
+         */
+        CreatorApplicationListSortField: "created_at" | "updated_at" | "full_name" | "birth_date" | "city_name";
+        /**
+         * @description Sort direction.
+         * @enum {string}
+         */
+        SortOrder: "asc" | "desc";
+        /**
+         * @description Filter, search, sort and pagination payload for the admin list. All
+         *     filter fields are optional and combined with AND between fields, OR
+         *     (any-of) within a single array. Empty/whitespace `search` is ignored.
+         */
+        CreatorApplicationsListRequest: {
+            /** @description Match any of these statuses. Empty/missing → all statuses. */
+            statuses?: ("verification" | "moderation" | "awaiting_contract" | "contract_sent" | "signed" | "rejected" | "withdrawn")[];
+            /** @description Match any of these city codes (from the cities dictionary). */
+            cities?: string[];
+            /** @description Match applications that include any of these category codes. */
+            categories?: string[];
+            /**
+             * Format: date-time
+             * @description Inclusive lower bound for `created_at`.
+             */
+            dateFrom?: string;
+            /**
+             * Format: date-time
+             * @description Inclusive upper bound for `created_at`.
+             */
+            dateTo?: string;
+            /** @description Inclusive lower bound for the creator's age in full years (computed from birth_date). */
+            ageFrom?: number;
+            /** @description Inclusive upper bound for the creator's age in full years. */
+            ageTo?: number;
+            /**
+             * @description When true, only applications already bound to a Telegram account
+             *     are returned. When false, only those still without a link.
+             *     Missing/null disables the filter.
+             */
+            telegramLinked?: boolean;
+            /**
+             * @description Free-text search across last_name, first_name, middle_name, IIN
+             *     (case-insensitive) and social-account handles. Trimmed; empty/blank
+             *     after trim disables the filter. Carries PII — the endpoint is POST
+             *     so this never lands in URL params.
+             */
+            search?: string;
+            sort: components["schemas"]["CreatorApplicationListSortField"];
+            order: components["schemas"]["SortOrder"];
+            /** @description 1-based page index. */
+            page: number;
+            /** @description Page size, between 1 and 200 inclusive. */
+            perPage: number;
+        };
+        CreatorApplicationListItem: {
+            /** Format: uuid */
+            id: string;
+            /** @enum {string} */
+            status: "verification" | "moderation" | "awaiting_contract" | "contract_sent" | "signed" | "rejected" | "withdrawn";
+            lastName: string;
+            firstName: string;
+            middleName?: string | null;
+            /** Format: date */
+            birthDate: string;
+            city: components["schemas"]["CreatorApplicationDetailCity"];
+            /** @description Categories selected by the creator, sorted by sort_order then code. */
+            categories: components["schemas"]["CreatorApplicationDetailCategory"][];
+            /** @description Social accounts attached to the application, sorted by platform then handle. */
+            socials: components["schemas"]["CreatorApplicationDetailSocial"][];
+            /** @description True when the creator has bound a Telegram account via /start. */
+            telegramLinked: boolean;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        CreatorApplicationsListData: {
+            items: components["schemas"]["CreatorApplicationListItem"][];
+            /**
+             * Format: int64
+             * @description Total number of matching applications across all pages.
+             */
+            total: number;
+            page: number;
+            perPage: number;
+        };
+        CreatorApplicationsListResult: {
+            data: components["schemas"]["CreatorApplicationsListData"];
         };
     };
     responses: never;
@@ -1352,6 +1473,66 @@ export interface operations {
                 };
             };
             /** @description Validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Unexpected error */
+            default: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    listCreatorApplications: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreatorApplicationsListRequest"];
+            };
+        };
+        responses: {
+            /** @description Page of creator applications matching the filter */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreatorApplicationsListResult"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation error (unknown sort/order, page/perPage out of range, missing required field) */
             422: {
                 headers: {
                     [name: string]: unknown;

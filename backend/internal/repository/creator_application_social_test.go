@@ -109,3 +109,58 @@ func TestCreatorApplicationSocialRepository_ListByApplicationID(t *testing.T) {
 		require.ErrorContains(t, err, "db down")
 	})
 }
+
+func TestCreatorApplicationSocialRepository_ListByApplicationIDs(t *testing.T) {
+	t.Parallel()
+
+	const sqlStmt = "SELECT application_id, created_at, handle, id, platform FROM creator_application_socials WHERE application_id IN ($1,$2) ORDER BY application_id ASC, platform ASC, handle ASC"
+
+	t.Run("empty input short-circuits without query", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &creatorApplicationSocialRepository{db: mock}
+
+		got, err := repo.ListByApplicationIDs(context.Background(), nil)
+		require.NoError(t, err)
+		require.Empty(t, got)
+	})
+
+	t.Run("success groups handles by application id", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &creatorApplicationSocialRepository{db: mock}
+		created := time.Date(2026, 4, 20, 18, 0, 0, 0, time.UTC)
+
+		mock.ExpectQuery(sqlStmt).
+			WithArgs("app-1", "app-2").
+			WillReturnRows(pgxmock.NewRows([]string{"application_id", "created_at", "handle", "id", "platform"}).
+				AddRow("app-1", created, "aidana", "s-1", "instagram").
+				AddRow("app-1", created, "aidana_tt", "s-2", "tiktok").
+				AddRow("app-2", created, "anotheruser", "s-3", "instagram"))
+
+		got, err := repo.ListByApplicationIDs(context.Background(), []string{"app-1", "app-2"})
+		require.NoError(t, err)
+		require.Equal(t, map[string][]*CreatorApplicationSocialRow{
+			"app-1": {
+				{ID: "s-1", ApplicationID: "app-1", Platform: "instagram", Handle: "aidana", CreatedAt: created},
+				{ID: "s-2", ApplicationID: "app-1", Platform: "tiktok", Handle: "aidana_tt", CreatedAt: created},
+			},
+			"app-2": {
+				{ID: "s-3", ApplicationID: "app-2", Platform: "instagram", Handle: "anotheruser", CreatedAt: created},
+			},
+		}, got)
+	})
+
+	t.Run("propagates query error", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &creatorApplicationSocialRepository{db: mock}
+
+		mock.ExpectQuery(sqlStmt).
+			WithArgs("app-1", "app-2").
+			WillReturnError(errors.New("db down"))
+
+		_, err := repo.ListByApplicationIDs(context.Background(), []string{"app-1", "app-2"})
+		require.ErrorContains(t, err, "db down")
+	})
+}

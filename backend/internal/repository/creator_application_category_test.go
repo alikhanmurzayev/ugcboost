@@ -107,3 +107,68 @@ func TestCreatorApplicationCategoryRepository_ListByApplicationID(t *testing.T) 
 		require.ErrorContains(t, err, "db down")
 	})
 }
+
+func TestCreatorApplicationCategoryRepository_ListByApplicationIDs(t *testing.T) {
+	t.Parallel()
+
+	const sqlStmt = "SELECT application_id, category_code FROM creator_application_categories WHERE application_id IN ($1,$2) ORDER BY application_id ASC, category_code ASC"
+
+	t.Run("empty input short-circuits without query", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &creatorApplicationCategoryRepository{db: mock}
+
+		got, err := repo.ListByApplicationIDs(context.Background(), nil)
+		require.NoError(t, err)
+		require.Empty(t, got)
+	})
+
+	t.Run("success groups codes by application id", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &creatorApplicationCategoryRepository{db: mock}
+
+		mock.ExpectQuery(sqlStmt).
+			WithArgs("app-1", "app-2").
+			WillReturnRows(pgxmock.NewRows([]string{"application_id", "category_code"}).
+				AddRow("app-1", "beauty").
+				AddRow("app-1", "fashion").
+				AddRow("app-2", "food"))
+
+		got, err := repo.ListByApplicationIDs(context.Background(), []string{"app-1", "app-2"})
+		require.NoError(t, err)
+		require.Equal(t, map[string][]string{
+			"app-1": {"beauty", "fashion"},
+			"app-2": {"food"},
+		}, got)
+	})
+
+	t.Run("missing application id surfaces as no-key in map", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &creatorApplicationCategoryRepository{db: mock}
+
+		mock.ExpectQuery(sqlStmt).
+			WithArgs("app-1", "app-empty").
+			WillReturnRows(pgxmock.NewRows([]string{"application_id", "category_code"}).
+				AddRow("app-1", "beauty"))
+
+		got, err := repo.ListByApplicationIDs(context.Background(), []string{"app-1", "app-empty"})
+		require.NoError(t, err)
+		require.Equal(t, map[string][]string{"app-1": {"beauty"}}, got)
+		require.NotContains(t, got, "app-empty")
+	})
+
+	t.Run("propagates query error", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &creatorApplicationCategoryRepository{db: mock}
+
+		mock.ExpectQuery(sqlStmt).
+			WithArgs("app-1", "app-2").
+			WillReturnError(errors.New("db down"))
+
+		_, err := repo.ListByApplicationIDs(context.Background(), []string{"app-1", "app-2"})
+		require.ErrorContains(t, err, "db down")
+	})
+}
