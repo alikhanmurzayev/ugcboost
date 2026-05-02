@@ -1044,6 +1044,14 @@ components:
       description: Supported social network for creator accounts (MVP scope).
       enum: [instagram, tiktok, threads]
 
+    SocialVerificationMethod:
+      type: string
+      description: |
+        How a social account was verified. `auto` — webhook from SendPulse caught
+        the verification code in an Instagram DM. `manual` — admin marked the
+        social as verified from the application drawer.
+      enum: [auto, manual]
+
     SocialAccountInput:
       type: object
       required: [platform, handle]
@@ -1155,12 +1163,29 @@ components:
 
     CreatorApplicationDetailSocial:
       type: object
-      required: [platform, handle]
+      required: [platform, handle, verified]
       properties:
         platform:
           $ref: "#/components/schemas/SocialPlatform"
         handle:
           type: string
+        verified:
+          type: boolean
+          description: Whether the creator's ownership of this social account has been confirmed.
+        method:
+          $ref: "#/components/schemas/SocialVerificationMethod"
+          nullable: true
+          description: Path used to verify ownership; null while the account is unverified.
+        verifiedByUserId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Admin who pressed the manual-verify button. Null on auto and on unverified rows.
+        verifiedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: When verification succeeded; null while the account is unverified.
 
     CreatorApplicationDetailConsent:
       type: object

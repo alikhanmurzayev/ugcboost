@@ -1,7 +1,10 @@
 package domain
 
 import (
+	"crypto/rand"
 	"errors"
+	"fmt"
+	"math/big"
 	"regexp"
 	"time"
 )
@@ -35,6 +38,32 @@ const (
 // SocialPlatformValues is the canonical list of accepted platforms.
 // Used by services/handlers when iterating and by tests for coverage.
 var SocialPlatformValues = []string{SocialPlatformInstagram, SocialPlatformTikTok, SocialPlatformThreads}
+
+// SocialVerificationMethod values mirror the enum in openapi.yaml. "auto"
+// covers verification via SendPulse webhook (Instagram DM), "manual" covers
+// admin-driven verification from the application drawer.
+const (
+	SocialVerificationMethodAuto   = "auto"
+	SocialVerificationMethodManual = "manual"
+)
+
+// SocialVerificationMethodValues is the canonical list of accepted verification
+// methods, used by handlers/tests when iterating.
+var SocialVerificationMethodValues = []string{SocialVerificationMethodAuto, SocialVerificationMethodManual}
+
+// Verification code: an "UGC-NNNNNN" identifier persisted on the application
+// at submit time. The creator copies it from the TMA and sends it in an IG DM
+// (auto path) or an admin matches it during manual verification. Format
+// integrity lives in the service — there is no DB CHECK on the column.
+const (
+	VerificationCodePrefix                = "UGC-"
+	VerificationCodeDigits                = 6
+	VerificationCodeMaxGenerationAttempts = 20
+)
+
+// verificationCodeRandomMax is the upper bound (exclusive) for crypto/rand
+// when sampling a digit sequence. Equal to 10**VerificationCodeDigits.
+var verificationCodeRandomMax = big.NewInt(1_000_000)
 
 // MaxCategoriesPerApplication caps how many category codes a creator may
 // pick on the landing form. The landing UI enforces this client-side; the
@@ -98,6 +127,12 @@ var ErrCreatorApplicationDuplicate = errors.New("creator application with this i
 // application is already linked. The service re-reads the row to decide
 // idempotent vs business error.
 var ErrTelegramApplicationLinkConflict = errors.New("telegram link for this application already exists")
+
+// ErrCreatorApplicationVerificationCodeConflict is raised by the repo on a
+// 23505 against the partial unique index over verification_code WHERE
+// status='verification'. The service catches it and retries Submit with a
+// freshly-generated code (cenkalti/backoff/v5, max VerificationCodeMaxGenerationAttempts).
+var ErrCreatorApplicationVerificationCodeConflict = errors.New("creator application verification code collides with an existing verification-status row")
 
 // SocialHandleRegex is the validation pattern applied to handles after they
 // are trimmed, stripped of leading '@' and lowercased. Current scope (IG/TT)
@@ -203,10 +238,15 @@ type TelegramLinkInput struct {
 }
 
 // CreatorApplicationDetailSocial is one social account attached to the
-// application — exactly what was persisted at submit time.
+// application. Carries verification state so admin and creator surfaces can
+// reflect "verified / by whom / when / how" without a separate fetch.
 type CreatorApplicationDetailSocial struct {
-	Platform string
-	Handle   string
+	Platform         string
+	Handle           string
+	Verified         bool
+	Method           *string
+	VerifiedByUserID *string
+	VerifiedAt       *time.Time
 }
 
 // CreatorApplicationDetailConsent is one consent record persisted at submit
@@ -361,4 +401,15 @@ func DocumentVersionFor(consentType, agreementVersion, privacyVersion string) st
 	default:
 		return privacyVersion
 	}
+}
+
+// GenerateVerificationCode returns a fresh "UGC-NNNNNN" identifier sampled
+// from crypto/rand. Callers should retry on
+// ErrCreatorApplicationVerificationCodeConflict via cenkalti/backoff.
+func GenerateVerificationCode() (string, error) {
+	n, err := rand.Int(rand.Reader, verificationCodeRandomMax)
+	if err != nil {
+		return "", fmt.Errorf("verification code rand: %w", err)
+	}
+	return fmt.Sprintf("%s%0*d", VerificationCodePrefix, VerificationCodeDigits, n.Int64()), nil
 }

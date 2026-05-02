@@ -12,21 +12,32 @@ import (
 
 // Creator application socials table and column names.
 const (
-	TableCreatorApplicationSocials              = "creator_application_socials"
-	CreatorApplicationSocialColumnID            = "id"
-	CreatorApplicationSocialColumnApplicationID = "application_id"
-	CreatorApplicationSocialColumnPlatform      = "platform"
-	CreatorApplicationSocialColumnHandle        = "handle"
-	CreatorApplicationSocialColumnCreatedAt     = "created_at"
+	TableCreatorApplicationSocials                 = "creator_application_socials"
+	CreatorApplicationSocialColumnID               = "id"
+	CreatorApplicationSocialColumnApplicationID    = "application_id"
+	CreatorApplicationSocialColumnPlatform         = "platform"
+	CreatorApplicationSocialColumnHandle           = "handle"
+	CreatorApplicationSocialColumnVerified         = "verified"
+	CreatorApplicationSocialColumnMethod           = "method"
+	CreatorApplicationSocialColumnVerifiedByUserID = "verified_by_user_id"
+	CreatorApplicationSocialColumnVerifiedAt       = "verified_at"
+	CreatorApplicationSocialColumnCreatedAt        = "created_at"
 )
 
 // CreatorApplicationSocialRow maps to the creator_application_socials table.
+// Verified/Method/VerifiedByUserID/VerifiedAt are select-only — they default
+// to (false, NULL, NULL, NULL) on INSERT and are populated later by the
+// SendPulse webhook (chunk 8) or by manual admin verification (chunk 9).
 type CreatorApplicationSocialRow struct {
-	ID            string    `db:"id"`
-	ApplicationID string    `db:"application_id" insert:"application_id"`
-	Platform      string    `db:"platform"       insert:"platform"`
-	Handle        string    `db:"handle"         insert:"handle"`
-	CreatedAt     time.Time `db:"created_at"`
+	ID               string     `db:"id"`
+	ApplicationID    string     `db:"application_id"      insert:"application_id"`
+	Platform         string     `db:"platform"            insert:"platform"`
+	Handle           string     `db:"handle"              insert:"handle"`
+	Verified         bool       `db:"verified"`
+	Method           *string    `db:"method"`
+	VerifiedByUserID *string    `db:"verified_by_user_id"`
+	VerifiedAt       *time.Time `db:"verified_at"`
+	CreatedAt        time.Time  `db:"created_at"`
 }
 
 var (

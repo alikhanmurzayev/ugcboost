@@ -451,6 +451,14 @@ func verifyCreatorApplicationByID(t *testing.T, c *apiclient.ClientWithResponses
 		require.NotEmpty(t, got.Consents[i].UserAgent, "consent %d userAgent empty", i)
 		require.NotEmpty(t, got.Consents[i].DocumentVersion, "consent %d documentVersion empty", i)
 	}
+	// Newly-submitted application: every social row must come back unverified
+	// with the three companion fields (method/by/at) set to null.
+	for i, soc := range got.Socials {
+		require.False(t, soc.Verified, "social[%d].verified must default to false", i)
+		require.Nil(t, soc.Method, "social[%d].method must be nil for an unverified row", i)
+		require.Nil(t, soc.VerifiedByUserId, "social[%d].verifiedByUserId must be nil for an unverified row", i)
+		require.Nil(t, soc.VerifiedAt, "social[%d].verifiedAt must be nil for an unverified row", i)
+	}
 
 	// Build the full expected aggregate with City/Categories resolved against
 	// the live public dictionaries — the same source the read-side handler

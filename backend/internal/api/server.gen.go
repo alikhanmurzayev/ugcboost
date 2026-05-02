@@ -125,6 +125,24 @@ func (e SocialPlatform) Valid() bool {
 	}
 }
 
+// Defines values for SocialVerificationMethod.
+const (
+	Auto   SocialVerificationMethod = "auto"
+	Manual SocialVerificationMethod = "manual"
+)
+
+// Valid indicates whether the value is a known member of the SocialVerificationMethod enum.
+func (e SocialVerificationMethod) Valid() bool {
+	switch e {
+	case Auto:
+		return true
+	case Manual:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for SortOrder.
 const (
 	Asc  SortOrder = "asc"
@@ -344,8 +362,22 @@ type CreatorApplicationDetailData struct {
 type CreatorApplicationDetailSocial struct {
 	Handle string `json:"handle"`
 
+	// Method How a social account was verified. `auto` — webhook from SendPulse caught
+	// the verification code in an Instagram DM. `manual` — admin marked the
+	// social as verified from the application drawer.
+	Method *SocialVerificationMethod `json:"method,omitempty"`
+
 	// Platform Supported social network for creator accounts (MVP scope).
 	Platform SocialPlatform `json:"platform"`
+
+	// Verified Whether the creator's ownership of this social account has been confirmed.
+	Verified bool `json:"verified"`
+
+	// VerifiedAt When verification succeeded; null while the account is unverified.
+	VerifiedAt *time.Time `json:"verifiedAt,omitempty"`
+
+	// VerifiedByUserId Admin who pressed the manual-verify button. Null on auto and on unverified rows.
+	VerifiedByUserId *openapi_types.UUID `json:"verifiedByUserId,omitempty"`
 }
 
 // CreatorApplicationListItem defines model for CreatorApplicationListItem.
@@ -660,6 +692,11 @@ type SocialAccountInput struct {
 
 // SocialPlatform Supported social network for creator accounts (MVP scope).
 type SocialPlatform string
+
+// SocialVerificationMethod How a social account was verified. `auto` — webhook from SendPulse caught
+// the verification code in an Instagram DM. `manual` — admin marked the
+// social as verified from the application drawer.
+type SocialVerificationMethod string
 
 // SortOrder Sort direction.
 type SortOrder string

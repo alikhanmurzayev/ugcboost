@@ -60,7 +60,7 @@ func TestCreatorApplicationSocialRepository_InsertMany(t *testing.T) {
 func TestCreatorApplicationSocialRepository_ListByApplicationID(t *testing.T) {
 	t.Parallel()
 
-	const sqlStmt = "SELECT application_id, created_at, handle, id, platform FROM creator_application_socials WHERE application_id = $1 ORDER BY platform ASC, handle ASC"
+	const sqlStmt = "SELECT application_id, created_at, handle, id, method, platform, verified, verified_at, verified_by_user_id FROM creator_application_socials WHERE application_id = $1 ORDER BY platform ASC, handle ASC"
 
 	t.Run("success maps rows in DB order", func(t *testing.T) {
 		t.Parallel()
@@ -70,9 +70,9 @@ func TestCreatorApplicationSocialRepository_ListByApplicationID(t *testing.T) {
 
 		mock.ExpectQuery(sqlStmt).
 			WithArgs("app-1").
-			WillReturnRows(pgxmock.NewRows([]string{"application_id", "created_at", "handle", "id", "platform"}).
-				AddRow("app-1", created, "aidana", "s-1", "instagram").
-				AddRow("app-1", created, "aidana_tt", "s-2", "tiktok"))
+			WillReturnRows(pgxmock.NewRows([]string{"application_id", "created_at", "handle", "id", "method", "platform", "verified", "verified_at", "verified_by_user_id"}).
+				AddRow("app-1", created, "aidana", "s-1", nil, "instagram", false, nil, nil).
+				AddRow("app-1", created, "aidana_tt", "s-2", nil, "tiktok", false, nil, nil))
 
 		got, err := repo.ListByApplicationID(context.Background(), "app-1")
 		require.NoError(t, err)
@@ -89,7 +89,7 @@ func TestCreatorApplicationSocialRepository_ListByApplicationID(t *testing.T) {
 
 		mock.ExpectQuery(sqlStmt).
 			WithArgs("app-empty").
-			WillReturnRows(pgxmock.NewRows([]string{"application_id", "created_at", "handle", "id", "platform"}))
+			WillReturnRows(pgxmock.NewRows([]string{"application_id", "created_at", "handle", "id", "method", "platform", "verified", "verified_at", "verified_by_user_id"}))
 
 		got, err := repo.ListByApplicationID(context.Background(), "app-empty")
 		require.NoError(t, err)
@@ -113,7 +113,7 @@ func TestCreatorApplicationSocialRepository_ListByApplicationID(t *testing.T) {
 func TestCreatorApplicationSocialRepository_ListByApplicationIDs(t *testing.T) {
 	t.Parallel()
 
-	const sqlStmt = "SELECT application_id, created_at, handle, id, platform FROM creator_application_socials WHERE application_id IN ($1,$2) ORDER BY application_id ASC, platform ASC, handle ASC"
+	const sqlStmt = "SELECT application_id, created_at, handle, id, method, platform, verified, verified_at, verified_by_user_id FROM creator_application_socials WHERE application_id IN ($1,$2) ORDER BY application_id ASC, platform ASC, handle ASC"
 
 	t.Run("empty input short-circuits without query", func(t *testing.T) {
 		t.Parallel()
@@ -133,10 +133,10 @@ func TestCreatorApplicationSocialRepository_ListByApplicationIDs(t *testing.T) {
 
 		mock.ExpectQuery(sqlStmt).
 			WithArgs("app-1", "app-2").
-			WillReturnRows(pgxmock.NewRows([]string{"application_id", "created_at", "handle", "id", "platform"}).
-				AddRow("app-1", created, "aidana", "s-1", "instagram").
-				AddRow("app-1", created, "aidana_tt", "s-2", "tiktok").
-				AddRow("app-2", created, "anotheruser", "s-3", "instagram"))
+			WillReturnRows(pgxmock.NewRows([]string{"application_id", "created_at", "handle", "id", "method", "platform", "verified", "verified_at", "verified_by_user_id"}).
+				AddRow("app-1", created, "aidana", "s-1", nil, "instagram", false, nil, nil).
+				AddRow("app-1", created, "aidana_tt", "s-2", nil, "tiktok", false, nil, nil).
+				AddRow("app-2", created, "anotheruser", "s-3", nil, "instagram", false, nil, nil))
 
 		got, err := repo.ListByApplicationIDs(context.Background(), []string{"app-1", "app-2"})
 		require.NoError(t, err)
