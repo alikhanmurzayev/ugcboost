@@ -56,16 +56,18 @@ test.describe("Auth flow", () => {
 
     await loginAs(page, admin);
 
-    // Sidebar carries the seeded email — anchored via data-testid on the
-    // sidebar container plus a substring assertion on the email (uniquely
-    // generated per test, so no copyright dependency).
+    // Sidebar carries the seeded email and the admin role label. testid =
+    // stable locator, toContainText = end-to-end check that the i18n bundle
+    // resolved the right key (LoginPage / DashboardLayout unit tests cover
+    // the static keys; this guards the runtime wiring).
     const sidebar = page.getByTestId("sidebar");
     await expect(sidebar).toBeVisible();
     await expect(sidebar).toContainText(admin.email);
+    await expect(sidebar).toContainText("Админ");
 
     // Admin-only nav presence is the structural proof of role: a
     // brand_manager would not see this link (covered in admin verification
-    // spec AC5). Combined with /, brands and audit, this captures the full
+    // spec). Combined with /, brands and audit, this captures the full
     // admin-side navigation surface.
     await expect(page.getByTestId("nav-link-/")).toBeVisible();
     await expect(page.getByTestId("nav-link-brands")).toBeVisible();
@@ -73,7 +75,13 @@ test.describe("Auth flow", () => {
     await expect(
       page.getByTestId("nav-link-creator-applications/verification"),
     ).toBeVisible();
-    await expect(page.getByTestId("dashboard-page")).toBeVisible();
+
+    // Dashboard renders with localized header — testid pins the container,
+    // toContainText pins the rendered copy ("Дашборд" comes from the
+    // dashboard i18n bundle).
+    const dashboard = page.getByTestId("dashboard-page");
+    await expect(dashboard).toBeVisible();
+    await expect(dashboard).toContainText("Дашборд");
   });
 
   test("Wrong password — error shown, stay on login", async ({
@@ -89,9 +97,14 @@ test.describe("Auth flow", () => {
     await page.getByTestId("login-button").click();
 
     await expect(page).toHaveURL("/login");
-    // Error block is the contract; the exact message wording is owned by
-    // the i18n unit tests (errors.test.ts).
-    await expect(page.getByTestId("login-error")).toBeVisible();
+    // Error block + exact wording — testid is the locator (per
+    // frontend-testing-e2e.md), and the textual assert pins the auth-specific
+    // copy that LoginPage.test.tsx unit tests also exercise. The duplication
+    // is intentional: unit covers the i18n key resolution, e2e covers the
+    // backend-frontend contract that wrong-creds bubbles to this exact UI.
+    await expect(page.getByTestId("login-error")).toContainText(
+      "Неверный email или пароль",
+    );
   });
 
   test("Session restore — F5 keeps user logged in", async ({
@@ -107,7 +120,9 @@ test.describe("Auth flow", () => {
     await page.reload();
 
     await expect(page).toHaveURL("/");
-    await expect(page.getByTestId("dashboard-page")).toBeVisible();
+    const dashboard = page.getByTestId("dashboard-page");
+    await expect(dashboard).toBeVisible();
+    await expect(dashboard).toContainText("Дашборд");
     await expect(page.getByTestId("sidebar")).toContainText(admin.email);
   });
 

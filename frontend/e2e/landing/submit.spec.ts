@@ -84,7 +84,7 @@ async function waitForDictionaries(page: Page): Promise<void> {
   // Categories: at least one category checkbox has been attached. Picks up
   // any category code without baking a specific one into the test.
   await expect
-    .poll(async () => page.locator(".category-checkbox").count(), {
+    .poll(async () => page.getByTestId(/^category-checkbox-/).count(), {
       timeout: 10_000,
     })
     .toBeGreaterThan(0);
@@ -122,7 +122,7 @@ test.describe("Landing submission flow", () => {
 
     const cityCount = await page.getByTestId("city-select").locator("option").count();
     expect(cityCount).toBeGreaterThan(1);
-    const categoryCount = await page.locator(".category-checkbox").count();
+    const categoryCount = await page.getByTestId(/^category-checkbox-/).count();
     expect(categoryCount).toBeGreaterThan(0);
   });
 

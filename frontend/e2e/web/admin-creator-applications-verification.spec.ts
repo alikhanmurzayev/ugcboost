@@ -156,7 +156,7 @@ test.describe("Admin verification flow", () => {
     // buildFullName in ApplicationDrawer.tsx (filter(Boolean)) so a future
     // null/empty middleName tightens the same expectation without rewrite.
     const fullName = buildExpectedFullName(application);
-    await expect(drawer.getByText(fullName, { exact: true })).toBeVisible();
+    await expect(drawer.getByTestId("drawer-full-name")).toHaveText(fullName);
 
     // Timeline — submitted-at line in ru locale: "Подана: 2 мая 2026 г. в 17:21"
     // (Intl ru-RU uses "г. в HH:MM" — letter "в" separates the date and time).
@@ -169,17 +169,12 @@ test.describe("Admin verification flow", () => {
     const mm = String(application.birthDate.getUTCMonth() + 1).padStart(2, "0");
     const yyyy = application.birthDate.getUTCFullYear();
     const age = ageInYearsUTC(application.birthDate);
-    await expect(
-      drawer.getByText(
-        `${dd}.${mm}.${yyyy} · ${age} ${pluralYears(age)}`,
-        { exact: true },
-      ),
-    ).toBeVisible();
+    await expect(drawer.getByTestId("drawer-birth-date")).toHaveText(
+      `${dd}.${mm}.${yyyy} · ${age} ${pluralYears(age)}`,
+    );
 
     // IIN
-    await expect(
-      drawer.getByText(application.iin, { exact: true }),
-    ).toBeVisible();
+    await expect(drawer.getByTestId("drawer-iin")).toHaveText(application.iin);
 
     // Phone — visible text + tel: deep-link
     const phoneLink = drawer.getByTestId("application-phone");
@@ -187,17 +182,23 @@ test.describe("Admin verification flow", () => {
     await expect(phoneLink).toHaveAttribute("href", `tel:${application.phone}`);
 
     // City — name resolved from the live cities dictionary
-    await expect(drawer.getByText(cityName, { exact: true })).toBeVisible();
+    await expect(drawer.getByTestId("drawer-city")).toHaveText(cityName);
 
     // Categories — one chip per dict name + one italic chip "Другое: ${text}".
     // The "Другое:" prefix comes from the creatorApplications i18n bundle
     // (drawer.categoryOther) — coincidentally same as the "other" dict name
-    // today, but tested independently of it.
-    await expect(drawer.getByText(beautyName, { exact: true })).toBeVisible();
-    await expect(drawer.getByText(otherName, { exact: true })).toBeVisible();
-    await expect(
-      drawer.getByText(`Другое: ${application.categoryOtherText ?? ""}`),
-    ).toBeVisible();
+    // today, but tested independently of it via separate testid.
+    await expect(drawer.getByTestId("drawer-category-beauty")).toHaveText(
+      beautyName,
+    );
+    await expect(drawer.getByTestId("drawer-category-other")).toHaveText(
+      otherName,
+    );
+    if (application.categoryOtherText !== null) {
+      await expect(
+        drawer.getByTestId("drawer-category-other-text"),
+      ).toHaveText(`Другое: ${application.categoryOtherText}`);
+    }
 
     // Socials — handle text inside the platform-keyed link
     await expect(drawer.getByTestId("social-instagram")).toContainText(igHandle);
@@ -253,7 +254,7 @@ test.describe("Admin verification flow", () => {
     await expect(drawer).toBeVisible();
     const fullName = buildExpectedFullName(application);
     expect(fullName).toBe(`${application.lastName} ${application.firstName}`);
-    await expect(drawer.getByText(fullName, { exact: true })).toBeVisible();
+    await expect(drawer.getByTestId("drawer-full-name")).toHaveText(fullName);
   });
 
   test("Drawer prev/next — keyboard + buttons traverse newest-first list", async ({
@@ -302,9 +303,9 @@ test.describe("Admin verification flow", () => {
     await expect(drawer).toBeVisible();
 
     const headerVisible = (app: SeededCreatorApplication) =>
-      expect(
-        drawer.getByText(buildExpectedFullName(app), { exact: true }),
-      ).toBeVisible();
+      expect(drawer.getByTestId("drawer-full-name")).toHaveText(
+        buildExpectedFullName(app),
+      );
 
     await headerVisible(c);
     await expect(drawer.getByTestId("drawer-prev")).toBeDisabled();
