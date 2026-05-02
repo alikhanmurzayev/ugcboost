@@ -1,0 +1,72 @@
+{
+  "navGroup": "Заявки креаторов",
+  "stages": {
+    "verification": {
+      "title": "Верификация",
+      "description": "Креаторы подтверждают владение аккаунтом в Telegram-боте."
+    },
+    "moderation": {
+      "title": "Модерация"
+    },
+    "contracts": {
+      "title": "Договоры"
+    },
+    "rejected": {
+      "title": "Отклонённые"
+    }
+  },
+  "loadError": "Не удалось загрузить заявки",
+  "empty": "Нет заявок в этой очереди",
+  "emptyFiltered": "Нет заявок по выбранным фильтрам",
+  "drawer": {
+    "submittedAt": "Подана",
+    "iin": "ИИН",
+    "birthDate": "Дата рождения",
+    "phone": "Телефон",
+    "city": "Город",
+    "categories": "Категории",
+    "categoryOther": "Другое",
+    "socials": "Соцсети",
+    "telegram": "Telegram",
+    "telegramNotLinked": "Не привязан"
+  },
+  "columns": {
+    "fullName": "ФИО",
+    "socials": "Соцсети",
+    "categories": "Категории",
+    "submittedAt": "Подана",
+    "hoursInStage": "В этапе",
+    "telegram": "Telegram"
+  },
+  "drawerNav": {
+    "prev": "Предыдущая заявка",
+    "next": "Следующая заявка"
+  },
+  "filters": {
+    "title": "Фильтры",
+    "open": "Фильтры",
+    "dateFrom": "Дата с",
+    "dateTo": "Дата по",
+    "city": "Город",
+    "ageFrom": "Возраст от",
+    "ageTo": "Возраст до",
+    "categories": "Категории",
+    "reset": "Сбросить",
+    "apply": "Применить",
+    "anyCity": "Любой город",
+    "anyCategory": "Любая категория",
+    "active": "Активные фильтры",
+    "date": "Период подачи",
+    "age": "Возраст",
+    "searchCity": "Найти город",
+    "searchCategory": "Найти категорию",
+    "search": "Поиск по ФИО или нику"
+  },
+  "telegramLinked": "Привязан",
+  "telegramNotLinked": "Не привязан",
+  "pagination": {
+    "prev": "Предыдущая",
+    "next": "Следующая",
+    "page": "Страница {{page}} из {{total}}"
+  }
+}

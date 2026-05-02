@@ -2,7 +2,8 @@
 title: "Админ-фронт: список + drawer заявок на верификации"
 type: feature
 created: "2026-05-02"
-status: ready-for-dev
+status: in-progress
+baseline_commit: "0cc7307"
 context:
   - docs/standards/
   - _bmad-output/planning-artifacts/creator-onboarding-roadmap.md

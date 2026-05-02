@@ -5,10 +5,17 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import LoginPage from "@/features/auth/LoginPage";
 import AuthGuard from "@/features/auth/AuthGuard";
 import DashboardLayout from "@/shared/layouts/DashboardLayout";
+import AdminLayout from "@/shared/layouts/AdminLayout";
 import DashboardPage from "@/features/dashboard/DashboardPage";
 import BrandsPage from "@/features/brands/BrandsPage";
 import BrandDetailPage from "@/features/brands/BrandDetailPage";
 import AuditLogPage from "@/features/audit/AuditLogPage";
+import VerificationPage from "@/features/creatorApplications/VerificationPage";
+import ModerationPage from "@/features/creatorApplications/stubs/ModerationPage";
+import ContractsPage from "@/features/creatorApplications/stubs/ContractsPage";
+import RejectedPage from "@/features/creatorApplications/stubs/RejectedPage";
+import CreatorsPage from "@/features/creatorApplications/stubs/CreatorsPage";
+import CampaignsStubPage from "@/features/campaigns/stubs/CampaignsStubPage";
 import RoleGuard from "@/features/auth/RoleGuard";
 import ErrorBoundary from "@/shared/components/ErrorBoundary";
 import Spinner from "@/shared/components/Spinner";
@@ -36,27 +43,80 @@ function App() {
       <QueryClientProvider client={queryClient}>
         <BrowserRouter>
           <Routes>
-          <Route path={ROUTES.LOGIN} element={<LoginPage />} />
+            <Route path={ROUTES.LOGIN} element={<LoginPage />} />
 
-          <Route element={<AuthGuard />}>
-            <Route
-              path="/prototype/*"
-              element={
-                <Suspense fallback={<Spinner className="mt-12" />}>
-                  <PrototypeApp />
-                </Suspense>
-              }
-            />
+            <Route element={<AuthGuard />}>
+              <Route
+                path="/prototype/*"
+                element={
+                  <Suspense fallback={<Spinner className="mt-12" />}>
+                    <PrototypeApp />
+                  </Suspense>
+                }
+              />
 
-            <Route element={<DashboardLayout />}>
-              <Route index element={<DashboardPage />} />
-              <Route path={ROUTES.BRANDS} element={<BrandsPage />} />
-              <Route path={ROUTES.BRAND_DETAIL_PATTERN} element={<BrandDetailPage />} />
-              <Route element={<RoleGuard allowedRoles={[Roles.ADMIN]} />}>
-                <Route path={ROUTES.AUDIT} element={<AuditLogPage />} />
+              <Route element={<DashboardLayout />}>
+                <Route index element={<DashboardPage />} />
+                <Route path={ROUTES.BRANDS} element={<BrandsPage />} />
+                <Route
+                  path={ROUTES.BRAND_DETAIL_PATTERN}
+                  element={<BrandDetailPage />}
+                />
+                <Route element={<RoleGuard allowedRoles={[Roles.ADMIN]} />}>
+                  <Route path={ROUTES.AUDIT} element={<AuditLogPage />} />
+                </Route>
+              </Route>
+
+              <Route element={<AdminLayout />}>
+                <Route element={<RoleGuard allowedRoles={[Roles.ADMIN]} />}>
+                  <Route
+                    path={ROUTES.CREATOR_APP_VERIFICATION}
+                    element={<VerificationPage />}
+                  />
+                  <Route
+                    path={ROUTES.CREATOR_APP_MODERATION}
+                    element={<ModerationPage />}
+                  />
+                  <Route
+                    path={ROUTES.CREATOR_APP_CONTRACTS}
+                    element={<ContractsPage />}
+                  />
+                  <Route
+                    path={ROUTES.CREATOR_APP_REJECTED}
+                    element={<RejectedPage />}
+                  />
+                  <Route path={ROUTES.CREATORS} element={<CreatorsPage />} />
+                </Route>
+                <Route
+                  path={ROUTES.CAMPAIGNS_ACTIVE}
+                  element={<CampaignsStubPage />}
+                />
+                <Route
+                  path={ROUTES.CAMPAIGNS_PENDING}
+                  element={<CampaignsStubPage />}
+                />
+                <Route
+                  path={ROUTES.CAMPAIGNS_REJECTED}
+                  element={<CampaignsStubPage />}
+                />
+                <Route
+                  path={ROUTES.CAMPAIGNS_DRAFT}
+                  element={<CampaignsStubPage />}
+                />
+                <Route
+                  path={ROUTES.CAMPAIGNS_COMPLETED}
+                  element={<CampaignsStubPage />}
+                />
+                <Route
+                  path={ROUTES.CAMPAIGN_NEW}
+                  element={<CampaignsStubPage />}
+                />
+                <Route
+                  path={ROUTES.CAMPAIGN_DETAIL_PATTERN}
+                  element={<CampaignsStubPage />}
+                />
               </Route>
             </Route>
-          </Route>
           </Routes>
         </BrowserRouter>
       </QueryClientProvider>
