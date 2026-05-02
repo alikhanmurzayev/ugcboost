@@ -46,6 +46,8 @@ const FIXTURE_DETAIL = {
   categoryOtherText: null,
   consents: [],
   telegramLink: null,
+  telegramBotUrl:
+    "https://t.me/ugcboost_test_bot?start=11111111-1111-1111-1111-111111111111",
 };
 
 function renderPage(initialUrl: string) {
@@ -200,6 +202,71 @@ describe("VerificationPage — drawer toggle via URL", () => {
     await waitFor(() => {
       expect(getCreatorApplication).toHaveBeenCalledWith(FIXTURE_ITEM.id);
     });
+  });
+
+  it("shows copy-bot-message button when telegram is not linked", async () => {
+    vi.mocked(listCreatorApplications).mockResolvedValue({
+      data: { items: [FIXTURE_ITEM], total: 1, page: 1, perPage: 50 },
+    });
+    vi.mocked(getCreatorApplication).mockResolvedValue({
+      data: { ...FIXTURE_DETAIL, telegramLink: null },
+    });
+
+    renderPage(`/creator-applications/verification?id=${FIXTURE_ITEM.id}`);
+
+    expect(
+      await screen.findByTestId("drawer-copy-bot-message"),
+    ).toBeInTheDocument();
+  });
+
+  it("hides copy-bot-message button when telegram already linked", async () => {
+    vi.mocked(listCreatorApplications).mockResolvedValue({
+      data: { items: [FIXTURE_ITEM], total: 1, page: 1, perPage: 50 },
+    });
+    vi.mocked(getCreatorApplication).mockResolvedValue({
+      data: {
+        ...FIXTURE_DETAIL,
+        telegramLink: {
+          telegramUserId: 42,
+          telegramUsername: "ivan",
+          telegramFirstName: null,
+          telegramLastName: null,
+          linkedAt: "2026-04-30T13:00:00Z",
+        },
+      },
+    });
+
+    renderPage(`/creator-applications/verification?id=${FIXTURE_ITEM.id}`);
+
+    expect(await screen.findByTestId("drawer")).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("drawer-copy-bot-message"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("copies hardcoded message with bot URL on click", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+
+    vi.mocked(listCreatorApplications).mockResolvedValue({
+      data: { items: [FIXTURE_ITEM], total: 1, page: 1, perPage: 50 },
+    });
+    vi.mocked(getCreatorApplication).mockResolvedValue({
+      data: { ...FIXTURE_DETAIL, telegramLink: null },
+    });
+
+    renderPage(`/creator-applications/verification?id=${FIXTURE_ITEM.id}`);
+
+    const btn = await screen.findByTestId("drawer-copy-bot-message");
+    await userEvent.click(btn);
+
+    await waitFor(() => {
+      expect(writeText).toHaveBeenCalledTimes(1);
+    });
+    const arg = writeText.mock.calls[0][0] as string;
+    expect(arg).toContain(FIXTURE_DETAIL.telegramBotUrl);
+    expect(arg).toContain("UGC boost");
+    expect(arg).toContain("Telegram");
   });
 
   it("closes drawer when close button clicked", async () => {

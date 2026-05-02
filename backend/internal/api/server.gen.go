@@ -327,6 +327,13 @@ type CreatorApplicationDetailData struct {
 	// machine described in `_bmad-output/planning-artifacts/creator-application-state-machine.md`.
 	Status CreatorApplicationStatus `json:"status"`
 
+	// TelegramBotUrl Deep-link in form `https://t.me/{bot}?start={applicationId}`. The
+	// admin shares it with the creator (e.g. via WhatsApp) when
+	// `telegramLink` is null. Always returned regardless of link state so
+	// the response shape stays stable; the frontend renders the copy
+	// action only when not yet bound.
+	TelegramBotUrl string `json:"telegramBotUrl"`
+
 	// TelegramLink Telegram account linked to this application. Null when the creator
 	// has not yet opened the bot.
 	TelegramLink *TelegramLink `json:"telegramLink,omitempty"`

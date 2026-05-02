@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 import Spinner from "@/shared/components/Spinner";
 import SocialLink from "./SocialLink";
@@ -264,17 +264,114 @@ function ApplicationBody({ application }: { application: ApplicationDetail }) {
                       .join(" ") || `id ${tg.telegramUserId}`}
               </span>
             ) : (
-              <span
-                className="text-sm text-gray-400"
-                data-testid="drawer-telegram-not-linked"
-              >
-                {t("drawer.telegramNotLinked")}
-              </span>
+              <div data-testid="drawer-telegram-not-linked">
+                <span className="text-sm text-gray-400">
+                  {t("drawer.telegramNotLinked")}
+                </span>
+                <CopyBotMessageButton
+                  message={t("drawer.botMessageTemplate", {
+                    url: application.telegramBotUrl,
+                  })}
+                  copyLabel={t("drawer.copyBotMessage")}
+                  copiedLabel={t("drawer.botMessageCopied")}
+                  hint={t("drawer.botMessageHint")}
+                />
+              </div>
             )
           }
         />
       </dl>
     </>
+  );
+}
+
+interface CopyBotMessageButtonProps {
+  message: string;
+  copyLabel: string;
+  copiedLabel: string;
+  hint: string;
+}
+
+function CopyBotMessageButton({
+  message,
+  copyLabel,
+  copiedLabel,
+  hint,
+}: CopyBotMessageButtonProps) {
+  const [copied, setCopied] = useState(false);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    };
+  }, []);
+
+  async function handleCopy() {
+    try {
+      await navigator.clipboard.writeText(message);
+      setCopied(true);
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      timeoutRef.current = setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Clipboard может быть недоступен (старый браузер / insecure context).
+      // В этом случае ничего не делаем — UI просто не покажет confirm,
+      // оператор увидит что не сработало и попросит у нас починить.
+    }
+  }
+
+  return (
+    <div className="mt-2 flex flex-col gap-1.5">
+      <button
+        type="button"
+        onClick={handleCopy}
+        data-testid="drawer-copy-bot-message"
+        className={`inline-flex w-fit items-center gap-1.5 rounded-button border px-3 py-1.5 text-sm font-medium transition ${
+          copied
+            ? "border-emerald-300 bg-emerald-50 text-emerald-700"
+            : "border-surface-300 bg-white text-gray-700 hover:bg-surface-100"
+        }`}
+      >
+        {copied ? <CheckIcon /> : <CopyIcon />}
+        {copied ? copiedLabel : copyLabel}
+      </button>
+      <p className="text-xs text-gray-500">{hint}</p>
+    </div>
+  );
+}
+
+function CopyIcon() {
+  return (
+    <svg
+      className="h-4 w-4"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+    </svg>
+  );
+}
+
+function CheckIcon() {
+  return (
+    <svg
+      className="h-4 w-4"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <polyline points="20 6 9 17 4 12" />
+    </svg>
   );
 }
 

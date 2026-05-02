@@ -28,7 +28,11 @@
     "categoryOther": "Другое",
     "socials": "Соцсети",
     "telegram": "Telegram",
-    "telegramNotLinked": "Не привязан"
+    "telegramNotLinked": "Не привязан",
+    "copyBotMessage": "Скопировать сообщение",
+    "botMessageCopied": "Скопировано",
+    "botMessageHint": "Отправьте это креатору, чтобы он привязал Telegram к заявке",
+    "botMessageTemplate": "Здравствуйте! Вы оставили заявку в UGC boost. Чтобы мы могли отправлять вам обновления по статусу и инструкции по дальнейшим шагам, привяжите Telegram-аккаунт к заявке: перейдите по ссылке.\n\n{{url}}"
   },
   "columns": {
     "fullName": "ФИО",
