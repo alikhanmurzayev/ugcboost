@@ -6,16 +6,6 @@ export type CreatorApplicationSubmitRequest =
 export type CreatorApplicationSubmitData =
   components["schemas"]["CreatorApplicationSubmitData"];
 
-function extractErrorCode(error: unknown): string {
-  const e = error as { error?: { code?: string } };
-  return e?.error?.code ?? "INTERNAL_ERROR";
-}
-
-function extractErrorMessage(error: unknown): string {
-  const e = error as { error?: { message?: string } };
-  return e?.error?.message ?? "";
-}
-
 export async function submitCreatorApplication(
   payload: CreatorApplicationSubmitRequest,
 ): Promise<CreatorApplicationSubmitData> {
@@ -23,7 +13,7 @@ export async function submitCreatorApplication(
     body: payload,
   });
   if (error) {
-    throw new ApiError(response.status, extractErrorCode(error), extractErrorMessage(error));
+    throw ApiError.fromResponse(response.status, error);
   }
   return data.data;
 }

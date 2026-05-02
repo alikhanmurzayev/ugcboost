@@ -34,6 +34,15 @@ export class ApiError extends Error {
     this.code = code;
     this.serverMessage = serverMessage ?? "";
   }
+
+  // fromResponse parses an openapi-fetch error envelope (`{ error: { code,
+  // message } }`) into a typed ApiError. Falls back to INTERNAL_ERROR + empty
+  // message when the server returned an unexpected shape, so callers always
+  // get a stable error to throw.
+  static fromResponse(status: number, error: unknown): ApiError {
+    const e = error as { error?: { code?: string; message?: string } };
+    return new ApiError(status, e?.error?.code ?? "INTERNAL_ERROR", e?.error?.message ?? "");
+  }
 }
 
 // Landing reaches only public endpoints (dictionaries + creator submit) and
