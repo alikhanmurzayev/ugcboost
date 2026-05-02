@@ -135,6 +135,35 @@ describe("VerificationPage — list rendering", () => {
     ).toBeInTheDocument();
     expect(screen.getByTestId("verification-total")).toHaveTextContent("1");
   });
+
+  it("renders telegram-linked icon for linked row", async () => {
+    vi.mocked(listCreatorApplications).mockResolvedValueOnce({
+      data: { items: [FIXTURE_ITEM], total: 1, page: 1, perPage: 50 },
+    });
+
+    renderPage("/creator-applications/verification");
+
+    expect(
+      await screen.findByTestId("row-telegram-linked"),
+    ).toBeInTheDocument();
+  });
+
+  it("renders telegram-not-linked icon for unlinked row", async () => {
+    vi.mocked(listCreatorApplications).mockResolvedValueOnce({
+      data: {
+        items: [{ ...FIXTURE_ITEM, telegramLinked: false }],
+        total: 1,
+        page: 1,
+        perPage: 50,
+      },
+    });
+
+    renderPage("/creator-applications/verification");
+
+    expect(
+      await screen.findByTestId("row-telegram-not-linked"),
+    ).toBeInTheDocument();
+  });
 });
 
 describe("VerificationPage — drawer toggle via URL", () => {
@@ -234,6 +263,34 @@ describe("VerificationPage — filter URL → list body roundtrip", () => {
           page: 1,
           perPage: 50,
         }),
+      );
+    });
+  });
+
+  it("forwards telegramLinked=true from URL to body", async () => {
+    vi.mocked(listCreatorApplications).mockResolvedValue({
+      data: { items: [], total: 0, page: 1, perPage: 50 },
+    });
+
+    renderPage("/creator-applications/verification?telegramLinked=true");
+
+    await waitFor(() => {
+      expect(listCreatorApplications).toHaveBeenCalledWith(
+        expect.objectContaining({ telegramLinked: true }),
+      );
+    });
+  });
+
+  it("forwards telegramLinked=false from URL to body", async () => {
+    vi.mocked(listCreatorApplications).mockResolvedValue({
+      data: { items: [], total: 0, page: 1, perPage: 50 },
+    });
+
+    renderPage("/creator-applications/verification?telegramLinked=false");
+
+    await waitFor(() => {
+      expect(listCreatorApplications).toHaveBeenCalledWith(
+        expect.objectContaining({ telegramLinked: false }),
       );
     });
   });

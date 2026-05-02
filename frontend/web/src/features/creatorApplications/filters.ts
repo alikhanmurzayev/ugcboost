@@ -12,6 +12,7 @@ export interface FilterValues {
   ageFrom?: number;
   ageTo?: number;
   categories: string[];
+  telegramLinked?: boolean;
 }
 
 const FILTER_PARAM_KEYS = [
@@ -22,6 +23,7 @@ const FILTER_PARAM_KEYS = [
   "ageFrom",
   "ageTo",
   "categories",
+  "telegramLinked",
 ] as const;
 
 export function parseFilters(sp: URLSearchParams): FilterValues {
@@ -33,6 +35,7 @@ export function parseFilters(sp: URLSearchParams): FilterValues {
     ageFrom: parsePositiveInt(sp.get("ageFrom")),
     ageTo: parsePositiveInt(sp.get("ageTo")),
     categories: splitCsv(sp.get("categories")),
+    telegramLinked: parseBool(sp.get("telegramLinked")),
   };
 }
 
@@ -52,6 +55,11 @@ export function writeFilters(sp: URLSearchParams, f: FilterValues): void {
     "categories",
     f.categories.length ? f.categories.join(",") : undefined,
   );
+  setOrDelete(
+    sp,
+    "telegramLinked",
+    f.telegramLinked === undefined ? undefined : String(f.telegramLinked),
+  );
 }
 
 export function clearFilters(sp: URLSearchParams): void {
@@ -66,7 +74,8 @@ export function isFilterActive(f: FilterValues): boolean {
     f.cities.length > 0 ||
     f.ageFrom !== undefined ||
     f.ageTo !== undefined ||
-    f.categories.length > 0
+    f.categories.length > 0 ||
+    f.telegramLinked !== undefined
   );
 }
 
@@ -76,6 +85,7 @@ export function countActive(f: FilterValues): number {
   if (f.cities.length > 0) count++;
   if (f.ageFrom !== undefined || f.ageTo !== undefined) count++;
   if (f.categories.length > 0) count++;
+  if (f.telegramLinked !== undefined) count++;
   return count;
 }
 
@@ -105,6 +115,8 @@ export function toListInput(
   if (filters.categories.length > 0) body.categories = filters.categories;
   if (filters.ageFrom !== undefined) body.ageFrom = filters.ageFrom;
   if (filters.ageTo !== undefined) body.ageTo = filters.ageTo;
+  if (filters.telegramLinked !== undefined)
+    body.telegramLinked = filters.telegramLinked;
   return body;
 }
 
@@ -133,6 +145,12 @@ function parseIsoDate(value: string | null): string | undefined {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return undefined;
   const d = new Date(`${value}T00:00:00Z`);
   return Number.isNaN(d.getTime()) ? undefined : value;
+}
+
+function parseBool(value: string | null): boolean | undefined {
+  if (value === "true") return true;
+  if (value === "false") return false;
+  return undefined;
 }
 
 function setOrDelete(

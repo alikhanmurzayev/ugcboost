@@ -60,7 +60,11 @@
     "age": "Возраст",
     "searchCity": "Найти город",
     "searchCategory": "Найти категорию",
-    "search": "Поиск по ФИО или нику"
+    "search": "Поиск по ФИО или нику",
+    "telegram": "Telegram",
+    "anyTelegram": "Любой",
+    "telegramLinked": "Привязан",
+    "telegramNotLinked": "Не привязан"
   },
   "telegramLinked": "Привязан",
   "telegramNotLinked": "Не привязан",

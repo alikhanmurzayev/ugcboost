@@ -5,7 +5,6 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import LoginPage from "@/features/auth/LoginPage";
 import AuthGuard from "@/features/auth/AuthGuard";
 import DashboardLayout from "@/shared/layouts/DashboardLayout";
-import AdminLayout from "@/shared/layouts/AdminLayout";
 import DashboardPage from "@/features/dashboard/DashboardPage";
 import BrandsPage from "@/features/brands/BrandsPage";
 import BrandDetailPage from "@/features/brands/BrandDetailPage";
@@ -62,13 +61,9 @@ function App() {
                   path={ROUTES.BRAND_DETAIL_PATTERN}
                   element={<BrandDetailPage />}
                 />
+
                 <Route element={<RoleGuard allowedRoles={[Roles.ADMIN]} />}>
                   <Route path={ROUTES.AUDIT} element={<AuditLogPage />} />
-                </Route>
-              </Route>
-
-              <Route element={<AdminLayout />}>
-                <Route element={<RoleGuard allowedRoles={[Roles.ADMIN]} />}>
                   <Route
                     path={ROUTES.CREATOR_APP_VERIFICATION}
                     element={<VerificationPage />}
@@ -87,6 +82,7 @@ function App() {
                   />
                   <Route path={ROUTES.CREATORS} element={<CreatorsPage />} />
                 </Route>
+
                 <Route
                   path={ROUTES.CAMPAIGNS_ACTIVE}
                   element={<CampaignsStubPage />}

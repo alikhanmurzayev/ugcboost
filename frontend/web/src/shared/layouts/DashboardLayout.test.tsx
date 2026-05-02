@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import AdminLayout from "./AdminLayout";
+import DashboardLayout from "./DashboardLayout";
 import { useAuthStore } from "@/stores/auth";
 import { Roles } from "@/shared/constants/roles";
 
@@ -27,19 +27,22 @@ function setUser(role: "admin" | "brand_manager" | null) {
   }
 }
 
-function renderLayout() {
+function renderLayout(initialUrl = "/") {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
   return render(
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter initialEntries={["/creator-applications/verification"]}>
+      <MemoryRouter initialEntries={[initialUrl]}>
         <Routes>
-          <Route element={<AdminLayout />}>
+          <Route element={<DashboardLayout />}>
+            <Route index element={<div>Dashboard stub</div>} />
             <Route
               path="creator-applications/verification"
               element={<div>Verification stub</div>}
             />
+            <Route path="brands" element={<div>Brands stub</div>} />
+            <Route path="audit" element={<div>Audit stub</div>} />
           </Route>
         </Routes>
       </MemoryRouter>
@@ -47,12 +50,38 @@ function renderLayout() {
   );
 }
 
-describe("AdminLayout", () => {
+describe("DashboardLayout — admin nav", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
-  it("renders nav and verification badge for admin", async () => {
+  it("renders all admin nav links incl. dashboard, applications, creators, brands, audit", async () => {
+    setUser(Roles.ADMIN);
+    vi.mocked(getCreatorApplicationsCounts).mockResolvedValue({
+      data: { items: [] },
+    });
+
+    renderLayout();
+
+    expect(screen.getByTestId("nav-link-/")).toBeInTheDocument();
+    expect(
+      screen.getByTestId("nav-link-creator-applications/verification"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("nav-link-creator-applications/moderation"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("nav-link-creator-applications/contracts"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("nav-link-creator-applications/rejected"),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("nav-link-creators")).toBeInTheDocument();
+    expect(screen.getByTestId("nav-link-brands")).toBeInTheDocument();
+    expect(screen.getByTestId("nav-link-audit")).toBeInTheDocument();
+  });
+
+  it("shows verification badge from counts", async () => {
     setUser(Roles.ADMIN);
     vi.mocked(getCreatorApplicationsCounts).mockResolvedValue({
       data: {
@@ -64,14 +93,6 @@ describe("AdminLayout", () => {
     });
 
     renderLayout();
-
-    expect(
-      screen.getByTestId("nav-link-creator-applications/verification"),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByTestId("nav-link-creator-applications/moderation"),
-    ).toBeInTheDocument();
-    expect(screen.getByTestId("nav-link-creators")).toBeInTheDocument();
 
     await waitFor(() => {
       expect(
@@ -116,15 +137,42 @@ describe("AdminLayout", () => {
       screen.queryByTestId("nav-badge-creator-applications/verification"),
     ).not.toBeInTheDocument();
   });
+});
 
-  it("does not query counts for non-admin", () => {
+describe("DashboardLayout — brand manager nav", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("renders only dashboard and brands for brand_manager", () => {
+    setUser(Roles.BRAND_MANAGER);
+    renderLayout();
+
+    expect(screen.getByTestId("nav-link-/")).toBeInTheDocument();
+    expect(screen.getByTestId("nav-link-brands")).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("nav-link-creator-applications/verification"),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("nav-link-creators"),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByTestId("nav-link-audit")).not.toBeInTheDocument();
+  });
+
+  it("does not query counts for brand_manager", () => {
     setUser(Roles.BRAND_MANAGER);
     renderLayout();
 
     expect(getCreatorApplicationsCounts).not.toHaveBeenCalled();
   });
+});
 
-  it("renders logout button and user email", () => {
+describe("DashboardLayout — chrome", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("renders user email and logout button", () => {
     setUser(Roles.ADMIN);
     vi.mocked(getCreatorApplicationsCounts).mockResolvedValue({
       data: { items: [] },

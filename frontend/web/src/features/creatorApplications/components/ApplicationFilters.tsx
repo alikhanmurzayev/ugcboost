@@ -205,8 +205,70 @@ export default function ApplicationFilters() {
               testid="filter-categories"
             />
           </FilterRow>
+
+          <FilterRow label={t("filters.telegram")} className="mt-3">
+            <TelegramLinkedSegment
+              value={filters.telegramLinked}
+              onChange={(telegramLinked) =>
+                update({ ...filters, telegramLinked })
+              }
+              labels={{
+                any: t("filters.anyTelegram"),
+                linked: t("filters.telegramLinked"),
+                notLinked: t("filters.telegramNotLinked"),
+              }}
+            />
+          </FilterRow>
         </div>
       )}
+    </div>
+  );
+}
+
+interface TelegramLinkedSegmentProps {
+  value: boolean | undefined;
+  onChange: (value: boolean | undefined) => void;
+  labels: { any: string; linked: string; notLinked: string };
+}
+
+function TelegramLinkedSegment({
+  value,
+  onChange,
+  labels,
+}: TelegramLinkedSegmentProps) {
+  const options: { key: string; label: string; value: boolean | undefined }[] =
+    [
+      { key: "any", label: labels.any, value: undefined },
+      { key: "true", label: labels.linked, value: true },
+      { key: "false", label: labels.notLinked, value: false },
+    ];
+  return (
+    <div
+      role="radiogroup"
+      aria-label={labels.any}
+      className="inline-flex rounded-button border border-surface-300 bg-white p-0.5"
+      data-testid="filter-telegram-linked"
+    >
+      {options.map((opt) => {
+        const active = opt.value === value;
+        return (
+          <button
+            key={opt.key}
+            type="button"
+            role="radio"
+            aria-checked={active}
+            onClick={() => onChange(opt.value)}
+            data-testid={`filter-telegram-linked-${opt.key}`}
+            className={`rounded-button px-3 py-1 text-sm font-medium transition ${
+              active
+                ? "bg-primary text-white"
+                : "text-gray-700 hover:bg-surface-100"
+            }`}
+          >
+            {opt.label}
+          </button>
+        );
+      })}
     </div>
   );
 }
