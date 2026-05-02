@@ -82,6 +82,266 @@ export async function cleanupCreatorApplication(
   });
 }
 
+// SeededUser is what seedAdmin / seedBrandManager hand back to the test:
+// credentials usable for the UI login plus a per-user cleanup closure that
+// honours E2E_CLEANUP=false (data preserved for post-mortem on failure).
+export interface SeededUser {
+  email: string;
+  password: string;
+  userId: string;
+  cleanup: () => Promise<void>;
+}
+
+interface SeedUserApiResponse {
+  data: { id: string; email: string; role: string };
+}
+
+// seedAdmin creates a fresh admin user with a unique email (Date.now + uuid
+// suffix) to keep parallel workers from colliding on the unique-email
+// constraint. Password is the canonical "testpass123" used across all e2e
+// suites — the e2e password format is intentionally identical so a single
+// helper can log into any seeded user.
+export function seedAdmin(
+  request: APIRequestContext,
+  apiUrl: string,
+): Promise<SeededUser> {
+  return seedUser(request, apiUrl, "admin", "test-admin");
+}
+
+// seedBrandManager mirrors seedAdmin for the brand_manager role. Only the
+// role and email prefix differ — RoleGuard / sidebar tests need a real
+// non-admin to assert the negative case.
+export function seedBrandManager(
+  request: APIRequestContext,
+  apiUrl: string,
+): Promise<SeededUser> {
+  return seedUser(request, apiUrl, "brand_manager", "test-bm");
+}
+
+async function seedUser(
+  request: APIRequestContext,
+  apiUrl: string,
+  role: "admin" | "brand_manager",
+  prefix: string,
+): Promise<SeededUser> {
+  const email = `${prefix}-${Date.now()}-${crypto.randomUUID().slice(0, 8)}@e2e.test`;
+  const password = "testpass123";
+  const resp = await request.post(`${apiUrl}/test/seed-user`, {
+    data: { email, password, role },
+  });
+  if (resp.status() !== 201) {
+    throw new Error(`seedUser ${role}: ${resp.status()} ${await resp.text()}`);
+  }
+  const body = (await resp.json()) as SeedUserApiResponse;
+  const userId = body.data.id;
+  return {
+    email,
+    password,
+    userId,
+    cleanup: async () => {
+      if (process.env.E2E_CLEANUP === "false") return;
+      await request.post(`${apiUrl}/test/cleanup-entity`, {
+        data: { type: "user", id: userId },
+      });
+    },
+  };
+}
+
+// SocialAccountInput mirrors backend SocialAccountInput in the OpenAPI spec
+// for POST /creators/applications. We duplicate the type instead of importing
+// from web's generated schema because frontend e2e is an isolated module
+// (per docs/standards/frontend-testing-e2e.md).
+export interface SocialAccountInput {
+  platform: "instagram" | "tiktok" | "threads";
+  handle: string;
+}
+
+// SeedCreatorApplicationOpts lets the test override any default field; passing
+// `null` for an optional string deletes the default (e.g. middleName: null
+// produces a two-word full name in the drawer header).
+export interface SeedCreatorApplicationOpts {
+  lastName?: string;
+  firstName?: string;
+  middleName?: string | null;
+  iin?: string;
+  phone?: string;
+  city?: string;
+  address?: string | null;
+  categories?: string[];
+  categoryOtherText?: string | null;
+  socials?: SocialAccountInput[];
+  acceptedAll?: boolean;
+}
+
+// SeededCreatorApplication is what tests assert against. We surface the exact
+// values posted to the API so the spec can compare drawer rendering 1:1
+// without re-deriving anything from server state. birthDate is parsed back
+// from the IIN so callers do not need to know the IIN-encoding rules.
+export interface SeededCreatorApplication {
+  applicationId: string;
+  lastName: string;
+  firstName: string;
+  middleName: string | null;
+  iin: string;
+  phone: string;
+  city: string;
+  address: string | null;
+  categories: string[];
+  categoryOtherText: string | null;
+  socials: SocialAccountInput[];
+  birthDate: Date;
+  cleanup: () => Promise<void>;
+}
+
+interface SubmitApiResponse {
+  data: { applicationId: string; telegramBotUrl: string };
+}
+
+// seedCreatorApplication POSTs to the production /creators/applications
+// endpoint (no auth — it's the public landing-form path) so the seeded row
+// is indistinguishable from a real submission: triggers the same audit log,
+// telegram-link record, consent rows, etc. Defaults form a "minimum valid"
+// applicant; opts overrides any field for the scenario under test.
+export async function seedCreatorApplication(
+  request: APIRequestContext,
+  apiUrl: string,
+  opts: SeedCreatorApplicationOpts = {},
+): Promise<SeededCreatorApplication> {
+  const uuid = crypto.randomUUID();
+  const lastName = opts.lastName ?? `e2e-${uuid}-Иванов`;
+  const firstName = opts.firstName ?? "Айдана";
+  const middleName =
+    opts.middleName === undefined ? "Тестовна" : opts.middleName;
+  const iin = opts.iin ?? uniqueIIN();
+  const phone = opts.phone ?? "+77001234567";
+  const city = opts.city ?? "almaty";
+  const address = opts.address === undefined ? null : opts.address;
+  const categories = opts.categories ?? ["beauty"];
+  const categoryOtherText =
+    opts.categoryOtherText === undefined ? null : opts.categoryOtherText;
+  const socials =
+    opts.socials ?? [
+      { platform: "instagram", handle: `aidana_test_${uuid.slice(0, 8)}` },
+    ];
+  const acceptedAll = opts.acceptedAll ?? true;
+
+  const requestBody: Record<string, unknown> = {
+    lastName,
+    firstName,
+    iin,
+    phone,
+    city,
+    categories,
+    socials,
+    acceptedAll,
+  };
+  if (middleName) requestBody.middleName = middleName;
+  if (address !== null) requestBody.address = address;
+  if (categoryOtherText !== null) requestBody.categoryOtherText = categoryOtherText;
+
+  const resp = await request.post(`${apiUrl}/creators/applications`, {
+    data: requestBody,
+  });
+  if (resp.status() !== 201) {
+    throw new Error(
+      `seedCreatorApplication: ${resp.status()} ${await resp.text()}`,
+    );
+  }
+  const body = (await resp.json()) as SubmitApiResponse;
+  const applicationId = body.data.applicationId;
+
+  return {
+    applicationId,
+    lastName,
+    firstName,
+    middleName,
+    iin,
+    phone,
+    city,
+    address,
+    categories,
+    categoryOtherText,
+    socials,
+    birthDate: parseBirthDateFromIin(iin),
+    cleanup: () => cleanupCreatorApplication(request, apiUrl, applicationId),
+  };
+}
+
+// parseBirthDateFromIin reverses generateValidIIN: digits 0..5 are yymmdd
+// and digit 6 is the century byte (1/2 → 1800s, 3/4 → 1900s, 5/6 → 2000s).
+function parseBirthDateFromIin(iin: string): Date {
+  const yy = Number(iin.slice(0, 2));
+  const mm = Number(iin.slice(2, 4));
+  const dd = Number(iin.slice(4, 6));
+  const century = iin.charAt(6);
+  let yearBase: number;
+  if (century === "1" || century === "2") yearBase = 1800;
+  else if (century === "3" || century === "4") yearBase = 1900;
+  else if (century === "5" || century === "6") yearBase = 2000;
+  else throw new Error(`parseBirthDateFromIin: unknown century byte ${century}`);
+  return new Date(Date.UTC(yearBase + yy, mm - 1, dd));
+}
+
+// uniqueTelegramUserId mirrors testutil.UniqueTelegramUserID in the backend:
+// epoch (1<<30) + (Date.now() % (1<<20)) * 1024 + per-process counter. Picks
+// ids well outside the realistic Telegram range so synthetic test users can
+// never collide with a real user during a manual smoke against the live bot.
+let telegramTestIdCounter = 0;
+export function uniqueTelegramUserId(): number {
+  const epoch = 1 << 30;
+  telegramTestIdCounter += 1;
+  return epoch + (Date.now() % (1 << 20)) * 1024 + telegramTestIdCounter;
+}
+
+// LinkTelegramOpts lets the spec pin synthetic identity fields when a test
+// asserts on telegram username/first/last name in the drawer header. By
+// default the helper picks fresh values per call.
+export interface LinkTelegramOpts {
+  telegramUserId?: number;
+  username?: string;
+  firstName?: string;
+  lastName?: string;
+}
+
+export interface LinkedTelegram {
+  telegramUserId: number;
+  username: string;
+  firstName: string;
+  lastName: string;
+}
+
+// linkTelegramToApplication injects a synthetic "/start <applicationId>"
+// update into the in-process Telegram handler via POST /test/telegram/message.
+// The handler runs synchronously, so once this resolves the application is
+// linked — UI can be navigated immediately without waitFor.
+export async function linkTelegramToApplication(
+  request: APIRequestContext,
+  apiUrl: string,
+  applicationId: string,
+  opts: LinkTelegramOpts = {},
+): Promise<LinkedTelegram> {
+  const telegramUserId = opts.telegramUserId ?? uniqueTelegramUserId();
+  const username = opts.username ?? `tg_${telegramUserId}`;
+  const firstName = opts.firstName ?? "Тест";
+  const lastName = opts.lastName ?? "Креатор";
+  const resp = await request.post(`${apiUrl}/test/telegram/message`, {
+    data: {
+      chatId: telegramUserId,
+      userId: telegramUserId,
+      text: `/start ${applicationId}`,
+      username,
+      firstName,
+      lastName,
+    },
+  });
+  if (!resp.ok()) {
+    throw new Error(
+      `linkTelegramToApplication: ${resp.status()} ${await resp.text()}`,
+    );
+  }
+  return { telegramUserId, username, firstName, lastName };
+}
+
 // iinChecksum runs the two-pass Republic of Kazakhstan algorithm on the
 // first 11 digits of an IIN. Returns the checksum digit (0..9) or null if
 // both passes land on the forbidden mod=10 result.
