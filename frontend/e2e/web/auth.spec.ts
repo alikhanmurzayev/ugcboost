@@ -1,18 +1,19 @@
 /**
  * Auth flow E2E — веб-приложение.
  *
- * Тесты проходят полный цикл аутентификации одного администратора. В
- * beforeAll сеем тестового пользователя через POST /test/seed-user, а в
- * afterAll удаляем его через DELETE /test/users/${TEST_EMAIL} (если
- * E2E_CLEANUP !== "false"). Все кейсы собраны в одном test.describe
- * ("Auth flow") и работают на общем seeded-админе.
+ * Каждый тест сидит своего администратора через seedAdmin (UUID-суффикс в
+ * email — изоляция от параллельных воркеров) и дренирует его через
+ * POST /test/cleanup-entity {type:"user", id} в afterEach. Cleanup —
+ * fail-fast с per-call 5-секундным таймаутом: поломанный бэкенд должен
+ * упасть громко и сразу, а не оставлять "пользователь остался в БД, тесты
+ * через час станут flaky".
  *
  * Happy path: правильный email и пароль ведут на дашборд, в сайдбаре виден
- * email пользователя, роль «Админ» и полный набор навигационных ссылок
- * (главная, бренды, аудит) — у админа доступ ко всему. Противоположный
- * кейс — неправильный пароль: остаёмся на /login и показываем ошибку
- * «Неверный email или пароль» без утечки того, какой именно компонент
- * ошибся (email, пароль, сеть).
+ * email пользователя и admin-only nav-link на верификацию заявок (его
+ * присутствие закрывает роль через структуру навигации, без копирайт-зависимых
+ * локаторов вроде "Админ"). Противоположный кейс — неправильный пароль:
+ * остаёмся на /login, появляется блок login-error без утечки того, какой
+ * именно компонент ошибся (email, пароль, сеть).
  *
  * Session restore проверяет, что перезагрузка страницы (F5) не выкидывает
  * пользователя на /login: access token в памяти теряется, приложение на
@@ -24,106 +25,153 @@
  * конца: неаутентифицированный пользователь, идущий прямо на /, тоже
  * редиректится на /login.
  */
-import { test, expect } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
+import { seedAdmin, type SeededUser } from "../helpers/api";
 
-// API URL for test setup (seed users). Falls back to docker-compose.test.yml backend.
 const API_URL = process.env.API_URL || "http://localhost:8080";
-const TEST_EMAIL = `test-web-${Date.now()}@e2e.test`;
-const TEST_PASSWORD = "testpass123";
-
-// Seed a test admin user via /test/seed-user before all tests.
-test.beforeAll(async ({ request }) => {
-  const resp = await request.post(`${API_URL}/test/seed-user`, {
-    data: { email: TEST_EMAIL, password: TEST_PASSWORD, role: "admin" },
-  });
-  expect(resp.status()).toBe(201);
-});
-
-test.afterAll(async ({ request }) => {
-  if (process.env.E2E_CLEANUP !== "false") {
-    await request.delete(`${API_URL}/test/users/${TEST_EMAIL}`);
-  }
-});
+const CLEANUP_TIMEOUT_MS = 5_000;
 
 test.describe("Auth flow", () => {
-  test("1. Happy login — email + password → dashboard with sidebar", async ({
+  let cleanupStack: Array<() => Promise<void>>;
+
+  test.beforeEach(() => {
+    cleanupStack = [];
+  });
+
+  test.afterEach(async () => {
+    if (process.env.E2E_CLEANUP === "false") return;
+    while (cleanupStack.length > 0) {
+      const fn = cleanupStack.pop();
+      if (!fn) continue;
+      await withTimeout(fn(), CLEANUP_TIMEOUT_MS, "cleanup");
+    }
+  });
+
+  test("Happy login — email + password → dashboard with sidebar", async ({
     page,
+    request,
   }) => {
-    await page.goto("/login", { waitUntil: "domcontentloaded" });
+    const admin = await seedAdmin(request, API_URL);
+    cleanupStack.push(admin.cleanup);
 
-    await page.getByTestId("email-input").fill(TEST_EMAIL);
-    await page.getByTestId("password-input").fill(TEST_PASSWORD);
-    await page.getByTestId("login-button").click();
+    await loginAs(page, admin);
 
-    // Should redirect to dashboard
-    await expect(page).toHaveURL("/");
-    await expect(page.getByRole("heading", { name: "Дашборд" })).toBeVisible();
+    // Sidebar carries the seeded email and the admin role label. testid =
+    // stable locator, toContainText = end-to-end check that the i18n bundle
+    // resolved the right key (LoginPage / DashboardLayout unit tests cover
+    // the static keys; this guards the runtime wiring).
+    const sidebar = page.getByTestId("sidebar");
+    await expect(sidebar).toBeVisible();
+    await expect(sidebar).toContainText(admin.email);
+    await expect(sidebar).toContainText("Админ");
 
-    // Sidebar shows user info
-    await expect(page.getByText(TEST_EMAIL, { exact: true })).toBeVisible();
-    await expect(page.getByText("Админ")).toBeVisible();
-
-    // Sidebar navigation present (admin role)
+    // Admin-only nav presence is the structural proof of role: a
+    // brand_manager would not see this link (covered in admin verification
+    // spec). Combined with /, brands and audit, this captures the full
+    // admin-side navigation surface.
     await expect(page.getByTestId("nav-link-/")).toBeVisible();
     await expect(page.getByTestId("nav-link-brands")).toBeVisible();
     await expect(page.getByTestId("nav-link-audit")).toBeVisible();
+    await expect(
+      page.getByTestId("nav-link-creator-applications/verification"),
+    ).toBeVisible();
+
+    // Dashboard renders with localized header — testid pins the container,
+    // toContainText pins the rendered copy ("Дашборд" comes from the
+    // dashboard i18n bundle).
+    const dashboard = page.getByTestId("dashboard-page");
+    await expect(dashboard).toBeVisible();
+    await expect(dashboard).toContainText("Дашборд");
   });
 
-  test("2. Wrong password — error shown, stay on login", async ({ page }) => {
-    await page.goto("/login", { waitUntil: "domcontentloaded" });
+  test("Wrong password — error shown, stay on login", async ({
+    page,
+    request,
+  }) => {
+    const admin = await seedAdmin(request, API_URL);
+    cleanupStack.push(admin.cleanup);
 
-    await page.getByTestId("email-input").fill(TEST_EMAIL);
+    await page.goto("/login", { waitUntil: "domcontentloaded" });
+    await page.getByTestId("email-input").fill(admin.email);
     await page.getByTestId("password-input").fill("wrongpassword");
     await page.getByTestId("login-button").click();
 
-    // Should stay on login page with error
     await expect(page).toHaveURL("/login");
+    // Error block + exact wording — testid is the locator (per
+    // frontend-testing-e2e.md), and the textual assert pins the auth-specific
+    // copy that LoginPage.test.tsx unit tests also exercise. The duplication
+    // is intentional: unit covers the i18n key resolution, e2e covers the
+    // backend-frontend contract that wrong-creds bubbles to this exact UI.
     await expect(page.getByTestId("login-error")).toContainText(
       "Неверный email или пароль",
     );
   });
 
-  test("3. Session restore — F5 keeps user logged in", async ({ page }) => {
-    // Login first
-    await page.goto("/login", { waitUntil: "domcontentloaded" });
-    await page.getByTestId("email-input").fill(TEST_EMAIL);
-    await page.getByTestId("password-input").fill(TEST_PASSWORD);
-    await page.getByTestId("login-button").click();
-    await expect(page).toHaveURL("/");
+  test("Session restore — F5 keeps user logged in", async ({
+    page,
+    request,
+  }) => {
+    const admin = await seedAdmin(request, API_URL);
+    cleanupStack.push(admin.cleanup);
 
-    // Reload page (simulates F5 — token lost from memory)
+    await loginAs(page, admin);
+
+    // Reload page (simulates F5 — token lost from memory, refresh kicks in)
     await page.reload();
 
-    // Should still be on dashboard, not redirected to login
     await expect(page).toHaveURL("/");
-    await expect(page.getByRole("heading", { name: "Дашборд" })).toBeVisible();
-    await expect(page.getByText(TEST_EMAIL, { exact: true })).toBeVisible();
+    const dashboard = page.getByTestId("dashboard-page");
+    await expect(dashboard).toBeVisible();
+    await expect(dashboard).toContainText("Дашборд");
+    await expect(page.getByTestId("sidebar")).toContainText(admin.email);
   });
 
-  test("4. Logout — redirects to login, session destroyed", async ({
+  test("Logout — redirects to login, session destroyed", async ({
     page,
+    request,
   }) => {
-    // Login first
-    await page.goto("/login", { waitUntil: "domcontentloaded" });
-    await page.getByTestId("email-input").fill(TEST_EMAIL);
-    await page.getByTestId("password-input").fill(TEST_PASSWORD);
-    await page.getByTestId("login-button").click();
-    await expect(page).toHaveURL("/");
+    const admin = await seedAdmin(request, API_URL);
+    cleanupStack.push(admin.cleanup);
 
-    // Click logout
+    await loginAs(page, admin);
+
     await page.getByTestId("logout-button").click();
     await expect(page).toHaveURL("/login");
 
-    // Try accessing dashboard — should redirect to login
+    // Try accessing dashboard — should redirect back to login because the
+    // session was destroyed, not just because the in-memory state was wiped.
     await page.goto("/", { waitUntil: "domcontentloaded" });
     await expect(page).toHaveURL("/login");
   });
 
-  test("5. Protected route — unauthenticated user redirected to login", async ({
+  test("Protected route — unauthenticated user redirected to login", async ({
     page,
   }) => {
-    // Go directly to protected route without logging in
     await page.goto("/", { waitUntil: "domcontentloaded" });
     await expect(page).toHaveURL("/login");
   });
 });
+
+async function loginAs(page: Page, user: SeededUser): Promise<void> {
+  await page.goto("/login", { waitUntil: "domcontentloaded" });
+  await page.getByTestId("email-input").fill(user.email);
+  await page.getByTestId("password-input").fill(user.password);
+  await page.getByTestId("login-button").click();
+  await expect(page).toHaveURL("/");
+}
+
+async function withTimeout<T>(
+  promise: Promise<T>,
+  ms: number,
+  label: string,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
+  });
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}

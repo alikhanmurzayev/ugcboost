@@ -1,9 +1,18 @@
 import { type ReactNode } from "react";
 import type { DictionaryItem } from "../types";
 
-export default function CategoryChip({ children }: { children: ReactNode }) {
+export default function CategoryChip({
+  children,
+  testid,
+}: {
+  children: ReactNode;
+  testid?: string;
+}) {
   return (
-    <span className="inline-flex items-center rounded-full border border-surface-300 bg-surface-100 px-2.5 py-0.5 text-xs text-gray-800">
+    <span
+      className="inline-flex items-center rounded-full border border-surface-300 bg-surface-100 px-2.5 py-0.5 text-xs text-gray-800"
+      data-testid={testid}
+    >
       {children}
     </span>
   );

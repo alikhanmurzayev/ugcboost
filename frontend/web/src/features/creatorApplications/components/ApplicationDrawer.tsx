@@ -135,7 +135,10 @@ function DrawerHeader({
           </NavButton>
         </>
       )}
-      <div className="flex-1 truncate px-2 text-lg font-semibold text-gray-900">
+      <div
+        className="flex-1 truncate px-2 text-lg font-semibold text-gray-900"
+        data-testid="drawer-full-name"
+      >
         {title}
       </div>
       <button
@@ -197,10 +200,15 @@ function ApplicationBody({ application }: { application: ApplicationDetail }) {
 
       <dl className="mt-5 grid grid-cols-2 gap-x-6 gap-y-4">
         <Field
+          testid="drawer-birth-date"
           label={t("drawer.birthDate")}
           value={`${formatDate(application.birthDate)} · ${age} ${pluralYears(age)}`}
         />
-        <Field label={t("drawer.iin")} value={application.iin} />
+        <Field
+          testid="drawer-iin"
+          label={t("drawer.iin")}
+          value={application.iin}
+        />
         <Field
           label={t("drawer.phone")}
           value={
@@ -213,7 +221,11 @@ function ApplicationBody({ application }: { application: ApplicationDetail }) {
             </a>
           }
         />
-        <Field label={t("drawer.city")} value={application.city.name} />
+        <Field
+          testid="drawer-city"
+          label={t("drawer.city")}
+          value={application.city.name}
+        />
 
         <Field
           fullWidth
@@ -221,10 +233,15 @@ function ApplicationBody({ application }: { application: ApplicationDetail }) {
           value={
             <div className="flex flex-wrap gap-1.5">
               {application.categories.map((c) => (
-                <CategoryChip key={c.code}>{c.name}</CategoryChip>
+                <CategoryChip
+                  key={c.code}
+                  testid={`drawer-category-${c.code}`}
+                >
+                  {c.name}
+                </CategoryChip>
               ))}
               {application.categoryOtherText && (
-                <CategoryChip>
+                <CategoryChip testid="drawer-category-other-text">
                   <span className="italic">
                     {t("drawer.categoryOther")}: {application.categoryOtherText}
                   </span>
@@ -379,17 +396,21 @@ function Field({
   label,
   value,
   fullWidth = false,
+  testid,
 }: {
   label: string;
   value: ReactNode;
   fullWidth?: boolean;
+  testid?: string;
 }) {
   return (
     <div className={fullWidth ? "col-span-2" : ""}>
       <dt className="text-xs font-medium uppercase tracking-wide text-gray-500">
         {label}
       </dt>
-      <dd className="mt-1 text-sm text-gray-900">{value}</dd>
+      <dd className="mt-1 text-sm text-gray-900" data-testid={testid}>
+        {value}
+      </dd>
     </div>
   );
 }

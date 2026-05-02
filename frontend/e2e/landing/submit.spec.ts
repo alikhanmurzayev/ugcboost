@@ -42,10 +42,12 @@ const API_URL = process.env.API_URL || "http://localhost:8080";
 
 // Application ids registered for cleanup. Kept module-level so afterAll can
 // drain them in LIFO order regardless of which test created them.
+// cleanupCreatorApplication itself honours E2E_CLEANUP=false and throws on
+// any unexpected status — afterAll deliberately does not swallow errors so a
+// stale row surfaces immediately instead of leaking into the next CI run.
 const created: string[] = [];
 
 test.afterAll(async ({ request }) => {
-  if (process.env.E2E_CLEANUP === "false") return;
   while (created.length > 0) {
     const id = created.pop();
     if (id) await cleanupCreatorApplication(request, API_URL, id);
@@ -82,7 +84,7 @@ async function waitForDictionaries(page: Page): Promise<void> {
   // Categories: at least one category checkbox has been attached. Picks up
   // any category code without baking a specific one into the test.
   await expect
-    .poll(async () => page.locator(".category-checkbox").count(), {
+    .poll(async () => page.getByTestId(/^category-checkbox-/).count(), {
       timeout: 10_000,
     })
     .toBeGreaterThan(0);
@@ -101,14 +103,16 @@ test.describe("Landing submission flow", () => {
   // Surface unexpected JS errors that the form handler catches silently —
   // a missing dependency or a broken event listener would otherwise pass
   // unnoticed and the failure mode (no submit, no error) is hard to debug.
+  // console.warn (not log) keeps eslint's no-console rule happy and matches
+  // the diagnostic intent — these lines fire only when something goes wrong.
   test.beforeEach(async ({ page }) => {
-    page.on("pageerror", (err) => console.log("[pageerror]", err.message));
+    page.on("pageerror", (err) => console.warn("[pageerror]", err.message));
     page.on("requestfailed", (req) =>
-      console.log("[requestfailed]", req.url(), req.failure()?.errorText),
+      console.warn("[requestfailed]", req.url(), req.failure()?.errorText),
     );
   });
 
-  test("0. Dictionaries — селекты непустые после загрузки", async ({ page }) => {
+  test("Dictionaries — селекты непустые после загрузки", async ({ page }) => {
     // Smoke test that pins the contract between the API and the form: cities
     // dropdown carries real options, categories renders at least one
     // checkbox. Placed first so a regression here fails fast and obviously,
@@ -118,11 +122,11 @@ test.describe("Landing submission flow", () => {
 
     const cityCount = await page.getByTestId("city-select").locator("option").count();
     expect(cityCount).toBeGreaterThan(1);
-    const categoryCount = await page.locator(".category-checkbox").count();
+    const categoryCount = await page.getByTestId(/^category-checkbox-/).count();
     expect(categoryCount).toBeGreaterThan(0);
   });
 
-  test("1. Golden path — fills the form, sees success screen with telegram CTA", async ({
+  test("Golden path — fills the form, sees success screen with telegram CTA", async ({
     page,
   }) => {
     await page.goto("/", { waitUntil: "domcontentloaded" });
@@ -148,7 +152,7 @@ test.describe("Landing submission flow", () => {
     if (href) created.push(extractApplicationIdFromBotUrl(href));
   });
 
-  test("2. Other category — categoryOtherText input appears and submit succeeds", async ({
+  test("Other category — categoryOtherText input appears and submit succeeds", async ({
     page,
   }) => {
     await page.goto("/", { waitUntil: "domcontentloaded" });
@@ -170,7 +174,7 @@ test.describe("Landing submission flow", () => {
     if (href) created.push(extractApplicationIdFromBotUrl(href));
   });
 
-  test("3. Server validation — under-age IIN surfaces form error, no success", async ({
+  test("Server validation — under-age IIN surfaces form error, no success", async ({
     page,
   }) => {
     await page.goto("/", { waitUntil: "domcontentloaded" });
