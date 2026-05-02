@@ -162,3 +162,71 @@ func (_c *MockCreatorApplicationSocialRepo_ListByApplicationID_Call) RunAndRetur
 	_c.Call.Return(run)
 	return _c
 }
+
+// ListByApplicationIDs provides a mock function for the type MockCreatorApplicationSocialRepo
+func (_mock *MockCreatorApplicationSocialRepo) ListByApplicationIDs(ctx context.Context, applicationIDs []string) (map[string][]*repository.CreatorApplicationSocialRow, error) {
+	ret := _mock.Called(ctx, applicationIDs)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ListByApplicationIDs")
+	}
+
+	var r0 map[string][]*repository.CreatorApplicationSocialRow
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, []string) (map[string][]*repository.CreatorApplicationSocialRow, error)); ok {
+		return returnFunc(ctx, applicationIDs)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, []string) map[string][]*repository.CreatorApplicationSocialRow); ok {
+		r0 = returnFunc(ctx, applicationIDs)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(map[string][]*repository.CreatorApplicationSocialRow)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, []string) error); ok {
+		r1 = returnFunc(ctx, applicationIDs)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockCreatorApplicationSocialRepo_ListByApplicationIDs_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ListByApplicationIDs'
+type MockCreatorApplicationSocialRepo_ListByApplicationIDs_Call struct {
+	*mock.Call
+}
+
+// ListByApplicationIDs is a helper method to define mock.On call
+//   - ctx context.Context
+//   - applicationIDs []string
+func (_e *MockCreatorApplicationSocialRepo_Expecter) ListByApplicationIDs(ctx interface{}, applicationIDs interface{}) *MockCreatorApplicationSocialRepo_ListByApplicationIDs_Call {
+	return &MockCreatorApplicationSocialRepo_ListByApplicationIDs_Call{Call: _e.mock.On("ListByApplicationIDs", ctx, applicationIDs)}
+}
+
+func (_c *MockCreatorApplicationSocialRepo_ListByApplicationIDs_Call) Run(run func(ctx context.Context, applicationIDs []string)) *MockCreatorApplicationSocialRepo_ListByApplicationIDs_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 []string
+		if args[1] != nil {
+			arg1 = args[1].([]string)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockCreatorApplicationSocialRepo_ListByApplicationIDs_Call) Return(stringToCreatorApplicationSocialRows map[string][]*repository.CreatorApplicationSocialRow, err error) *MockCreatorApplicationSocialRepo_ListByApplicationIDs_Call {
+	_c.Call.Return(stringToCreatorApplicationSocialRows, err)
+	return _c
+}
+
+func (_c *MockCreatorApplicationSocialRepo_ListByApplicationIDs_Call) RunAndReturn(run func(ctx context.Context, applicationIDs []string) (map[string][]*repository.CreatorApplicationSocialRow, error)) *MockCreatorApplicationSocialRepo_ListByApplicationIDs_Call {
+	_c.Call.Return(run)
+	return _c
+}

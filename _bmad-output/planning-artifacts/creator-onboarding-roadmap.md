@@ -3,7 +3,7 @@ title: "Roadmap: онбординг креатора до договора"
 type: roadmap
 status: living
 created: "2026-04-29"
-updated: "2026-05-01"
+updated: "2026-05-02"
 ---
 
 # Roadmap: онбординг креатора до договора
@@ -38,7 +38,7 @@ Living document. Покрывает путь от подачи заявки на
 - [x] **1. Привязка Telegram-аккаунта к заявке.** Кнопка на лендинге → автозапуск бота → автовыполнение `/start` со скрытым ID заявки в payload → бот ловит, привязывает Telegram-пользователя к заявке → открытие TMA с экраном статуса. Реализация — PR #35 (минимальный бот на go-telegram/bot), PR #38 (привязка через `/start`-payload + audit), review-fixes — `_bmad-output/implementation-artifacts/archive/spec-review-fixes-telegram-link.md`
 - [x] **2. Спроектировать стейт-машину заявки.** Жизненный цикл заявки от подачи до подписания договора, легальные переходы, представление для креатора. Источник истины для БД, бэка, админки и TMA. Документ — `_bmad-output/planning-artifacts/creator-application-state-machine.md`
 - [x] **3. Реализация целевой стейт-машины.** Один PR. Миграция: обновить значения существующего enum статусов под целевую модель (см. state-machine doc) + бэкфил существующих заявок `pending` → `verification` + перестроить partial unique index по ИИН на новых активных значениях. Код: domain, repository, openapi, ручка приёма заявок с лендинга (`POST /creators/applications`) теперь пишет `verification`. Unit + e2e тесты под новые статусы. Без таблицы истории переходов и сервиса переходов — появятся с первым реальным переходом. PR #46, спека — `_bmad-output/implementation-artifacts/spec-creator-application-state-machine.md`
-- [ ] **4. Админка-бэк: ручка списка заявок.** GET `/admin/creator-applications` с фильтром по статусу + пагинацией. Auth-gating на ADMIN. Расширяемая под все статусы, но используется пока под `verification`
+- [~] **4. Админка-бэк: ручка списка заявок.** `POST /creators/applications/list` (admin-only, POST из-за PII в search) с фильтрами (status/cities/categories arrays, dateFrom/To, ageFrom/To, telegramLinked, search), сортировкой (created_at|updated_at|full_name|birth_date|city_name × asc|desc) и пагинацией. Item-shape лёгкий (без phone/address/consents) — расширяется новыми optional полями для будущих чанков. Спека — `_bmad-output/implementation-artifacts/spec-creator-applications-list.md`
 - [ ] **5. Админка-фронт: список + карточка заявки на верификации.** Перенос из прототипа Айданы (`frontend/web/src/_prototype/`) в реальный `features/creatorApplications/`. Один экран — список заявок со статусом `verification` + карточка-drawer. Подключение к реальному API + RoleGuard(ADMIN). Без действий модерации
 - [ ] **6. Экран статуса заявки в TMA.** Креатор видит текущий шаг и что делать дальше. 6 видимых состояний (см. state-machine doc). Обновляется по мере прохождения
 - [ ] **7. Верификация владения соцсетями.** Метод и порядок (TMA или бэк сначала) выбираем при старте chunk

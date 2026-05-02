@@ -18,3 +18,16 @@ func (a *AuthzService) CanViewCreatorApplication(ctx context.Context) error {
 	}
 	return nil
 }
+
+// CanListCreatorApplications gates the admin moderation list endpoint
+// (POST /creators/applications/list). The list-item shape carries lighter
+// PII than the full GET aggregate (no phone/address/consents) but still
+// includes IIN and full names, so admin role is the only acceptable
+// authorization. Returning the same domain.ErrForbidden as the GET keeps
+// the 403 message and timing identical between the two endpoints.
+func (a *AuthzService) CanListCreatorApplications(ctx context.Context) error {
+	if middleware.RoleFromContext(ctx) != api.Admin {
+		return domain.ErrForbidden
+	}
+	return nil
+}

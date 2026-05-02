@@ -25,6 +25,29 @@ type CreatorApplicationRepoFactory interface {
 	NewAuditRepo(db dbutil.DB) repository.AuditRepo
 }
 
+// creatorApplicationListInputToRepo translates the validated handler input
+// into the repo-shaped params struct. Search trimming happens here so the
+// repo never sees whitespace-only queries (an empty Search ignores the
+// filter). All other fields pass through unchanged — the handler is the
+// single source of truth for validation.
+func creatorApplicationListInputToRepo(in domain.CreatorApplicationListInput) repository.CreatorApplicationListParams {
+	return repository.CreatorApplicationListParams{
+		Statuses:       in.Statuses,
+		Cities:         in.Cities,
+		Categories:     in.Categories,
+		DateFrom:       in.DateFrom,
+		DateTo:         in.DateTo,
+		AgeFrom:        in.AgeFrom,
+		AgeTo:          in.AgeTo,
+		TelegramLinked: in.TelegramLinked,
+		Search:         strings.TrimSpace(in.Search),
+		Sort:           in.Sort,
+		Order:          in.Order,
+		Page:           in.Page,
+		PerPage:        in.PerPage,
+	}
+}
+
 // CreatorApplicationService owns the submission use case for creator
 // applications coming from the public landing page.
 type CreatorApplicationService struct {
@@ -448,6 +471,84 @@ func (s *CreatorApplicationService) GetByID(ctx context.Context, id string) (*do
 	}
 
 	return s.creatorApplicationDetailFromRows(appRow, categoryRows, socialRows, consentRows, linkRow), nil
+}
+
+// List returns one page of applications matching the validated filter set.
+// The handler has already enforced sort/order whitelists, page/perPage
+// bounds and statuses-array membership; this method trusts those invariants
+// and focuses on (1) trimming the search query, (2) running the repo's
+// page+count query, and (3) batch-hydrating the categories and socials
+// collections so the read is N+1-free. Telegram-linked is computed in the
+// repo's main query via LEFT JOIN, so no additional hydration is needed.
+//
+// The reads run against the pool directly — no transaction. Admin moderation
+// reads do not need cross-table consistency on the order of milliseconds; a
+// brand-new application appearing in the page query but not yet in the
+// hydration query is acceptable (the missing rows degrade to empty arrays,
+// not corrupt data).
+func (s *CreatorApplicationService) List(ctx context.Context, in domain.CreatorApplicationListInput) (*domain.CreatorApplicationListPage, error) {
+	params := creatorApplicationListInputToRepo(in)
+
+	appRepo := s.repoFactory.NewCreatorApplicationRepo(s.pool)
+	rows, total, err := appRepo.List(ctx, params)
+	if err != nil {
+		return nil, fmt.Errorf("list applications: %w", err)
+	}
+	if total == 0 || len(rows) == 0 {
+		return &domain.CreatorApplicationListPage{
+			Items:   nil,
+			Total:   total,
+			Page:    in.Page,
+			PerPage: in.PerPage,
+		}, nil
+	}
+
+	appIDs := make([]string, len(rows))
+	for i, row := range rows {
+		appIDs[i] = row.ID
+	}
+
+	categoriesByApp, err := s.repoFactory.NewCreatorApplicationCategoryRepo(s.pool).ListByApplicationIDs(ctx, appIDs)
+	if err != nil {
+		return nil, fmt.Errorf("hydrate categories: %w", err)
+	}
+	socialsByApp, err := s.repoFactory.NewCreatorApplicationSocialRepo(s.pool).ListByApplicationIDs(ctx, appIDs)
+	if err != nil {
+		return nil, fmt.Errorf("hydrate socials: %w", err)
+	}
+
+	items := make([]*domain.CreatorApplicationListItem, len(rows))
+	for i, row := range rows {
+		socialRows := socialsByApp[row.ID]
+		socials := make([]domain.CreatorApplicationDetailSocial, len(socialRows))
+		for j, sr := range socialRows {
+			socials[j] = domain.CreatorApplicationDetailSocial{
+				Platform: sr.Platform,
+				Handle:   sr.Handle,
+			}
+		}
+		items[i] = &domain.CreatorApplicationListItem{
+			ID:             row.ID,
+			Status:         row.Status,
+			LastName:       row.LastName,
+			FirstName:      row.FirstName,
+			MiddleName:     trimOptional(row.MiddleName),
+			BirthDate:      row.BirthDate,
+			CityCode:       row.CityCode,
+			Categories:     append([]string(nil), categoriesByApp[row.ID]...),
+			Socials:        socials,
+			TelegramLinked: row.TelegramLinked,
+			CreatedAt:      row.CreatedAt,
+			UpdatedAt:      row.UpdatedAt,
+		}
+	}
+
+	return &domain.CreatorApplicationListPage{
+		Items:   items,
+		Total:   total,
+		Page:    in.Page,
+		PerPage: in.PerPage,
+	}, nil
 }
 
 // creatorApplicationDetailFromRows maps the four repo result sets onto the

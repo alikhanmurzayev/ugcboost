@@ -492,7 +492,7 @@ func buildExpectedDetail(t *testing.T, req apiclient.CreatorApplicationSubmitReq
 		City:              cityRef,
 		Address:           req.Address,
 		CategoryOtherText: otherPtr,
-		Status:            apiclient.Verification,
+		Status:            apiclient.CreatorApplicationDetailDataStatusVerification,
 		CreatedAt:         got.CreatedAt,
 		UpdatedAt:         got.UpdatedAt,
 		Categories:        catRefs,

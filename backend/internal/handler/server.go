@@ -44,6 +44,7 @@ type AuthzService interface {
 	CanRemoveManager(ctx context.Context, brandID, userID string) error
 	CanListAuditLogs(ctx context.Context) error
 	CanViewCreatorApplication(ctx context.Context) error
+	CanListCreatorApplications(ctx context.Context) error
 }
 
 // AuditLogService is the interface Server needs from the audit service.
@@ -57,6 +58,7 @@ type AuditLogService interface {
 type CreatorApplicationService interface {
 	Submit(ctx context.Context, in domain.CreatorApplicationInput) (*domain.CreatorApplicationSubmission, error)
 	GetByID(ctx context.Context, id string) (*domain.CreatorApplicationDetail, error)
+	List(ctx context.Context, in domain.CreatorApplicationListInput) (*domain.CreatorApplicationListPage, error)
 }
 
 // DictionaryService is the interface Server needs to serve public dictionaries

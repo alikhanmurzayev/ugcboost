@@ -608,6 +608,62 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /creators/applications/list:
+    post:
+      operationId: listCreatorApplications
+      summary: List creator applications with filters, search, sorting and pagination (admin only)
+      description: |
+        Admin-only paginated list endpoint backing the moderation UI. POST is
+        used (not GET) because the search field carries PII (IIN, names, social
+        handles) which `security.md` forbids in URL params. Authorisation is
+        evaluated before any business logic so non-admin callers get 403
+        regardless of whether matching applications exist. Pagination, sort
+        field and sort order are required — there are no server-side defaults,
+        the client must explicitly choose. The item shape is intentionally lean:
+        list-views never expose phone, address, consents or the full Telegram
+        link aggregate (only a `telegramLinked` boolean) — full PII is reserved
+        for `GET /creators/applications/{id}`.
+      tags: [creators]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatorApplicationsListRequest"
+      responses:
+        "200":
+          description: Page of creator applications matching the filter
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreatorApplicationsListResult"
+        "401":
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Validation error (unknown sort/order, page/perPage out of range, missing required field)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          description: Unexpected error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /creators/applications/{id}:
     parameters:
       - name: id
@@ -1286,6 +1342,169 @@ components:
       properties:
         data:
           $ref: "#/components/schemas/CreatorApplicationDetailData"
+
+    CreatorApplicationListSortField:
+      type: string
+      description: |
+        Sort field for the admin list. Mapped to a SQL column / expression on
+        the backend. Unknown values are rejected with 422.
+      enum: [created_at, updated_at, full_name, birth_date, city_name]
+
+    SortOrder:
+      type: string
+      description: Sort direction.
+      enum: [asc, desc]
+
+    CreatorApplicationsListRequest:
+      type: object
+      required: [sort, order, page, perPage]
+      description: |
+        Filter, search, sort and pagination payload for the admin list. All
+        filter fields are optional and combined with AND between fields, OR
+        (any-of) within a single array. Empty/whitespace `search` is ignored.
+      properties:
+        statuses:
+          type: array
+          description: Match any of these statuses. Empty/missing → all statuses.
+          items:
+            type: string
+            enum: [verification, moderation, awaiting_contract, contract_sent, signed, rejected, withdrawn]
+        cities:
+          type: array
+          description: Match any of these city codes (from the cities dictionary).
+          items:
+            type: string
+            minLength: 1
+            maxLength: 64
+        categories:
+          type: array
+          description: Match applications that include any of these category codes.
+          items:
+            type: string
+            minLength: 1
+            maxLength: 64
+        dateFrom:
+          type: string
+          format: date-time
+          description: Inclusive lower bound for `created_at`.
+        dateTo:
+          type: string
+          format: date-time
+          description: Inclusive upper bound for `created_at`.
+        ageFrom:
+          type: integer
+          minimum: 0
+          maximum: 120
+          description: Inclusive lower bound for the creator's age in full years (computed from birth_date).
+        ageTo:
+          type: integer
+          minimum: 0
+          maximum: 120
+          description: Inclusive upper bound for the creator's age in full years.
+        telegramLinked:
+          type: boolean
+          description: |
+            When true, only applications already bound to a Telegram account
+            are returned. When false, only those still without a link.
+            Missing/null disables the filter.
+        search:
+          type: string
+          maxLength: 128
+          description: |
+            Free-text search across last_name, first_name, middle_name, IIN
+            (case-insensitive) and social-account handles. Trimmed; empty/blank
+            after trim disables the filter. Carries PII — the endpoint is POST
+            so this never lands in URL params.
+        sort:
+          $ref: "#/components/schemas/CreatorApplicationListSortField"
+        order:
+          $ref: "#/components/schemas/SortOrder"
+        page:
+          type: integer
+          minimum: 1
+          description: 1-based page index.
+        perPage:
+          type: integer
+          minimum: 1
+          maximum: 200
+          description: Page size, between 1 and 200 inclusive.
+
+    CreatorApplicationListItem:
+      type: object
+      required:
+        - id
+        - status
+        - lastName
+        - firstName
+        - birthDate
+        - city
+        - categories
+        - socials
+        - telegramLinked
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [verification, moderation, awaiting_contract, contract_sent, signed, rejected, withdrawn]
+        lastName:
+          type: string
+        firstName:
+          type: string
+        middleName:
+          type: string
+          nullable: true
+        birthDate:
+          type: string
+          format: date
+        city:
+          $ref: "#/components/schemas/CreatorApplicationDetailCity"
+        categories:
+          type: array
+          description: Categories selected by the creator, sorted by sort_order then code.
+          items:
+            $ref: "#/components/schemas/CreatorApplicationDetailCategory"
+        socials:
+          type: array
+          description: Social accounts attached to the application, sorted by platform then handle.
+          items:
+            $ref: "#/components/schemas/CreatorApplicationDetailSocial"
+        telegramLinked:
+          type: boolean
+          description: True when the creator has bound a Telegram account via /start.
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CreatorApplicationsListData:
+      type: object
+      required: [items, total, page, perPage]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/CreatorApplicationListItem"
+        total:
+          type: integer
+          format: int64
+          description: Total number of matching applications across all pages.
+        page:
+          type: integer
+        perPage:
+          type: integer
+
+    CreatorApplicationsListResult:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: "#/components/schemas/CreatorApplicationsListData"
 
   securitySchemes:
     bearerAuth:

@@ -149,6 +149,11 @@ type ClientInterface interface {
 
 	SubmitCreatorApplication(ctx context.Context, body SubmitCreatorApplicationJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// ListCreatorApplicationsWithBody request with any body
+	ListCreatorApplicationsWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	ListCreatorApplications(ctx context.Context, body ListCreatorApplicationsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetCreatorApplication request
 	GetCreatorApplication(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -413,6 +418,30 @@ func (c *Client) SubmitCreatorApplicationWithBody(ctx context.Context, contentTy
 
 func (c *Client) SubmitCreatorApplication(ctx context.Context, body SubmitCreatorApplicationJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewSubmitCreatorApplicationRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ListCreatorApplicationsWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListCreatorApplicationsRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ListCreatorApplications(ctx context.Context, body ListCreatorApplicationsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListCreatorApplicationsRequest(c.Server, body)
 	if err != nil {
 		return nil, err
 	}
@@ -1131,6 +1160,46 @@ func NewSubmitCreatorApplicationRequestWithBody(server string, contentType strin
 	return req, nil
 }
 
+// NewListCreatorApplicationsRequest calls the generic ListCreatorApplications builder with application/json body
+func NewListCreatorApplicationsRequest(server string, body ListCreatorApplicationsJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewListCreatorApplicationsRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewListCreatorApplicationsRequestWithBody generates requests for ListCreatorApplications with any type of body
+func NewListCreatorApplicationsRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/creators/applications/list")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 // NewGetCreatorApplicationRequest generates requests for GetCreatorApplication
 func NewGetCreatorApplicationRequest(server string, id openapi_types.UUID) (*http.Request, error) {
 	var err error
@@ -1327,6 +1396,11 @@ type ClientWithResponsesInterface interface {
 	SubmitCreatorApplicationWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SubmitCreatorApplicationResponse, error)
 
 	SubmitCreatorApplicationWithResponse(ctx context.Context, body SubmitCreatorApplicationJSONRequestBody, reqEditors ...RequestEditorFn) (*SubmitCreatorApplicationResponse, error)
+
+	// ListCreatorApplicationsWithBodyWithResponse request with any body
+	ListCreatorApplicationsWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ListCreatorApplicationsResponse, error)
+
+	ListCreatorApplicationsWithResponse(ctx context.Context, body ListCreatorApplicationsJSONRequestBody, reqEditors ...RequestEditorFn) (*ListCreatorApplicationsResponse, error)
 
 	// GetCreatorApplicationWithResponse request
 	GetCreatorApplicationWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetCreatorApplicationResponse, error)
@@ -1702,6 +1776,32 @@ func (r SubmitCreatorApplicationResponse) StatusCode() int {
 	return 0
 }
 
+type ListCreatorApplicationsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *CreatorApplicationsListResult
+	JSON401      *ErrorResponse
+	JSON403      *ErrorResponse
+	JSON422      *ErrorResponse
+	JSONDefault  *ErrorResponse
+}
+
+// Status returns HTTPResponse.Status
+func (r ListCreatorApplicationsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListCreatorApplicationsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type GetCreatorApplicationResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -1964,6 +2064,23 @@ func (c *ClientWithResponses) SubmitCreatorApplicationWithResponse(ctx context.C
 		return nil, err
 	}
 	return ParseSubmitCreatorApplicationResponse(rsp)
+}
+
+// ListCreatorApplicationsWithBodyWithResponse request with arbitrary body returning *ListCreatorApplicationsResponse
+func (c *ClientWithResponses) ListCreatorApplicationsWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ListCreatorApplicationsResponse, error) {
+	rsp, err := c.ListCreatorApplicationsWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListCreatorApplicationsResponse(rsp)
+}
+
+func (c *ClientWithResponses) ListCreatorApplicationsWithResponse(ctx context.Context, body ListCreatorApplicationsJSONRequestBody, reqEditors ...RequestEditorFn) (*ListCreatorApplicationsResponse, error) {
+	rsp, err := c.ListCreatorApplications(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListCreatorApplicationsResponse(rsp)
 }
 
 // GetCreatorApplicationWithResponse request returning *GetCreatorApplicationResponse
@@ -2601,6 +2718,60 @@ func ParseSubmitCreatorApplicationResponse(rsp *http.Response) (*SubmitCreatorAp
 			return nil, err
 		}
 		response.JSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON422 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseListCreatorApplicationsResponse parses an HTTP response from a ListCreatorApplicationsWithResponse call
+func ParseListCreatorApplicationsResponse(rsp *http.Response) (*ListCreatorApplicationsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListCreatorApplicationsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest CreatorApplicationsListResult
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
 		var dest ErrorResponse

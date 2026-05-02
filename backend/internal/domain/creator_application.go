@@ -220,6 +220,109 @@ type CreatorApplicationDetailConsent struct {
 	UserAgent       string
 }
 
+// Sort fields supported by the admin list endpoint
+// (POST /creators/applications/list). The repo translates each value into a
+// SQL column / expression; unknown values are rejected upstream by the
+// handler with CodeValidation.
+const (
+	CreatorApplicationSortCreatedAt = "created_at"
+	CreatorApplicationSortUpdatedAt = "updated_at"
+	CreatorApplicationSortFullName  = "full_name"
+	CreatorApplicationSortBirthDate = "birth_date"
+	CreatorApplicationSortCityName  = "city_name"
+)
+
+// CreatorApplicationListSortFieldValues is the canonical, ordered list of
+// supported sort fields. Iterating it gives the validator a single source of
+// truth instead of a switch with hard-coded literals.
+var CreatorApplicationListSortFieldValues = []string{
+	CreatorApplicationSortCreatedAt,
+	CreatorApplicationSortUpdatedAt,
+	CreatorApplicationSortFullName,
+	CreatorApplicationSortBirthDate,
+	CreatorApplicationSortCityName,
+}
+
+// SortOrderAsc / SortOrderDesc — case-sensitive direction tokens accepted by
+// the admin list endpoint.
+const (
+	SortOrderAsc  = "asc"
+	SortOrderDesc = "desc"
+)
+
+// SortOrderValues lists every accepted direction token.
+var SortOrderValues = []string{SortOrderAsc, SortOrderDesc}
+
+// Pagination + filter bounds for the admin list endpoint. oapi-codegen does
+// NOT enforce OpenAPI's minimum/maximum/maxLength at runtime, so the handler
+// validates each constraint explicitly. The hard caps here protect both the
+// instance (huge OFFSETs / megabyte ILIKE patterns / billion-element arrays
+// = DoS vector) and the user (silent no-op filters when boundaries are
+// quietly ignored).
+const (
+	CreatorApplicationListPageMin            = 1
+	CreatorApplicationListPageMax            = 100_000
+	CreatorApplicationListPerPageMin         = 1
+	CreatorApplicationListPerPageMax         = 200
+	CreatorApplicationListSearchMaxLen       = 128
+	CreatorApplicationListAgeMin             = 0
+	CreatorApplicationListAgeMax             = 120
+	CreatorApplicationListCityCodeMaxLen     = 64
+	CreatorApplicationListCategoryCodeMaxLen = 64
+	CreatorApplicationListFilterArrayMax     = 50
+)
+
+// CreatorApplicationListInput is the validated read aggregate the service
+// receives from the handler. Pointers / nullable types denote optional filters
+// — nil/empty means "do not apply this filter". Statuses/Cities/Categories are
+// any-of arrays.
+type CreatorApplicationListInput struct {
+	Statuses       []string
+	Cities         []string
+	Categories     []string
+	DateFrom       *time.Time
+	DateTo         *time.Time
+	AgeFrom        *int
+	AgeTo          *int
+	TelegramLinked *bool
+	Search         string
+	Sort           string
+	Order          string
+	Page           int
+	PerPage        int
+}
+
+// CreatorApplicationListItem is one row in the admin list response. The shape
+// is intentionally lean — phone, address, consents and the full Telegram link
+// aggregate are deliberately absent (admins fetch those via GET
+// /creators/applications/{id}). Categories and CityCode hold raw codes; the
+// handler resolves dictionary names at presentation time so service/repo stay
+// presentation-free.
+type CreatorApplicationListItem struct {
+	ID             string
+	Status         string
+	LastName       string
+	FirstName      string
+	MiddleName     *string
+	BirthDate      time.Time
+	CityCode       string
+	Categories     []string
+	Socials        []CreatorApplicationDetailSocial
+	TelegramLinked bool
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+}
+
+// CreatorApplicationListPage is what the service returns: the page slice plus
+// pagination echo (page/perPage) and the total count over the unpaginated
+// filter set.
+type CreatorApplicationListPage struct {
+	Items   []*CreatorApplicationListItem
+	Total   int64
+	Page    int
+	PerPage int
+}
+
 // DocumentVersionFor returns the document version stamp recorded against the
 // given consent type. Both processing and third_party / cross_border consents
 // reference the privacy policy; terms references the user agreement.

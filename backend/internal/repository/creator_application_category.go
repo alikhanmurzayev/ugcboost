@@ -37,6 +37,7 @@ var (
 type CreatorApplicationCategoryRepo interface {
 	InsertMany(ctx context.Context, rows []CreatorApplicationCategoryRow) error
 	ListByApplicationID(ctx context.Context, applicationID string) ([]string, error)
+	ListByApplicationIDs(ctx context.Context, applicationIDs []string) (map[string][]string, error)
 }
 
 type creatorApplicationCategoryRepository struct {
@@ -68,4 +69,43 @@ func (r *creatorApplicationCategoryRepository) ListByApplicationID(ctx context.C
 		Where(sq.Eq{CreatorApplicationCategoryColumnApplicationID: applicationID}).
 		OrderBy(CreatorApplicationCategoryColumnCategoryCode + " ASC")
 	return dbutil.Vals[string](ctx, r.db, q)
+}
+
+// creatorApplicationCategoryHydrationRow is a private projection used only by
+// ListByApplicationIDs. It is kept off the public surface (the rest of the
+// codebase reads single-application categories via ListByApplicationID) so
+// the row shape can evolve with the batch use-case without breaking callers.
+type creatorApplicationCategoryHydrationRow struct {
+	ApplicationID string `db:"application_id"`
+	CategoryCode  string `db:"category_code"`
+}
+
+// ListByApplicationIDs hydrates the categories of every supplied application
+// id in a single query. It returns a map keyed by applicationID, with each
+// slice already sorted by category code so the handler hydration step can
+// merge with the dictionary lookup deterministically. An empty input set is a
+// no-op and returns an empty map without hitting the database.
+func (r *creatorApplicationCategoryRepository) ListByApplicationIDs(ctx context.Context, applicationIDs []string) (map[string][]string, error) {
+	if len(applicationIDs) == 0 {
+		return map[string][]string{}, nil
+	}
+	q := sq.Select(
+		CreatorApplicationCategoryColumnApplicationID,
+		CreatorApplicationCategoryColumnCategoryCode,
+	).
+		From(TableCreatorApplicationCategories).
+		Where(sq.Eq{CreatorApplicationCategoryColumnApplicationID: applicationIDs}).
+		OrderBy(
+			CreatorApplicationCategoryColumnApplicationID+" ASC",
+			CreatorApplicationCategoryColumnCategoryCode+" ASC",
+		)
+	rows, err := dbutil.Many[creatorApplicationCategoryHydrationRow](ctx, r.db, q)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string][]string, len(applicationIDs))
+	for _, row := range rows {
+		out[row.ApplicationID] = append(out[row.ApplicationID], row.CategoryCode)
+	}
+	return out, nil
 }

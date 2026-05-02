@@ -46,17 +46,110 @@ func (e CreatorApplicationDetailConsentConsentType) Valid() bool {
 
 // Defines values for CreatorApplicationDetailDataStatus.
 const (
-	AwaitingContract CreatorApplicationDetailDataStatus = "awaiting_contract"
-	ContractSent     CreatorApplicationDetailDataStatus = "contract_sent"
-	Moderation       CreatorApplicationDetailDataStatus = "moderation"
-	Rejected         CreatorApplicationDetailDataStatus = "rejected"
-	Signed           CreatorApplicationDetailDataStatus = "signed"
-	Verification     CreatorApplicationDetailDataStatus = "verification"
-	Withdrawn        CreatorApplicationDetailDataStatus = "withdrawn"
+	CreatorApplicationDetailDataStatusAwaitingContract CreatorApplicationDetailDataStatus = "awaiting_contract"
+	CreatorApplicationDetailDataStatusContractSent     CreatorApplicationDetailDataStatus = "contract_sent"
+	CreatorApplicationDetailDataStatusModeration       CreatorApplicationDetailDataStatus = "moderation"
+	CreatorApplicationDetailDataStatusRejected         CreatorApplicationDetailDataStatus = "rejected"
+	CreatorApplicationDetailDataStatusSigned           CreatorApplicationDetailDataStatus = "signed"
+	CreatorApplicationDetailDataStatusVerification     CreatorApplicationDetailDataStatus = "verification"
+	CreatorApplicationDetailDataStatusWithdrawn        CreatorApplicationDetailDataStatus = "withdrawn"
 )
 
 // Valid indicates whether the value is a known member of the CreatorApplicationDetailDataStatus enum.
 func (e CreatorApplicationDetailDataStatus) Valid() bool {
+	switch e {
+	case CreatorApplicationDetailDataStatusAwaitingContract:
+		return true
+	case CreatorApplicationDetailDataStatusContractSent:
+		return true
+	case CreatorApplicationDetailDataStatusModeration:
+		return true
+	case CreatorApplicationDetailDataStatusRejected:
+		return true
+	case CreatorApplicationDetailDataStatusSigned:
+		return true
+	case CreatorApplicationDetailDataStatusVerification:
+		return true
+	case CreatorApplicationDetailDataStatusWithdrawn:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CreatorApplicationListItemStatus.
+const (
+	CreatorApplicationListItemStatusAwaitingContract CreatorApplicationListItemStatus = "awaiting_contract"
+	CreatorApplicationListItemStatusContractSent     CreatorApplicationListItemStatus = "contract_sent"
+	CreatorApplicationListItemStatusModeration       CreatorApplicationListItemStatus = "moderation"
+	CreatorApplicationListItemStatusRejected         CreatorApplicationListItemStatus = "rejected"
+	CreatorApplicationListItemStatusSigned           CreatorApplicationListItemStatus = "signed"
+	CreatorApplicationListItemStatusVerification     CreatorApplicationListItemStatus = "verification"
+	CreatorApplicationListItemStatusWithdrawn        CreatorApplicationListItemStatus = "withdrawn"
+)
+
+// Valid indicates whether the value is a known member of the CreatorApplicationListItemStatus enum.
+func (e CreatorApplicationListItemStatus) Valid() bool {
+	switch e {
+	case CreatorApplicationListItemStatusAwaitingContract:
+		return true
+	case CreatorApplicationListItemStatusContractSent:
+		return true
+	case CreatorApplicationListItemStatusModeration:
+		return true
+	case CreatorApplicationListItemStatusRejected:
+		return true
+	case CreatorApplicationListItemStatusSigned:
+		return true
+	case CreatorApplicationListItemStatusVerification:
+		return true
+	case CreatorApplicationListItemStatusWithdrawn:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CreatorApplicationListSortField.
+const (
+	BirthDate CreatorApplicationListSortField = "birth_date"
+	CityName  CreatorApplicationListSortField = "city_name"
+	CreatedAt CreatorApplicationListSortField = "created_at"
+	FullName  CreatorApplicationListSortField = "full_name"
+	UpdatedAt CreatorApplicationListSortField = "updated_at"
+)
+
+// Valid indicates whether the value is a known member of the CreatorApplicationListSortField enum.
+func (e CreatorApplicationListSortField) Valid() bool {
+	switch e {
+	case BirthDate:
+		return true
+	case CityName:
+		return true
+	case CreatedAt:
+		return true
+	case FullName:
+		return true
+	case UpdatedAt:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CreatorApplicationsListRequestStatuses.
+const (
+	AwaitingContract CreatorApplicationsListRequestStatuses = "awaiting_contract"
+	ContractSent     CreatorApplicationsListRequestStatuses = "contract_sent"
+	Moderation       CreatorApplicationsListRequestStatuses = "moderation"
+	Rejected         CreatorApplicationsListRequestStatuses = "rejected"
+	Signed           CreatorApplicationsListRequestStatuses = "signed"
+	Verification     CreatorApplicationsListRequestStatuses = "verification"
+	Withdrawn        CreatorApplicationsListRequestStatuses = "withdrawn"
+)
+
+// Valid indicates whether the value is a known member of the CreatorApplicationsListRequestStatuses enum.
+func (e CreatorApplicationsListRequestStatuses) Valid() bool {
 	switch e {
 	case AwaitingContract:
 		return true
@@ -92,6 +185,24 @@ func (e SocialPlatform) Valid() bool {
 	case Threads:
 		return true
 	case Tiktok:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SortOrder.
+const (
+	Asc  SortOrder = "asc"
+	Desc SortOrder = "desc"
+)
+
+// Valid indicates whether the value is a known member of the SortOrder enum.
+func (e SortOrder) Valid() bool {
+	switch e {
+	case Asc:
+		return true
+	case Desc:
 		return true
 	default:
 		return false
@@ -296,7 +407,7 @@ type CreatorApplicationDetailData struct {
 	// Socials Social accounts attached to the application, sorted by platform then handle.
 	Socials []CreatorApplicationDetailSocial `json:"socials"`
 
-	// Status Application status (target 7-state machine, see creator-application-state-machine.md).
+	// Status Application status.
 	Status CreatorApplicationDetailDataStatus `json:"status"`
 
 	// TelegramLink Telegram account linked to this application. Null when the creator
@@ -305,7 +416,7 @@ type CreatorApplicationDetailData struct {
 	UpdatedAt    time.Time     `json:"updatedAt"`
 }
 
-// CreatorApplicationDetailDataStatus Application status (target 7-state machine, see creator-application-state-machine.md).
+// CreatorApplicationDetailDataStatus Application status.
 type CreatorApplicationDetailDataStatus string
 
 // CreatorApplicationDetailSocial defines model for CreatorApplicationDetailSocial.
@@ -315,6 +426,35 @@ type CreatorApplicationDetailSocial struct {
 	// Platform Supported social network for creator accounts (MVP scope).
 	Platform SocialPlatform `json:"platform"`
 }
+
+// CreatorApplicationListItem defines model for CreatorApplicationListItem.
+type CreatorApplicationListItem struct {
+	BirthDate openapi_types.Date `json:"birthDate"`
+
+	// Categories Categories selected by the creator, sorted by sort_order then code.
+	Categories []CreatorApplicationDetailCategory `json:"categories"`
+	City       CreatorApplicationDetailCity       `json:"city"`
+	CreatedAt  time.Time                          `json:"createdAt"`
+	FirstName  string                             `json:"firstName"`
+	Id         openapi_types.UUID                 `json:"id"`
+	LastName   string                             `json:"lastName"`
+	MiddleName *string                            `json:"middleName,omitempty"`
+
+	// Socials Social accounts attached to the application, sorted by platform then handle.
+	Socials []CreatorApplicationDetailSocial `json:"socials"`
+	Status  CreatorApplicationListItemStatus `json:"status"`
+
+	// TelegramLinked True when the creator has bound a Telegram account via /start.
+	TelegramLinked bool      `json:"telegramLinked"`
+	UpdatedAt      time.Time `json:"updatedAt"`
+}
+
+// CreatorApplicationListItemStatus defines model for CreatorApplicationListItem.Status.
+type CreatorApplicationListItemStatus string
+
+// CreatorApplicationListSortField Sort field for the admin list. Mapped to a SQL column / expression on
+// the backend. Unknown values are rejected with 422.
+type CreatorApplicationListSortField string
 
 // CreatorApplicationSubmitData defines model for CreatorApplicationSubmitData.
 type CreatorApplicationSubmitData struct {
@@ -365,6 +505,74 @@ type CreatorApplicationSubmitRequest struct {
 // CreatorApplicationSubmitResult defines model for CreatorApplicationSubmitResult.
 type CreatorApplicationSubmitResult struct {
 	Data CreatorApplicationSubmitData `json:"data"`
+}
+
+// CreatorApplicationsListData defines model for CreatorApplicationsListData.
+type CreatorApplicationsListData struct {
+	Items   []CreatorApplicationListItem `json:"items"`
+	Page    int                          `json:"page"`
+	PerPage int                          `json:"perPage"`
+
+	// Total Total number of matching applications across all pages.
+	Total int64 `json:"total"`
+}
+
+// CreatorApplicationsListRequest Filter, search, sort and pagination payload for the admin list. All
+// filter fields are optional and combined with AND between fields, OR
+// (any-of) within a single array. Empty/whitespace `search` is ignored.
+type CreatorApplicationsListRequest struct {
+	// AgeFrom Inclusive lower bound for the creator's age in full years (computed from birth_date).
+	AgeFrom *int `json:"ageFrom,omitempty"`
+
+	// AgeTo Inclusive upper bound for the creator's age in full years.
+	AgeTo *int `json:"ageTo,omitempty"`
+
+	// Categories Match applications that include any of these category codes.
+	Categories *[]string `json:"categories,omitempty"`
+
+	// Cities Match any of these city codes (from the cities dictionary).
+	Cities *[]string `json:"cities,omitempty"`
+
+	// DateFrom Inclusive lower bound for `created_at`.
+	DateFrom *time.Time `json:"dateFrom,omitempty"`
+
+	// DateTo Inclusive upper bound for `created_at`.
+	DateTo *time.Time `json:"dateTo,omitempty"`
+
+	// Order Sort direction.
+	Order SortOrder `json:"order"`
+
+	// Page 1-based page index.
+	Page int `json:"page"`
+
+	// PerPage Page size, between 1 and 200 inclusive.
+	PerPage int `json:"perPage"`
+
+	// Search Free-text search across last_name, first_name, middle_name, IIN
+	// (case-insensitive) and social-account handles. Trimmed; empty/blank
+	// after trim disables the filter. Carries PII — the endpoint is POST
+	// so this never lands in URL params.
+	Search *string `json:"search,omitempty"`
+
+	// Sort Sort field for the admin list. Mapped to a SQL column / expression on
+	// the backend. Unknown values are rejected with 422.
+	Sort CreatorApplicationListSortField `json:"sort"`
+
+	// Statuses Match any of these statuses. Empty/missing → all statuses.
+	Statuses *[]CreatorApplicationsListRequestStatuses `json:"statuses,omitempty"`
+
+	// TelegramLinked When true, only applications already bound to a Telegram account
+	// are returned. When false, only those still without a link.
+	// Missing/null disables the filter.
+	TelegramLinked *bool `json:"telegramLinked,omitempty"`
+}
+
+// CreatorApplicationsListRequestStatuses defines model for CreatorApplicationsListRequest.Statuses.
+type CreatorApplicationsListRequestStatuses string
+
+// CreatorApplicationsListResult defines model for CreatorApplicationsListResult.
+type CreatorApplicationsListResult struct {
+	Data CreatorApplicationsListData `json:"data"`
 }
 
 // DictionaryEntry Single entry in a public dictionary (category, city, etc.).
@@ -488,6 +696,9 @@ type SocialAccountInput struct {
 // SocialPlatform Supported social network for creator accounts (MVP scope).
 type SocialPlatform string
 
+// SortOrder Sort direction.
+type SortOrder string
+
 // TelegramLink Telegram account linked to a creator application via /start deep-link.
 type TelegramLink struct {
 	// LinkedAt Timestamp of the successful link.
@@ -563,6 +774,9 @@ type AssignManagerJSONRequestBody = AssignManagerRequest
 // SubmitCreatorApplicationJSONRequestBody defines body for SubmitCreatorApplication for application/json ContentType.
 type SubmitCreatorApplicationJSONRequestBody = CreatorApplicationSubmitRequest
 
+// ListCreatorApplicationsJSONRequestBody defines body for ListCreatorApplications for application/json ContentType.
+type ListCreatorApplicationsJSONRequestBody = CreatorApplicationsListRequest
+
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
 	// List audit logs (admin only)
@@ -610,6 +824,9 @@ type ServerInterface interface {
 	// Submit a creator application from the public landing page
 	// (POST /creators/applications)
 	SubmitCreatorApplication(w http.ResponseWriter, r *http.Request)
+	// List creator applications with filters, search, sorting and pagination (admin only)
+	// (POST /creators/applications/list)
+	ListCreatorApplications(w http.ResponseWriter, r *http.Request)
 	// Get full creator application aggregate (admin only)
 	// (GET /creators/applications/{id})
 	GetCreatorApplication(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
@@ -712,6 +929,12 @@ func (_ Unimplemented) RemoveManager(w http.ResponseWriter, r *http.Request, bra
 // Submit a creator application from the public landing page
 // (POST /creators/applications)
 func (_ Unimplemented) SubmitCreatorApplication(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// List creator applications with filters, search, sorting and pagination (admin only)
+// (POST /creators/applications/list)
+func (_ Unimplemented) ListCreatorApplications(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -1139,6 +1362,26 @@ func (siw *ServerInterfaceWrapper) SubmitCreatorApplication(w http.ResponseWrite
 	handler.ServeHTTP(w, r)
 }
 
+// ListCreatorApplications operation middleware
+func (siw *ServerInterfaceWrapper) ListCreatorApplications(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListCreatorApplications(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetCreatorApplication operation middleware
 func (siw *ServerInterfaceWrapper) GetCreatorApplication(w http.ResponseWriter, r *http.Request) {
 
@@ -1366,6 +1609,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/creators/applications", wrapper.SubmitCreatorApplication)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/creators/applications/list", wrapper.ListCreatorApplications)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/creators/applications/{id}", wrapper.GetCreatorApplication)
@@ -2009,6 +2255,62 @@ func (response SubmitCreatorApplicationdefaultJSONResponse) VisitSubmitCreatorAp
 	return json.NewEncoder(w).Encode(response.Body)
 }
 
+type ListCreatorApplicationsRequestObject struct {
+	Body *ListCreatorApplicationsJSONRequestBody
+}
+
+type ListCreatorApplicationsResponseObject interface {
+	VisitListCreatorApplicationsResponse(w http.ResponseWriter) error
+}
+
+type ListCreatorApplications200JSONResponse CreatorApplicationsListResult
+
+func (response ListCreatorApplications200JSONResponse) VisitListCreatorApplicationsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type ListCreatorApplications401JSONResponse ErrorResponse
+
+func (response ListCreatorApplications401JSONResponse) VisitListCreatorApplicationsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type ListCreatorApplications403JSONResponse ErrorResponse
+
+func (response ListCreatorApplications403JSONResponse) VisitListCreatorApplicationsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type ListCreatorApplications422JSONResponse ErrorResponse
+
+func (response ListCreatorApplications422JSONResponse) VisitListCreatorApplicationsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(422)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type ListCreatorApplicationsdefaultJSONResponse struct {
+	Body       ErrorResponse
+	StatusCode int
+}
+
+func (response ListCreatorApplicationsdefaultJSONResponse) VisitListCreatorApplicationsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+
+	return json.NewEncoder(w).Encode(response.Body)
+}
+
 type GetCreatorApplicationRequestObject struct {
 	Id openapi_types.UUID `json:"id"`
 }
@@ -2178,6 +2480,9 @@ type StrictServerInterface interface {
 	// Submit a creator application from the public landing page
 	// (POST /creators/applications)
 	SubmitCreatorApplication(ctx context.Context, request SubmitCreatorApplicationRequestObject) (SubmitCreatorApplicationResponseObject, error)
+	// List creator applications with filters, search, sorting and pagination (admin only)
+	// (POST /creators/applications/list)
+	ListCreatorApplications(ctx context.Context, request ListCreatorApplicationsRequestObject) (ListCreatorApplicationsResponseObject, error)
 	// Get full creator application aggregate (admin only)
 	// (GET /creators/applications/{id})
 	GetCreatorApplication(ctx context.Context, request GetCreatorApplicationRequestObject) (GetCreatorApplicationResponseObject, error)
@@ -2633,6 +2938,37 @@ func (sh *strictHandler) SubmitCreatorApplication(w http.ResponseWriter, r *http
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(SubmitCreatorApplicationResponseObject); ok {
 		if err := validResponse.VisitSubmitCreatorApplicationResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListCreatorApplications operation middleware
+func (sh *strictHandler) ListCreatorApplications(w http.ResponseWriter, r *http.Request) {
+	var request ListCreatorApplicationsRequestObject
+
+	var body ListCreatorApplicationsJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListCreatorApplications(ctx, request.(ListCreatorApplicationsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListCreatorApplications")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListCreatorApplicationsResponseObject); ok {
+		if err := validResponse.VisitListCreatorApplicationsResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
