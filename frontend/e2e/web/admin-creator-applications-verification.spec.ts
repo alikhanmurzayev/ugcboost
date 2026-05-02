@@ -6,9 +6,12 @@
  * локальный cleanup-стек в afterEach. uuid в lastName заявок гарантирует, что
  * параллельные воркеры не пересекаются по search-фильтру; при
  * `E2E_CLEANUP=false` всё остаётся в БД для разбора упавшего сценария.
+ * Cleanup в afterEach падает на первой же ошибке per-call (Promise.race с
+ * 5-секундным таймаутом) — захламление БД ведёт к flaky-collision'ам в
+ * следующих прогонах, лучше упасть громко и сразу.
  *
- * Happy path (AC1) — admin логинится, ищет по uuid, находит ровно одну
- * строку, открывает drawer и проверяет equality на все отображаемые поля:
+ * Happy path — admin логинится, ищет по uuid, находит ровно одну строку,
+ * открывает drawer и проверяет equality на все отображаемые поля:
  * заголовок-ФИО, локализованную строку timeline'а, дату рождения с
  * pluralYears-склонением, ИИН, phone-ссылку с tel:-href'ом, город (canonical
  * "Алматы" из dictionary cities), две category-чипы и одну "Другое: ..." из
@@ -16,25 +19,33 @@
  * "не привязан" с кнопкой копирования сообщения. Click drawer-close убирает
  * drawer и `?id=` из URL.
  *
- * Drawer prev/next (AC2) — три заявки с общим uuid, последовательные POST'ы
- * задают детерминированный created_at desc. Тест начинает с самой свежей,
- * идёт next-кнопкой и ArrowRight'ом до конца (next disabled), возвращается
+ * Заявка без отчества — отдельный кейс закрывает контракт helper'а: каллер
+ * передаёт middleName=null, helper отправляет в API без middleName, бэк
+ * нормализует через trimOptional до nil, drawer строит ФИО через
+ * filter(Boolean) и показывает заголовок без trailing-space. Такой же
+ * результат для middleName="", который backend схлопывает к nil.
+ *
+ * Drawer prev/next — три заявки с общим uuid, последовательные POST'ы
+ * (helper делает 10ms-задержку перед каждым) задают детерминированный
+ * created_at desc даже на медленной CI. Тест начинает с самой свежей, идёт
+ * next-кнопкой и ArrowRight'ом до конца (next disabled), возвращается
  * prev-кнопкой и закрывает Escape'ом — закрывает все три способа управления
  * drawer'ом одним сценарием.
  *
- * Filter telegramLinked (AC3) — две заявки, у одной TG привязан через
+ * Filter telegramLinked — две заявки, у одной TG привязан через
  * /test/telegram/message с "/start <id>" (in-process bot handler пишет связь
  * синхронно). Сегмент `any` / `true` / `false` проверен во всех трёх ветках
  * + возврат на `any`, чтобы зафиксировать обратимость фильтра.
  *
- * Empty state (AC4) — admin вводит свежий random uuid в search; никакая
- * заявка не сидится. `applications-table-empty` виден, сама таблица в DOM
- * отсутствует — закрывает UI-инвариант "пустой результат не рендерит каркас".
+ * Empty state — admin вводит свежий random uuid в search; никакая заявка не
+ * сидится. `applications-table-empty` виден, сама таблица в DOM отсутствует
+ * — закрывает UI-инвариант "пустой результат не рендерит каркас".
  *
- * RoleGuard (AC5) — brand_manager логинится, в сайдбаре нет nav-link на
+ * RoleGuard — brand_manager логинится, в сайдбаре нет nav-link на
  * verification, прямой goto на /creator-applications/verification
  * редиректит на ROUTES.DASHBOARD = "/", где рендерится дашборд.
  */
+import { randomUUID } from "node:crypto";
 import { test, expect, type APIRequestContext, type Page } from "@playwright/test";
 import {
   linkTelegramToApplication,
@@ -45,6 +56,7 @@ import {
 } from "../helpers/api";
 
 const API_URL = process.env.API_URL || "http://localhost:8080";
+const CLEANUP_TIMEOUT_MS = 5_000;
 
 test.describe("Admin verification flow", () => {
   // Pin browser TZ to UTC so toLocaleDateString / toLocaleString outputs from
@@ -58,20 +70,20 @@ test.describe("Admin verification flow", () => {
     cleanupStack = [];
   });
 
+  // Cleanup is fail-fast: the first cleanup-fn that errors aborts the drain
+  // and re-throws so the next prog catches a hard failure instead of silently
+  // leaking rows. Each call is wrapped in a 5s timeout — a hung backend would
+  // otherwise block afterEach until Playwright's global 60s ceiling kicks in.
   test.afterEach(async () => {
     if (process.env.E2E_CLEANUP === "false") return;
     while (cleanupStack.length > 0) {
       const fn = cleanupStack.pop();
       if (!fn) continue;
-      try {
-        await fn();
-      } catch {
-        // best-effort cleanup — a stale row should not flag the test as failed
-      }
+      await withTimeout(fn(), CLEANUP_TIMEOUT_MS, "cleanup");
     }
   });
 
-  test("1. Happy path — admin opens drawer and sees full applicant data", async ({
+  test("Happy path — admin opens drawer and sees full applicant data", async ({
     page,
     request,
   }) => {
@@ -87,7 +99,7 @@ test.describe("Admin verification flow", () => {
     const beautyName = lookupOrThrow(categories, "beauty", "categories");
     const otherName = lookupOrThrow(categories, "other", "categories");
 
-    const uuid = crypto.randomUUID();
+    const uuid = randomUUID();
     const igHandle = `aidana_${uuid.slice(0, 8)}`;
     const ttHandle = `tt_${uuid.slice(0, 8)}`;
     const application = await seedCreatorApplication(request, API_URL, {
@@ -112,11 +124,11 @@ test.describe("Admin verification flow", () => {
       page.getByTestId("creator-applications-verification-page"),
     ).toBeVisible();
 
-    // Open the filter popover before searching — per AC1 the moderator's
-    // workflow is "open filters → narrow down by uuid". Close it via the
-    // toggle (NOT Escape — Chromium clears <input type="search"> on Escape,
-    // wiping the just-typed uuid) before clicking the row, otherwise the
-    // popover overlays the top rows and intercepts pointer events.
+    // Open the filter popover before searching — the moderator's workflow is
+    // "open filters → narrow down by uuid". Close it via the toggle (NOT
+    // Escape — Chromium clears <input type="search"> on Escape, wiping the
+    // just-typed uuid) before clicking the row, otherwise the popover
+    // overlays the top rows and intercepts pointer events.
     await page.getByTestId("filters-toggle").click();
     await expect(page.getByTestId("filters-popover")).toBeVisible();
     await page.getByTestId("filters-search").fill(uuid);
@@ -140,16 +152,10 @@ test.describe("Admin verification flow", () => {
     const drawer = page.getByTestId("drawer");
     await expect(drawer).toBeVisible();
 
-    // Header — full name composed of last + first + middle, joined by spaces
-    // (mirrors buildFullName in ApplicationDrawer.tsx — null/empty middleName
-    // collapses to two-word output, so the test must use the same filter).
-    const fullName = [
-      application.lastName,
-      application.firstName,
-      application.middleName,
-    ]
-      .filter(Boolean)
-      .join(" ");
+    // Header — full name = last + first + middle joined by spaces. Mirrors
+    // buildFullName in ApplicationDrawer.tsx (filter(Boolean)) so a future
+    // null/empty middleName tightens the same expectation without rewrite.
+    const fullName = buildExpectedFullName(application);
     await expect(drawer.getByText(fullName, { exact: true })).toBeVisible();
 
     // Timeline — submitted-at line in ru locale: "Подана: 2 мая 2026 г. в 17:21"
@@ -209,15 +215,58 @@ test.describe("Admin verification flow", () => {
     await expect(page).not.toHaveURL(/[?&]id=/);
   });
 
-  test("2. Drawer prev/next — keyboard + buttons traverse newest-first list", async ({
+  test("Creator without middleName — drawer header collapses to two-word form", async ({
     page,
     request,
   }) => {
     const admin = await seedAdmin(request, API_URL);
     cleanupStack.push(admin.cleanup);
 
-    const uuid = crypto.randomUUID();
+    const uuid = randomUUID();
+    // middleName=null tells the helper to omit the field from the request
+    // body. Backend's trimOptional then stores nil; drawer's buildFullName
+    // filter(Boolean) collapses to "<lastName> <firstName>" with no padding.
+    const application = await seedCreatorApplication(request, API_URL, {
+      lastName: `e2e-${uuid}-Сатпаева`,
+      firstName: "Анель",
+      middleName: null,
+    });
+    cleanupStack.push(application.cleanup);
+    expect(application.middleName).toBeNull();
+
+    await loginAs(page, admin.email, admin.password);
+    await page
+      .getByTestId("nav-link-creator-applications/verification")
+      .click();
+    await page.getByTestId("filters-search").fill(uuid);
+
+    await expect(
+      page.getByTestId("applications-table").locator("tbody tr"),
+    ).toHaveCount(1);
+    await page
+      .getByTestId(`row-${application.applicationId}`)
+      .locator("td")
+      .first()
+      .click();
+
+    const drawer = page.getByTestId("drawer");
+    await expect(drawer).toBeVisible();
+    const fullName = buildExpectedFullName(application);
+    expect(fullName).toBe(`${application.lastName} ${application.firstName}`);
+    await expect(drawer.getByText(fullName, { exact: true })).toBeVisible();
+  });
+
+  test("Drawer prev/next — keyboard + buttons traverse newest-first list", async ({
+    page,
+    request,
+  }) => {
+    const admin = await seedAdmin(request, API_URL);
+    cleanupStack.push(admin.cleanup);
+
+    const uuid = randomUUID();
     // Sequential POSTs — created_at desc means the last seeded is the first row.
+    // The 10ms sleep inside seedCreatorApplication keeps timestamps strictly
+    // monotonic even when the runner clock has microsecond-precision ties.
     const a = await seedCreatorApplication(request, API_URL, {
       lastName: `e2e-${uuid}-A`,
     });
@@ -242,7 +291,8 @@ test.describe("Admin verification flow", () => {
     ).toHaveCount(3);
 
     // Newest first — c, b, a. Click the index cell of the first row (c).
-    // See AC1 note: socials column stops propagation, so we always target td:first.
+    // The socials column stops propagation (so its <a> links don't open the
+    // drawer), so we always target td:first.
     await page
       .getByTestId(`row-${c.applicationId}`)
       .locator("td")
@@ -253,12 +303,7 @@ test.describe("Admin verification flow", () => {
 
     const headerVisible = (app: SeededCreatorApplication) =>
       expect(
-        drawer.getByText(
-          [app.lastName, app.firstName, app.middleName]
-            .filter(Boolean)
-            .join(" "),
-          { exact: true },
-        ),
+        drawer.getByText(buildExpectedFullName(app), { exact: true }),
       ).toBeVisible();
 
     await headerVisible(c);
@@ -283,14 +328,14 @@ test.describe("Admin verification flow", () => {
     await expect(page.getByTestId("drawer")).toHaveCount(0);
   });
 
-  test("3. Filter telegramLinked — three branches each leave only matching rows", async ({
+  test("Filter telegramLinked — three branches each leave only matching rows", async ({
     page,
     request,
   }) => {
     const admin = await seedAdmin(request, API_URL);
     cleanupStack.push(admin.cleanup);
 
-    const uuid = crypto.randomUUID();
+    const uuid = randomUUID();
     const noTg = await seedCreatorApplication(request, API_URL, {
       lastName: `e2e-${uuid}-noTG`,
     });
@@ -335,7 +380,7 @@ test.describe("Admin verification flow", () => {
     await expect(tableRows).toHaveCount(2);
   });
 
-  test("4. Empty state — random uuid in search yields empty-message and no table", async ({
+  test("Empty state — random uuid in search yields empty-message and no table", async ({
     page,
     request,
   }) => {
@@ -346,13 +391,13 @@ test.describe("Admin verification flow", () => {
     await page
       .getByTestId("nav-link-creator-applications/verification")
       .click();
-    await page.getByTestId("filters-search").fill(crypto.randomUUID());
+    await page.getByTestId("filters-search").fill(randomUUID());
 
     await expect(page.getByTestId("applications-table-empty")).toBeVisible();
     await expect(page.getByTestId("applications-table")).toHaveCount(0);
   });
 
-  test("5. RoleGuard — brand_manager has no nav link and is redirected from /verification", async ({
+  test("RoleGuard — brand_manager has no nav link and is redirected from /verification", async ({
     page,
     request,
   }) => {
@@ -388,6 +433,33 @@ async function loginAs(
   await page.getByTestId("password-input").fill(password);
   await page.getByTestId("login-button").click();
   await expect(page).toHaveURL("/");
+}
+
+// buildExpectedFullName mirrors buildFullName in ApplicationDrawer.tsx. Kept
+// in one place so empty/null middleName cases stay aligned with what the
+// drawer actually renders without a per-test re-derivation.
+function buildExpectedFullName(app: SeededCreatorApplication): string {
+  return [app.lastName, app.firstName, app.middleName]
+    .filter(Boolean)
+    .join(" ");
+}
+
+// withTimeout races the given promise against a sleep so cleanup of a hung
+// backend call surfaces in seconds, not after Playwright's 60s ceiling.
+async function withTimeout<T>(
+  promise: Promise<T>,
+  ms: number,
+  label: string,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label} timed out after ${ms}ms`)), ms);
+  });
+  try {
+    return await Promise.race([promise, timeout]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
 }
 
 // ageInYearsUTC mirrors filters.calcAge in the web bundle — with browser

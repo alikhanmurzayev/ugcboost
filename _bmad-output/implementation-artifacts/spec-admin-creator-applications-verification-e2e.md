@@ -73,6 +73,20 @@ context:
 - **2026-05-02 (impl)** — На прогоне выяснилось, что: (1) `socials` column в `ApplicationsTable.tsx` останавливает propagation, поэтому `row.click()` мог попасть на `<a>` соцссылки и не открыть drawer — клик переведён на `td:first-child` (index-ячейка). (2) Локализованный datetime в `application-timeline` рендерится как `«… г. в HH:MM»` (через "в", не запятую) — regex поправлен. (3) Имена городов/категорий в production dict (`Бьюти (макияж, уход)` etc.) могут отличаться от ожидаемого — добавлен локальный `fetchDictionary` с резолвом code → name из `/dictionaries/*` (публичный endpoint), assert'ы привязаны к live dict.
 - **2026-05-02 (impl)** — Cleanup для seeded user'ов делается через `POST /test/cleanup-entity {type:"user", id}` (не `DELETE /test/users/:email` — такого эндпоинта на бэке нет; auth.spec.ts работает потому, что 404 от `request.delete` молча игнорируется).
 - **2026-05-02 (review patches)** — После 3-агентного ревью применены три патча: (1) AC1 — добавлен click `filters-toggle` перед `filters-search.fill` и close-toggle после, чтобы popover не перекрывал клик по строке; close именно toggle'ом (не Escape — Chromium очищает `<input type="search">` на Escape). (2) AC5 — перед `nav-link.toHaveCount(0)` добавлен `expect(sidebar).toBeVisible()`, чтобы count(0) был привязан к фактическому рендеру сайдбара. (3) AC1 + AC2 — fullName собирается через `[last, first, middle].filter(Boolean).join(" ")` (повторяет `buildFullName` в drawer), защищает тест от middleName=null/empty.
+- **2026-05-02 (PR #50 review fixes)** — После inline-комментариев Алихана + дополнительный аудит всех frontend e2e-тестов на соответствие стандартам:
+  - **codegen для e2e**: добавлены `frontend/e2e/types/{schema.ts, test-schema.ts}` через `openapi-typescript` в `make generate-api`. Все ручные интерфейсы для API request/response в `helpers/api.ts` удалены — типы derive'ятся из generated `components["schemas"][...]` (требование `frontend-types.md`).
+  - **cleanup fail-fast** (PR-comment): `try/catch{}` в `afterEach` убран; cleanup падает на первой же ошибке. `cleanupCreatorApplication` / `cleanupUser` проверяют status (204|404 OK, иначе throw). Применено также к `auth.spec.ts` и `submit.spec.ts`.
+  - **per-call cleanup timeout 5s** (PR-comment): `withTimeout` (Promise.race + clearTimeout) защищает от зависшего backend-вызова.
+  - **`auth.spec.ts` cleanup endpoint** (PR-comment): сломанный `DELETE /test/users/:email` заменён на `seedAdmin` helper, который использует `POST /test/cleanup-entity {type:"user", id}`. Заодно убран module-level `TEST_EMAIL/TEST_PASSWORD` (anti-pattern для параллельных воркеров) — каждый тест сидит своего admin'а.
+  - **`uniqueIIN` рандомизация** (PR-comment): год (1985..2005), месяц (1..12), день (1..28) и serial рисуются из `crypto.randomBytes` — то же поведение, что и в `backend/e2e/testutil/iin.go::UniqueIIN`. Устранён May-15 UTC-midnight age-race и birthday-paradox для параллельных воркеров.
+  - **`uniqueTelegramUserId` через crypto** (PR-comment): `epoch(1<<30) + crypto.randomBytes(6)` вместо `Date.now+counter`. Параллельно-безопасно без atomic counter, который ресетится на каждый Node-процесс.
+  - **AC2 timing** (PR-comment): `seedCreatorApplication` делает `sleep(10ms)` перед каждым POST — детерминированный `created_at desc` даже на медленной CI с микросекундными ties в Postgres `now()`.
+  - **`middleName=""` дроп** (PR-comment): helper больше не дропает поле; `middleName: string | null` (null — не отправлять в API, "" — отправлять как есть). Backend нормализует "" → nil через `trimOptional`. Добавлен test "Creator without middleName" с `middleName=null` для покрытия two-word ФИО без trailing-space.
+  - **getByText("Дашборд"/"Админ") → testid + structural** (audit): копирайт-зависимые ассерты в auth.spec заменены на `dashboard-page` testid + проверка набора admin-only nav-link'ов (`creator-applications/verification`).
+  - **submit.spec console.log → console.warn** (audit): соответствует `frontend-quality.md` (eslint allow `warn`/`error`).
+  - **Test names без нумерации** (audit): `1. Happy login...` → `Happy login...`. Стандарт `frontend-testing-e2e.md` требует именование "по user flow", нумерация ничего не сообщает.
+  - **`placeholder.test.ts` удалён** (audit): пустой `expect(true).toBe(true)`. Makefile target `test-unit-landing` обновлён с `--passWithNoTests` (landing — Astro-лендос, юнит-тестов фактически нет).
+  - **JSDoc `auth.spec.ts`** (audit): обновлён нарратив, упоминание сломанного DELETE /test/users убрано.
 
 ## Verification
 
@@ -94,45 +108,87 @@ context:
 
 ## Suggested Review Order
 
+**Codegen для e2e (новое — Phase 0)**
+
+- Makefile target `generate-api`: добавлены две строки `openapi-typescript` для production и test схем в `frontend/e2e/types/`
+  `Makefile:193`
+
+- Production OpenAPI types для e2e (auto-generated)
+  `frontend/e2e/types/schema.ts:1`
+
+- Test OpenAPI types для e2e (auto-generated)
+  `frontend/e2e/types/test-schema.ts:1`
+
 **Test scenarios — entry point**
 
-- Header JSDoc + 5 AC-сценариев одним `test.describe` — основная читаемая поверхность изменений
-  [`admin-creator-applications-verification.spec.ts:1`](../../frontend/e2e/web/admin-creator-applications-verification.spec.ts#L1)
+- Header JSDoc + 6 сценариев одним `test.describe` — основная читаемая поверхность изменений
+  `frontend/e2e/web/admin-creator-applications-verification.spec.ts:1`
 
-- AC1 happy path — drawer-equality на всех отображаемых полях, ключевая проверка
-  [`admin-creator-applications-verification.spec.ts:74`](../../frontend/e2e/web/admin-creator-applications-verification.spec.ts#L74)
+- Happy path — drawer-equality на всех отображаемых полях, ключевая проверка
+  `frontend/e2e/web/admin-creator-applications-verification.spec.ts:86`
 
-- AC2 — детерминированный prev/next через 3 заявки, mix кнопок и keyboard
-  [`admin-creator-applications-verification.spec.ts:212`](../../frontend/e2e/web/admin-creator-applications-verification.spec.ts#L212)
+- Creator without middleName — новый кейс на null/empty middleName (по результатам PR-ревью)
+  `frontend/e2e/web/admin-creator-applications-verification.spec.ts:218`
 
-- AC3 — three-branch фильтр telegramLinked + linkTelegramToApplication side-effect
-  [`admin-creator-applications-verification.spec.ts:286`](../../frontend/e2e/web/admin-creator-applications-verification.spec.ts#L286)
+- Drawer prev/next — детерминированный mix кнопок и keyboard через 3 заявки
+  `frontend/e2e/web/admin-creator-applications-verification.spec.ts:259`
 
-- AC5 — RoleGuard для brand_manager, проверка sidebar + redirect в одном тесте
-  [`admin-creator-applications-verification.spec.ts:355`](../../frontend/e2e/web/admin-creator-applications-verification.spec.ts#L355)
+- Filter telegramLinked — three-branch фильтр + linkTelegramToApplication side-effect
+  `frontend/e2e/web/admin-creator-applications-verification.spec.ts:331`
 
-**Helpers и инфра спеки**
+- RoleGuard для brand_manager — проверка sidebar + redirect
+  `frontend/e2e/web/admin-creator-applications-verification.spec.ts:400`
 
-- `loginAs` — UI-логин, mirror auth.spec.ts pattern
-  [`admin-creator-applications-verification.spec.ts:381`](../../frontend/e2e/web/admin-creator-applications-verification.spec.ts#L381)
+**Cleanup-инфраструктура (PR-fix)**
 
-- `fetchDictionary` + `lookupOrThrow` — резолвят live dict для assert'ов на city/category
-  [`admin-creator-applications-verification.spec.ts:416`](../../frontend/e2e/web/admin-creator-applications-verification.spec.ts#L416)
+- `withTimeout` + fail-fast `afterEach` — cleanup падает на первой ошибке, per-call 5s timeout
+  `frontend/e2e/web/admin-creator-applications-verification.spec.ts:74`
 
-**Расширения api.ts (helpers)**
+**Helpers**
 
-- `seedCreatorApplication` — POST на public endpoint, дефолты + opts override
-  [`api.ts:205`](../../frontend/e2e/helpers/api.ts#L205)
+- `helpers/api.ts` верхушка — JSDoc + импорты derived из generated schemas (нет ручных API-типов)
+  `frontend/e2e/helpers/api.ts:1`
 
-- `linkTelegramToApplication` — синхронный in-process bot-handler через `/test/telegram/message`
-  [`api.ts:317`](../../frontend/e2e/helpers/api.ts#L317)
+- `uniqueIIN` через `crypto.randomBytes` — рандомные year/month/day/serial, mirror `testutil.UniqueIIN`
+  `frontend/e2e/helpers/api.ts:81`
 
-- `seedAdmin` / `seedBrandManager` — обёртки над seedUser с unique email + cleanup-closure
-  [`api.ts:104`](../../frontend/e2e/helpers/api.ts#L104)
+- `cleanupCreatorApplication` / `cleanupUser` — респектят `E2E_CLEANUP=false`, проверяют status, throw на unexpected
+  `frontend/e2e/helpers/api.ts:124`
 
-- `uniqueTelegramUserId` — mirrors testutil.UniqueTelegramUserID на бэке
-  [`api.ts:290`](../../frontend/e2e/helpers/api.ts#L290)
+- `postJson<T>` — единственное место где Playwright's untyped resp.json() кастится к типу
+  `frontend/e2e/helpers/api.ts:108`
 
-- `parseBirthDateFromIin` — обратная функция к generateValidIIN, century-byte → year
-  [`api.ts:272`](../../frontend/e2e/helpers/api.ts#L272)
+- `seedAdmin` / `seedBrandManager` — wrappers вокруг seedUser
+  `frontend/e2e/helpers/api.ts:170`
+
+- `SeedCreatorApplicationOpts` / `SeededCreatorApplication` — derive'ы из generated `CreatorApplicationSubmitRequest`
+  `frontend/e2e/helpers/api.ts:218`
+
+- `seedCreatorApplication` — 10ms sleep, middleName="" больше не дропается, derived types
+  `frontend/e2e/helpers/api.ts:255`
+
+- `uniqueTelegramUserId` — `crypto.randomBytes(6)` вместо `Date.now+counter`
+  `frontend/e2e/helpers/api.ts:347`
+
+**Auth spec (большой рефакторинг — PR-fix + audit)**
+
+- `auth.spec.ts` JSDoc — обновлён, нет упоминания сломанного DELETE /test/users
+  `frontend/e2e/web/auth.spec.ts:1`
+
+- 5 тестов на seedAdmin helper, без module-level state, data-testid вместо getByText("Дашборд"/"Админ")
+  `frontend/e2e/web/auth.spec.ts:51`
+
+**Submit spec (мелкие правки — audit)**
+
+- `submit.spec.ts` afterAll — fail-fast cleanup без silent swallow
+  `frontend/e2e/landing/submit.spec.ts:47`
+
+- console.log → console.warn (соответствие `no-console: ["error", { allow: ["warn", "error"] }]`)
+  `frontend/e2e/landing/submit.spec.ts:107`
+
+**Прочее**
+
+- `frontend/landing/src/placeholder.test.ts` — удалён
+- Makefile `test-unit-landing` — `--passWithNoTests` для пустой landing test-suite
+  `Makefile:137`
 

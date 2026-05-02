@@ -2,12 +2,37 @@
  * Shared E2E helpers for browser tests across web / tma / landing.
  *
  * Each function is a thin HTTP wrapper around the backend test endpoints
- * (POST /test/*) or a deterministic input generator
- * (generateValidIIN / uniqueIIN / underageIIN). Algorithms that mirror
+ * (POST /test/*) or a deterministic input generator. Algorithms that mirror
  * backend domain logic (IIN checksum, age math) are duplicated here on
  * purpose — frontend e2e is an isolated module and must not import Go code.
+ *
+ * Request/response types are derived from the OpenAPI schemas regenerated
+ * by `make generate-api` (see frontend/e2e/types/{schema,test-schema}.ts).
+ * Helper-shaped types (opts/return) extend or pick from those generated
+ * types via Partial / Omit so adding a new optional API field does not
+ * require touching the helper. Per docs/standards/frontend-types.md, no
+ * helper declares a manual interface that duplicates an API shape.
  */
+import { randomBytes, randomInt, randomUUID } from "node:crypto";
 import type { APIRequestContext } from "@playwright/test";
+
+import type { components } from "../types/schema";
+import type { components as testComponents } from "../types/test-schema";
+
+type CreatorApplicationSubmitRequest =
+  components["schemas"]["CreatorApplicationSubmitRequest"];
+type CreatorApplicationSubmitResult =
+  components["schemas"]["CreatorApplicationSubmitResult"];
+type SeedUserRequest = testComponents["schemas"]["SeedUserRequest"];
+type SeedUserResult = testComponents["schemas"]["SeedUserResult"];
+type SeedUserRole = SeedUserRequest["role"];
+type CleanupEntityRequest = testComponents["schemas"]["CleanupEntityRequest"];
+type SendTelegramMessageRequest =
+  testComponents["schemas"]["SendTelegramMessageRequest"];
+type SendTelegramMessageResult =
+  testComponents["schemas"]["SendTelegramMessageResult"];
+
+export type SocialAccountInput = components["schemas"]["SocialAccountInput"];
 
 // MinCreatorAge mirrors domain.MinCreatorAge in the backend. Bumping the
 // backend constant means bumping this one too — the underage helper relies
@@ -15,8 +40,11 @@ import type { APIRequestContext } from "@playwright/test";
 export const MIN_CREATOR_AGE = 18;
 
 // generateValidIIN returns a checksum-valid Kazakhstani IIN for the given
-// birth date. The serial is randomised, so two calls on the same date give
-// different IINs unless extremely (un)lucky (1/10000 collision per call).
+// birth date. The serial is drawn from crypto.randomBytes — same parallel-
+// safe approach as backend/e2e/testutil/iin.go::UniqueIIN, since
+// Math.random() under N>1 workers gives birthday-paradox collisions on the
+// partial unique index that guards active applications.
+//
 // The century byte encodes both sex and the 100-year window: 1/2 → 1800s,
 // 3/4 → 1900s, 5/6 → 2000s. We pick by birth year.
 export function generateValidIIN(birth: Date): string {
@@ -26,11 +54,11 @@ export function generateValidIIN(birth: Date): string {
   const dd = String(birth.getUTCDate()).padStart(2, "0");
   const century = centuryByteFor(year);
 
-  // Loop until we hit a serial that yields a valid checksum (rare miss when
-  // both passes land on the forbidden mod=10 result — happens for ~1% of
-  // serials, bounded retry keeps the function deterministic in practice).
+  // Loop until we hit a serial whose checksum is defined (the rare ~1%
+  // corner where both passes land on mod=10 forces a re-roll). Bounded so
+  // an algorithmic regression cannot spin forever.
   for (let attempt = 0; attempt < 100; attempt++) {
-    const serial = String(Math.floor(Math.random() * 10_000)).padStart(4, "0");
+    const serial = String(randomInt(0, 10_000)).padStart(4, "0");
     const prefix = yy + mm + dd + century + serial;
     const check = iinChecksum(prefix);
     if (check !== null) return prefix + String(check);
@@ -38,9 +66,6 @@ export function generateValidIIN(birth: Date): string {
   throw new Error("generateValidIIN: failed to find a valid checksum after 100 attempts");
 }
 
-// centuryByteFor mirrors backend domain.iinYear: 1/2 → 1800s, 3/4 → 1900s,
-// 5/6 → 2000s. We return the male digit (1/3/5) — the backend treats 1+2,
-// 3+4, 5+6 as the same year mapping, so picking either works.
 function centuryByteFor(year: number): string {
   if (year >= 1800 && year < 1900) return "1";
   if (year >= 1900 && year < 2000) return "3";
@@ -48,12 +73,19 @@ function centuryByteFor(year: number): string {
   throw new Error(`centuryByteFor: year ${year} outside the supported 1800–2099 range`);
 }
 
-// uniqueIIN builds an IIN for an applicant ~comfortably above MinCreatorAge.
-// Uses Date.now to seed birth year so different test runs land on slightly
-// different birthdays — combined with the random serial this avoids partial
-// unique index collisions across parallel workers without any shared state.
+// uniqueIIN returns a fresh, checksum-valid IIN comfortably above
+// MinCreatorAge. Year (1985..2005), month (1..12), day (1..28 to dodge
+// Feb 29) and the 4-digit serial are all drawn from crypto.randomBytes —
+// exactly the strategy used by backend testutil.UniqueIIN. With ~70M valid
+// IINs in the pool, collisions across parallel workers are vanishingly
+// improbable. Day randomisation eliminates the May-15 UTC-midnight age
+// race we hit when the birth date was fixed.
 export function uniqueIIN(): string {
-  const birth = new Date(Date.UTC(1995, 4, 15)); // 1995-05-15, ~30 years old in 2026
+  const buf = randomBytes(8);
+  const year = 1985 + (buf.readUInt8(0) % 21);
+  const month = 1 + (buf.readUInt8(1) % 12);
+  const day = 1 + (buf.readUInt8(2) % 28);
+  const birth = new Date(Date.UTC(year, month - 1, day));
   return generateValidIIN(birth);
 }
 
@@ -69,31 +101,65 @@ export function underageIIN(): string {
   return generateValidIIN(birth);
 }
 
+// postJson centralises Playwright's untyped resp.json() into a single typed
+// surface. `as T` here is the cheapest contract — every caller passes the
+// matching OpenAPI-derived type, and a runtime validator (zod) was rejected
+// as overkill for test infrastructure that already pins assertions against
+// drawer text rendered from the same response.
+async function postJson<T>(
+  request: APIRequestContext,
+  url: string,
+  data: unknown,
+  expectedStatus: number,
+): Promise<T> {
+  const resp = await request.post(url, { data });
+  if (resp.status() !== expectedStatus) {
+    throw new Error(`POST ${url}: ${resp.status()} ${await resp.text()}`);
+  }
+  return (await resp.json()) as T;
+}
+
 // cleanupCreatorApplication removes one application via the test cleanup
-// endpoint. Cascades drop the related categories / socials / consents rows
-// (DELETE CASCADE in migrations); audit_logs survive on purpose.
+// endpoint. 204 = deleted, 404 = already gone (idempotent — afterEach
+// drains the LIFO stack and the same id is sometimes wiped by a cascade
+// from an earlier cleanup). Anything else throws so the failure surfaces
+// immediately instead of silently leaking rows into following test runs.
 export async function cleanupCreatorApplication(
   request: APIRequestContext,
   apiUrl: string,
   applicationId: string,
 ): Promise<void> {
-  await request.post(`${apiUrl}/test/cleanup-entity`, {
-    data: { type: "creator_application", id: applicationId },
-  });
+  if (process.env.E2E_CLEANUP === "false") return;
+  const body: CleanupEntityRequest = {
+    type: "creator_application",
+    id: applicationId,
+  };
+  const resp = await request.post(`${apiUrl}/test/cleanup-entity`, { data: body });
+  if (resp.status() !== 204 && resp.status() !== 404) {
+    throw new Error(
+      `cleanupCreatorApplication ${applicationId}: ${resp.status()} ${await resp.text()}`,
+    );
+  }
 }
 
-// SeededUser is what seedAdmin / seedBrandManager hand back to the test:
-// credentials usable for the UI login plus a per-user cleanup closure that
-// honours E2E_CLEANUP=false (data preserved for post-mortem on failure).
+async function cleanupUser(
+  request: APIRequestContext,
+  apiUrl: string,
+  userId: string,
+): Promise<void> {
+  if (process.env.E2E_CLEANUP === "false") return;
+  const body: CleanupEntityRequest = { type: "user", id: userId };
+  const resp = await request.post(`${apiUrl}/test/cleanup-entity`, { data: body });
+  if (resp.status() !== 204 && resp.status() !== 404) {
+    throw new Error(`cleanupUser ${userId}: ${resp.status()} ${await resp.text()}`);
+  }
+}
+
 export interface SeededUser {
   email: string;
   password: string;
   userId: string;
   cleanup: () => Promise<void>;
-}
-
-interface SeedUserApiResponse {
-  data: { id: string; email: string; role: string };
 }
 
 // seedAdmin creates a fresh admin user with a unique email (Date.now + uuid
@@ -121,111 +187,101 @@ export function seedBrandManager(
 async function seedUser(
   request: APIRequestContext,
   apiUrl: string,
-  role: "admin" | "brand_manager",
+  role: SeedUserRole,
   prefix: string,
 ): Promise<SeededUser> {
-  const email = `${prefix}-${Date.now()}-${crypto.randomUUID().slice(0, 8)}@e2e.test`;
+  const email = `${prefix}-${Date.now()}-${randomUUID().slice(0, 8)}@e2e.test`;
   const password = "testpass123";
-  const resp = await request.post(`${apiUrl}/test/seed-user`, {
-    data: { email, password, role },
-  });
-  if (resp.status() !== 201) {
-    throw new Error(`seedUser ${role}: ${resp.status()} ${await resp.text()}`);
-  }
-  const body = (await resp.json()) as SeedUserApiResponse;
-  const userId = body.data.id;
+  const body: SeedUserRequest = { email, password, role };
+  const result = await postJson<SeedUserResult>(
+    request,
+    `${apiUrl}/test/seed-user`,
+    body,
+    201,
+  );
+  const userId = result.data.id;
   return {
     email,
     password,
     userId,
-    cleanup: async () => {
-      if (process.env.E2E_CLEANUP === "false") return;
-      await request.post(`${apiUrl}/test/cleanup-entity`, {
-        data: { type: "user", id: userId },
-      });
-    },
+    cleanup: () => cleanupUser(request, apiUrl, userId),
   };
 }
 
-// SocialAccountInput mirrors backend SocialAccountInput in the OpenAPI spec
-// for POST /creators/applications. We duplicate the type instead of importing
-// from web's generated schema because frontend e2e is an isolated module
-// (per docs/standards/frontend-testing-e2e.md).
-export interface SocialAccountInput {
-  platform: "instagram" | "tiktok" | "threads";
-  handle: string;
-}
-
-// SeedCreatorApplicationOpts lets the test override any default field; passing
-// `null` for an optional string deletes the default (e.g. middleName: null
-// produces a two-word full name in the drawer header).
-export interface SeedCreatorApplicationOpts {
-  lastName?: string;
-  firstName?: string;
+// SeedCreatorApplicationOpts derives every field from the OpenAPI submit
+// request. Three fields are widened to allow `null` so the spec can pin
+// "field absent / explicitly empty" semantics that OpenAPI marks as
+// nullable (address, categoryOtherText) plus middleName, where the test
+// occasionally drives the helper to omit it from the body entirely.
+export type SeedCreatorApplicationOpts = Partial<
+  Omit<
+    CreatorApplicationSubmitRequest,
+    "middleName" | "address" | "categoryOtherText"
+  >
+> & {
   middleName?: string | null;
-  iin?: string;
-  phone?: string;
-  city?: string;
   address?: string | null;
-  categories?: string[];
   categoryOtherText?: string | null;
-  socials?: SocialAccountInput[];
-  acceptedAll?: boolean;
-}
+};
 
-// SeededCreatorApplication is what tests assert against. We surface the exact
-// values posted to the API so the spec can compare drawer rendering 1:1
-// without re-deriving anything from server state. birthDate is parsed back
-// from the IIN so callers do not need to know the IIN-encoding rules.
-export interface SeededCreatorApplication {
+// SeededCreatorApplication is what tests assert against. We surface the
+// exact values posted to the API (so the spec can compare drawer rendering
+// 1:1 without re-deriving anything from server state) plus a parsed
+// birthDate (decoded from the IIN to spare callers the encoding rules)
+// and a per-application cleanup closure that respects E2E_CLEANUP.
+export type SeededCreatorApplication = Omit<
+  CreatorApplicationSubmitRequest,
+  "middleName" | "address" | "categoryOtherText"
+> & {
   applicationId: string;
-  lastName: string;
-  firstName: string;
   middleName: string | null;
-  iin: string;
-  phone: string;
-  city: string;
   address: string | null;
-  categories: string[];
   categoryOtherText: string | null;
-  socials: SocialAccountInput[];
   birthDate: Date;
   cleanup: () => Promise<void>;
-}
-
-interface SubmitApiResponse {
-  data: { applicationId: string; telegramBotUrl: string };
-}
+};
 
 // seedCreatorApplication POSTs to the production /creators/applications
 // endpoint (no auth — it's the public landing-form path) so the seeded row
 // is indistinguishable from a real submission: triggers the same audit log,
 // telegram-link record, consent rows, etc. Defaults form a "minimum valid"
 // applicant; opts overrides any field for the scenario under test.
+//
+// The 10ms pre-POST sleep guarantees deterministic created_at ordering for
+// callers that seed several applications back-to-back: Postgres now() is
+// microsecond-precision, but on a slow CI runner sequential POSTs can hit
+// the same microsecond and fall back to a UUID tiebreak that is non-
+// deterministic. 10ms is well above one tick on every supported runner.
 export async function seedCreatorApplication(
   request: APIRequestContext,
   apiUrl: string,
   opts: SeedCreatorApplicationOpts = {},
 ): Promise<SeededCreatorApplication> {
-  const uuid = crypto.randomUUID();
+  await sleep(10);
+
+  const uuid = randomUUID();
   const lastName = opts.lastName ?? `e2e-${uuid}-Иванов`;
   const firstName = opts.firstName ?? "Айдана";
-  const middleName =
-    opts.middleName === undefined ? "Тестовна" : opts.middleName;
+  const middleName: string | null =
+    opts.middleName !== undefined ? opts.middleName : "Тестовна";
   const iin = opts.iin ?? uniqueIIN();
   const phone = opts.phone ?? "+77001234567";
   const city = opts.city ?? "almaty";
-  const address = opts.address === undefined ? null : opts.address;
+  const address: string | null = opts.address !== undefined ? opts.address : null;
   const categories = opts.categories ?? ["beauty"];
-  const categoryOtherText =
-    opts.categoryOtherText === undefined ? null : opts.categoryOtherText;
+  const categoryOtherText: string | null =
+    opts.categoryOtherText !== undefined ? opts.categoryOtherText : null;
   const socials =
     opts.socials ?? [
       { platform: "instagram", handle: `aidana_test_${uuid.slice(0, 8)}` },
     ];
   const acceptedAll = opts.acceptedAll ?? true;
 
-  const requestBody: Record<string, unknown> = {
+  // Build the request body. middleName / address / categoryOtherText are
+  // forwarded to the API only when non-null; null carries "field absent"
+  // semantics on our side, which the OpenAPI shape encodes as the field
+  // being omitted from the request body.
+  const requestBody: CreatorApplicationSubmitRequest = {
     lastName,
     firstName,
     iin,
@@ -235,23 +291,19 @@ export async function seedCreatorApplication(
     socials,
     acceptedAll,
   };
-  if (middleName) requestBody.middleName = middleName;
+  if (middleName !== null) requestBody.middleName = middleName;
   if (address !== null) requestBody.address = address;
   if (categoryOtherText !== null) requestBody.categoryOtherText = categoryOtherText;
 
-  const resp = await request.post(`${apiUrl}/creators/applications`, {
-    data: requestBody,
-  });
-  if (resp.status() !== 201) {
-    throw new Error(
-      `seedCreatorApplication: ${resp.status()} ${await resp.text()}`,
-    );
-  }
-  const body = (await resp.json()) as SubmitApiResponse;
-  const applicationId = body.data.applicationId;
+  const result = await postJson<CreatorApplicationSubmitResult>(
+    request,
+    `${apiUrl}/creators/applications`,
+    requestBody,
+    201,
+  );
 
   return {
-    applicationId,
+    applicationId: result.data.applicationId,
     lastName,
     firstName,
     middleName,
@@ -262,8 +314,9 @@ export async function seedCreatorApplication(
     categories,
     categoryOtherText,
     socials,
+    acceptedAll,
     birthDate: parseBirthDateFromIin(iin),
-    cleanup: () => cleanupCreatorApplication(request, apiUrl, applicationId),
+    cleanup: () => cleanupCreatorApplication(request, apiUrl, result.data.applicationId),
   };
 }
 
@@ -282,20 +335,30 @@ function parseBirthDateFromIin(iin: string): Date {
   return new Date(Date.UTC(yearBase + yy, mm - 1, dd));
 }
 
-// uniqueTelegramUserId mirrors testutil.UniqueTelegramUserID in the backend:
-// epoch (1<<30) + (Date.now() % (1<<20)) * 1024 + per-process counter. Picks
-// ids well outside the realistic Telegram range so synthetic test users can
-// never collide with a real user during a manual smoke against the live bot.
-let telegramTestIdCounter = 0;
+// uniqueTelegramUserId picks ids well above the realistic Telegram range
+// (positive int64 above 2^30) so synthetic test users can never collide
+// with a real user during a manual smoke through the live bot. The lower
+// bits come from crypto.randomBytes — same parallel-worker safety we get
+// from crypto/rand in backend testutil.UniqueTelegramUserID, without the
+// per-process atomic counter that resets on every fresh Node process.
+//
+// 6 random bytes ≈ 2^48 of entropy; epoch + max stays inside
+// Number.MAX_SAFE_INTEGER (2^53 - 1).
 export function uniqueTelegramUserId(): number {
   const epoch = 1 << 30;
-  telegramTestIdCounter += 1;
-  return epoch + (Date.now() % (1 << 20)) * 1024 + telegramTestIdCounter;
+  const buf = randomBytes(6);
+  let rand = 0;
+  for (let i = 0; i < buf.length; i++) {
+    rand = rand * 256 + buf.readUInt8(i);
+  }
+  return epoch + rand;
 }
 
 // LinkTelegramOpts lets the spec pin synthetic identity fields when a test
 // asserts on telegram username/first/last name in the drawer header. By
-// default the helper picks fresh values per call.
+// default the helper picks fresh values per call. Field names mirror the
+// SendTelegramMessageRequest schema with telegramUserId substituted for
+// chatId/userId (the helper sets both from one source of truth).
 export interface LinkTelegramOpts {
   telegramUserId?: number;
   username?: string;
@@ -324,21 +387,20 @@ export async function linkTelegramToApplication(
   const username = opts.username ?? `tg_${telegramUserId}`;
   const firstName = opts.firstName ?? "Тест";
   const lastName = opts.lastName ?? "Креатор";
-  const resp = await request.post(`${apiUrl}/test/telegram/message`, {
-    data: {
-      chatId: telegramUserId,
-      userId: telegramUserId,
-      text: `/start ${applicationId}`,
-      username,
-      firstName,
-      lastName,
-    },
-  });
-  if (!resp.ok()) {
-    throw new Error(
-      `linkTelegramToApplication: ${resp.status()} ${await resp.text()}`,
-    );
-  }
+  const body: SendTelegramMessageRequest = {
+    chatId: telegramUserId,
+    userId: telegramUserId,
+    text: `/start ${applicationId}`,
+    username,
+    firstName,
+    lastName,
+  };
+  await postJson<SendTelegramMessageResult>(
+    request,
+    `${apiUrl}/test/telegram/message`,
+    body,
+    200,
+  );
   return { telegramUserId, username, firstName, lastName };
 }
 
@@ -362,4 +424,8 @@ function iinChecksum(first11: string): number | null {
     if (mod === 10) return null;
   }
   return mod;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }

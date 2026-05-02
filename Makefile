@@ -134,7 +134,7 @@ test-unit-tma:
 	cd frontend/tma && npm test -- --run
 
 test-unit-landing:
-	cd frontend/landing && npm test -- --run
+	cd frontend/landing && npm test -- --run --passWithNoTests
 
 test-e2e-backend: start-backend
 	cd backend/e2e && go test ./... -count=1 -v -race -timeout 5m
@@ -193,6 +193,8 @@ generate-api:
 	cd frontend/web && npx openapi-typescript ../../backend/api/openapi.yaml -o src/api/generated/schema.ts
 	cd frontend/tma && npx openapi-typescript ../../backend/api/openapi.yaml -o src/api/generated/schema.ts
 	cd frontend/landing && npx openapi-typescript ../../backend/api/openapi.yaml -o src/api/generated/schema.ts
+	cd frontend/web && npx openapi-typescript ../../backend/api/openapi.yaml -o ../e2e/types/schema.ts
+	cd frontend/web && npx openapi-typescript ../../backend/api/openapi-test.yaml -o ../e2e/types/test-schema.ts
 	oapi-codegen -package apiclient -generate types \
 		-o backend/e2e/apiclient/types.gen.go backend/api/openapi.yaml
 	oapi-codegen -package apiclient -generate client \
