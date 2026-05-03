@@ -232,6 +232,8 @@ jobs:
       - name: Run E2E tests
         working-directory: backend/e2e
         run: go test ./... -count=1 -v -race -timeout 5m
+        env:
+          SENDPULSE_WEBHOOK_SECRET: ci-sendpulse-secret-not-real
       - name: Dump logs on failure
         if: failure()
         run: docker compose -f docker-compose.ci.isolated.yml logs
