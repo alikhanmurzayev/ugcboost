@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -65,16 +66,27 @@ func GetCreatorApplicationVerificationCode(t *testing.T, applicationID string) s
 }
 
 // LinkTelegramToApplication drives /start <applicationID> from a fresh
-// synthetic Telegram account and asserts the bot replied successfully. The
-// returned TelegramUpdate carries the user_id/username/first/last names the
-// helper synthesised so list tests can verify telegramLinked is propagated.
+// synthetic Telegram account, asserts the bot did not produce a synchronous
+// reply (chunk 9 — welcome is fire-and-forget through the Notifier and lands
+// in /test/telegram/sent, not the per-call SpyOnlySender of /test/telegram/
+// message), and blocks until the async welcome lands in the spy. Draining
+// the welcome here means downstream tests can capture a "since" right after
+// the helper returns and trust that follow-up notifications they assert on
+// (e.g. verification-approved) will land in isolation. The returned
+// TelegramUpdate carries the user_id/username/first/last names the helper
+// synthesised so list tests can verify telegramLinked is propagated.
 func LinkTelegramToApplication(t *testing.T, applicationID string) TelegramUpdate {
 	t.Helper()
 	tc := NewTestClient(t)
 	upd := DefaultTelegramUpdate(t)
 	upd.Text = "/start " + applicationID
+	since := time.Now().UTC()
 	replies := SendTelegramUpdate(t, tc, upd)
-	require.Len(t, replies, 1, "telegram bot must reply exactly once to /start <appID>")
+	require.Empty(t, replies, "telegram bot must not produce a synchronous reply on success-link (welcome is async via Notifier)")
+	_ = WaitForTelegramSent(t, upd.UserID, TelegramSentOptions{
+		Since:       since,
+		ExpectCount: 1,
+	})
 	return upd
 }
 

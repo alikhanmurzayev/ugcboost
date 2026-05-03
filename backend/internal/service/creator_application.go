@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/AlekSi/pointer"
@@ -16,7 +15,6 @@ import (
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/domain"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/logger"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/repository"
-	"github.com/alikhanmurzayev/ugcboost/backend/internal/telegram"
 )
 
 // CreatorApplicationRepoFactory enumerates the repos the service needs.
@@ -55,26 +53,30 @@ func creatorApplicationListInputToRepo(in domain.CreatorApplicationListInput) re
 	}
 }
 
-type CreatorApplicationService struct {
-	pool         dbutil.Pool
-	repoFactory  CreatorApplicationRepoFactory
-	telegramSend telegram.Sender
-	notifyWG     *sync.WaitGroup
-	tmaPublicURL string
-	logger       logger.Logger
+// creatorAppNotifier is the consumer-side contract: only the verification-
+// approved event the SendPulse path fires. Defined here so the service does
+// not pull in the concrete *telegram.Notifier — accept interfaces, return
+// structs.
+type creatorAppNotifier interface {
+	NotifyVerificationApproved(ctx context.Context, chatID int64)
 }
 
-// NewCreatorApplicationService wires the service. notifyWG tracks fire-
-// and-forget Telegram-notification goroutines so the process can drain
-// them on shutdown before closing the pool.
-func NewCreatorApplicationService(pool dbutil.Pool, repoFactory CreatorApplicationRepoFactory, telegramSend telegram.Sender, notifyWG *sync.WaitGroup, tmaPublicURL string, log logger.Logger) *CreatorApplicationService {
+type CreatorApplicationService struct {
+	pool        dbutil.Pool
+	repoFactory CreatorApplicationRepoFactory
+	notifier    creatorAppNotifier
+	logger      logger.Logger
+}
+
+// NewCreatorApplicationService wires the service. The notifier owns its own
+// WaitGroup and timeout so the closer talks to the Notifier rather than this
+// service for notify-drain semantics.
+func NewCreatorApplicationService(pool dbutil.Pool, repoFactory CreatorApplicationRepoFactory, notifier creatorAppNotifier, log logger.Logger) *CreatorApplicationService {
 	return &CreatorApplicationService{
-		pool:         pool,
-		repoFactory:  repoFactory,
-		telegramSend: telegramSend,
-		notifyWG:     notifyWG,
-		tmaPublicURL: tmaPublicURL,
-		logger:       log,
+		pool:        pool,
+		repoFactory: repoFactory,
+		notifier:    notifier,
+		logger:      log,
 	}
 }
 
@@ -890,32 +892,16 @@ func (s *CreatorApplicationService) applyTransition(
 	return nil
 }
 
-// telegramNotifyTimeout caps an outbound Telegram notification. The send
-// runs on context.WithoutCancel + hard timeout — verification already
-// committed, so SendPulse-side cancellation must not silently drop the
-// user-facing message, and a stalled Telegram API call must not hold a
-// goroutine indefinitely.
-const telegramNotifyTimeout = 10 * time.Second
-
-// notifyVerificationApproved fires the "verification approved" Telegram
-// message in the background. Tracked via notifyWG so process shutdown can
-// drain in-flight goroutines before the pool closes. Missing link is
-// expected (creator hasn't pressed /start yet) — info, not warn.
+// notifyVerificationApproved delegates to the Notifier. Missing link is
+// expected (creator hasn't pressed /start yet) but should still surface
+// in operations dashboards — auto-verify happened without a way to tell
+// the creator. We short-circuit so the Notifier never sees a zero chat id.
+// The Notifier owns the goroutine, timeout and WaitGroup; failures land
+// in its log.
 func (s *CreatorApplicationService) notifyVerificationApproved(ctx context.Context, telegramUserID *int64) {
 	if telegramUserID == nil {
-		s.logger.Info(ctx, "creator verification: skipping telegram notify, application not linked")
+		s.logger.Warn(ctx, "creator verification: skipping telegram notify, application not linked")
 		return
 	}
-	s.notifyWG.Add(1)
-	go func() {
-		defer s.notifyWG.Done()
-		notifyCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), telegramNotifyTimeout)
-		defer cancel()
-		if err := telegram.SendVerificationNotification(notifyCtx, s.telegramSend, *telegramUserID, s.tmaPublicURL); err != nil {
-			s.logger.Error(notifyCtx, "creator verification: telegram send failed",
-				"telegram_user_id", *telegramUserID,
-				"error", err,
-			)
-		}
-	}()
+	s.notifier.NotifyVerificationApproved(ctx, *telegramUserID)
 }

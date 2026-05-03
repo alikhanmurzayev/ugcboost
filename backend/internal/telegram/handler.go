@@ -97,7 +97,8 @@ func (h *Handler) Handle(ctx context.Context, sender Sender, update *models.Upda
 		h.reply(ctx, sender, chatID, h.errorReply(ctx, err))
 		return
 	}
-	h.reply(ctx, sender, chatID, MessageLinkSuccess)
+	// Welcome message is fired post-commit by the link service through the
+	// Notifier — no synchronous reply here. See spec-creator-bot-notify-foundation.
 }
 
 // startPayload returns (payload, true) for "/start" / "/start <something>"

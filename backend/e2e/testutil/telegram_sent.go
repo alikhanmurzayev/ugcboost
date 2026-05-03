@@ -59,3 +59,28 @@ func WaitForTelegramSent(t *testing.T, chatID int64, opts TelegramSentOptions) [
 		time.Sleep(telegramSentPollInterval)
 	}
 }
+
+// EnsureNoNewTelegramSent polls /test/telegram/sent for `window` time and
+// fails the test as soon as any record at-or-after `since` appears for
+// chatID. Use it for negative assertions ("notify must NOT fire") instead
+// of `time.Sleep` + one-shot read — sleep is flaky on slow CI, polling
+// fails fast on positive evidence and only succeeds after observing
+// stability over the full window.
+func EnsureNoNewTelegramSent(t *testing.T, chatID int64, since time.Time, window time.Duration) {
+	t.Helper()
+	deadline := time.Now().Add(window)
+	client := NewTestClient(t)
+	s := since
+	params := &testclient.GetTelegramSentParams{ChatId: chatID, Since: &s}
+	for time.Now().Before(deadline) {
+		resp, err := client.GetTelegramSentWithResponse(context.Background(), params)
+		require.NoError(t, err)
+		require.Equal(t, http.StatusOK, resp.StatusCode())
+		require.NotNil(t, resp.JSON200)
+		if len(resp.JSON200.Data.Messages) > 0 {
+			t.Fatalf("expected zero sent messages for chat %d in %s window, got %d (first: %q)",
+				chatID, window, len(resp.JSON200.Data.Messages), resp.JSON200.Data.Messages[0].Text)
+		}
+		time.Sleep(telegramSentPollInterval)
+	}
+}

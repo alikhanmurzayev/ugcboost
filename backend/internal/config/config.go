@@ -72,11 +72,6 @@ type Config struct {
 	// EnableTestEndpoints is also true there.
 	TelegramMock bool `env:"TELEGRAM_MOCK" envDefault:"false"`
 
-	// Public URL of the Telegram Mini App, embedded into the WebApp button
-	// inside outbound bot notifications (verification approved etc.).
-	// Different per environment (local/staging/prod).
-	TMAPublicURL string `env:"TMA_PUBLIC_URL,required"`
-
 	// Bearer secret SendPulse signs the IG webhook with. Constant-time
 	// compared in middleware before the handler runs.
 	SendPulseWebhookSecret string `env:"SENDPULSE_WEBHOOK_SECRET,required"`
@@ -118,9 +113,6 @@ func Load() (*Config, error) {
 	// Re-validate non-empty here so a deploy with KEY= refuses to start.
 	if cfg.SendPulseWebhookSecret == "" {
 		return nil, fmt.Errorf("SENDPULSE_WEBHOOK_SECRET must be a non-empty value")
-	}
-	if cfg.TMAPublicURL == "" {
-		return nil, fmt.Errorf("TMA_PUBLIC_URL must be a non-empty value")
 	}
 	if !cfg.TelegramMock && cfg.TelegramBotToken == "" {
 		return nil, fmt.Errorf("TELEGRAM_BOT_TOKEN must be a non-empty value when TELEGRAM_MOCK=false")

@@ -6,13 +6,10 @@ import (
 	"encoding/json"
 	"errors"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
 	"github.com/AlekSi/pointer"
-	tgbot "github.com/go-telegram/bot"
-	tgmodels "github.com/go-telegram/bot/models"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
@@ -22,7 +19,6 @@ import (
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/repository"
 	repomocks "github.com/alikhanmurzayev/ugcboost/backend/internal/repository/mocks"
 	svcmocks "github.com/alikhanmurzayev/ugcboost/backend/internal/service/mocks"
-	tgmocks "github.com/alikhanmurzayev/ugcboost/backend/internal/telegram/mocks"
 )
 
 // validCreatorInput builds an input that passes every precondition so scenarios
@@ -61,10 +57,9 @@ func validCreatorInput(t *testing.T) domain.CreatorApplicationInput {
 // dictRepo serves both the category lookup (dictionary GetActiveByCodes call)
 // and stays around for any future dictionary-backed checks.
 //
-// tgSender is the spy injected into NewCreatorApplicationService for tests
-// that exercise the SendPulse verification path; the Submit-flow tests
-// leave it as a nil-tolerant spy because Submit never fires it.
-// transitionRepo + tgSender wire up the chunk-8 verification flow tests.
+// notifier is the consumer-side mock injected into NewCreatorApplicationService
+// for tests that exercise the SendPulse verification path; the Submit-flow
+// tests leave it as a nil-tolerant mock because Submit never fires it.
 type creatorServiceRig struct {
 	pool                *dbmocks.MockPool
 	factory             *svcmocks.MockCreatorApplicationRepoFactory
@@ -76,8 +71,7 @@ type creatorServiceRig struct {
 	appTelegramLinkRepo *repomocks.MockCreatorApplicationTelegramLinkRepo
 	transitionRepo      *repomocks.MockCreatorApplicationStatusTransitionRepo
 	auditRepo           *repomocks.MockAuditRepo
-	tgSender            *tgmocks.MockSender
-	notifyWG            *sync.WaitGroup
+	notifier            *svcmocks.MockcreatorAppNotifier
 	logger              *logmocks.MockLogger
 }
 
@@ -94,8 +88,7 @@ func newCreatorServiceRig(t *testing.T) creatorServiceRig {
 		appTelegramLinkRepo: repomocks.NewMockCreatorApplicationTelegramLinkRepo(t),
 		transitionRepo:      repomocks.NewMockCreatorApplicationStatusTransitionRepo(t),
 		auditRepo:           repomocks.NewMockAuditRepo(t),
-		tgSender:            tgmocks.NewMockSender(t),
-		notifyWG:            &sync.WaitGroup{},
+		notifier:            svcmocks.NewMockcreatorAppNotifier(t),
 		logger:              logmocks.NewMockLogger(t),
 	}
 }
@@ -160,7 +153,7 @@ func TestCreatorApplicationService_Submit(t *testing.T) {
 		in := validCreatorInput(t)
 		in.Consents.AcceptedAll = false
 
-		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.tgSender, rig.notifyWG, "https://tma.test", rig.logger)
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.notifier, rig.logger)
 		_, err := svc.Submit(context.Background(), in)
 
 		var ve *domain.ValidationError
@@ -174,7 +167,7 @@ func TestCreatorApplicationService_Submit(t *testing.T) {
 		in := validCreatorInput(t)
 		in.IIN = "bad"
 
-		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.tgSender, rig.notifyWG, "https://tma.test", rig.logger)
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.notifier, rig.logger)
 		_, err := svc.Submit(context.Background(), in)
 
 		var ve *domain.ValidationError
@@ -189,7 +182,7 @@ func TestCreatorApplicationService_Submit(t *testing.T) {
 		// Birth-day - 1 of MinCreatorAge anniversary: still one day shy.
 		in.Now = time.Date(1995+domain.MinCreatorAge, 5, 14, 0, 0, 0, 0, time.UTC)
 
-		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.tgSender, rig.notifyWG, "https://tma.test", rig.logger)
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.notifier, rig.logger)
 		_, err := svc.Submit(context.Background(), in)
 
 		var ve *domain.ValidationError
@@ -203,7 +196,7 @@ func TestCreatorApplicationService_Submit(t *testing.T) {
 		in := validCreatorInput(t)
 		in.Socials = nil
 
-		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.tgSender, rig.notifyWG, "https://tma.test", rig.logger)
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.notifier, rig.logger)
 		_, err := svc.Submit(context.Background(), in)
 
 		var ve *domain.ValidationError
@@ -217,7 +210,7 @@ func TestCreatorApplicationService_Submit(t *testing.T) {
 		in := validCreatorInput(t)
 		in.Socials[0].Platform = "facebook"
 
-		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.tgSender, rig.notifyWG, "https://tma.test", rig.logger)
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.notifier, rig.logger)
 		_, err := svc.Submit(context.Background(), in)
 
 		var ve *domain.ValidationError
@@ -254,7 +247,7 @@ func TestCreatorApplicationService_Submit(t *testing.T) {
 		rig.auditRepo.EXPECT().Create(mock.Anything, mock.Anything).Return(nil)
 		rig.logger.EXPECT().Info(mock.Anything, "creator application submitted", []any{"application_id", "app-th"}).Once()
 
-		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.tgSender, rig.notifyWG, "https://tma.test", rig.logger)
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.notifier, rig.logger)
 		_, err := svc.Submit(context.Background(), in)
 		require.NoError(t, err)
 	})
@@ -265,7 +258,7 @@ func TestCreatorApplicationService_Submit(t *testing.T) {
 		in := validCreatorInput(t)
 		in.CategoryCodes = []string{"beauty", "fashion", "food", "fitness"} // 4 > MaxCategoriesPerApplication
 
-		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.tgSender, rig.notifyWG, "https://tma.test", rig.logger)
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.notifier, rig.logger)
 		_, err := svc.Submit(context.Background(), in)
 
 		var ve *domain.ValidationError
@@ -289,7 +282,7 @@ func TestCreatorApplicationService_Submit(t *testing.T) {
 		expectDictionaryWiring(rig)
 		rig.appRepo.EXPECT().HasActiveByIIN(mock.Anything, in.IIN).Return(false, nil)
 
-		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.tgSender, rig.notifyWG, "https://tma.test", rig.logger)
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.notifier, rig.logger)
 		_, err := svc.Submit(context.Background(), in)
 		var ve *domain.ValidationError
 		require.ErrorAs(t, err, &ve)
@@ -322,7 +315,7 @@ func TestCreatorApplicationService_Submit(t *testing.T) {
 		rig.auditRepo.EXPECT().Create(mock.Anything, mock.Anything).Return(nil)
 		rig.logger.EXPECT().Info(mock.Anything, "creator application submitted", []any{"application_id", "app-dedup"}).Once()
 
-		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.tgSender, rig.notifyWG, "https://tma.test", rig.logger)
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.notifier, rig.logger)
 		_, err := svc.Submit(context.Background(), in)
 		require.NoError(t, err)
 	})
@@ -339,7 +332,7 @@ func TestCreatorApplicationService_Submit(t *testing.T) {
 		rig.dictRepo.EXPECT().GetActiveByCodes(mock.Anything, repository.TableCategories, []string{"beauty", "fashion"}).
 			Return(nil, errors.New("db down"))
 
-		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.tgSender, rig.notifyWG, "https://tma.test", rig.logger)
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.notifier, rig.logger)
 		_, err := svc.Submit(context.Background(), in)
 		require.ErrorContains(t, err, "lookup categories")
 		require.ErrorContains(t, err, "db down")
@@ -352,7 +345,7 @@ func TestCreatorApplicationService_Submit(t *testing.T) {
 		in.CategoryCodes = []string{"beauty", "other"}
 		in.CategoryOtherText = nil
 
-		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.tgSender, rig.notifyWG, "https://tma.test", rig.logger)
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.notifier, rig.logger)
 		_, err := svc.Submit(context.Background(), in)
 
 		var ve *domain.ValidationError
@@ -369,7 +362,7 @@ func TestCreatorApplicationService_Submit(t *testing.T) {
 		in.CategoryCodes = []string{"beauty", "other"}
 		in.CategoryOtherText = &blank
 
-		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.tgSender, rig.notifyWG, "https://tma.test", rig.logger)
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.notifier, rig.logger)
 		_, err := svc.Submit(context.Background(), in)
 
 		var ve *domain.ValidationError
@@ -385,7 +378,7 @@ func TestCreatorApplicationService_Submit(t *testing.T) {
 		in.CategoryCodes = []string{"beauty", "other"}
 		in.CategoryOtherText = &long
 
-		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.tgSender, rig.notifyWG, "https://tma.test", rig.logger)
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.notifier, rig.logger)
 		_, err := svc.Submit(context.Background(), in)
 
 		var ve *domain.ValidationError
@@ -403,7 +396,7 @@ func TestCreatorApplicationService_Submit(t *testing.T) {
 		expectFactoryWiring(rig)
 		rig.appRepo.EXPECT().HasActiveByIIN(mock.Anything, in.IIN).Return(true, nil)
 
-		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.tgSender, rig.notifyWG, "https://tma.test", rig.logger)
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.notifier, rig.logger)
 		_, err := svc.Submit(context.Background(), in)
 
 		var be *domain.BusinessError
@@ -420,7 +413,7 @@ func TestCreatorApplicationService_Submit(t *testing.T) {
 		expectFactoryWiring(rig)
 		rig.appRepo.EXPECT().HasActiveByIIN(mock.Anything, in.IIN).Return(false, errors.New("db down"))
 
-		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.tgSender, rig.notifyWG, "https://tma.test", rig.logger)
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.notifier, rig.logger)
 		_, err := svc.Submit(context.Background(), in)
 		require.ErrorContains(t, err, "db down")
 	})
@@ -438,7 +431,7 @@ func TestCreatorApplicationService_Submit(t *testing.T) {
 		rig.dictRepo.EXPECT().GetActiveByCodes(mock.Anything, repository.TableCategories, []string{"beauty", "mystery"}).
 			Return([]*repository.DictionaryEntryRow{{Code: "beauty", Active: true}}, nil)
 
-		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.tgSender, rig.notifyWG, "https://tma.test", rig.logger)
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.notifier, rig.logger)
 		_, err := svc.Submit(context.Background(), in)
 
 		var ve *domain.ValidationError
@@ -467,7 +460,7 @@ func TestCreatorApplicationService_Submit(t *testing.T) {
 		rig.dictRepo.EXPECT().GetActiveByCodes(mock.Anything, repository.TableCities, []string{"neverland"}).
 			Return(nil, nil)
 
-		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.tgSender, rig.notifyWG, "https://tma.test", rig.logger)
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.notifier, rig.logger)
 		_, err := svc.Submit(context.Background(), in)
 		var ve *domain.ValidationError
 		require.ErrorAs(t, err, &ve)
@@ -491,7 +484,7 @@ func TestCreatorApplicationService_Submit(t *testing.T) {
 		rig.dictRepo.EXPECT().GetActiveByCodes(mock.Anything, repository.TableCities, []string{"almaty"}).
 			Return(nil, errors.New("db down"))
 
-		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.tgSender, rig.notifyWG, "https://tma.test", rig.logger)
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.notifier, rig.logger)
 		_, err := svc.Submit(context.Background(), in)
 		require.ErrorContains(t, err, "lookup city")
 		require.ErrorContains(t, err, "db down")
@@ -515,7 +508,7 @@ func TestCreatorApplicationService_Submit(t *testing.T) {
 		rig.appRepo.EXPECT().Create(mock.Anything, mock.Anything).
 			Return((*repository.CreatorApplicationRow)(nil), errors.New("insert failed"))
 
-		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.tgSender, rig.notifyWG, "https://tma.test", rig.logger)
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.notifier, rig.logger)
 		_, err := svc.Submit(context.Background(), in)
 		require.ErrorContains(t, err, "insert failed")
 	})
@@ -600,7 +593,7 @@ func TestCreatorApplicationService_Submit(t *testing.T) {
 		})).Return(nil)
 		rig.logger.EXPECT().Info(mock.Anything, "creator application submitted", []any{"application_id", "app-1"}).Once()
 
-		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.tgSender, rig.notifyWG, "https://tma.test", rig.logger)
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.notifier, rig.logger)
 		got, err := svc.Submit(context.Background(), in)
 		require.NoError(t, err)
 		require.Equal(t, &domain.CreatorApplicationSubmission{
@@ -638,7 +631,7 @@ func TestCreatorApplicationService_Submit(t *testing.T) {
 		rig.auditRepo.EXPECT().Create(mock.Anything, mock.Anything).Return(nil)
 		rig.logger.EXPECT().Info(mock.Anything, "creator application submitted", []any{"application_id", "app-addr"}).Once()
 
-		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.tgSender, rig.notifyWG, "https://tma.test", rig.logger)
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.notifier, rig.logger)
 		_, err := svc.Submit(context.Background(), in)
 		require.NoError(t, err)
 	})
@@ -671,7 +664,7 @@ func TestCreatorApplicationService_Submit(t *testing.T) {
 		rig.auditRepo.EXPECT().Create(mock.Anything, mock.Anything).Return(nil)
 		rig.logger.EXPECT().Info(mock.Anything, "creator application submitted", []any{"application_id", "app-blank"}).Once()
 
-		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.tgSender, rig.notifyWG, "https://tma.test", rig.logger)
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.notifier, rig.logger)
 		_, err := svc.Submit(context.Background(), in)
 		require.NoError(t, err)
 	})
@@ -701,7 +694,7 @@ func TestCreatorApplicationService_Submit(t *testing.T) {
 		rig.auditRepo.EXPECT().Create(mock.Anything, mock.Anything).Return(nil)
 		rig.logger.EXPECT().Info(mock.Anything, "creator application submitted", []any{"application_id", "app-other"}).Once()
 
-		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.tgSender, rig.notifyWG, "https://tma.test", rig.logger)
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.notifier, rig.logger)
 		_, err := svc.Submit(context.Background(), in)
 		require.NoError(t, err)
 	})
@@ -730,7 +723,7 @@ func TestCreatorApplicationService_Submit(t *testing.T) {
 				in := validCreatorInput(t)
 				tc.mutate(&in)
 
-				svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.tgSender, rig.notifyWG, "https://tma.test", rig.logger)
+				svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.notifier, rig.logger)
 				_, err := svc.Submit(context.Background(), in)
 
 				var ve *domain.ValidationError
@@ -750,7 +743,7 @@ func TestCreatorApplicationService_Submit(t *testing.T) {
 			{Platform: domain.SocialPlatformInstagram, Handle: "aidana"},
 		}
 
-		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.tgSender, rig.notifyWG, "https://tma.test", rig.logger)
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.notifier, rig.logger)
 		_, err := svc.Submit(context.Background(), in)
 
 		var ve *domain.ValidationError
@@ -765,7 +758,7 @@ func TestCreatorApplicationService_Submit(t *testing.T) {
 		in := validCreatorInput(t)
 		in.Socials[0].Handle = "aidana user"
 
-		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.tgSender, rig.notifyWG, "https://tma.test", rig.logger)
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.notifier, rig.logger)
 		_, err := svc.Submit(context.Background(), in)
 
 		var ve *domain.ValidationError
@@ -804,7 +797,7 @@ func TestCreatorApplicationService_Submit(t *testing.T) {
 		rig.auditRepo.EXPECT().Create(mock.Anything, mock.Anything).Return(nil).Once()
 		rig.logger.EXPECT().Info(mock.Anything, "creator application submitted", []any{"application_id", "app-retry"}).Once()
 
-		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.tgSender, rig.notifyWG, "https://tma.test", rig.logger)
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.notifier, rig.logger)
 		got, err := svc.Submit(context.Background(), in)
 		require.NoError(t, err)
 		require.Equal(t, "app-retry", got.ApplicationID)
@@ -831,7 +824,7 @@ func TestCreatorApplicationService_Submit(t *testing.T) {
 		rig.appRepo.EXPECT().Create(mock.Anything, mock.Anything).
 			Return((*repository.CreatorApplicationRow)(nil), domain.ErrCreatorApplicationVerificationCodeConflict).Times(tries)
 
-		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.tgSender, rig.notifyWG, "https://tma.test", rig.logger)
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.notifier, rig.logger)
 		_, err := svc.Submit(context.Background(), in)
 		require.Error(t, err)
 		require.ErrorContains(t, err, "failed to generate unique verification code after")
@@ -855,7 +848,7 @@ func TestCreatorApplicationService_Submit(t *testing.T) {
 		rig.appRepo.EXPECT().Create(mock.Anything, mock.Anything).
 			Return((*repository.CreatorApplicationRow)(nil), domain.ErrCreatorApplicationDuplicate)
 
-		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.tgSender, rig.notifyWG, "https://tma.test", rig.logger)
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.notifier, rig.logger)
 		_, err := svc.Submit(context.Background(), in)
 
 		var be *domain.BusinessError
@@ -875,7 +868,7 @@ func TestCreatorApplicationService_GetByID(t *testing.T) {
 		rig.factory.EXPECT().NewCreatorApplicationRepo(mock.Anything).Return(rig.appRepo)
 		rig.appRepo.EXPECT().GetByID(mock.Anything, appID).Return(nil, sql.ErrNoRows)
 
-		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.tgSender, rig.notifyWG, "https://tma.test", rig.logger)
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.notifier, rig.logger)
 		_, err := svc.GetByID(context.Background(), appID)
 		require.ErrorIs(t, err, sql.ErrNoRows)
 	})
@@ -890,7 +883,7 @@ func TestCreatorApplicationService_GetByID(t *testing.T) {
 		rig.appCategoryRepo.EXPECT().ListByApplicationID(mock.Anything, appID).
 			Return(nil, errors.New("cat boom"))
 
-		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.tgSender, rig.notifyWG, "https://tma.test", rig.logger)
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.notifier, rig.logger)
 		_, err := svc.GetByID(context.Background(), appID)
 		require.ErrorContains(t, err, "list categories")
 		require.ErrorContains(t, err, "cat boom")
@@ -909,7 +902,7 @@ func TestCreatorApplicationService_GetByID(t *testing.T) {
 		rig.appSocialRepo.EXPECT().ListByApplicationID(mock.Anything, appID).
 			Return(nil, errors.New("soc boom"))
 
-		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.tgSender, rig.notifyWG, "https://tma.test", rig.logger)
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.notifier, rig.logger)
 		_, err := svc.GetByID(context.Background(), appID)
 		require.ErrorContains(t, err, "list socials")
 		require.ErrorContains(t, err, "soc boom")
@@ -931,7 +924,7 @@ func TestCreatorApplicationService_GetByID(t *testing.T) {
 		rig.appConsentRepo.EXPECT().ListByApplicationID(mock.Anything, appID).
 			Return(nil, errors.New("con boom"))
 
-		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.tgSender, rig.notifyWG, "https://tma.test", rig.logger)
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.notifier, rig.logger)
 		_, err := svc.GetByID(context.Background(), appID)
 		require.ErrorContains(t, err, "list consents")
 		require.ErrorContains(t, err, "con boom")
@@ -953,7 +946,7 @@ func TestCreatorApplicationService_GetByID(t *testing.T) {
 		rig.appTelegramLinkRepo.EXPECT().GetByApplicationID(mock.Anything, appID).
 			Return(nil, errors.New("link boom"))
 
-		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.tgSender, rig.notifyWG, "https://tma.test", rig.logger)
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.notifier, rig.logger)
 		_, err := svc.GetByID(context.Background(), appID)
 		require.ErrorContains(t, err, "get telegram link")
 		require.ErrorContains(t, err, "link boom")
@@ -1007,7 +1000,7 @@ func TestCreatorApplicationService_GetByID(t *testing.T) {
 		rig.appTelegramLinkRepo.EXPECT().GetByApplicationID(mock.Anything, appID).
 			Return(nil, sql.ErrNoRows)
 
-		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.tgSender, rig.notifyWG, "https://tma.test", rig.logger)
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.notifier, rig.logger)
 		got, err := svc.GetByID(context.Background(), appID)
 		require.NoError(t, err)
 		require.Equal(t, &domain.CreatorApplicationDetail{
@@ -1061,7 +1054,7 @@ func TestCreatorApplicationService_List(t *testing.T) {
 
 		in := baseInput()
 		in.Search = "   aidana   "
-		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.tgSender, rig.notifyWG, "https://tma.test", rig.logger)
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.notifier, rig.logger)
 		page, err := svc.List(context.Background(), in)
 		require.NoError(t, err)
 		require.Equal(t, &domain.CreatorApplicationListPage{
@@ -1078,7 +1071,7 @@ func TestCreatorApplicationService_List(t *testing.T) {
 		rig.factory.EXPECT().NewCreatorApplicationRepo(mock.Anything).Return(rig.appRepo)
 		rig.appRepo.EXPECT().List(mock.Anything, mock.Anything).Return(nil, int64(0), errors.New("db down"))
 
-		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.tgSender, rig.notifyWG, "https://tma.test", rig.logger)
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.notifier, rig.logger)
 		_, err := svc.List(context.Background(), baseInput())
 		require.ErrorContains(t, err, "list applications")
 		require.ErrorContains(t, err, "db down")
@@ -1094,7 +1087,7 @@ func TestCreatorApplicationService_List(t *testing.T) {
 		rig.appCategoryRepo.EXPECT().ListByApplicationIDs(mock.Anything, []string{"app-1"}).
 			Return(nil, errors.New("cat boom"))
 
-		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.tgSender, rig.notifyWG, "https://tma.test", rig.logger)
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.notifier, rig.logger)
 		_, err := svc.List(context.Background(), baseInput())
 		require.ErrorContains(t, err, "hydrate categories")
 		require.ErrorContains(t, err, "cat boom")
@@ -1113,7 +1106,7 @@ func TestCreatorApplicationService_List(t *testing.T) {
 		rig.appSocialRepo.EXPECT().ListByApplicationIDs(mock.Anything, []string{"app-1"}).
 			Return(nil, errors.New("soc boom"))
 
-		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.tgSender, rig.notifyWG, "https://tma.test", rig.logger)
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.notifier, rig.logger)
 		_, err := svc.List(context.Background(), baseInput())
 		require.ErrorContains(t, err, "hydrate socials")
 		require.ErrorContains(t, err, "soc boom")
@@ -1125,7 +1118,7 @@ func TestCreatorApplicationService_List(t *testing.T) {
 		rig.factory.EXPECT().NewCreatorApplicationRepo(mock.Anything).Return(rig.appRepo)
 		rig.appRepo.EXPECT().List(mock.Anything, mock.Anything).Return(nil, int64(0), nil)
 
-		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.tgSender, rig.notifyWG, "https://tma.test", rig.logger)
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.notifier, rig.logger)
 		page, err := svc.List(context.Background(), baseInput())
 		require.NoError(t, err)
 		require.Equal(t, &domain.CreatorApplicationListPage{
@@ -1175,7 +1168,7 @@ func TestCreatorApplicationService_List(t *testing.T) {
 				},
 			}, nil)
 
-		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.tgSender, rig.notifyWG, "https://tma.test", rig.logger)
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.notifier, rig.logger)
 		page, err := svc.List(context.Background(), baseInput())
 		require.NoError(t, err)
 		require.Equal(t, &domain.CreatorApplicationListPage{
@@ -1218,7 +1211,7 @@ func TestCreatorApplicationService_Counts(t *testing.T) {
 		rig.factory.EXPECT().NewCreatorApplicationRepo(mock.Anything).Return(rig.appRepo)
 		rig.appRepo.EXPECT().Counts(mock.Anything).Return(nil, errors.New("db down"))
 
-		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.tgSender, rig.notifyWG, "https://tma.test", rig.logger)
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.notifier, rig.logger)
 		got, err := svc.Counts(context.Background())
 		require.ErrorContains(t, err, "counts applications")
 		require.ErrorContains(t, err, "db down")
@@ -1231,7 +1224,7 @@ func TestCreatorApplicationService_Counts(t *testing.T) {
 		rig.factory.EXPECT().NewCreatorApplicationRepo(mock.Anything).Return(rig.appRepo)
 		rig.appRepo.EXPECT().Counts(mock.Anything).Return(map[string]int64{}, nil)
 
-		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.tgSender, rig.notifyWG, "https://tma.test", rig.logger)
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.notifier, rig.logger)
 		got, err := svc.Counts(context.Background())
 		require.NoError(t, err)
 		require.Equal(t, map[string]int64{}, got)
@@ -1247,7 +1240,7 @@ func TestCreatorApplicationService_Counts(t *testing.T) {
 			domain.CreatorApplicationStatusRejected:     2,
 		}, nil)
 
-		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.tgSender, rig.notifyWG, "https://tma.test", rig.logger)
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.notifier, rig.logger)
 		got, err := svc.Counts(context.Background())
 		require.NoError(t, err)
 		require.Equal(t, map[string]int64{
@@ -1273,7 +1266,7 @@ func TestCreatorApplicationService_Counts(t *testing.T) {
 					args[2] == "count" && args[3] == int64(9)
 			})).Once()
 
-		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.tgSender, rig.notifyWG, "https://tma.test", rig.logger)
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.notifier, rig.logger)
 		got, err := svc.Counts(context.Background())
 		require.NoError(t, err)
 		require.Equal(t, map[string]int64{
@@ -1355,22 +1348,14 @@ func TestCreatorApplicationService_VerifyInstagramByCode(t *testing.T) {
 				TelegramUserID: 555,
 			}, nil)
 
-		var capturedSendParams *tgbot.SendMessageParams
-		rig.tgSender.EXPECT().SendMessage(mock.Anything, mock.AnythingOfType("*bot.SendMessageParams")).
-			Run(func(_ context.Context, params *tgbot.SendMessageParams) {
-				capturedSendParams = params
-			}).
-			Return(nil, nil)
+		rig.notifier.EXPECT().NotifyVerificationApproved(mock.Anything, int64(555)).Once()
 
-		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.tgSender, rig.notifyWG, "https://tma.test", rig.logger)
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.notifier, rig.logger)
 		rig.logger.EXPECT().Info(mock.Anything, "sendpulse webhook: instagram verified", mock.Anything).Maybe()
 
 		status, err := svc.VerifyInstagramByCode(context.Background(), "UGC-123456", "AIDANA")
 		require.NoError(t, err)
 		require.Equal(t, domain.VerifyInstagramStatusVerified, status)
-		// Drain the post-commit notify goroutine so SendMessage assertion can
-		// safely read capturedSendParams without racing the goroutine.
-		rig.notifyWG.Wait()
 
 		require.Equal(t, "social-1", capturedSocial.ID)
 		require.Equal(t, "aidana", capturedSocial.Handle)
@@ -1398,16 +1383,6 @@ func TestCreatorApplicationService_VerifyInstagramByCode(t *testing.T) {
 		require.Equal(t, domain.CreatorApplicationStatusVerification, auditPayload["from_status"])
 		require.Equal(t, domain.CreatorApplicationStatusModeration, auditPayload["to_status"])
 		require.Equal(t, false, auditPayload["handle_changed"])
-
-		require.NotNil(t, capturedSendParams)
-		require.Equal(t, int64(555), capturedSendParams.ChatID)
-		require.NotEmpty(t, capturedSendParams.Text, "verification notification must carry text")
-		kb, ok := capturedSendParams.ReplyMarkup.(tgmodels.InlineKeyboardMarkup)
-		require.True(t, ok, "ReplyMarkup must be InlineKeyboardMarkup, got %T", capturedSendParams.ReplyMarkup)
-		require.NotEmpty(t, kb.InlineKeyboard)
-		require.NotEmpty(t, kb.InlineKeyboard[0])
-		require.NotNil(t, kb.InlineKeyboard[0][0].WebApp)
-		require.Equal(t, "https://tma.test", kb.InlineKeyboard[0][0].WebApp.URL)
 	})
 
 	t.Run("self-fix mismatch overwrites handle and stamps audit flag", func(t *testing.T) {
@@ -1442,10 +1417,13 @@ func TestCreatorApplicationService_VerifyInstagramByCode(t *testing.T) {
 			}).
 			Return(nil)
 		rig.appTelegramLinkRepo.EXPECT().GetByApplicationID(mock.Anything, "app-1").
-			Return(nil, sql.ErrNoRows)
+			Return(&repository.CreatorApplicationTelegramLinkRow{
+				ApplicationID:  "app-1",
+				TelegramUserID: 777,
+			}, nil)
+		rig.notifier.EXPECT().NotifyVerificationApproved(mock.Anything, int64(777)).Once()
 
-		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.tgSender, rig.notifyWG, "https://tma.test", rig.logger)
-		rig.logger.EXPECT().Info(mock.Anything, "creator verification: skipping telegram notify, application not linked").Once()
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.notifier, rig.logger)
 		rig.logger.EXPECT().Info(mock.Anything, "sendpulse webhook: instagram verified", mock.Anything).Maybe()
 
 		status, err := svc.VerifyInstagramByCode(context.Background(), "UGC-123456", "@New")
@@ -1457,6 +1435,38 @@ func TestCreatorApplicationService_VerifyInstagramByCode(t *testing.T) {
 		var auditPayload map[string]any
 		require.NoError(t, json.Unmarshal(capturedAudit.NewValue, &auditPayload))
 		require.Equal(t, true, auditPayload["handle_changed"])
+	})
+
+	t.Run("verified path skips notify and warns when application not linked", func(t *testing.T) {
+		t.Parallel()
+		rig := newCreatorServiceRig(t)
+		expectVerifyTxBegin(rig)
+		expectVerifyFactoryWiring(rig)
+		rig.factory.EXPECT().NewCreatorApplicationStatusTransitionRepo(mock.Anything).Return(rig.transitionRepo)
+
+		appRow := applicationRow("app-1")
+		rig.appRepo.EXPECT().GetByVerificationCodeAndStatus(mock.Anything, "UGC-123456", domain.CreatorApplicationStatusVerification).
+			Return(appRow, nil)
+		rig.appSocialRepo.EXPECT().ListByApplicationID(mock.Anything, "app-1").
+			Return([]*repository.CreatorApplicationSocialRow{
+				{ID: "social-1", ApplicationID: "app-1", Platform: domain.SocialPlatformInstagram, Handle: "aidana"},
+			}, nil)
+		rig.appSocialRepo.EXPECT().UpdateVerification(mock.Anything, mock.Anything).Return(nil)
+		rig.appRepo.EXPECT().UpdateStatus(mock.Anything, "app-1", domain.CreatorApplicationStatusModeration).Return(nil)
+		rig.transitionRepo.EXPECT().Insert(mock.Anything, mock.Anything).Return(nil)
+		rig.auditRepo.EXPECT().Create(mock.Anything, mock.Anything).Return(nil)
+		rig.appTelegramLinkRepo.EXPECT().GetByApplicationID(mock.Anything, "app-1").
+			Return(nil, sql.ErrNoRows)
+
+		// No notifier expectation — the nil-link branch must NOT fire a
+		// notification. Mockery cleanup will fail the test if it does.
+		rig.logger.EXPECT().Warn(mock.Anything, "creator verification: skipping telegram notify, application not linked").Once()
+		rig.logger.EXPECT().Info(mock.Anything, "sendpulse webhook: instagram verified", mock.Anything).Maybe()
+
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.notifier, rig.logger)
+		status, err := svc.VerifyInstagramByCode(context.Background(), "UGC-123456", "aidana")
+		require.NoError(t, err)
+		require.Equal(t, domain.VerifyInstagramStatusVerified, status)
 	})
 
 	t.Run("already verified social returns noop without writes", func(t *testing.T) {
@@ -1476,7 +1486,7 @@ func TestCreatorApplicationService_VerifyInstagramByCode(t *testing.T) {
 				{ID: "social-1", ApplicationID: "app-1", Platform: domain.SocialPlatformInstagram, Handle: "aidana", Verified: true},
 			}, nil)
 
-		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.tgSender, rig.notifyWG, "https://tma.test", rig.logger)
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.notifier, rig.logger)
 
 		status, err := svc.VerifyInstagramByCode(context.Background(), "UGC-123456", "aidana")
 		require.NoError(t, err)
@@ -1495,7 +1505,7 @@ func TestCreatorApplicationService_VerifyInstagramByCode(t *testing.T) {
 		rig.appRepo.EXPECT().GetByVerificationCodeAndStatus(mock.Anything, "UGC-999999", domain.CreatorApplicationStatusVerification).
 			Return(nil, sql.ErrNoRows)
 
-		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.tgSender, rig.notifyWG, "https://tma.test", rig.logger)
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.notifier, rig.logger)
 
 		status, err := svc.VerifyInstagramByCode(context.Background(), "UGC-999999", "aidana")
 		require.NoError(t, err)
@@ -1509,7 +1519,7 @@ func TestCreatorApplicationService_VerifyInstagramByCode(t *testing.T) {
 		// the WithTx scope. Logger captures the warn line.
 		rig.logger.EXPECT().Warn(mock.Anything, "sendpulse webhook: empty username after normalisation", mock.Anything).Once()
 
-		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.tgSender, rig.notifyWG, "https://tma.test", rig.logger)
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.notifier, rig.logger)
 		status, err := svc.VerifyInstagramByCode(context.Background(), "UGC-123456", "@@@   ")
 		require.NoError(t, err)
 		require.Equal(t, domain.VerifyInstagramStatusNotFound, status)
@@ -1532,45 +1542,11 @@ func TestCreatorApplicationService_VerifyInstagramByCode(t *testing.T) {
 				{ID: "social-2", ApplicationID: "app-1", Platform: domain.SocialPlatformTikTok, Handle: "aidana_tt"},
 			}, nil)
 
-		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.tgSender, rig.notifyWG, "https://tma.test", rig.logger)
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.notifier, rig.logger)
 
 		status, err := svc.VerifyInstagramByCode(context.Background(), "UGC-123456", "aidana")
 		require.NoError(t, err)
 		require.Equal(t, domain.VerifyInstagramStatusNoIGSocial, status)
-	})
-
-	t.Run("telegram send failure does not propagate", func(t *testing.T) {
-		t.Parallel()
-		rig := newCreatorServiceRig(t)
-		expectVerifyTxBegin(rig)
-		expectVerifyFactoryWiring(rig)
-		rig.factory.EXPECT().NewCreatorApplicationStatusTransitionRepo(mock.Anything).Return(rig.transitionRepo)
-
-		appRow := applicationRow("app-1")
-		rig.appRepo.EXPECT().GetByVerificationCodeAndStatus(mock.Anything, "UGC-123456", domain.CreatorApplicationStatusVerification).
-			Return(appRow, nil)
-		rig.appSocialRepo.EXPECT().ListByApplicationID(mock.Anything, "app-1").
-			Return([]*repository.CreatorApplicationSocialRow{
-				{ID: "social-1", ApplicationID: "app-1", Platform: domain.SocialPlatformInstagram, Handle: "aidana"},
-			}, nil)
-		rig.appSocialRepo.EXPECT().UpdateVerification(mock.Anything, mock.Anything).Return(nil)
-		rig.appRepo.EXPECT().UpdateStatus(mock.Anything, "app-1", domain.CreatorApplicationStatusModeration).Return(nil)
-		rig.transitionRepo.EXPECT().Insert(mock.Anything, mock.Anything).Return(nil)
-		rig.auditRepo.EXPECT().Create(mock.Anything, mock.Anything).Return(nil)
-		rig.appTelegramLinkRepo.EXPECT().GetByApplicationID(mock.Anything, "app-1").
-			Return(&repository.CreatorApplicationTelegramLinkRow{ApplicationID: "app-1", TelegramUserID: 555}, nil)
-
-		rig.tgSender.EXPECT().SendMessage(mock.Anything, mock.Anything).Return(nil, errors.New("telegram down"))
-		rig.logger.EXPECT().Info(mock.Anything, "sendpulse webhook: instagram verified", mock.Anything).Maybe()
-		rig.logger.EXPECT().Error(mock.Anything, "creator verification: telegram send failed", mock.Anything).Once()
-
-		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.tgSender, rig.notifyWG, "https://tma.test", rig.logger)
-
-		status, err := svc.VerifyInstagramByCode(context.Background(), "UGC-123456", "aidana")
-		require.NoError(t, err)
-		require.Equal(t, domain.VerifyInstagramStatusVerified, status)
-		// Drain notify goroutine so the Error-log expectation observes its call.
-		rig.notifyWG.Wait()
 	})
 
 	t.Run("update social db error rolls back tx and bubbles", func(t *testing.T) {
@@ -1589,7 +1565,7 @@ func TestCreatorApplicationService_VerifyInstagramByCode(t *testing.T) {
 		rig.appSocialRepo.EXPECT().UpdateVerification(mock.Anything, mock.Anything).
 			Return(errors.New("update failed"))
 
-		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.tgSender, rig.notifyWG, "https://tma.test", rig.logger)
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.notifier, rig.logger)
 
 		_, err := svc.VerifyInstagramByCode(context.Background(), "UGC-123456", "aidana")
 		require.ErrorContains(t, err, "update failed")
@@ -1602,7 +1578,7 @@ func TestCreatorApplicationService_applyTransition(t *testing.T) {
 	t.Run("disallowed transition surfaces ErrInvalidStatusTransition with from→to context", func(t *testing.T) {
 		t.Parallel()
 		rig := newCreatorServiceRig(t)
-		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.tgSender, rig.notifyWG, "https://tma.test", rig.logger)
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.notifier, rig.logger)
 
 		// signed → moderation is not declared in the state machine; the
 		// helper must reject it before any repo wiring.

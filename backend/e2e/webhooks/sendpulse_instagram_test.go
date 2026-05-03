@@ -1,5 +1,6 @@
 // Package webhooks — E2E тесты HTTP-поверхности /webhooks/* (chunk 8
-// creator-onboarding-roadmap, follow-up к PR #52 ревью).
+// creator-onboarding-roadmap, обновлено chunk 9 — chunk-8 placeholder с
+// WebApp-кнопкой выпилен, теперь идёт plain-text «Заявка ушла на модерацию»).
 //
 // TestSendPulseInstagramWebhook проходит по всем веткам I/O-матрицы
 // SendPulse-вебхука. На вход — заявка, поданная через лендинг (статус
@@ -15,8 +16,9 @@
 // Сценарии:
 //   - happy path: код, отправленный SendPulse'ом, совпадает с заявкой,
 //     IG-handle совпадает; ожидаем 200 {}, статус заявки moderation,
-//     audit-row с handle_changed=false, ровно одно TG-уведомление с WebApp-
-//     кнопкой на TMA;
+//     audit-row с handle_changed=false, ровно одно TG-уведомление —
+//     plain-text без inline-кнопок, без `tma`/`mini`/`webapp`/`ig.me`/`UGC-`,
+//     с подстрокой «модерацию»;
 //   - self-fix: тот же код, но username отличается от сохранённого handle;
 //     заявка переходит, audit-row помечает handle_changed=true, TG-нотификация
 //     уходит;
@@ -36,13 +38,18 @@
 // transitions / audit. SendPulse-секрет читается из env (по умолчанию —
 // значение из backend/.env, чтобы локальный go test "из коробки"
 // заработал против поднятого через make start-backend стенда).
+//
+// E2E test-mode contract (см. spec-creator-bot-notify-foundation): запись
+// в `/test/telegram/sent` фиксирует то, что бэк попытался отправить — не
+// факт доставки. В TeeSender-режиме (mock=false) на синтетических chat_id
+// реальный bot.SendMessage всегда падает; spy записывает params + Err.
+// `Err` намеренно НЕ ассертим — тесты verify outbound params, не доставку.
 package webhooks_test
 
 import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"strings"
 	"testing"
 	"time"
 
@@ -50,6 +57,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/alikhanmurzayev/ugcboost/backend/e2e/apiclient"
+	"github.com/alikhanmurzayev/ugcboost/backend/e2e/testclient"
 	"github.com/alikhanmurzayev/ugcboost/backend/e2e/testutil"
 )
 
@@ -106,13 +114,7 @@ func TestSendPulseInstagramWebhook(t *testing.T) {
 			ExpectCount: 1,
 		})
 		require.Len(t, sent, 1)
-		require.NotEmpty(t, sent[0].Text, "verification notification must carry text")
-		require.NotNil(t, sent[0].WebAppUrl, "verification notification must attach a WebApp button")
-		require.True(t, strings.HasPrefix(*sent[0].WebAppUrl, "http"),
-			"WebApp URL must point at the TMA: %q", *sent[0].WebAppUrl)
-		// sent[0].Error may be populated under TeeSender (real Telegram path
-		// rejects synthetic chat ids); we only assert orchestration-level
-		// invariants — a record exists, with the expected ChatID + WebApp.
+		assertVerificationApprovedShape(t, sent[0])
 	})
 
 	t.Run("self-fix mismatch overwrites handle, stamps audit flag, notifies", func(t *testing.T) {
@@ -149,6 +151,7 @@ func TestSendPulseInstagramWebhook(t *testing.T) {
 			ExpectCount: 1,
 		})
 		require.Len(t, sent, 1)
+		assertVerificationApprovedShape(t, sent[0])
 	})
 
 	t.Run("repeat delivery after success is a no-op (no audit, no TG)", func(t *testing.T) {
@@ -348,6 +351,24 @@ func listVerificationAuditEntries(t *testing.T, c *apiclient.ClientWithResponses
 	require.Equal(t, http.StatusOK, resp.StatusCode())
 	require.NotNil(t, resp.JSON200)
 	return resp.JSON200.Data.Logs
+}
+
+// verificationApprovedText pins the chunk-9 contract for the verification-
+// approved Telegram notification — exact string, plain text, no inline
+// keyboard. Дублирует константу из internal/telegram/notifier.go: e2e-пакет —
+// отдельный модуль, и assert-by-equality требует, чтобы любое изменение
+// копирайта одновременно ломало тест.
+const verificationApprovedText = "Заявка ушла на модерацию ✅\n\n" +
+	"Напишу сюда, как только модератор примет решение."
+
+// assertVerificationApprovedShape сверяет, что бэк отправил ровно
+// verificationApprovedText без WebApp-кнопки. msg.Error может быть
+// заполнен под TeeSender'ом (реальный bot.SendMessage отвергает синтетические
+// chat ids); это outbound params, не факт доставки — Err намеренно не ассертим.
+func assertVerificationApprovedShape(t *testing.T, msg testclient.TelegramSentMessage) {
+	t.Helper()
+	require.Equal(t, verificationApprovedText, msg.Text)
+	require.Nil(t, msg.WebAppUrl, "chunk-9 verification-approved is plain text — no WebApp button")
 }
 
 // assertAuditPayload verifies all five fields the verification_auto handler
