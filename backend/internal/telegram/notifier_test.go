@@ -3,7 +3,6 @@ package telegram_test
 import (
 	"context"
 	"errors"
-	"strings"
 	"testing"
 	"time"
 
@@ -52,10 +51,35 @@ func waitFor(t *testing.T, label string, done <-chan struct{}) {
 	}
 }
 
+// expectedWelcomeWithIG / expectedWelcomeNoIG / expectedVerificationApproved
+// — точные строки, которые получит креатор в Telegram. Дублируют константы
+// из notifier.go намеренно: assert-by-equality требует, чтобы любое изменение
+// копирайта одновременно ломало тест и продакшен-код, иначе теряется аудит-
+// сигнал «текст изменился, но тест зеленеет».
+func expectedWelcomeWithIG(verificationCode string) string {
+	return "Здравствуйте! 👋\n\n" +
+		"Получили вашу заявку.\n" +
+		"Чтобы подтвердить Instagram, нужна одна минута:\n\n" +
+		"1. Скопируйте код (тап по блоку):\n\n" +
+		"   <pre>" + verificationCode + "</pre>\n\n" +
+		"2. Откройте Direct и отправьте его нам:\n\n" +
+		"   https://ig.me/m/ugc_boost\n\n" +
+		"Напишу сюда, как только проверим."
+}
+
+const (
+	expectedWelcomeNoIG = "Здравствуйте! 👋\n\n" +
+		"Спасибо за заявку! Обрабатываем.\n\n" +
+		"Напишу сюда, как только будет готово."
+
+	expectedVerificationApproved = "Заявка ушла на модерацию ✅\n\n" +
+		"Напишу сюда, как только модератор примет решение."
+)
+
 func TestNotifier_NotifyApplicationLinked(t *testing.T) {
 	t.Parallel()
 
-	t.Run("with-IG variant carries UGC code, Direct URL, HTML parse mode", func(t *testing.T) {
+	t.Run("with-IG variant carries exact welcome text and HTML parse mode", func(t *testing.T) {
 		t.Parallel()
 		sender := tgmocks.NewMockSender(t)
 		log := logmocks.NewMockLogger(t)
@@ -74,12 +98,10 @@ func TestNotifier_NotifyApplicationLinked(t *testing.T) {
 		require.True(t, ok)
 		require.Equal(t, int64(4242), chatID)
 		require.Equal(t, models.ParseModeHTML, (*captured).ParseMode)
-		require.Contains(t, (*captured).Text, "UGC-123456")
-		require.Contains(t, (*captured).Text, "https://ig.me/m/ugc_boost")
-		require.Contains(t, (*captured).Text, "<pre>UGC-123456</pre>")
+		require.Equal(t, expectedWelcomeWithIG("UGC-123456"), (*captured).Text)
 	})
 
-	t.Run("no-IG variant stays neutral, no code or Direct URL", func(t *testing.T) {
+	t.Run("no-IG variant carries exact neutral welcome text without parse mode", func(t *testing.T) {
 		t.Parallel()
 		sender := tgmocks.NewMockSender(t)
 		log := logmocks.NewMockLogger(t)
@@ -94,9 +116,11 @@ func TestNotifier_NotifyApplicationLinked(t *testing.T) {
 		n.Wait()
 
 		require.NotNil(t, *captured)
-		require.Contains(t, (*captured).Text, "Спасибо за заявку")
-		require.NotContains(t, (*captured).Text, "UGC-")
-		require.NotContains(t, (*captured).Text, "ig.me")
+		chatID, ok := (*captured).ChatID.(int64)
+		require.True(t, ok)
+		require.Equal(t, int64(7), chatID)
+		require.Equal(t, expectedWelcomeNoIG, (*captured).Text)
+		require.Empty(t, (*captured).ParseMode, "no-IG variant has no HTML — parse mode must stay empty")
 	})
 
 	t.Run("sender error logged, Wait still drains", func(t *testing.T) {
@@ -118,7 +142,7 @@ func TestNotifier_NotifyApplicationLinked(t *testing.T) {
 func TestNotifier_NotifyVerificationApproved(t *testing.T) {
 	t.Parallel()
 
-	t.Run("posts plain-text moderation message without inline keyboard", func(t *testing.T) {
+	t.Run("posts exact moderation message without inline keyboard", func(t *testing.T) {
 		t.Parallel()
 		sender := tgmocks.NewMockSender(t)
 		log := logmocks.NewMockLogger(t)
@@ -133,13 +157,9 @@ func TestNotifier_NotifyVerificationApproved(t *testing.T) {
 		chatID, ok := (*captured).ChatID.(int64)
 		require.True(t, ok)
 		require.Equal(t, int64(555), chatID)
-		require.Contains(t, (*captured).Text, "модерацию")
+		require.Equal(t, expectedVerificationApproved, (*captured).Text)
 		require.Empty(t, (*captured).ParseMode, "verification-approved is plain text — no parse mode")
 		require.Nil(t, (*captured).ReplyMarkup, "no inline keyboard on chunk-9 verification-approved")
-		// Belt-and-braces: substrings the e2e tests assert never appear.
-		for _, banned := range []string{"tma", "mini", "webapp", "ig.me", "UGC-"} {
-			require.NotContains(t, strings.ToLower((*captured).Text), strings.ToLower(banned))
-		}
 	})
 
 	t.Run("sender error logged with chat id and op", func(t *testing.T) {

@@ -50,7 +50,6 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"strings"
 	"testing"
 	"time"
 
@@ -354,21 +353,22 @@ func listVerificationAuditEntries(t *testing.T, c *apiclient.ClientWithResponses
 	return resp.JSON200.Data.Logs
 }
 
-// assertVerificationApprovedShape pins the chunk-9 contract for the
-// verification-approved Telegram notification: plain text without inline
-// keyboard, contains "модерацию", and never carries any of the substrings
-// the WebApp/TMA placeholder used to ship.
+// verificationApprovedText pins the chunk-9 contract for the verification-
+// approved Telegram notification — exact string, plain text, no inline
+// keyboard. Дублирует константу из internal/telegram/notifier.go: e2e-пакет —
+// отдельный модуль, и assert-by-equality требует, чтобы любое изменение
+// копирайта одновременно ломало тест.
+const verificationApprovedText = "Заявка ушла на модерацию ✅\n\n" +
+	"Напишу сюда, как только модератор примет решение."
+
+// assertVerificationApprovedShape сверяет, что бэк отправил ровно
+// verificationApprovedText без WebApp-кнопки. msg.Error может быть
+// заполнен под TeeSender'ом (реальный bot.SendMessage отвергает синтетические
+// chat ids); это outbound params, не факт доставки — Err намеренно не ассертим.
 func assertVerificationApprovedShape(t *testing.T, msg testclient.TelegramSentMessage) {
 	t.Helper()
-	require.NotEmpty(t, msg.Text, "verification notification must carry text")
-	require.Contains(t, msg.Text, "модерацию", "verification-approved must mention moderation")
+	require.Equal(t, verificationApprovedText, msg.Text)
 	require.Nil(t, msg.WebAppUrl, "chunk-9 verification-approved is plain text — no WebApp button")
-	lower := strings.ToLower(msg.Text)
-	for _, banned := range []string{"tma", "mini", "webapp", "ig.me", "ugc-"} {
-		require.NotContainsf(t, lower, banned, "verification-approved must not contain %q (text=%q)", banned, msg.Text)
-	}
-	// msg.Error may be populated under TeeSender (real Telegram path rejects
-	// synthetic chat ids); we only assert outbound params, never delivery.
 }
 
 // assertAuditPayload verifies all five fields the verification_auto handler

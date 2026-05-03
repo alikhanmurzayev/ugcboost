@@ -41,7 +41,6 @@ package telegram_test
 import (
 	"context"
 	"net/http"
-	"strings"
 	"testing"
 	"time"
 
@@ -71,7 +70,29 @@ const (
 	replyFallback              = "Здравствуйте! Чтобы продолжить, подайте заявку на ugcboost.kz"
 	replyApplicationNotFound   = "Заявка не найдена. Подайте новую на ugcboost.kz"
 	replyApplicationAlreadyLnk = "Эта заявка уже связана с другим Telegram. Если это ошибка — обратитесь в поддержку"
+
+	// welcomeNoIGText дублирует строку из internal/telegram/notifier.go.
+	// Дублирование намеренное: e2e-пакет — отдельный модуль, и assert-by-equality
+	// требует, чтобы любое изменение копирайта одновременно ломало тест.
+	welcomeNoIGText = "Здравствуйте! 👋\n\n" +
+		"Спасибо за заявку! Обрабатываем.\n\n" +
+		"Напишу сюда, как только будет готово."
 )
+
+// welcomeWithIGText собирает welcome-сообщение для IG-варианта, подставляя
+// реальный verification-код. Дублирует шаблон из internal/telegram/notifier.go
+// по тем же соображениям, что и welcomeNoIGText. Любое изменение копирайта
+// должно одновременно сломать тест.
+func welcomeWithIGText(verificationCode string) string {
+	return "Здравствуйте! 👋\n\n" +
+		"Получили вашу заявку.\n" +
+		"Чтобы подтвердить Instagram, нужна одна минута:\n\n" +
+		"1. Скопируйте код (тап по блоку):\n\n" +
+		"   <pre>" + verificationCode + "</pre>\n\n" +
+		"2. Откройте Direct и отправьте его нам:\n\n" +
+		"   https://ig.me/m/ugc_boost\n\n" +
+		"Напишу сюда, как только проверим."
+}
 
 // validRequestWithIG mirrors the helper from creator_application package
 // without sharing types — keeps the two e2e packages independent. Carries
@@ -159,8 +180,7 @@ func TestTelegramLink(t *testing.T) {
 		})
 		require.Len(t, sent, 1)
 		require.Equal(t, upd.UserID, sent[0].ChatId)
-		require.Contains(t, sent[0].Text, code, "with-IG welcome must surface the verification code")
-		require.Contains(t, sent[0].Text, "https://ig.me/m/ugc_boost", "with-IG welcome must include the Direct deep-link")
+		require.Equal(t, welcomeWithIGText(code), sent[0].Text)
 		require.Nil(t, sent[0].WebAppUrl, "chunk-9 messages never carry a WebApp button")
 
 		adminClient, adminToken, _ := testutil.SetupAdminClient(t)
@@ -196,9 +216,7 @@ func TestTelegramLink(t *testing.T) {
 			ExpectCount: 1,
 		})
 		require.Len(t, sent, 1)
-		require.Contains(t, sent[0].Text, "Спасибо за заявку")
-		require.NotContains(t, sent[0].Text, "UGC-")
-		require.NotContains(t, strings.ToLower(sent[0].Text), "ig.me")
+		require.Equal(t, welcomeNoIGText, sent[0].Text)
 		require.Nil(t, sent[0].WebAppUrl)
 	})
 
@@ -224,7 +242,9 @@ func TestTelegramLink(t *testing.T) {
 			ExpectCount: 2,
 		})
 		require.Len(t, sent, 2, "idempotent re-link must trigger a second welcome")
-		require.Equal(t, sent[0].Text, sent[1].Text, "both welcomes must be identical")
+		expected := welcomeWithIGText(testutil.GetCreatorApplicationVerificationCode(t, appID))
+		require.Equal(t, expected, sent[0].Text)
+		require.Equal(t, expected, sent[1].Text)
 
 		// Audit entry exists exactly once — repeated /start must not produce a
 		// second link audit row.
