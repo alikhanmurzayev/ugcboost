@@ -370,21 +370,9 @@ export interface paths {
         put?: never;
         /**
          * SendPulse webhook for Instagram DM verification
-         * @description Public endpoint called by SendPulse when a creator messages our
-         *     official Instagram. The bearer token in `Authorization` is validated
-         *     against `SENDPULSE_WEBHOOK_SECRET` by a dedicated middleware before
-         *     the handler runs — wrong or missing secret yields 401 with an empty
-         *     body so an attacker cannot fingerprint the endpoint.
-         *
-         *     On a valid request the handler parses a `UGC-NNNNNN` code from
-         *     `lastMessage`, locates the matching application in `verification`
-         *     status, marks its Instagram social account as `auto`-verified and
-         *     triggers the `verification → moderation` transition (audit log +
-         *     history row + Telegram notification, all under one transaction).
-         *     Always returns 200 with an empty body — including no-op outcomes
-         *     (code missing, application not found, social already verified, no
-         *     IG social on the application). Detailed wiring lives in
-         *     `_bmad-output/implementation-artifacts/spec-creator-verification-instagram-webhook.md`.
+         * @description SendPulse-driven Instagram DM verification. Bearer-gated by the
+         *     SendPulse middleware. Always returns 200 `{}` past the bearer (incl.
+         *     no-op outcomes) and 401 `{}` before — anti-fingerprinting.
          */
         post: operations["sendPulseInstagramWebhook"];
         delete?: never;
@@ -712,6 +700,12 @@ export interface components {
         CreatorApplicationDetailData: {
             /** Format: uuid */
             id: string;
+            /**
+             * @description 6-digit `UGC-NNNNNN` code the creator must DM to the official
+             *     Instagram for auto-verification. Visible only via this admin
+             *     endpoint — never returned by public/landing routes.
+             */
+            verificationCode: string;
             lastName: string;
             firstName: string;
             middleName?: string | null;

@@ -61,8 +61,16 @@ type Config struct {
 	// Different bot per environment.
 	TelegramBotUsername string `env:"TELEGRAM_BOT_USERNAME,required"`
 
-	// Empty value means long polling does not start.
+	// Required when TelegramMock is false. With TelegramMock=true the sender
+	// runs in spy-only mode and the token is irrelevant.
 	TelegramBotToken string `env:"TELEGRAM_BOT_TOKEN" envDefault:""`
+
+	// When true the outbound Telegram sender records into an in-memory spy
+	// store and never touches the network. Used by local dev and CI so tests
+	// can assert on what would have been sent without a real bot. On staging
+	// false enables real delivery; the spy still records (Tee mode) because
+	// EnableTestEndpoints is also true there.
+	TelegramMock bool `env:"TELEGRAM_MOCK" envDefault:"false"`
 
 	// Public URL of the Telegram Mini App, embedded into the WebApp button
 	// inside outbound bot notifications (verification approved etc.).
@@ -113,6 +121,9 @@ func Load() (*Config, error) {
 	}
 	if cfg.TMAPublicURL == "" {
 		return nil, fmt.Errorf("TMA_PUBLIC_URL must be a non-empty value")
+	}
+	if !cfg.TelegramMock && cfg.TelegramBotToken == "" {
+		return nil, fmt.Errorf("TELEGRAM_BOT_TOKEN must be a non-empty value when TELEGRAM_MOCK=false")
 	}
 
 	// Derive values from Environment

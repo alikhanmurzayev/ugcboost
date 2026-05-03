@@ -349,6 +349,11 @@ type CreatorApplicationDetailData struct {
 	// has not yet opened the bot.
 	TelegramLink *TelegramLink `json:"telegramLink,omitempty"`
 	UpdatedAt    time.Time     `json:"updatedAt"`
+
+	// VerificationCode 6-digit `UGC-NNNNNN` code the creator must DM to the official
+	// Instagram for auto-verification. Visible only via this admin
+	// endpoint — never returned by public/landing routes.
+	VerificationCode string `json:"verificationCode"`
 }
 
 // CreatorApplicationDetailSocial defines model for CreatorApplicationDetailSocial.

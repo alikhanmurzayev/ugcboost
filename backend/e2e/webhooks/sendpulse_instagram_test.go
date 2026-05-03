@@ -1,25 +1,28 @@
 // Package webhooks — E2E тесты HTTP-поверхности /webhooks/* (chunk 8
-// creator-onboarding-roadmap).
+// creator-onboarding-roadmap, follow-up к PR #52 ревью).
 //
 // TestSendPulseInstagramWebhook проходит по всем веткам I/O-матрицы
 // SendPulse-вебхука. На вход — заявка, поданная через лендинг (статус
-// verification, Instagram-социалка). На выходе мы отслеживаем три сигнала:
-// HTTP-код самого вебхука (200 для всех успешных и no-op-исходов, 401 для
-// неверного bearer'а — анти-fingerprinting), статус заявки в admin-detail
-// (verification → moderation на happy path) и audit-row через
-// /audit-logs (creator_application_verification_auto). Записи в
+// verification, Instagram-социалка). На выходе мы отслеживаем четыре
+// сигнала: HTTP-код самого вебхука (200 для всех успешных и no-op-исходов,
+// 401 для неверного bearer'а — анти-fingerprinting), статус заявки в
+// admin-detail (verification → moderation на happy path), audit-row через
+// /audit-logs (creator_application_verification_auto) и outbound Telegram-
+// уведомление через тест-ручку /test/telegram/sent. Записи в
 // creator_application_status_transitions проверяются юнит-тестами и
-// вручную через psql — публичной/админской ручки чтения для них пока нет
-// (отдельный будущий чанк, когда появится UI).
+// вручную через psql — публичной/админской ручки чтения для них пока нет.
 //
 // Сценарии:
 //   - happy path: код, отправленный SendPulse'ом, совпадает с заявкой,
 //     IG-handle совпадает; ожидаем 200 {}, статус заявки moderation,
-//     audit-row с handle_changed=false;
+//     audit-row с handle_changed=false, ровно одно TG-уведомление с WebApp-
+//     кнопкой на TMA;
 //   - self-fix: тот же код, но username отличается от сохранённого handle;
-//     заявка всё равно переходит, audit-row помечает handle_changed=true;
+//     заявка переходит, audit-row помечает handle_changed=true, TG-нотификация
+//     уходит;
 //   - already verified: повторная доставка того же вебхука после happy
-//     path → 200 {}, статус и handle не меняются, новых audit-строк нет;
+//     path → 200 {}, статус и handle не меняются, новых audit-строк нет,
+//     повторное TG-уведомление не уходит;
 //   - not found: код, не привязанный ни к одной активной заявке → 200 {},
 //     никаких побочных эффектов;
 //   - no IG social: заявка без IG-социалки → 200 {}, статус остаётся;
@@ -39,7 +42,9 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -61,11 +66,14 @@ const auditActionCreatorApplicationVerificationAuto = "creator_application_verif
 func TestSendPulseInstagramWebhook(t *testing.T) {
 	t.Parallel()
 
-	t.Run("happy path verifies application and writes audit row", func(t *testing.T) {
+	t.Run("happy path verifies application, writes audit row, sends TG notification", func(t *testing.T) {
 		t.Parallel()
 		setup := testutil.SetupCreatorApplicationViaLanding(t)
 		appID := setup.ApplicationID
 		igHandle := normalisedIGHandle(t, setup.Request)
+
+		tgUpd := testutil.LinkTelegramToApplication(t, appID)
+		since := time.Now().UTC()
 
 		code := testutil.GetCreatorApplicationVerificationCode(t, appID)
 		body := testutil.SendPulseWebhookHappyPathRequest(code, igHandle)
@@ -77,24 +85,43 @@ func TestSendPulseInstagramWebhook(t *testing.T) {
 		adminClient, adminToken, _ := testutil.SetupAdminClient(t)
 		detail := getApplicationDetail(t, adminClient, adminToken, appID)
 		require.Equal(t, apiclient.Moderation, detail.Status)
+		require.Equal(t, code, detail.VerificationCode, "admin detail must surface the same code")
+
 		ig := findIGSocial(t, detail)
 		require.True(t, ig.Verified, "IG social must be verified after webhook")
 		require.NotNil(t, ig.Method)
 		require.Equal(t, apiclient.Auto, *ig.Method)
 		require.Equal(t, igHandle, ig.Handle, "happy path must leave the handle untouched")
+		require.Nil(t, ig.VerifiedByUserId, "auto verification has no actor")
+		require.NotNil(t, ig.VerifiedAt)
+		require.WithinDuration(t, time.Now().UTC(), *ig.VerifiedAt, time.Minute)
 
 		audit := testutil.FindAuditEntry(t, adminClient, adminToken,
 			auditEntityTypeCreatorApplication, appID,
 			auditActionCreatorApplicationVerificationAuto)
-		require.Equal(t, false, auditPayloadField(t, audit, "handle_changed"))
-		require.Equal(t, "verification", auditPayloadField(t, audit, "from_status"))
-		require.Equal(t, "moderation", auditPayloadField(t, audit, "to_status"))
+		assertAuditPayload(t, audit, appID, false)
+
+		sent := testutil.WaitForTelegramSent(t, tgUpd.UserID, testutil.TelegramSentOptions{
+			Since:       since,
+			ExpectCount: 1,
+		})
+		require.Len(t, sent, 1)
+		require.NotEmpty(t, sent[0].Text, "verification notification must carry text")
+		require.NotNil(t, sent[0].WebAppUrl, "verification notification must attach a WebApp button")
+		require.True(t, strings.HasPrefix(*sent[0].WebAppUrl, "http"),
+			"WebApp URL must point at the TMA: %q", *sent[0].WebAppUrl)
+		// sent[0].Error may be populated under TeeSender (real Telegram path
+		// rejects synthetic chat ids); we only assert orchestration-level
+		// invariants — a record exists, with the expected ChatID + WebApp.
 	})
 
-	t.Run("self-fix mismatch overwrites handle and stamps audit flag", func(t *testing.T) {
+	t.Run("self-fix mismatch overwrites handle, stamps audit flag, notifies", func(t *testing.T) {
 		t.Parallel()
 		setup := testutil.SetupCreatorApplicationViaLanding(t)
 		appID := setup.ApplicationID
+
+		tgUpd := testutil.LinkTelegramToApplication(t, appID)
+		since := time.Now().UTC()
 
 		code := testutil.GetCreatorApplicationVerificationCode(t, appID)
 		// Force an obvious mismatch — anything outside the original handle.
@@ -110,20 +137,28 @@ func TestSendPulseInstagramWebhook(t *testing.T) {
 		ig := findIGSocial(t, detail)
 		require.Equal(t, "definitelynew", ig.Handle, "self-fix must persist the normalised webhook handle")
 		require.True(t, ig.Verified)
+		require.Nil(t, ig.VerifiedByUserId)
 
 		audit := testutil.FindAuditEntry(t, adminClient, adminToken,
 			auditEntityTypeCreatorApplication, appID,
 			auditActionCreatorApplicationVerificationAuto)
-		require.Equal(t, true, auditPayloadField(t, audit, "handle_changed"))
-		require.Equal(t, "verification", auditPayloadField(t, audit, "from_status"))
-		require.Equal(t, "moderation", auditPayloadField(t, audit, "to_status"))
+		assertAuditPayload(t, audit, appID, true)
+
+		sent := testutil.WaitForTelegramSent(t, tgUpd.UserID, testutil.TelegramSentOptions{
+			Since:       since,
+			ExpectCount: 1,
+		})
+		require.Len(t, sent, 1)
 	})
 
-	t.Run("repeat delivery after success is a no-op", func(t *testing.T) {
+	t.Run("repeat delivery after success is a no-op (no audit, no TG)", func(t *testing.T) {
 		t.Parallel()
 		setup := testutil.SetupCreatorApplicationViaLanding(t)
 		appID := setup.ApplicationID
 		igHandle := normalisedIGHandle(t, setup.Request)
+
+		tgUpd := testutil.LinkTelegramToApplication(t, appID)
+		since := time.Now().UTC()
 
 		code := testutil.GetCreatorApplicationVerificationCode(t, appID)
 		body := testutil.SendPulseWebhookHappyPathRequest(code, igHandle)
@@ -132,10 +167,26 @@ func TestSendPulseInstagramWebhook(t *testing.T) {
 		status, _ := testutil.SendPulseWebhookCall(t, testutil.SendPulseWebhookOptions{Body: &body})
 		require.Equal(t, http.StatusOK, status)
 
+		// Wait for the first notification before the second call so we can
+		// distinguish "no extra send" from "send not yet recorded".
+		_ = testutil.WaitForTelegramSent(t, tgUpd.UserID, testutil.TelegramSentOptions{
+			Since:       since,
+			ExpectCount: 1,
+		})
+
 		// Second delivery — must short-circuit before any state change.
 		status2, body2 := testutil.SendPulseWebhookCall(t, testutil.SendPulseWebhookOptions{Body: &body})
 		require.Equal(t, http.StatusOK, status2)
 		require.JSONEq(t, "{}", string(body2))
+
+		// Give the (non-existent) second notify goroutine a chance to fire,
+		// then re-poll: count must still be 1.
+		time.Sleep(300 * time.Millisecond)
+		sent := testutil.WaitForTelegramSent(t, tgUpd.UserID, testutil.TelegramSentOptions{
+			Since:       since,
+			ExpectCount: 1,
+		})
+		require.Len(t, sent, 1, "noop must not send a second TG notification")
 
 		adminClient, adminToken, _ := testutil.SetupAdminClient(t)
 		entries := listVerificationAuditEntries(t, adminClient, adminToken, appID)
@@ -299,16 +350,23 @@ func listVerificationAuditEntries(t *testing.T, c *apiclient.ClientWithResponses
 	return resp.JSON200.Data.Logs
 }
 
-// auditPayloadField extracts a single JSON property from an audit entry's
-// new_value blob, fails the test if the field is absent.
-func auditPayloadField(t *testing.T, entry *apiclient.AuditLogEntry, field string) any {
+// assertAuditPayload verifies all five fields the verification_auto handler
+// stamps onto the audit row's new_value. social_id is shape-checked (UUID
+// string, non-empty) — the public detail DTO does not surface social.id, so
+// we cannot pin the exact value without exposing a new field just for tests.
+func assertAuditPayload(t *testing.T, entry *apiclient.AuditLogEntry, appID string, handleChanged bool) {
 	t.Helper()
 	require.NotNil(t, entry.NewValue)
 	raw, err := json.Marshal(entry.NewValue)
 	require.NoError(t, err)
 	var payload map[string]any
 	require.NoError(t, json.Unmarshal(raw, &payload))
-	v, ok := payload[field]
-	require.True(t, ok, "audit payload missing field %q: %s", field, raw)
-	return v
+	require.Equal(t, appID, payload["application_id"])
+	socialID, ok := payload["social_id"].(string)
+	require.True(t, ok, "social_id must be a string, got %T", payload["social_id"])
+	_, parseErr := uuid.Parse(socialID)
+	require.NoError(t, parseErr, "social_id must be a UUID: %q", socialID)
+	require.Equal(t, "verification", payload["from_status"])
+	require.Equal(t, "moderation", payload["to_status"])
+	require.Equal(t, handleChanged, payload["handle_changed"])
 }

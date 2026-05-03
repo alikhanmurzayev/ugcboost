@@ -95,37 +95,38 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
-  /test/creator-applications/{id}/verification-code:
+  /test/telegram/sent:
     get:
-      operationId: getCreatorApplicationVerificationCode
-      summary: Read the verification_code persisted on a creator application
+      operationId: getTelegramSent
+      summary: Read recorded outbound Telegram messages
       description: |
-        Test-only window into the verification_code column. The production
-        admin/creator API deliberately hides the code (it is the secret the
-        SendPulse webhook matches against), but the e2e webhook tests need
-        the value to construct a realistic IG DM payload. NEVER enabled in
-        production.
+        Returns SentRecord rows captured by the in-process spy store every
+        time the backend's Telegram Sender is invoked. Filter by chatId
+        (always required to keep parallel e2e isolated) and optionally
+        by `since` to bound the lookup. NEVER enabled in production.
       tags: [test]
       parameters:
-        - name: id
-          in: path
+        - name: chatId
+          in: query
           required: true
           schema:
+            type: integer
+            format: int64
+          description: Telegram chat id (== TG user id for private DMs).
+        - name: since
+          in: query
+          required: false
+          schema:
             type: string
-            format: uuid
+            format: date-time
+          description: Only records sent at or after this timestamp.
       responses:
         "200":
-          description: Verification code returned
+          description: Recorded messages
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CreatorApplicationVerificationCodeResult"
-        "404":
-          description: Application not found
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
+                $ref: "#/components/schemas/TelegramSentResult"
 
   /test/telegram/message:
     post:
@@ -263,20 +264,47 @@ components:
           items:
             $ref: "#/components/schemas/TelegramReply"
 
-    CreatorApplicationVerificationCodeData:
+    TelegramSentMessage:
       type: object
-      required: [verificationCode]
+      required: [chatId, text, sentAt]
       properties:
-        verificationCode:
+        chatId:
+          type: integer
+          format: int64
+        text:
           type: string
-          description: The UGC-NNNNNN code persisted on the application.
+        webAppUrl:
+          type: string
+          nullable: true
+          description: |
+            URL embedded into the InlineKeyboardMarkup WebApp button when
+            the sender attached one. Null for plain-text messages.
+        sentAt:
+          type: string
+          format: date-time
+        error:
+          type: string
+          nullable: true
+          description: |
+            Empty when the real upstream Telegram send succeeded (or when
+            running under the spy-only sender, which never errs); populated
+            with the upstream error string in TeeSender mode.
 
-    CreatorApplicationVerificationCodeResult:
+    TelegramSentData:
+      type: object
+      required: [messages]
+      properties:
+        messages:
+          type: array
+          items:
+            $ref: "#/components/schemas/TelegramSentMessage"
+
+    TelegramSentResult:
       type: object
       required: [data]
       properties:
         data:
-          $ref: "#/components/schemas/CreatorApplicationVerificationCodeData"
+          $ref: "#/components/schemas/TelegramSentData"
 
     ErrorResponse:
       type: object

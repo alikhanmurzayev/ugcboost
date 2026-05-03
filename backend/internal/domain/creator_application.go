@@ -209,6 +209,7 @@ type CreatorApplicationDetail struct {
 	Address           *string
 	CategoryOtherText *string
 	Status            string
+	VerificationCode  string
 	CreatedAt         time.Time
 	UpdatedAt         time.Time
 	Categories        []string

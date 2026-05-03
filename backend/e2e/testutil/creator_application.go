@@ -48,18 +48,19 @@ func SetupCreatorApplicationViaLanding(t *testing.T, mutate ...func(*apiclient.C
 }
 
 // GetCreatorApplicationVerificationCode fetches the persisted verification
-// code for an application via the test-only endpoint. Used by SendPulse
-// webhook tests to construct realistic IG DM payloads — the production API
-// hides the column.
+// code via the admin detail endpoint. Used by SendPulse webhook tests to
+// construct realistic IG DM payloads. Public/landing endpoints intentionally
+// hide the field — only admins (and these e2e tests, with admin token) see it.
 func GetCreatorApplicationVerificationCode(t *testing.T, applicationID string) string {
 	t.Helper()
-	tc := NewTestClient(t)
+	c, token, _ := SetupAdminClient(t)
 	id, err := uuid.Parse(applicationID)
 	require.NoError(t, err)
-	resp, err := tc.GetCreatorApplicationVerificationCodeWithResponse(context.Background(), id)
+	resp, err := c.GetCreatorApplicationWithResponse(context.Background(), id, WithAuth(token))
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, resp.StatusCode())
 	require.NotNil(t, resp.JSON200)
+	require.NotEmpty(t, resp.JSON200.Data.VerificationCode, "admin detail must surface verification_code")
 	return resp.JSON200.Data.VerificationCode
 }
 

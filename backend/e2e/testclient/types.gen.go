@@ -4,6 +4,8 @@
 package testclient
 
 import (
+	"time"
+
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
@@ -72,17 +74,6 @@ type CleanupEntityRequest struct {
 
 // CleanupEntityRequestType defines model for CleanupEntityRequest.Type.
 type CleanupEntityRequestType string
-
-// CreatorApplicationVerificationCodeData defines model for CreatorApplicationVerificationCodeData.
-type CreatorApplicationVerificationCodeData struct {
-	// VerificationCode The UGC-NNNNNN code persisted on the application.
-	VerificationCode string `json:"verificationCode"`
-}
-
-// CreatorApplicationVerificationCodeResult defines model for CreatorApplicationVerificationCodeResult.
-type CreatorApplicationVerificationCodeResult struct {
-	Data CreatorApplicationVerificationCodeData `json:"data"`
-}
 
 // ErrorResponse defines model for ErrorResponse.
 type ErrorResponse struct {
@@ -155,9 +146,44 @@ type TelegramReply struct {
 	Text   string `json:"text"`
 }
 
+// TelegramSentData defines model for TelegramSentData.
+type TelegramSentData struct {
+	Messages []TelegramSentMessage `json:"messages"`
+}
+
+// TelegramSentMessage defines model for TelegramSentMessage.
+type TelegramSentMessage struct {
+	ChatId int64 `json:"chatId"`
+
+	// Error Empty when the real upstream Telegram send succeeded (or when
+	// running under the spy-only sender, which never errs); populated
+	// with the upstream error string in TeeSender mode.
+	Error  *string   `json:"error,omitempty"`
+	SentAt time.Time `json:"sentAt"`
+	Text   string    `json:"text"`
+
+	// WebAppUrl URL embedded into the InlineKeyboardMarkup WebApp button when
+	// the sender attached one. Null for plain-text messages.
+	WebAppUrl *string `json:"webAppUrl,omitempty"`
+}
+
+// TelegramSentResult defines model for TelegramSentResult.
+type TelegramSentResult struct {
+	Data TelegramSentData `json:"data"`
+}
+
 // GetResetTokenParams defines parameters for GetResetToken.
 type GetResetTokenParams struct {
 	Email openapi_types.Email `form:"email" json:"email"`
+}
+
+// GetTelegramSentParams defines parameters for GetTelegramSent.
+type GetTelegramSentParams struct {
+	// ChatId Telegram chat id (== TG user id for private DMs).
+	ChatId int64 `form:"chatId" json:"chatId"`
+
+	// Since Only records sent at or after this timestamp.
+	Since *time.Time `form:"since,omitempty" json:"since,omitempty"`
 }
 
 // CleanupEntityJSONRequestBody defines body for CleanupEntity for application/json ContentType.

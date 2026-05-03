@@ -14,7 +14,6 @@ import (
 	"strings"
 
 	"github.com/oapi-codegen/runtime"
-	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
 // RequestEditorFn  is the function signature for the RequestEditor callback function
@@ -95,9 +94,6 @@ type ClientInterface interface {
 
 	CleanupEntity(ctx context.Context, body CleanupEntityJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// GetCreatorApplicationVerificationCode request
-	GetCreatorApplicationVerificationCode(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
-
 	// GetResetToken request
 	GetResetToken(ctx context.Context, params *GetResetTokenParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -110,6 +106,9 @@ type ClientInterface interface {
 	SendTelegramMessageWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	SendTelegramMessage(ctx context.Context, body SendTelegramMessageJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// GetTelegramSent request
+	GetTelegramSent(ctx context.Context, params *GetTelegramSentParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 }
 
 func (c *Client) CleanupEntityWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -126,18 +125,6 @@ func (c *Client) CleanupEntityWithBody(ctx context.Context, contentType string, 
 
 func (c *Client) CleanupEntity(ctx context.Context, body CleanupEntityJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewCleanupEntityRequest(c.Server, body)
-	if err != nil {
-		return nil, err
-	}
-	req = req.WithContext(ctx)
-	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
-		return nil, err
-	}
-	return c.Client.Do(req)
-}
-
-func (c *Client) GetCreatorApplicationVerificationCode(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewGetCreatorApplicationVerificationCodeRequest(c.Server, id)
 	if err != nil {
 		return nil, err
 	}
@@ -208,6 +195,18 @@ func (c *Client) SendTelegramMessage(ctx context.Context, body SendTelegramMessa
 	return c.Client.Do(req)
 }
 
+func (c *Client) GetTelegramSent(ctx context.Context, params *GetTelegramSentParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetTelegramSentRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 // NewCleanupEntityRequest calls the generic CleanupEntity builder with application/json body
 func NewCleanupEntityRequest(server string, body CleanupEntityJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
@@ -244,40 +243,6 @@ func NewCleanupEntityRequestWithBody(server string, contentType string, body io.
 	}
 
 	req.Header.Add("Content-Type", contentType)
-
-	return req, nil
-}
-
-// NewGetCreatorApplicationVerificationCodeRequest generates requests for GetCreatorApplicationVerificationCode
-func NewGetCreatorApplicationVerificationCodeRequest(server string, id openapi_types.UUID) (*http.Request, error) {
-	var err error
-
-	var pathParam0 string
-
-	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
-	if err != nil {
-		return nil, err
-	}
-
-	serverURL, err := url.Parse(server)
-	if err != nil {
-		return nil, err
-	}
-
-	operationPath := fmt.Sprintf("/test/creator-applications/%s/verification-code", pathParam0)
-	if operationPath[0] == '/' {
-		operationPath = "." + operationPath
-	}
-
-	queryURL, err := serverURL.Parse(operationPath)
-	if err != nil {
-		return nil, err
-	}
-
-	req, err := http.NewRequest("GET", queryURL.String(), nil)
-	if err != nil {
-		return nil, err
-	}
 
 	return req, nil
 }
@@ -407,6 +372,67 @@ func NewSendTelegramMessageRequestWithBody(server string, contentType string, bo
 	return req, nil
 }
 
+// NewGetTelegramSentRequest generates requests for GetTelegramSent
+func NewGetTelegramSentRequest(server string, params *GetTelegramSentParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/test/telegram/sent")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", true, "chatId", params.ChatId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: "int64"}); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if params.Since != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "since", *params.Since, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: "date-time"}); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 func (c *Client) applyEditors(ctx context.Context, req *http.Request, additionalEditors []RequestEditorFn) error {
 	for _, r := range c.RequestEditors {
 		if err := r(ctx, req); err != nil {
@@ -455,9 +481,6 @@ type ClientWithResponsesInterface interface {
 
 	CleanupEntityWithResponse(ctx context.Context, body CleanupEntityJSONRequestBody, reqEditors ...RequestEditorFn) (*CleanupEntityResponse, error)
 
-	// GetCreatorApplicationVerificationCodeWithResponse request
-	GetCreatorApplicationVerificationCodeWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetCreatorApplicationVerificationCodeResponse, error)
-
 	// GetResetTokenWithResponse request
 	GetResetTokenWithResponse(ctx context.Context, params *GetResetTokenParams, reqEditors ...RequestEditorFn) (*GetResetTokenResponse, error)
 
@@ -470,6 +493,9 @@ type ClientWithResponsesInterface interface {
 	SendTelegramMessageWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SendTelegramMessageResponse, error)
 
 	SendTelegramMessageWithResponse(ctx context.Context, body SendTelegramMessageJSONRequestBody, reqEditors ...RequestEditorFn) (*SendTelegramMessageResponse, error)
+
+	// GetTelegramSentWithResponse request
+	GetTelegramSentWithResponse(ctx context.Context, params *GetTelegramSentParams, reqEditors ...RequestEditorFn) (*GetTelegramSentResponse, error)
 }
 
 type CleanupEntityResponse struct {
@@ -489,29 +515,6 @@ func (r CleanupEntityResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r CleanupEntityResponse) StatusCode() int {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.StatusCode
-	}
-	return 0
-}
-
-type GetCreatorApplicationVerificationCodeResponse struct {
-	Body         []byte
-	HTTPResponse *http.Response
-	JSON200      *CreatorApplicationVerificationCodeResult
-	JSON404      *ErrorResponse
-}
-
-// Status returns HTTPResponse.Status
-func (r GetCreatorApplicationVerificationCodeResponse) Status() string {
-	if r.HTTPResponse != nil {
-		return r.HTTPResponse.Status
-	}
-	return http.StatusText(0)
-}
-
-// StatusCode returns HTTPResponse.StatusCode
-func (r GetCreatorApplicationVerificationCodeResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -587,6 +590,28 @@ func (r SendTelegramMessageResponse) StatusCode() int {
 	return 0
 }
 
+type GetTelegramSentResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *TelegramSentResult
+}
+
+// Status returns HTTPResponse.Status
+func (r GetTelegramSentResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetTelegramSentResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 // CleanupEntityWithBodyWithResponse request with arbitrary body returning *CleanupEntityResponse
 func (c *ClientWithResponses) CleanupEntityWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CleanupEntityResponse, error) {
 	rsp, err := c.CleanupEntityWithBody(ctx, contentType, body, reqEditors...)
@@ -602,15 +627,6 @@ func (c *ClientWithResponses) CleanupEntityWithResponse(ctx context.Context, bod
 		return nil, err
 	}
 	return ParseCleanupEntityResponse(rsp)
-}
-
-// GetCreatorApplicationVerificationCodeWithResponse request returning *GetCreatorApplicationVerificationCodeResponse
-func (c *ClientWithResponses) GetCreatorApplicationVerificationCodeWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetCreatorApplicationVerificationCodeResponse, error) {
-	rsp, err := c.GetCreatorApplicationVerificationCode(ctx, id, reqEditors...)
-	if err != nil {
-		return nil, err
-	}
-	return ParseGetCreatorApplicationVerificationCodeResponse(rsp)
 }
 
 // GetResetTokenWithResponse request returning *GetResetTokenResponse
@@ -656,6 +672,15 @@ func (c *ClientWithResponses) SendTelegramMessageWithResponse(ctx context.Contex
 	return ParseSendTelegramMessageResponse(rsp)
 }
 
+// GetTelegramSentWithResponse request returning *GetTelegramSentResponse
+func (c *ClientWithResponses) GetTelegramSentWithResponse(ctx context.Context, params *GetTelegramSentParams, reqEditors ...RequestEditorFn) (*GetTelegramSentResponse, error) {
+	rsp, err := c.GetTelegramSent(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetTelegramSentResponse(rsp)
+}
+
 // ParseCleanupEntityResponse parses an HTTP response from a CleanupEntityWithResponse call
 func ParseCleanupEntityResponse(rsp *http.Response) (*CleanupEntityResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -683,39 +708,6 @@ func ParseCleanupEntityResponse(rsp *http.Response) (*CleanupEntityResponse, err
 			return nil, err
 		}
 		response.JSON422 = &dest
-
-	}
-
-	return response, nil
-}
-
-// ParseGetCreatorApplicationVerificationCodeResponse parses an HTTP response from a GetCreatorApplicationVerificationCodeWithResponse call
-func ParseGetCreatorApplicationVerificationCodeResponse(rsp *http.Response) (*GetCreatorApplicationVerificationCodeResponse, error) {
-	bodyBytes, err := io.ReadAll(rsp.Body)
-	defer func() { _ = rsp.Body.Close() }()
-	if err != nil {
-		return nil, err
-	}
-
-	response := &GetCreatorApplicationVerificationCodeResponse{
-		Body:         bodyBytes,
-		HTTPResponse: rsp,
-	}
-
-	switch {
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
-		var dest CreatorApplicationVerificationCodeResult
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON200 = &dest
-
-	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
-		var dest ErrorResponse
-		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
-			return nil, err
-		}
-		response.JSON404 = &dest
 
 	}
 
@@ -815,6 +807,32 @@ func ParseSendTelegramMessageResponse(rsp *http.Response) (*SendTelegramMessageR
 			return nil, err
 		}
 		response.JSON422 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetTelegramSentResponse parses an HTTP response from a GetTelegramSentWithResponse call
+func ParseGetTelegramSentResponse(rsp *http.Response) (*GetTelegramSentResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetTelegramSentResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest TelegramSentResult
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
 
 	}
 

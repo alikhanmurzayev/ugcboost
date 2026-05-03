@@ -62,7 +62,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/test/creator-applications/{id}/verification-code": {
+    "/test/telegram/sent": {
         parameters: {
             query?: never;
             header?: never;
@@ -70,14 +70,13 @@ export interface paths {
             cookie?: never;
         };
         /**
-         * Read the verification_code persisted on a creator application
-         * @description Test-only window into the verification_code column. The production
-         *     admin/creator API deliberately hides the code (it is the secret the
-         *     SendPulse webhook matches against), but the e2e webhook tests need
-         *     the value to construct a realistic IG DM payload. NEVER enabled in
-         *     production.
+         * Read recorded outbound Telegram messages
+         * @description Returns SentRecord rows captured by the in-process spy store every
+         *     time the backend's Telegram Sender is invoked. Filter by chatId
+         *     (always required to keep parallel e2e isolated) and optionally
+         *     by `since` to bound the lookup. NEVER enabled in production.
          */
-        get: operations["getCreatorApplicationVerificationCode"];
+        get: operations["getTelegramSent"];
         put?: never;
         post?: never;
         delete?: never;
@@ -167,12 +166,29 @@ export interface components {
         SendTelegramMessageResult: {
             replies: components["schemas"]["TelegramReply"][];
         };
-        CreatorApplicationVerificationCodeData: {
-            /** @description The UGC-NNNNNN code persisted on the application. */
-            verificationCode: string;
+        TelegramSentMessage: {
+            /** Format: int64 */
+            chatId: number;
+            text: string;
+            /**
+             * @description URL embedded into the InlineKeyboardMarkup WebApp button when
+             *     the sender attached one. Null for plain-text messages.
+             */
+            webAppUrl?: string | null;
+            /** Format: date-time */
+            sentAt: string;
+            /**
+             * @description Empty when the real upstream Telegram send succeeded (or when
+             *     running under the spy-only sender, which never errs); populated
+             *     with the upstream error string in TeeSender mode.
+             */
+            error?: string | null;
         };
-        CreatorApplicationVerificationCodeResult: {
-            data: components["schemas"]["CreatorApplicationVerificationCodeData"];
+        TelegramSentData: {
+            messages: components["schemas"]["TelegramSentMessage"][];
+        };
+        TelegramSentResult: {
+            data: components["schemas"]["TelegramSentData"];
         };
         ErrorResponse: {
             error: {
@@ -293,33 +309,27 @@ export interface operations {
             };
         };
     };
-    getCreatorApplicationVerificationCode: {
+    getTelegramSent: {
         parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                id: string;
+            query: {
+                /** @description Telegram chat id (== TG user id for private DMs). */
+                chatId: number;
+                /** @description Only records sent at or after this timestamp. */
+                since?: string;
             };
+            header?: never;
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description Verification code returned */
+            /** @description Recorded messages */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["CreatorApplicationVerificationCodeResult"];
-                };
-            };
-            /** @description Application not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ErrorResponse"];
+                    "application/json": components["schemas"]["TelegramSentResult"];
                 };
             };
         };
