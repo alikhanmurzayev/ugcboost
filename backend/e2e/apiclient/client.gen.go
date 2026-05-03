@@ -165,6 +165,11 @@ type ClientInterface interface {
 
 	// HealthCheck request
 	HealthCheck(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// SendPulseInstagramWebhookWithBody request with any body
+	SendPulseInstagramWebhookWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	SendPulseInstagramWebhook(ctx context.Context, body SendPulseInstagramWebhookJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 }
 
 func (c *Client) ListAuditLogs(ctx context.Context, params *ListAuditLogsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -493,6 +498,30 @@ func (c *Client) ListDictionary(ctx context.Context, pType ListDictionaryParamsT
 
 func (c *Client) HealthCheck(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewHealthCheckRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) SendPulseInstagramWebhookWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewSendPulseInstagramWebhookRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) SendPulseInstagramWebhook(ctx context.Context, body SendPulseInstagramWebhookJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewSendPulseInstagramWebhookRequest(c.Server, body)
 	if err != nil {
 		return nil, err
 	}
@@ -1337,6 +1366,46 @@ func NewHealthCheckRequest(server string) (*http.Request, error) {
 	return req, nil
 }
 
+// NewSendPulseInstagramWebhookRequest calls the generic SendPulseInstagramWebhook builder with application/json body
+func NewSendPulseInstagramWebhookRequest(server string, body SendPulseInstagramWebhookJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewSendPulseInstagramWebhookRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewSendPulseInstagramWebhookRequestWithBody generates requests for SendPulseInstagramWebhook with any type of body
+func NewSendPulseInstagramWebhookRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/webhooks/sendpulse/instagram")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 func (c *Client) applyEditors(ctx context.Context, req *http.Request, additionalEditors []RequestEditorFn) error {
 	for _, r := range c.RequestEditors {
 		if err := r(ctx, req); err != nil {
@@ -1455,6 +1524,11 @@ type ClientWithResponsesInterface interface {
 
 	// HealthCheckWithResponse request
 	HealthCheckWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*HealthCheckResponse, error)
+
+	// SendPulseInstagramWebhookWithBodyWithResponse request with any body
+	SendPulseInstagramWebhookWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SendPulseInstagramWebhookResponse, error)
+
+	SendPulseInstagramWebhookWithResponse(ctx context.Context, body SendPulseInstagramWebhookJSONRequestBody, reqEditors ...RequestEditorFn) (*SendPulseInstagramWebhookResponse, error)
 }
 
 type ListAuditLogsResponse struct {
@@ -1945,6 +2019,30 @@ func (r HealthCheckResponse) StatusCode() int {
 	return 0
 }
 
+type SendPulseInstagramWebhookResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *SendPulseInstagramWebhookResult
+	JSON401      *SendPulseInstagramWebhookResult
+	JSONDefault  *UnexpectedError
+}
+
+// Status returns HTTPResponse.Status
+func (r SendPulseInstagramWebhookResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r SendPulseInstagramWebhookResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 // ListAuditLogsWithResponse request returning *ListAuditLogsResponse
 func (c *ClientWithResponses) ListAuditLogsWithResponse(ctx context.Context, params *ListAuditLogsParams, reqEditors ...RequestEditorFn) (*ListAuditLogsResponse, error) {
 	rsp, err := c.ListAuditLogs(ctx, params, reqEditors...)
@@ -2187,6 +2285,23 @@ func (c *ClientWithResponses) HealthCheckWithResponse(ctx context.Context, reqEd
 		return nil, err
 	}
 	return ParseHealthCheckResponse(rsp)
+}
+
+// SendPulseInstagramWebhookWithBodyWithResponse request with arbitrary body returning *SendPulseInstagramWebhookResponse
+func (c *ClientWithResponses) SendPulseInstagramWebhookWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SendPulseInstagramWebhookResponse, error) {
+	rsp, err := c.SendPulseInstagramWebhookWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseSendPulseInstagramWebhookResponse(rsp)
+}
+
+func (c *ClientWithResponses) SendPulseInstagramWebhookWithResponse(ctx context.Context, body SendPulseInstagramWebhookJSONRequestBody, reqEditors ...RequestEditorFn) (*SendPulseInstagramWebhookResponse, error) {
+	rsp, err := c.SendPulseInstagramWebhook(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseSendPulseInstagramWebhookResponse(rsp)
 }
 
 // ParseListAuditLogsResponse parses an HTTP response from a ListAuditLogsWithResponse call
@@ -3032,6 +3147,46 @@ func ParseHealthCheckResponse(rsp *http.Response) (*HealthCheckResponse, error) 
 			return nil, err
 		}
 		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest UnexpectedError
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseSendPulseInstagramWebhookResponse parses an HTTP response from a SendPulseInstagramWebhookWithResponse call
+func ParseSendPulseInstagramWebhookResponse(rsp *http.Response) (*SendPulseInstagramWebhookResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &SendPulseInstagramWebhookResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest SendPulseInstagramWebhookResult
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest SendPulseInstagramWebhookResult
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
 		var dest UnexpectedError

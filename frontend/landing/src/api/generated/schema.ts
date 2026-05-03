@@ -359,6 +359,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/webhooks/sendpulse/instagram": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * SendPulse webhook for Instagram DM verification
+         * @description SendPulse-driven Instagram DM verification. Bearer-gated by the
+         *     SendPulse middleware. Always returns 200 `{}` past the bearer (incl.
+         *     no-op outcomes) and 401 `{}` before — anti-fingerprinting.
+         */
+        post: operations["sendPulseInstagramWebhook"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -678,6 +700,12 @@ export interface components {
         CreatorApplicationDetailData: {
             /** Format: uuid */
             id: string;
+            /**
+             * @description 6-digit `UGC-NNNNNN` code the creator must DM to the official
+             *     Instagram for auto-verification. Visible only via this admin
+             *     endpoint — never returned by public/landing routes.
+             */
+            verificationCode: string;
             lastName: string;
             firstName: string;
             middleName?: string | null;
@@ -832,6 +860,26 @@ export interface components {
         CreatorApplicationsCountsResult: {
             data: components["schemas"]["CreatorApplicationsCountsData"];
         };
+        /**
+         * @description Custom JSON payload SendPulse delivers from the Instagram chatbot.
+         *     `username` and `lastMessage` come from the configured "send custom
+         *     data" action; `contactId` is SendPulse's opaque contact identifier
+         *     kept for trace correlation.
+         */
+        SendPulseInstagramWebhookRequest: {
+            /** @description Instagram handle of the message sender as SendPulse received it. */
+            username: string;
+            /** @description Body of the last message in the IG DM thread. */
+            lastMessage: string;
+            /** @description Optional SendPulse contact id; opaque to backend, kept for correlation. */
+            contactId?: string;
+        };
+        /**
+         * @description Empty object — the SendPulse webhook never carries data back. Both
+         *     success (200) and the constant-time auth failure (401) emit the
+         *     same `{}` body.
+         */
+        SendPulseInstagramWebhookResult: Record<string, never>;
     };
     responses: {
         /** @description Unexpected error */
@@ -1517,6 +1565,40 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            default: components["responses"]["UnexpectedError"];
+        };
+    };
+    sendPulseInstagramWebhook: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SendPulseInstagramWebhookRequest"];
+            };
+        };
+        responses: {
+            /** @description Webhook processed (always — including no-op cases). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SendPulseInstagramWebhookResult"];
+                };
+            };
+            /** @description Wrong or missing bearer secret. Body is empty — no fingerprinting. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SendPulseInstagramWebhookResult"];
                 };
             };
             default: components["responses"]["UnexpectedError"];

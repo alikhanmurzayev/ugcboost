@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"testing"
 	"time"
@@ -161,6 +162,93 @@ func TestCreatorApplicationSocialRepository_ListByApplicationIDs(t *testing.T) {
 			WillReturnError(errors.New("db down"))
 
 		_, err := repo.ListByApplicationIDs(context.Background(), []string{"app-1", "app-2"})
+		require.ErrorContains(t, err, "db down")
+	})
+}
+
+func TestCreatorApplicationSocialRepository_UpdateVerification(t *testing.T) {
+	t.Parallel()
+
+	const sqlStmt = "UPDATE creator_application_socials SET handle = $1, verified = $2, method = $3, verified_by_user_id = $4, verified_at = $5 WHERE id = $6"
+
+	verifiedAt := time.Date(2026, 5, 2, 12, 0, 0, 0, time.UTC)
+
+	t.Run("auto-verification with self-fix overwrites handle", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &creatorApplicationSocialRepository{db: mock}
+
+		mock.ExpectExec(sqlStmt).
+			WithArgs("newhandle", true, "auto", (*string)(nil), verifiedAt, "social-1").
+			WillReturnResult(pgxmock.NewResult("UPDATE", 1))
+
+		err := repo.UpdateVerification(context.Background(), UpdateSocialVerificationParams{
+			ID:               "social-1",
+			Handle:           "newhandle",
+			Verified:         true,
+			Method:           "auto",
+			VerifiedByUserID: nil,
+			VerifiedAt:       verifiedAt,
+		})
+		require.NoError(t, err)
+	})
+
+	t.Run("manual verification stamps actor id", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &creatorApplicationSocialRepository{db: mock}
+		actorID := "00000000-0000-0000-0000-000000000aaa"
+
+		mock.ExpectExec(sqlStmt).
+			WithArgs("aidana", true, "manual", &actorID, verifiedAt, "social-1").
+			WillReturnResult(pgxmock.NewResult("UPDATE", 1))
+
+		err := repo.UpdateVerification(context.Background(), UpdateSocialVerificationParams{
+			ID:               "social-1",
+			Handle:           "aidana",
+			Verified:         true,
+			Method:           "manual",
+			VerifiedByUserID: &actorID,
+			VerifiedAt:       verifiedAt,
+		})
+		require.NoError(t, err)
+	})
+
+	t.Run("missing row returns sql.ErrNoRows", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &creatorApplicationSocialRepository{db: mock}
+
+		mock.ExpectExec(sqlStmt).
+			WithArgs("aidana", true, "auto", (*string)(nil), verifiedAt, "missing").
+			WillReturnResult(pgxmock.NewResult("UPDATE", 0))
+
+		err := repo.UpdateVerification(context.Background(), UpdateSocialVerificationParams{
+			ID:         "missing",
+			Handle:     "aidana",
+			Verified:   true,
+			Method:     "auto",
+			VerifiedAt: verifiedAt,
+		})
+		require.ErrorIs(t, err, sql.ErrNoRows)
+	})
+
+	t.Run("propagates db errors", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &creatorApplicationSocialRepository{db: mock}
+
+		mock.ExpectExec(sqlStmt).
+			WithArgs("aidana", true, "auto", (*string)(nil), verifiedAt, "social-1").
+			WillReturnError(errors.New("db down"))
+
+		err := repo.UpdateVerification(context.Background(), UpdateSocialVerificationParams{
+			ID:         "social-1",
+			Handle:     "aidana",
+			Verified:   true,
+			Method:     "auto",
+			VerifiedAt: verifiedAt,
+		})
 		require.ErrorContains(t, err, "db down")
 	})
 }

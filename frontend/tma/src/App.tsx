@@ -23,7 +23,10 @@ function App() {
                   <h1 className="text-3xl font-bold text-gray-900">
                     UGCBoost
                   </h1>
-                  <p className="mt-2 text-gray-500">Telegram Mini App</p>
+                  <p className="mt-2 text-gray-500">
+                    Спасибо за заявку! Статус и инструкции скоро появятся
+                    здесь. Обновления приходят в Telegram.
+                  </p>
                 </div>
               </div>
             }

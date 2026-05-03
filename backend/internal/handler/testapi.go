@@ -44,12 +44,13 @@ type TestAPICleanupRepoFactory interface {
 // because the hard-delete semantics are test-only and must not leak into
 // production call sites — see repository.UserRepo.DeleteForTests for details.
 type TestAPIHandler struct {
-	auth       TestAPIAuthService
-	pool       dbutil.Pool
-	repos      TestAPICleanupRepoFactory
-	tokenStore TokenStore
-	tgHandler  *telegram.Handler
-	logger     logger.Logger
+	auth        TestAPIAuthService
+	pool        dbutil.Pool
+	repos       TestAPICleanupRepoFactory
+	tokenStore  TokenStore
+	tgHandler   *telegram.Handler
+	telegramSpy *telegram.SentSpyStore
+	logger      logger.Logger
 }
 
 var _ testapi.StrictServerInterface = (*TestAPIHandler)(nil)
@@ -61,15 +62,17 @@ func NewTestAPIHandler(
 	repos TestAPICleanupRepoFactory,
 	tokenStore TokenStore,
 	tgHandler *telegram.Handler,
+	telegramSpy *telegram.SentSpyStore,
 	log logger.Logger,
 ) *TestAPIHandler {
 	return &TestAPIHandler{
-		auth:       auth,
-		pool:       pool,
-		repos:      repos,
-		tokenStore: tokenStore,
-		tgHandler:  tgHandler,
-		logger:     log,
+		auth:        auth,
+		pool:        pool,
+		repos:       repos,
+		tokenStore:  tokenStore,
+		tgHandler:   tgHandler,
+		telegramSpy: telegramSpy,
+		logger:      log,
 	}
 }
 
@@ -207,4 +210,53 @@ func (h *TestAPIHandler) GetResetToken(_ context.Context, request testapi.GetRes
 	return testapi.GetResetToken200JSONResponse{
 		Data: testapi.ResetTokenData{Token: token},
 	}, nil
+}
+
+// GetTelegramSent handles GET /test/telegram/sent. Returns SentRecord rows
+// captured by the spy store, filtered by chatId (always required so parallel
+// e2e suites stay isolated) and optional `since`. WebApp URL is extracted
+// from the InlineKeyboardMarkup the sender attached, when present.
+func (h *TestAPIHandler) GetTelegramSent(_ context.Context, request testapi.GetTelegramSentRequestObject) (testapi.GetTelegramSentResponseObject, error) {
+	filter := telegram.SentFilter{ChatID: request.Params.ChatId}
+	if request.Params.Since != nil {
+		filter.Since = *request.Params.Since
+	}
+	records := h.telegramSpy.List(filter)
+	out := make([]testapi.TelegramSentMessage, 0, len(records))
+	for _, r := range records {
+		msg := testapi.TelegramSentMessage{
+			ChatId: r.ChatID,
+			Text:   r.Text,
+			SentAt: r.SentAt,
+		}
+		if url := webAppURLFrom(r.ReplyMarkup); url != "" {
+			msg.WebAppUrl = &url
+		}
+		if r.Err != "" {
+			errCopy := r.Err
+			msg.Error = &errCopy
+		}
+		out = append(out, msg)
+	}
+	return testapi.GetTelegramSent200JSONResponse{
+		Data: testapi.TelegramSentData{Messages: out},
+	}, nil
+}
+
+// webAppURLFrom extracts the first WebApp URL from an InlineKeyboardMarkup,
+// when the recorded reply markup is exactly that shape. Anything else
+// returns "" — callers treat empty as "no WebApp button attached".
+func webAppURLFrom(markup any) string {
+	kb, ok := markup.(tgmodels.InlineKeyboardMarkup)
+	if !ok {
+		return ""
+	}
+	for _, row := range kb.InlineKeyboard {
+		for _, btn := range row {
+			if btn.WebApp != nil {
+				return btn.WebApp.URL
+			}
+		}
+	}
+	return ""
 }

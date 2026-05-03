@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math/big"
 	"regexp"
+	"strings"
 	"time"
 )
 
@@ -208,6 +209,7 @@ type CreatorApplicationDetail struct {
 	Address           *string
 	CategoryOtherText *string
 	Status            string
+	VerificationCode  string
 	CreatedAt         time.Time
 	UpdatedAt         time.Time
 	Categories        []string
@@ -413,3 +415,96 @@ func GenerateVerificationCode() (string, error) {
 	}
 	return fmt.Sprintf("%s%0*d", VerificationCodePrefix, VerificationCodeDigits, n.Int64()), nil
 }
+
+// verificationCodeParseRegex matches a single "UGC-NNNNNN" token anywhere in
+// the haystack, case-insensitive. Word boundaries on each side reject longer
+// digit runs like "UGC-1234567" — without them a 7-digit typo would extract
+// a candidate matching some other application's code and trigger a wrong
+// verification. The first match wins; ParseVerificationCode upper-cases it
+// before returning.
+var verificationCodeParseRegex = regexp.MustCompile(`(?i)\bUGC-[0-9]{6}\b`)
+
+// ParseVerificationCode extracts the first UGC-NNNNNN token from a free-form
+// text and returns it normalised to upper-case. The boolean is false when no
+// token is present. Used by the SendPulse webhook to fish a code out of an
+// Instagram DM body.
+func ParseVerificationCode(text string) (string, bool) {
+	match := verificationCodeParseRegex.FindString(text)
+	if match == "" {
+		return "", false
+	}
+	return strings.ToUpper(match), true
+}
+
+// NormalizeInstagramHandle is the canonical form persisted in
+// creator_application_socials.handle for IG accounts: trim whitespace, drop
+// every leading and trailing '@', lowercase the rest. Applied at submit
+// time, in the SendPulse webhook ingestion path and in the backfill
+// migration so the strict equality check between webhook payload and
+// stored handle stays sound. Trim both sides to mirror the SQL backfill
+// (`trim(BOTH '@' FROM handle)`) — divergent normalisation rules between
+// the migration and the live code would silently corrupt the comparison.
+func NormalizeInstagramHandle(h string) string {
+	return strings.ToLower(strings.Trim(strings.TrimSpace(h), "@"))
+}
+
+// creatorApplicationAllowedTransitions is the declarative state machine for
+// creator applications. Only transitions explicitly mapped to true here are
+// legal; everything else fails IsCreatorApplicationTransitionAllowed and the
+// service helper returns ErrInvalidStatusTransition. Each future flow (manual
+// verify, reject, withdraw, signing) extends the map in its own chunk.
+var creatorApplicationAllowedTransitions = map[string]map[string]bool{
+	CreatorApplicationStatusVerification: {
+		CreatorApplicationStatusModeration: true,
+	},
+}
+
+// IsCreatorApplicationTransitionAllowed reports whether moving an application
+// from `from` to `to` is permitted by the state machine. Identity transitions
+// (`from == to`) are not allowed.
+func IsCreatorApplicationTransitionAllowed(from, to string) bool {
+	allowed, ok := creatorApplicationAllowedTransitions[from]
+	if !ok {
+		return false
+	}
+	return allowed[to]
+}
+
+// ErrInvalidStatusTransition is the sentinel raised when the service helper
+// is asked to transition an application along an edge that is not declared
+// in creatorApplicationAllowedTransitions. Surfaces in stdout-логах
+// приложения via wrapped errors, never in user-facing copy.
+var ErrInvalidStatusTransition = errors.New("invalid creator application status transition")
+
+// TransitionReason* values are persisted in
+// creator_application_status_transitions.reason. The column itself is TEXT
+// (free-form for forward compatibility) but Go callers must use one of these
+// constants — readers / dashboards rely on the bounded vocabulary.
+const (
+	TransitionReasonInstagramAuto = "instagram_auto"
+)
+
+// VerifyInstagramStatus is the explicit outcome the service returns to the
+// SendPulse webhook handler. The handler always responds 200 `{}` regardless,
+// but distinct values give logs / metrics / unit tests a single source of
+// truth for the no-op vs side-effecting branches.
+type VerifyInstagramStatus string
+
+const (
+	// VerifyInstagramStatusVerified — full happy path executed: social row
+	// updated to verified=true (with optional self-fix of `handle`),
+	// application moved verification → moderation, audit + transition rows
+	// committed, Telegram notification scheduled (or skipped on missing link).
+	VerifyInstagramStatusVerified VerifyInstagramStatus = "verified"
+	// VerifyInstagramStatusNoop — social row was already verified=true; we
+	// do not touch state and skip Telegram. Acts as the idempotency branch
+	// for repeat webhook deliveries.
+	VerifyInstagramStatusNoop VerifyInstagramStatus = "noop"
+	// VerifyInstagramStatusNotFound — no application in `verification`
+	// status carries the parsed code. Does not commit anything.
+	VerifyInstagramStatusNotFound VerifyInstagramStatus = "not_found"
+	// VerifyInstagramStatusNoIGSocial — application matched, but it has no
+	// Instagram social attached (only TikTok / Threads). Does not commit
+	// anything.
+	VerifyInstagramStatusNoIGSocial VerifyInstagramStatus = "no_ig_social"
+)

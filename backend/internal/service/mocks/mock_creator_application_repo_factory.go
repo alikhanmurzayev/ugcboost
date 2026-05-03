@@ -302,6 +302,59 @@ func (_c *MockCreatorApplicationRepoFactory_NewCreatorApplicationSocialRepo_Call
 	return _c
 }
 
+// NewCreatorApplicationStatusTransitionRepo provides a mock function for the type MockCreatorApplicationRepoFactory
+func (_mock *MockCreatorApplicationRepoFactory) NewCreatorApplicationStatusTransitionRepo(db dbutil.DB) repository.CreatorApplicationStatusTransitionRepo {
+	ret := _mock.Called(db)
+
+	if len(ret) == 0 {
+		panic("no return value specified for NewCreatorApplicationStatusTransitionRepo")
+	}
+
+	var r0 repository.CreatorApplicationStatusTransitionRepo
+	if returnFunc, ok := ret.Get(0).(func(dbutil.DB) repository.CreatorApplicationStatusTransitionRepo); ok {
+		r0 = returnFunc(db)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(repository.CreatorApplicationStatusTransitionRepo)
+		}
+	}
+	return r0
+}
+
+// MockCreatorApplicationRepoFactory_NewCreatorApplicationStatusTransitionRepo_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'NewCreatorApplicationStatusTransitionRepo'
+type MockCreatorApplicationRepoFactory_NewCreatorApplicationStatusTransitionRepo_Call struct {
+	*mock.Call
+}
+
+// NewCreatorApplicationStatusTransitionRepo is a helper method to define mock.On call
+//   - db dbutil.DB
+func (_e *MockCreatorApplicationRepoFactory_Expecter) NewCreatorApplicationStatusTransitionRepo(db interface{}) *MockCreatorApplicationRepoFactory_NewCreatorApplicationStatusTransitionRepo_Call {
+	return &MockCreatorApplicationRepoFactory_NewCreatorApplicationStatusTransitionRepo_Call{Call: _e.mock.On("NewCreatorApplicationStatusTransitionRepo", db)}
+}
+
+func (_c *MockCreatorApplicationRepoFactory_NewCreatorApplicationStatusTransitionRepo_Call) Run(run func(db dbutil.DB)) *MockCreatorApplicationRepoFactory_NewCreatorApplicationStatusTransitionRepo_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 dbutil.DB
+		if args[0] != nil {
+			arg0 = args[0].(dbutil.DB)
+		}
+		run(
+			arg0,
+		)
+	})
+	return _c
+}
+
+func (_c *MockCreatorApplicationRepoFactory_NewCreatorApplicationStatusTransitionRepo_Call) Return(creatorApplicationStatusTransitionRepo repository.CreatorApplicationStatusTransitionRepo) *MockCreatorApplicationRepoFactory_NewCreatorApplicationStatusTransitionRepo_Call {
+	_c.Call.Return(creatorApplicationStatusTransitionRepo)
+	return _c
+}
+
+func (_c *MockCreatorApplicationRepoFactory_NewCreatorApplicationStatusTransitionRepo_Call) RunAndReturn(run func(db dbutil.DB) repository.CreatorApplicationStatusTransitionRepo) *MockCreatorApplicationRepoFactory_NewCreatorApplicationStatusTransitionRepo_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // NewCreatorApplicationTelegramLinkRepo provides a mock function for the type MockCreatorApplicationRepoFactory
 func (_mock *MockCreatorApplicationRepoFactory) NewCreatorApplicationTelegramLinkRepo(db dbutil.DB) repository.CreatorApplicationTelegramLinkRepo {
 	ret := _mock.Called(db)

@@ -196,6 +196,7 @@ func domainCreatorApplicationDetailToAPI(
 		Address:           d.Address,
 		CategoryOtherText: d.CategoryOtherText,
 		Status:            status,
+		VerificationCode:  d.VerificationCode,
 		CreatedAt:         d.CreatedAt,
 		UpdatedAt:         d.UpdatedAt,
 		Categories:        cats,

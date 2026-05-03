@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	"github.com/alikhanmurzayev/ugcboost/backend/e2e/apiclient"
@@ -44,6 +45,23 @@ func SetupCreatorApplicationViaLanding(t *testing.T, mutate ...func(*apiclient.C
 	appID := resp.JSON201.Data.ApplicationId.String()
 	RegisterCreatorApplicationCleanup(t, appID)
 	return SetupCreatorApplicationViaLandingResult{ApplicationID: appID, Request: req}
+}
+
+// GetCreatorApplicationVerificationCode fetches the persisted verification
+// code via the admin detail endpoint. Used by SendPulse webhook tests to
+// construct realistic IG DM payloads. Public/landing endpoints intentionally
+// hide the field — only admins (and these e2e tests, with admin token) see it.
+func GetCreatorApplicationVerificationCode(t *testing.T, applicationID string) string {
+	t.Helper()
+	c, token, _ := SetupAdminClient(t)
+	id, err := uuid.Parse(applicationID)
+	require.NoError(t, err)
+	resp, err := c.GetCreatorApplicationWithResponse(context.Background(), id, WithAuth(token))
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, resp.StatusCode())
+	require.NotNil(t, resp.JSON200)
+	require.NotEmpty(t, resp.JSON200.Data.VerificationCode, "admin detail must surface verification_code")
+	return resp.JSON200.Data.VerificationCode
 }
 
 // LinkTelegramToApplication drives /start <applicationID> from a fresh

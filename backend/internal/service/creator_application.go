@@ -6,14 +6,17 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
+	"github.com/AlekSi/pointer"
 	"github.com/cenkalti/backoff/v5"
 
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/dbutil"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/domain"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/logger"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/repository"
+	"github.com/alikhanmurzayev/ugcboost/backend/internal/telegram"
 )
 
 // CreatorApplicationRepoFactory enumerates the repos the service needs.
@@ -25,6 +28,7 @@ type CreatorApplicationRepoFactory interface {
 	NewCreatorApplicationSocialRepo(db dbutil.DB) repository.CreatorApplicationSocialRepo
 	NewCreatorApplicationConsentRepo(db dbutil.DB) repository.CreatorApplicationConsentRepo
 	NewCreatorApplicationTelegramLinkRepo(db dbutil.DB) repository.CreatorApplicationTelegramLinkRepo
+	NewCreatorApplicationStatusTransitionRepo(db dbutil.DB) repository.CreatorApplicationStatusTransitionRepo
 	NewAuditRepo(db dbutil.DB) repository.AuditRepo
 }
 
@@ -51,17 +55,27 @@ func creatorApplicationListInputToRepo(in domain.CreatorApplicationListInput) re
 	}
 }
 
-// CreatorApplicationService owns the submission use case for creator
-// applications coming from the public landing page.
 type CreatorApplicationService struct {
-	pool        dbutil.Pool
-	repoFactory CreatorApplicationRepoFactory
-	logger      logger.Logger
+	pool         dbutil.Pool
+	repoFactory  CreatorApplicationRepoFactory
+	telegramSend telegram.Sender
+	notifyWG     *sync.WaitGroup
+	tmaPublicURL string
+	logger       logger.Logger
 }
 
-// NewCreatorApplicationService wires the service with its dependencies.
-func NewCreatorApplicationService(pool dbutil.Pool, repoFactory CreatorApplicationRepoFactory, log logger.Logger) *CreatorApplicationService {
-	return &CreatorApplicationService{pool: pool, repoFactory: repoFactory, logger: log}
+// NewCreatorApplicationService wires the service. notifyWG tracks fire-
+// and-forget Telegram-notification goroutines so the process can drain
+// them on shutdown before closing the pool.
+func NewCreatorApplicationService(pool dbutil.Pool, repoFactory CreatorApplicationRepoFactory, telegramSend telegram.Sender, notifyWG *sync.WaitGroup, tmaPublicURL string, log logger.Logger) *CreatorApplicationService {
+	return &CreatorApplicationService{
+		pool:         pool,
+		repoFactory:  repoFactory,
+		telegramSend: telegramSend,
+		notifyWG:     notifyWG,
+		tmaPublicURL: tmaPublicURL,
+		logger:       log,
+	}
 }
 
 // Submit persists one application together with its related rows atomically.
@@ -345,12 +359,16 @@ func (s *CreatorApplicationService) iinErrorToValidation(_ error) error {
 }
 
 // normaliseSocials enforces the whitelist of platforms and normalises each
-// handle: trim whitespace → strip ALL leading '@' → lowercase → validate
-// against domain.SocialHandleRegex. Duplicates on the same (platform, handle)
-// pair inside one request are rejected up front so we never hit the DB
-// UNIQUE constraint mid-TX. Validation messages reference only the platform
-// (an enum value) — the user-controlled handle never makes it into an error
-// response or, by extension, into stdout logs through respondError.
+// handle via domain.NormalizeInstagramHandle (trim → strip leading '@' →
+// lowercase). The helper is named after Instagram because the chunk-8
+// SendPulse webhook makes a strict equality check against the persisted
+// IG handle, but the rule is byte-identical to what TikTok/Threads need
+// in the current scope, so all platforms run through it. Duplicates on the
+// same (platform, handle) pair inside one request are rejected up front so
+// we never hit the DB UNIQUE constraint mid-TX. Validation messages
+// reference only the platform (an enum value) — the user-controlled handle
+// never makes it into an error response or, by extension, into stdout
+// logs through respondError.
 func (s *CreatorApplicationService) normaliseSocials(accounts []domain.SocialAccountInput) ([]domain.SocialAccountInput, error) {
 	if len(accounts) == 0 {
 		return nil, domain.NewValidationError(domain.CodeValidation, "Нужен хотя бы один аккаунт в соцсети")
@@ -366,7 +384,7 @@ func (s *CreatorApplicationService) normaliseSocials(accounts []domain.SocialAcc
 			return nil, domain.NewValidationError(domain.CodeValidation,
 				fmt.Sprintf("Неподдерживаемая соцсеть: %s", a.Platform))
 		}
-		handle := strings.ToLower(strings.TrimLeft(strings.TrimSpace(a.Handle), "@"))
+		handle := domain.NormalizeInstagramHandle(a.Handle)
 		if handle == "" {
 			return nil, domain.NewValidationError(domain.CodeValidation,
 				fmt.Sprintf("Пустой handle для соцсети %s", a.Platform))
@@ -708,6 +726,7 @@ func (s *CreatorApplicationService) creatorApplicationDetailFromRows(
 		Address:           app.Address,
 		CategoryOtherText: app.CategoryOtherText,
 		Status:            app.Status,
+		VerificationCode:  app.VerificationCode,
 		CreatedAt:         app.CreatedAt,
 		UpdatedAt:         app.UpdatedAt,
 		Categories:        cats,
@@ -715,4 +734,188 @@ func (s *CreatorApplicationService) creatorApplicationDetailFromRows(
 		Consents:          cons,
 		TelegramLink:      tgLink,
 	}
+}
+
+// VerifyInstagramByCode is the SendPulse webhook entry point. Locates the
+// active application by verification_code, marks IG social auto-verified
+// (self-fix overwrites mismatched handle), transitions verification →
+// moderation with audit + history row in one tx, then fires the Telegram
+// notification post-commit. No-op branches are returned as status, not as
+// errors — handler never returns 4xx for them.
+//
+// Idempotency takes priority over self-fix: if social.verified=true the
+// stored handle stays unchanged, even when the webhook ships a different one.
+func (s *CreatorApplicationService) VerifyInstagramByCode(ctx context.Context, code, igHandle string) (domain.VerifyInstagramStatus, error) {
+	normalizedHandle := domain.NormalizeInstagramHandle(igHandle)
+	if normalizedHandle == "" {
+		// Self-fixing the stored handle to "" would break strict equality
+		// matching on every future delivery and destroy audit signal.
+		s.logger.Warn(ctx, "sendpulse webhook: empty username after normalisation",
+			"outcome", string(domain.VerifyInstagramStatusNotFound))
+		return domain.VerifyInstagramStatusNotFound, nil
+	}
+
+	var (
+		status         domain.VerifyInstagramStatus
+		telegramUserID *int64
+	)
+
+	err := dbutil.WithTx(ctx, s.pool, func(tx dbutil.DB) error {
+		appRepo := s.repoFactory.NewCreatorApplicationRepo(tx)
+		socialRepo := s.repoFactory.NewCreatorApplicationSocialRepo(tx)
+		linkRepo := s.repoFactory.NewCreatorApplicationTelegramLinkRepo(tx)
+		auditRepo := s.repoFactory.NewAuditRepo(tx)
+
+		appRow, err := appRepo.GetByVerificationCodeAndStatus(ctx, code, domain.CreatorApplicationStatusVerification)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				status = domain.VerifyInstagramStatusNotFound
+				return nil
+			}
+			return fmt.Errorf("verify instagram: lookup application: %w", err)
+		}
+
+		socials, err := socialRepo.ListByApplicationID(ctx, appRow.ID)
+		if err != nil {
+			return fmt.Errorf("verify instagram: list socials: %w", err)
+		}
+		var igSocial *repository.CreatorApplicationSocialRow
+		for _, sc := range socials {
+			if sc.Platform == domain.SocialPlatformInstagram {
+				igSocial = sc
+				break
+			}
+		}
+		if igSocial == nil {
+			status = domain.VerifyInstagramStatusNoIGSocial
+			return nil
+		}
+
+		if igSocial.Verified {
+			status = domain.VerifyInstagramStatusNoop
+			return nil
+		}
+
+		handleChanged := igSocial.Handle != normalizedHandle
+		now := time.Now().UTC()
+
+		if err := socialRepo.UpdateVerification(ctx, repository.UpdateSocialVerificationParams{
+			ID:               igSocial.ID,
+			Handle:           normalizedHandle,
+			Verified:         true,
+			Method:           domain.SocialVerificationMethodAuto,
+			VerifiedByUserID: nil,
+			VerifiedAt:       now,
+		}); err != nil {
+			return fmt.Errorf("verify instagram: update social: %w", err)
+		}
+
+		if err := s.applyTransition(ctx, tx, appRow, domain.CreatorApplicationStatusModeration, nil, domain.TransitionReasonInstagramAuto); err != nil {
+			return err
+		}
+
+		if err := writeAudit(ctx, auditRepo,
+			AuditActionCreatorApplicationVerificationAuto,
+			AuditEntityTypeCreatorApplication,
+			appRow.ID,
+			nil,
+			map[string]any{
+				"application_id": appRow.ID,
+				"social_id":      igSocial.ID,
+				"from_status":    appRow.Status,
+				"to_status":      domain.CreatorApplicationStatusModeration,
+				"handle_changed": handleChanged,
+			},
+		); err != nil {
+			return fmt.Errorf("verify instagram: write audit: %w", err)
+		}
+
+		link, err := linkRepo.GetByApplicationID(ctx, appRow.ID)
+		switch {
+		case err == nil:
+			telegramUserID = pointer.ToInt64(link.TelegramUserID)
+		case errors.Is(err, sql.ErrNoRows):
+			// no link yet — Telegram step skipped after commit
+		default:
+			return fmt.Errorf("verify instagram: get telegram link: %w", err)
+		}
+
+		status = domain.VerifyInstagramStatusVerified
+		return nil
+	})
+	if err != nil {
+		return "", err
+	}
+
+	if status == domain.VerifyInstagramStatusVerified {
+		s.notifyVerificationApproved(ctx, telegramUserID)
+	}
+	return status, nil
+}
+
+// applyTransition refuses transitions not declared in
+// domain.creatorApplicationAllowedTransitions, then writes status update +
+// history row inside the supplied transaction. Audit + external side
+// effects belong to the caller. actorID is nil for system-driven flows.
+func (s *CreatorApplicationService) applyTransition(
+	ctx context.Context,
+	tx dbutil.DB,
+	app *repository.CreatorApplicationRow,
+	toStatus string,
+	actorID *string,
+	reason string,
+) error {
+	if !domain.IsCreatorApplicationTransitionAllowed(app.Status, toStatus) {
+		return fmt.Errorf("%w: %s -> %s", domain.ErrInvalidStatusTransition, app.Status, toStatus)
+	}
+	appRepo := s.repoFactory.NewCreatorApplicationRepo(tx)
+	transitionRepo := s.repoFactory.NewCreatorApplicationStatusTransitionRepo(tx)
+
+	if err := appRepo.UpdateStatus(ctx, app.ID, toStatus); err != nil {
+		return fmt.Errorf("apply transition: update status: %w", err)
+	}
+
+	row := repository.CreatorApplicationStatusTransitionRow{
+		ApplicationID: app.ID,
+		FromStatus:    pointer.ToString(app.Status),
+		ToStatus:      toStatus,
+		ActorID:       actorID,
+	}
+	if reason != "" {
+		row.Reason = pointer.ToString(reason)
+	}
+	if err := transitionRepo.Insert(ctx, row); err != nil {
+		return fmt.Errorf("apply transition: insert history: %w", err)
+	}
+	return nil
+}
+
+// telegramNotifyTimeout caps an outbound Telegram notification. The send
+// runs on context.WithoutCancel + hard timeout — verification already
+// committed, so SendPulse-side cancellation must not silently drop the
+// user-facing message, and a stalled Telegram API call must not hold a
+// goroutine indefinitely.
+const telegramNotifyTimeout = 10 * time.Second
+
+// notifyVerificationApproved fires the "verification approved" Telegram
+// message in the background. Tracked via notifyWG so process shutdown can
+// drain in-flight goroutines before the pool closes. Missing link is
+// expected (creator hasn't pressed /start yet) — info, not warn.
+func (s *CreatorApplicationService) notifyVerificationApproved(ctx context.Context, telegramUserID *int64) {
+	if telegramUserID == nil {
+		s.logger.Info(ctx, "creator verification: skipping telegram notify, application not linked")
+		return
+	}
+	s.notifyWG.Add(1)
+	go func() {
+		defer s.notifyWG.Done()
+		notifyCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), telegramNotifyTimeout)
+		defer cancel()
+		if err := telegram.SendVerificationNotification(notifyCtx, s.telegramSend, *telegramUserID, s.tmaPublicURL); err != nil {
+			s.logger.Error(notifyCtx, "creator verification: telegram send failed",
+				"telegram_user_id", *telegramUserID,
+				"error", err,
+			)
+		}
+	}()
 }

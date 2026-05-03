@@ -349,6 +349,11 @@ type CreatorApplicationDetailData struct {
 	// has not yet opened the bot.
 	TelegramLink *TelegramLink `json:"telegramLink,omitempty"`
 	UpdatedAt    time.Time     `json:"updatedAt"`
+
+	// VerificationCode 6-digit `UGC-NNNNNN` code the creator must DM to the official
+	// Instagram for auto-verification. Visible only via this admin
+	// endpoint — never returned by public/landing routes.
+	VerificationCode string `json:"verificationCode"`
 }
 
 // CreatorApplicationDetailSocial defines model for CreatorApplicationDetailSocial.
@@ -674,6 +679,26 @@ type PasswordResetRequestBody struct {
 	Email openapi_types.Email `json:"email"`
 }
 
+// SendPulseInstagramWebhookRequest Custom JSON payload SendPulse delivers from the Instagram chatbot.
+// `username` and `lastMessage` come from the configured "send custom
+// data" action; `contactId` is SendPulse's opaque contact identifier
+// kept for trace correlation.
+type SendPulseInstagramWebhookRequest struct {
+	// ContactId Optional SendPulse contact id; opaque to backend, kept for correlation.
+	ContactId *string `json:"contactId,omitempty"`
+
+	// LastMessage Body of the last message in the IG DM thread.
+	LastMessage string `json:"lastMessage"`
+
+	// Username Instagram handle of the message sender as SendPulse received it.
+	Username string `json:"username"`
+}
+
+// SendPulseInstagramWebhookResult Empty object — the SendPulse webhook never carries data back. Both
+// success (200) and the constant-time auth failure (401) emit the
+// same `{}` body.
+type SendPulseInstagramWebhookResult = map[string]interface{}
+
 // SocialAccountInput defines model for SocialAccountInput.
 type SocialAccountInput struct {
 	// Handle Account handle or public identifier on the given platform.
@@ -783,3 +808,6 @@ type SubmitCreatorApplicationJSONRequestBody = CreatorApplicationSubmitRequest
 
 // ListCreatorApplicationsJSONRequestBody defines body for ListCreatorApplications for application/json ContentType.
 type ListCreatorApplicationsJSONRequestBody = CreatorApplicationsListRequest
+
+// SendPulseInstagramWebhookJSONRequestBody defines body for SendPulseInstagramWebhook for application/json ContentType.
+type SendPulseInstagramWebhookJSONRequestBody = SendPulseInstagramWebhookRequest

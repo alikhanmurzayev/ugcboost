@@ -95,6 +95,39 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /test/telegram/sent:
+    get:
+      operationId: getTelegramSent
+      summary: Read recorded outbound Telegram messages
+      description: |
+        Returns SentRecord rows captured by the in-process spy store every
+        time the backend's Telegram Sender is invoked. Filter by chatId
+        (always required to keep parallel e2e isolated) and optionally
+        by `since` to bound the lookup. NEVER enabled in production.
+      tags: [test]
+      parameters:
+        - name: chatId
+          in: query
+          required: true
+          schema:
+            type: integer
+            format: int64
+          description: Telegram chat id (== TG user id for private DMs).
+        - name: since
+          in: query
+          required: false
+          schema:
+            type: string
+            format: date-time
+          description: Only records sent at or after this timestamp.
+      responses:
+        "200":
+          description: Recorded messages
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TelegramSentResult"
+
   /test/telegram/message:
     post:
       operationId: sendTelegramMessage
@@ -230,6 +263,48 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/TelegramReply"
+
+    TelegramSentMessage:
+      type: object
+      required: [chatId, text, sentAt]
+      properties:
+        chatId:
+          type: integer
+          format: int64
+        text:
+          type: string
+        webAppUrl:
+          type: string
+          nullable: true
+          description: |
+            URL embedded into the InlineKeyboardMarkup WebApp button when
+            the sender attached one. Null for plain-text messages.
+        sentAt:
+          type: string
+          format: date-time
+        error:
+          type: string
+          nullable: true
+          description: |
+            Empty when the real upstream Telegram send succeeded (or when
+            running under the spy-only sender, which never errs); populated
+            with the upstream error string in TeeSender mode.
+
+    TelegramSentData:
+      type: object
+      required: [messages]
+      properties:
+        messages:
+          type: array
+          items:
+            $ref: "#/components/schemas/TelegramSentMessage"
+
+    TelegramSentResult:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: "#/components/schemas/TelegramSentData"
 
     ErrorResponse:
       type: object

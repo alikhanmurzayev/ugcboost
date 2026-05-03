@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/oapi-codegen/runtime"
@@ -152,9 +153,44 @@ type TelegramReply struct {
 	Text   string `json:"text"`
 }
 
+// TelegramSentData defines model for TelegramSentData.
+type TelegramSentData struct {
+	Messages []TelegramSentMessage `json:"messages"`
+}
+
+// TelegramSentMessage defines model for TelegramSentMessage.
+type TelegramSentMessage struct {
+	ChatId int64 `json:"chatId"`
+
+	// Error Empty when the real upstream Telegram send succeeded (or when
+	// running under the spy-only sender, which never errs); populated
+	// with the upstream error string in TeeSender mode.
+	Error  *string   `json:"error,omitempty"`
+	SentAt time.Time `json:"sentAt"`
+	Text   string    `json:"text"`
+
+	// WebAppUrl URL embedded into the InlineKeyboardMarkup WebApp button when
+	// the sender attached one. Null for plain-text messages.
+	WebAppUrl *string `json:"webAppUrl,omitempty"`
+}
+
+// TelegramSentResult defines model for TelegramSentResult.
+type TelegramSentResult struct {
+	Data TelegramSentData `json:"data"`
+}
+
 // GetResetTokenParams defines parameters for GetResetToken.
 type GetResetTokenParams struct {
 	Email openapi_types.Email `form:"email" json:"email"`
+}
+
+// GetTelegramSentParams defines parameters for GetTelegramSent.
+type GetTelegramSentParams struct {
+	// ChatId Telegram chat id (== TG user id for private DMs).
+	ChatId int64 `form:"chatId" json:"chatId"`
+
+	// Since Only records sent at or after this timestamp.
+	Since *time.Time `form:"since,omitempty" json:"since,omitempty"`
 }
 
 // CleanupEntityJSONRequestBody defines body for CleanupEntity for application/json ContentType.
@@ -180,6 +216,9 @@ type ServerInterface interface {
 	// Inject a synthetic text message into the Telegram handler
 	// (POST /test/telegram/message)
 	SendTelegramMessage(w http.ResponseWriter, r *http.Request)
+	// Read recorded outbound Telegram messages
+	// (GET /test/telegram/sent)
+	GetTelegramSent(w http.ResponseWriter, r *http.Request, params GetTelegramSentParams)
 }
 
 // Unimplemented server implementation that returns http.StatusNotImplemented for each endpoint.
@@ -207,6 +246,12 @@ func (_ Unimplemented) SeedUser(w http.ResponseWriter, r *http.Request) {
 // Inject a synthetic text message into the Telegram handler
 // (POST /test/telegram/message)
 func (_ Unimplemented) SendTelegramMessage(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Read recorded outbound Telegram messages
+// (GET /test/telegram/sent)
+func (_ Unimplemented) GetTelegramSent(w http.ResponseWriter, r *http.Request, params GetTelegramSentParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -286,6 +331,48 @@ func (siw *ServerInterfaceWrapper) SendTelegramMessage(w http.ResponseWriter, r 
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.SendTelegramMessage(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetTelegramSent operation middleware
+func (siw *ServerInterfaceWrapper) GetTelegramSent(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params GetTelegramSentParams
+
+	// ------------- Required query parameter "chatId" -------------
+
+	if paramValue := r.URL.Query().Get("chatId"); paramValue != "" {
+
+	} else {
+		siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "chatId"})
+		return
+	}
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "chatId", r.URL.Query(), &params.ChatId, runtime.BindQueryParameterOptions{Type: "integer", Format: "int64"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "chatId", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "since" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "since", r.URL.Query(), &params.Since, runtime.BindQueryParameterOptions{Type: "string", Format: "date-time"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "since", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetTelegramSent(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -420,6 +507,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/test/telegram/message", wrapper.SendTelegramMessage)
 	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/test/telegram/sent", wrapper.GetTelegramSent)
+	})
 
 	return r
 }
@@ -536,6 +626,23 @@ func (response SendTelegramMessage422JSONResponse) VisitSendTelegramMessageRespo
 	return json.NewEncoder(w).Encode(response)
 }
 
+type GetTelegramSentRequestObject struct {
+	Params GetTelegramSentParams
+}
+
+type GetTelegramSentResponseObject interface {
+	VisitGetTelegramSentResponse(w http.ResponseWriter) error
+}
+
+type GetTelegramSent200JSONResponse TelegramSentResult
+
+func (response GetTelegramSent200JSONResponse) VisitGetTelegramSentResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
 	// Hard-delete a test entity (user or brand) and its references
@@ -550,6 +657,9 @@ type StrictServerInterface interface {
 	// Inject a synthetic text message into the Telegram handler
 	// (POST /test/telegram/message)
 	SendTelegramMessage(ctx context.Context, request SendTelegramMessageRequestObject) (SendTelegramMessageResponseObject, error)
+	// Read recorded outbound Telegram messages
+	// (GET /test/telegram/sent)
+	GetTelegramSent(ctx context.Context, request GetTelegramSentRequestObject) (GetTelegramSentResponseObject, error)
 }
 
 type StrictHandlerFunc = strictnethttp.StrictHTTPHandlerFunc
@@ -693,6 +803,32 @@ func (sh *strictHandler) SendTelegramMessage(w http.ResponseWriter, r *http.Requ
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(SendTelegramMessageResponseObject); ok {
 		if err := validResponse.VisitSendTelegramMessageResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetTelegramSent operation middleware
+func (sh *strictHandler) GetTelegramSent(w http.ResponseWriter, r *http.Request, params GetTelegramSentParams) {
+	var request GetTelegramSentRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetTelegramSent(ctx, request.(GetTelegramSentRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetTelegramSent")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetTelegramSentResponseObject); ok {
+		if err := validResponse.VisitGetTelegramSentResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

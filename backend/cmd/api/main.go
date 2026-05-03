@@ -89,26 +89,19 @@ func run() error {
 	brandSvc := service.NewBrandService(pool, repoFactory, cfg.BcryptCost, appLogger)
 	auditSvc := service.NewAuditService(pool, repoFactory)
 	authzSvc := authz.NewAuthzService(brandSvc)
-	creatorApplicationSvc := service.NewCreatorApplicationService(pool, repoFactory, appLogger)
+
+	tgRig, err := setupTelegram(cfg, appLogger)
+	if err != nil {
+		return err
+	}
+	registerNotifyWaiter(tgRig.NotifyWG, cl)
+
+	creatorApplicationSvc := service.NewCreatorApplicationService(pool, repoFactory, tgRig.Sender, tgRig.NotifyWG, cfg.TMAPublicURL, appLogger)
 	creatorApplicationTelegramSvc := service.NewCreatorApplicationTelegramService(pool, repoFactory, appLogger)
 	dictionarySvc := service.NewDictionaryService(pool, repoFactory, appLogger)
 
-	// Long polling starts whenever a token is set; the test endpoint
-	// drives the same handler with a spy Sender on a separate path, so
-	// the two do not fight over updates.
 	tgHandler := telegram.NewHandler(creatorApplicationTelegramSvc, appLogger)
-	if cfg.TelegramBotToken != "" {
-		runnerCtx, runnerCancel := context.WithCancel(context.Background())
-		defer runnerCancel()
-		go telegram.Run(runnerCtx, cfg.TelegramBotToken, tgHandler, appLogger)
-		cl.Add("telegram-runner", func(_ context.Context) error {
-			runnerCancel()
-			return nil
-		})
-		appLogger.Info(ctx, "telegram bot polling enabled")
-	} else {
-		appLogger.Info(ctx, "telegram bot polling disabled (no token)")
-	}
+	startTelegramRunner(ctx, cfg, tgHandler, appLogger, cl)
 
 	// Seed admin
 	if err := authSvc.SeedAdmin(ctx, cfg.AdminEmail, cfg.AdminPassword); err != nil {
@@ -128,6 +121,9 @@ func run() error {
 	r.Use(middleware.SecureHeaders)
 	r.Use(middleware.CORS(cfg.CORSOrigins))
 	r.Use(middleware.Logging(appLogger))
+	// SendPulse webhook bearer auth — gates only the dedicated path; every
+	// other request flows through unchanged.
+	r.Use(middleware.SendPulseAuth(cfg.SendPulseWebhookSecret, appLogger))
 
 	// Create server implementing ServerInterface
 	server := handler.NewServer(authSvc, brandSvc, authzSvc, auditSvc, creatorApplicationSvc, dictionarySvc, handler.ServerConfig{
@@ -150,7 +146,7 @@ func run() error {
 	// endpoint uses the repo factory directly — the hard-delete for users
 	// is test-only and intentionally not exposed through any service.
 	if cfg.EnableTestEndpoints {
-		testHandler := handler.NewTestAPIHandler(authSvc, pool, repoFactory, resetTokenStore, tgHandler, appLogger)
+		testHandler := handler.NewTestAPIHandler(authSvc, pool, repoFactory, resetTokenStore, tgHandler, tgRig.Spy, appLogger)
 		testapi.HandlerWithOptions(handler.NewStrictTestAPIHandler(testHandler), testapi.ChiServerOptions{
 			BaseRouter:       r,
 			ErrorHandlerFunc: handler.HandleParamError(appLogger),

@@ -62,6 +62,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/test/telegram/sent": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read recorded outbound Telegram messages
+         * @description Returns SentRecord rows captured by the in-process spy store every
+         *     time the backend's Telegram Sender is invoked. Filter by chatId
+         *     (always required to keep parallel e2e isolated) and optionally
+         *     by `since` to bound the lookup. NEVER enabled in production.
+         */
+        get: operations["getTelegramSent"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/test/telegram/message": {
         parameters: {
             query?: never;
@@ -142,6 +165,30 @@ export interface components {
         };
         SendTelegramMessageResult: {
             replies: components["schemas"]["TelegramReply"][];
+        };
+        TelegramSentMessage: {
+            /** Format: int64 */
+            chatId: number;
+            text: string;
+            /**
+             * @description URL embedded into the InlineKeyboardMarkup WebApp button when
+             *     the sender attached one. Null for plain-text messages.
+             */
+            webAppUrl?: string | null;
+            /** Format: date-time */
+            sentAt: string;
+            /**
+             * @description Empty when the real upstream Telegram send succeeded (or when
+             *     running under the spy-only sender, which never errs); populated
+             *     with the upstream error string in TeeSender mode.
+             */
+            error?: string | null;
+        };
+        TelegramSentData: {
+            messages: components["schemas"]["TelegramSentMessage"][];
+        };
+        TelegramSentResult: {
+            data: components["schemas"]["TelegramSentData"];
         };
         ErrorResponse: {
             error: {
@@ -258,6 +305,31 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    getTelegramSent: {
+        parameters: {
+            query: {
+                /** @description Telegram chat id (== TG user id for private DMs). */
+                chatId: number;
+                /** @description Only records sent at or after this timestamp. */
+                since?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Recorded messages */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TelegramSentResult"];
                 };
             };
         };

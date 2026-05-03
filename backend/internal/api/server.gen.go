@@ -356,6 +356,11 @@ type CreatorApplicationDetailData struct {
 	// has not yet opened the bot.
 	TelegramLink *TelegramLink `json:"telegramLink,omitempty"`
 	UpdatedAt    time.Time     `json:"updatedAt"`
+
+	// VerificationCode 6-digit `UGC-NNNNNN` code the creator must DM to the official
+	// Instagram for auto-verification. Visible only via this admin
+	// endpoint — never returned by public/landing routes.
+	VerificationCode string `json:"verificationCode"`
 }
 
 // CreatorApplicationDetailSocial defines model for CreatorApplicationDetailSocial.
@@ -681,6 +686,26 @@ type PasswordResetRequestBody struct {
 	Email openapi_types.Email `json:"email"`
 }
 
+// SendPulseInstagramWebhookRequest Custom JSON payload SendPulse delivers from the Instagram chatbot.
+// `username` and `lastMessage` come from the configured "send custom
+// data" action; `contactId` is SendPulse's opaque contact identifier
+// kept for trace correlation.
+type SendPulseInstagramWebhookRequest struct {
+	// ContactId Optional SendPulse contact id; opaque to backend, kept for correlation.
+	ContactId *string `json:"contactId,omitempty"`
+
+	// LastMessage Body of the last message in the IG DM thread.
+	LastMessage string `json:"lastMessage"`
+
+	// Username Instagram handle of the message sender as SendPulse received it.
+	Username string `json:"username"`
+}
+
+// SendPulseInstagramWebhookResult Empty object — the SendPulse webhook never carries data back. Both
+// success (200) and the constant-time auth failure (401) emit the
+// same `{}` body.
+type SendPulseInstagramWebhookResult = map[string]interface{}
+
 // SocialAccountInput defines model for SocialAccountInput.
 type SocialAccountInput struct {
 	// Handle Account handle or public identifier on the given platform.
@@ -791,6 +816,9 @@ type SubmitCreatorApplicationJSONRequestBody = CreatorApplicationSubmitRequest
 // ListCreatorApplicationsJSONRequestBody defines body for ListCreatorApplications for application/json ContentType.
 type ListCreatorApplicationsJSONRequestBody = CreatorApplicationsListRequest
 
+// SendPulseInstagramWebhookJSONRequestBody defines body for SendPulseInstagramWebhook for application/json ContentType.
+type SendPulseInstagramWebhookJSONRequestBody = SendPulseInstagramWebhookRequest
+
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
 	// List audit logs (admin only)
@@ -853,6 +881,9 @@ type ServerInterface interface {
 	// Health check
 	// (GET /healthz)
 	HealthCheck(w http.ResponseWriter, r *http.Request)
+	// SendPulse webhook for Instagram DM verification
+	// (POST /webhooks/sendpulse/instagram)
+	SendPulseInstagramWebhook(w http.ResponseWriter, r *http.Request)
 }
 
 // Unimplemented server implementation that returns http.StatusNotImplemented for each endpoint.
@@ -976,6 +1007,12 @@ func (_ Unimplemented) ListDictionary(w http.ResponseWriter, r *http.Request, pT
 // Health check
 // (GET /healthz)
 func (_ Unimplemented) HealthCheck(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// SendPulse webhook for Instagram DM verification
+// (POST /webhooks/sendpulse/instagram)
+func (_ Unimplemented) SendPulseInstagramWebhook(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -1495,6 +1532,20 @@ func (siw *ServerInterfaceWrapper) HealthCheck(w http.ResponseWriter, r *http.Re
 	handler.ServeHTTP(w, r)
 }
 
+// SendPulseInstagramWebhook operation middleware
+func (siw *ServerInterfaceWrapper) SendPulseInstagramWebhook(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SendPulseInstagramWebhook(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 type UnescapedCookieParamError struct {
 	ParamName string
 	Err       error
@@ -1667,6 +1718,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/healthz", wrapper.HealthCheck)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/webhooks/sendpulse/instagram", wrapper.SendPulseInstagramWebhook)
 	})
 
 	return r
@@ -2529,6 +2583,44 @@ func (response HealthCheckdefaultJSONResponse) VisitHealthCheckResponse(w http.R
 	return json.NewEncoder(w).Encode(response.Body)
 }
 
+type SendPulseInstagramWebhookRequestObject struct {
+	Body *SendPulseInstagramWebhookJSONRequestBody
+}
+
+type SendPulseInstagramWebhookResponseObject interface {
+	VisitSendPulseInstagramWebhookResponse(w http.ResponseWriter) error
+}
+
+type SendPulseInstagramWebhook200JSONResponse SendPulseInstagramWebhookResult
+
+func (response SendPulseInstagramWebhook200JSONResponse) VisitSendPulseInstagramWebhookResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type SendPulseInstagramWebhook401JSONResponse SendPulseInstagramWebhookResult
+
+func (response SendPulseInstagramWebhook401JSONResponse) VisitSendPulseInstagramWebhookResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type SendPulseInstagramWebhookdefaultJSONResponse struct {
+	Body       ErrorResponse
+	StatusCode int
+}
+
+func (response SendPulseInstagramWebhookdefaultJSONResponse) VisitSendPulseInstagramWebhookResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+
+	return json.NewEncoder(w).Encode(response.Body)
+}
+
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
 	// List audit logs (admin only)
@@ -2591,6 +2683,9 @@ type StrictServerInterface interface {
 	// Health check
 	// (GET /healthz)
 	HealthCheck(ctx context.Context, request HealthCheckRequestObject) (HealthCheckResponseObject, error)
+	// SendPulse webhook for Instagram DM verification
+	// (POST /webhooks/sendpulse/instagram)
+	SendPulseInstagramWebhook(ctx context.Context, request SendPulseInstagramWebhookRequestObject) (SendPulseInstagramWebhookResponseObject, error)
 }
 
 type StrictHandlerFunc = strictnethttp.StrictHTTPHandlerFunc
@@ -3168,6 +3263,37 @@ func (sh *strictHandler) HealthCheck(w http.ResponseWriter, r *http.Request) {
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(HealthCheckResponseObject); ok {
 		if err := validResponse.VisitHealthCheckResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// SendPulseInstagramWebhook operation middleware
+func (sh *strictHandler) SendPulseInstagramWebhook(w http.ResponseWriter, r *http.Request) {
+	var request SendPulseInstagramWebhookRequestObject
+
+	var body SendPulseInstagramWebhookJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.SendPulseInstagramWebhook(ctx, request.(SendPulseInstagramWebhookRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "SendPulseInstagramWebhook")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(SendPulseInstagramWebhookResponseObject); ok {
+		if err := validResponse.VisitSendPulseInstagramWebhookResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

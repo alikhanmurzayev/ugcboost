@@ -25,4 +25,13 @@ const (
 	// MessageInternalError covers unexpected failures (DB, network) so the
 	// user does not face silence.
 	MessageInternalError = "Произошла внутренняя ошибка. Попробуйте позже"
+
+	// MessageVerificationApproved is posted by the SendPulse Instagram
+	// webhook after the verification → moderation transition. The bot
+	// surfaces a single "Открыть" button that opens the TMA via WebApp.
+	MessageVerificationApproved = "Instagram подтверждён. Заявка ушла на модерацию — следите за статусом в мини-приложении."
+
+	// MessageVerificationApprovedButton is the inline-keyboard label paired
+	// with MessageVerificationApproved.
+	MessageVerificationApprovedButton = "Открыть мини-приложение"
 )

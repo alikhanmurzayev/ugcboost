@@ -59,3 +59,9 @@ func (f *RepoFactory) NewCreatorApplicationConsentRepo(db dbutil.DB) CreatorAppl
 func (f *RepoFactory) NewCreatorApplicationTelegramLinkRepo(db dbutil.DB) CreatorApplicationTelegramLinkRepo {
 	return &creatorApplicationTelegramLinkRepository{db: db}
 }
+
+// NewCreatorApplicationStatusTransitionRepo creates a repo for the
+// creator_application_status_transitions table.
+func (f *RepoFactory) NewCreatorApplicationStatusTransitionRepo(db dbutil.DB) CreatorApplicationStatusTransitionRepo {
+	return &creatorApplicationStatusTransitionRepository{db: db}
+}

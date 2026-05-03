@@ -1,7 +1,9 @@
 import { describe, it, expect } from "vitest";
 
+import App from "./App";
+
 describe("App", () => {
-  it("placeholder test", () => {
-    expect(true).toBe(true);
+  it("exports a renderable component (smoke)", () => {
+    expect(App).toBeTypeOf("function");
   });
 });

@@ -7,6 +7,7 @@ import (
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/api"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/domain"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/logger"
+	"github.com/alikhanmurzayev/ugcboost/backend/internal/middleware"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/service"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/testapi"
 )
@@ -55,12 +56,14 @@ type AuditLogService interface {
 
 // CreatorApplicationService is the interface Server needs from the creator
 // application service (public submission flow from the landing page plus the
-// admin-only read aggregate used by the moderation UI).
+// admin-only read aggregate used by the moderation UI). Verification flows
+// from the SendPulse webhook also live here so the handler stays thin.
 type CreatorApplicationService interface {
 	Submit(ctx context.Context, in domain.CreatorApplicationInput) (*domain.CreatorApplicationSubmission, error)
 	GetByID(ctx context.Context, id string) (*domain.CreatorApplicationDetail, error)
 	List(ctx context.Context, in domain.CreatorApplicationListInput) (*domain.CreatorApplicationListPage, error)
 	Counts(ctx context.Context) (map[string]int64, error)
+	VerifyInstagramByCode(ctx context.Context, code, igHandle string) (domain.VerifyInstagramStatus, error)
 }
 
 // DictionaryService is the interface Server needs to serve public dictionaries
@@ -130,15 +133,44 @@ type strictErrorHandlerFunc = func(w http.ResponseWriter, r *http.Request, err e
 
 // newStrictErrorHandlers binds respondError to a logger and returns the pair of
 // handlers strict-server expects. Body-decode errors always become 422 +
-// CodeValidation; runtime errors keep their domain-driven mapping.
+// CodeValidation; runtime errors keep their domain-driven mapping. The
+// SendPulse webhook is the single exception: per its anti-fingerprinting
+// contract every authenticated request must respond 200 `{}` regardless
+// of whether the handler succeeded, no-op'd or hit an infra failure (the
+// 401 path is owned upstream by SendPulseAuth middleware). Routing both
+// request- and response-error hooks through suppressSendPulseError keeps
+// the contract uniform.
 func newStrictErrorHandlers(log logger.Logger) (request, response strictErrorHandlerFunc) {
 	request = func(w http.ResponseWriter, r *http.Request, _ error) {
+		if suppressSendPulseError(w, r, log) {
+			return
+		}
 		respondError(w, r, domain.NewValidationError(domain.CodeValidation, "Invalid request body"), log)
 	}
 	response = func(w http.ResponseWriter, r *http.Request, err error) {
+		if suppressSendPulseError(w, r, log) {
+			log.Error(r.Context(), "sendpulse webhook: suppressed downstream error",
+				"error", err.Error(), "path", r.URL.Path)
+			return
+		}
 		respondError(w, r, err, log)
 	}
 	return
+}
+
+// suppressSendPulseError detects the SendPulse webhook path and writes the
+// canonical 200 `{}` response so neither validation nor downstream errors
+// leak past the auth boundary. Returns true when it handled the response.
+func suppressSendPulseError(w http.ResponseWriter, r *http.Request, log logger.Logger) bool {
+	if r.URL.Path != middleware.SendPulseWebhookPath {
+		return false
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if _, err := w.Write([]byte("{}\n")); err != nil {
+		log.Error(r.Context(), "sendpulse webhook 200 encode failed", "error", err)
+	}
+	return true
 }
 
 // NewStrictAPIHandler wraps a Server with the strict-server adapter, plugging

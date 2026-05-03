@@ -638,6 +638,38 @@ paths:
         default:
           $ref: "#/components/responses/UnexpectedError"
 
+  /webhooks/sendpulse/instagram:
+    post:
+      operationId: sendPulseInstagramWebhook
+      summary: SendPulse webhook for Instagram DM verification
+      description: |
+        SendPulse-driven Instagram DM verification. Bearer-gated by the
+        SendPulse middleware. Always returns 200 `{}` past the bearer (incl.
+        no-op outcomes) and 401 `{}` before — anti-fingerprinting.
+      tags: [webhooks]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SendPulseInstagramWebhookRequest"
+      responses:
+        "200":
+          description: Webhook processed (always — including no-op cases).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SendPulseInstagramWebhookResult"
+        "401":
+          description: Wrong or missing bearer secret. Body is empty — no fingerprinting.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SendPulseInstagramWebhookResult"
+        default:
+          $ref: "#/components/responses/UnexpectedError"
+
 components:
   parameters:
     PageQueryParam:
@@ -1243,6 +1275,7 @@ components:
         - phone
         - city
         - status
+        - verificationCode
         - createdAt
         - updatedAt
         - categories
@@ -1253,6 +1286,12 @@ components:
         id:
           type: string
           format: uuid
+        verificationCode:
+          type: string
+          description: |
+            6-digit `UGC-NNNNNN` code the creator must DM to the official
+            Instagram for auto-verification. Visible only via this admin
+            endpoint — never returned by public/landing routes.
         lastName:
           type: string
         firstName:
@@ -1513,6 +1552,37 @@ components:
       properties:
         data:
           $ref: "#/components/schemas/CreatorApplicationsCountsData"
+
+    SendPulseInstagramWebhookRequest:
+      type: object
+      description: |
+        Custom JSON payload SendPulse delivers from the Instagram chatbot.
+        `username` and `lastMessage` come from the configured "send custom
+        data" action; `contactId` is SendPulse's opaque contact identifier
+        kept for trace correlation.
+      required: [username, lastMessage]
+      properties:
+        username:
+          type: string
+          minLength: 1
+          maxLength: 256
+          description: Instagram handle of the message sender as SendPulse received it.
+        lastMessage:
+          type: string
+          minLength: 1
+          maxLength: 4096
+          description: Body of the last message in the IG DM thread.
+        contactId:
+          type: string
+          maxLength: 256
+          description: Optional SendPulse contact id; opaque to backend, kept for correlation.
+
+    SendPulseInstagramWebhookResult:
+      type: object
+      description: |
+        Empty object — the SendPulse webhook never carries data back. Both
+        success (200) and the constant-time auth failure (401) emit the
+        same `{}` body.
 
   securitySchemes:
     bearerAuth:

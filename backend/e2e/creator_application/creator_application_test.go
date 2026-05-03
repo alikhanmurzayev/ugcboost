@@ -439,6 +439,8 @@ func verifyCreatorApplicationByID(t *testing.T, c *apiclient.ClientWithResponses
 	require.Equal(t, applicationID, got.Id.String())
 	require.WithinDuration(t, time.Now().UTC(), got.CreatedAt, 5*time.Minute)
 	require.WithinDuration(t, time.Now().UTC(), got.UpdatedAt, 5*time.Minute)
+	require.Regexp(t, `^UGC-\d{6}$`, got.VerificationCode,
+		"verificationCode must be UGC-NNNNNN, got %q", got.VerificationCode)
 	require.True(t, strings.HasPrefix(got.TelegramBotUrl, "https://t.me/"),
 		"telegram bot url should start with https://t.me/, got %q", got.TelegramBotUrl)
 	require.Contains(t, got.TelegramBotUrl, "?start="+applicationID,
@@ -506,11 +508,15 @@ func buildExpectedDetail(t *testing.T, req apiclient.CreatorApplicationSubmitReq
 		Address:           req.Address,
 		CategoryOtherText: otherPtr,
 		Status:            apiclient.Verification,
-		CreatedAt:         got.CreatedAt,
-		UpdatedAt:         got.UpdatedAt,
-		Categories:        catRefs,
-		Socials:           socs,
-		Consents:          buildExpectedConsents(got.Consents),
+		// VerificationCode is generated server-side per submission; shape is
+		// asserted in verifyCreatorApplicationByID — copy through here so the
+		// equality check stays exhaustive without freezing the random suffix.
+		VerificationCode: got.VerificationCode,
+		CreatedAt:        got.CreatedAt,
+		UpdatedAt:        got.UpdatedAt,
+		Categories:       catRefs,
+		Socials:          socs,
+		Consents:         buildExpectedConsents(got.Consents),
 		// telegramBotUrl shape (https://t.me/{bot}?start={id}) is asserted in
 		// verifyCreatorApplicationByID against the live TELEGRAM_BOT_USERNAME;
 		// the username itself is environment-specific so we copy through here.

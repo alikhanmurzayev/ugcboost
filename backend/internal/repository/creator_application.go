@@ -97,6 +97,8 @@ type CreatorApplicationRepo interface {
 	HasActiveByIIN(ctx context.Context, iin string) (bool, error)
 	Create(ctx context.Context, row CreatorApplicationRow) (*CreatorApplicationRow, error)
 	GetByID(ctx context.Context, id string) (*CreatorApplicationRow, error)
+	GetByVerificationCodeAndStatus(ctx context.Context, code, status string) (*CreatorApplicationRow, error)
+	UpdateStatus(ctx context.Context, id, status string) error
 	List(ctx context.Context, params CreatorApplicationListParams) ([]*CreatorApplicationListRow, int64, error)
 	Counts(ctx context.Context) (map[string]int64, error)
 	DeleteForTests(ctx context.Context, id string) error
@@ -220,6 +222,39 @@ func (r *creatorApplicationRepository) GetByID(ctx context.Context, id string) (
 		From(TableCreatorApplications).
 		Where(sq.Eq{CreatorApplicationColumnID: id})
 	return dbutil.One[CreatorApplicationRow](ctx, r.db, q)
+}
+
+// GetByVerificationCodeAndStatus returns the single application row with the
+// given verification_code currently sitting in `status`. The
+// (verification_code, status='verification') partial unique index guarantees
+// at most one row, so this never sees a multi-row result. sql.ErrNoRows is
+// propagated wrapped — the SendPulse service interprets that as the
+// not_found no-op branch.
+func (r *creatorApplicationRepository) GetByVerificationCodeAndStatus(ctx context.Context, code, status string) (*CreatorApplicationRow, error) {
+	q := sq.Select(creatorApplicationSelectColumns...).
+		From(TableCreatorApplications).
+		Where(sq.Eq{CreatorApplicationColumnVerificationCode: code}).
+		Where(sq.Eq{CreatorApplicationColumnStatus: status})
+	return dbutil.One[CreatorApplicationRow](ctx, r.db, q)
+}
+
+// UpdateStatus moves an application to a new status, refreshing updated_at
+// to NOW(). The state-machine guard lives in the service layer (via
+// domain.IsCreatorApplicationTransitionAllowed) — this method is a dumb
+// SQL wrapper. Returns sql.ErrNoRows when no row matches the id.
+func (r *creatorApplicationRepository) UpdateStatus(ctx context.Context, id, status string) error {
+	q := sq.Update(TableCreatorApplications).
+		Set(CreatorApplicationColumnStatus, status).
+		Set(CreatorApplicationColumnUpdatedAt, sq.Expr("NOW()")).
+		Where(sq.Eq{CreatorApplicationColumnID: id})
+	n, err := dbutil.Exec(ctx, r.db, q)
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
 }
 
 // DeleteForTests hard-deletes an application by id. Related rows in
