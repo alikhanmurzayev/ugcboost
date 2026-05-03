@@ -411,6 +411,7 @@ jobs:
           E2E_BASE_URL: https://staging-api.ugcboost.kz
           CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
           CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+          SENDPULSE_WEBHOOK_SECRET: ${{ secrets.STAGING_SENDPULSE_WEBHOOK_SECRET }}
 
   test-staging-web:
     name: Staging E2E Frontend
