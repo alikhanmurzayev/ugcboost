@@ -2,22 +2,23 @@
 //
 // Тесты используют POST /test/telegram/message: ручка собирает synthetic
 // Update, прогоняет через тот же in-process handler, что и production
-// long polling, и возвращает ответы, перехваченные in-memory spy Sender.
+// long polling, и возвращает синхронные ответы, перехваченные in-memory
+// per-call SpyOnlySender. **Внимание:** этот эндпоинт ловит только
+// синхронные handler-reply'и (error-ветки) — успешный link больше не
+// шлёт sync-reply, welcome уходит fire-and-forget через Notifier и
+// читается через GET /test/telegram/sent (chunk 9 рефактор).
 //
-// TestTelegramLink покрывает основной поток привязки Telegram-аккаунта к
-// поданной заявке. Тест сам подаёт заявку через публичную ручку, шлёт
-// /start <appID> от свежего synthetic-аккаунта и проверяет: бот ответил
-// success-текстом; admin GET /creators/applications/{id} возвращает
-// заполненный telegramLink с теми же user_id/username/first/last; в audit-логе
-// появилась строка action=creator_application_link_telegram. Подсценарий
-// idempotent повторно шлёт /start от того же TG и убеждается, что тот же
-// успешный ответ возвращается без задвоения данных. Подсценарий «другая
-// заявка занята другим Telegram» проверяет, что попытка чужого аккаунта
-// привязаться к уже занятой заявке получает текст «уже связана с другим
-// Telegram», а исходная привязка остаётся нетронутой.
+// TestTelegramLink покрывает основной поток привязки. С-IG happy-path:
+// заявка submitted с Instagram → /start → INSERT link + audit, отсутствие
+// sync-reply, welcome через /test/telegram/sent с подстрокой `UGC-` и
+// URL `https://ig.me/m/ugc_boost`. Без-IG happy-path: заявка только с
+// TikTok → welcome без `UGC-` и `ig.me`, текст «Спасибо за заявку».
+// Idempotent re-link: тот же TG жмёт /start ещё раз → 2 идентичных
+// welcome-записи. «Чужой Telegram» — синхронный sync-reply
+// «уже связана с другим Telegram», 0 новых записей в spy.
 //
-// TestTelegramFallback покрывает все ветки, не связанные с успешной
-// привязкой. /start без payload и /start с битой ссылкой получают универсальный
+// TestTelegramFallback покрывает все ветки, не связанные с успешным link.
+// /start без payload и /start с битой ссылкой получают универсальный
 // текст «подайте заявку на ugcboost.kz»; синтаксически валидный, но
 // несуществующий UUID получает «заявка не найдена»; любая другая команда
 // (/help) и плоский текст также сворачиваются в fallback.
@@ -28,11 +29,19 @@
 // Каждый тест создаёт свежие данные через бизнес-ручки. RegisterCleanup
 // удаляет заявки в обратном порядке (LIFO) при E2E_CLEANUP=true; привязки
 // уходят каскадом через ON DELETE CASCADE на application_id.
+//
+// E2E test-mode contract (см. spec-creator-bot-notify-foundation):
+// `/test/telegram/sent` ловит то, что бэк попытался отправить (params,
+// ChatID, ReplyMarkup) — не факт доставки. В TeeSender-режиме (mock=false
+// + EnableTestEndpoints) реальный bot.SendMessage зовётся, на синтетических
+// chat_id всегда падает; spy записывает params + Err. Err намеренно НЕ
+// ассертим — тесты verify outbound params, не факт доставки.
 package telegram_test
 
 import (
 	"context"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -61,13 +70,13 @@ func newRandomUUID(t *testing.T) string {
 const (
 	replyFallback              = "Здравствуйте! Чтобы продолжить, подайте заявку на ugcboost.kz"
 	replyApplicationNotFound   = "Заявка не найдена. Подайте новую на ugcboost.kz"
-	replyLinkSuccess           = "Здравствуйте! Заявка успешно связана с вашим Telegram. В ближайшее время в этом чате откроется мини-приложение со статусом обработки заявки"
 	replyApplicationAlreadyLnk = "Эта заявка уже связана с другим Telegram. Если это ошибка — обратитесь в поддержку"
 )
 
-// validRequest mirrors the helper from creator_application package without
-// sharing types — keeps the two e2e packages independent.
-func validRequest(iin string) apiclient.CreatorApplicationSubmitRequest {
+// validRequestWithIG mirrors the helper from creator_application package
+// without sharing types — keeps the two e2e packages independent. Carries
+// an Instagram social so the welcome variant exercises the with-IG branch.
+func validRequestWithIG(iin string) apiclient.CreatorApplicationSubmitRequest {
 	middle := "Ивановна"
 	return apiclient.CreatorApplicationSubmitRequest{
 		LastName:   "Муратова",
@@ -85,16 +94,42 @@ func validRequest(iin string) apiclient.CreatorApplicationSubmitRequest {
 	}
 }
 
-func submitApplication(t *testing.T) string {
+// validRequestNoIG drops the Instagram social — TikTok only — so the welcome
+// variant exercises the no-IG branch.
+func validRequestNoIG(iin string) apiclient.CreatorApplicationSubmitRequest {
+	middle := "Ивановна"
+	return apiclient.CreatorApplicationSubmitRequest{
+		LastName:   "Муратова",
+		FirstName:  "Айдана",
+		MiddleName: &middle,
+		Iin:        iin,
+		Phone:      "+77001234567",
+		City:       "almaty",
+		Categories: []string{"beauty", "fashion"},
+		Socials: []apiclient.SocialAccountInput{
+			{Platform: apiclient.Tiktok, Handle: "aidana_tt_" + iin[7:]},
+		},
+		AcceptedAll: true,
+	}
+}
+
+func submitWithRequest(t *testing.T, req apiclient.CreatorApplicationSubmitRequest) string {
 	t.Helper()
 	c := testutil.NewAPIClient(t)
-	resp, err := c.SubmitCreatorApplicationWithResponse(context.Background(), validRequest(testutil.UniqueIIN()))
+	resp, err := c.SubmitCreatorApplicationWithResponse(context.Background(), req)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusCreated, resp.StatusCode())
 	require.NotNil(t, resp.JSON201)
 	id := resp.JSON201.Data.ApplicationId.String()
 	testutil.RegisterCreatorApplicationCleanup(t, id)
 	return id
+}
+
+// requireNoSyncReply asserts the test endpoint returned an empty replies list.
+// Welcome on success-link is async via /test/telegram/sent, not a sync reply.
+func requireNoSyncReply(t *testing.T, replies []testclient.TelegramReply) {
+	t.Helper()
+	require.Empty(t, replies, "success /start must produce no synchronous reply (welcome is async via Notifier)")
 }
 
 func singleReply(t *testing.T, replies []testclient.TelegramReply, chatID int64) string {
@@ -107,14 +142,26 @@ func singleReply(t *testing.T, replies []testclient.TelegramReply, chatID int64)
 func TestTelegramLink(t *testing.T) {
 	t.Parallel()
 
-	t.Run("success creates link, returns success text and writes audit", func(t *testing.T) {
+	t.Run("with-IG: success creates link, sends welcome with UGC code and Direct URL", func(t *testing.T) {
 		t.Parallel()
 		tc := testutil.NewTestClient(t)
-		appID := submitApplication(t)
+		appID := submitWithRequest(t, validRequestWithIG(testutil.UniqueIIN()))
+		code := testutil.GetCreatorApplicationVerificationCode(t, appID)
 
 		upd := testutil.DefaultTelegramUpdate(t)
 		upd.Text = "/start " + appID
-		require.Equal(t, replyLinkSuccess, singleReply(t, testutil.SendTelegramUpdate(t, tc, upd), upd.ChatID))
+		since := time.Now().UTC()
+		requireNoSyncReply(t, testutil.SendTelegramUpdate(t, tc, upd))
+
+		sent := testutil.WaitForTelegramSent(t, upd.UserID, testutil.TelegramSentOptions{
+			Since:       since,
+			ExpectCount: 1,
+		})
+		require.Len(t, sent, 1)
+		require.Equal(t, upd.UserID, sent[0].ChatId)
+		require.Contains(t, sent[0].Text, code, "with-IG welcome must surface the verification code")
+		require.Contains(t, sent[0].Text, "https://ig.me/m/ugc_boost", "with-IG welcome must include the Direct deep-link")
+		require.Nil(t, sent[0].WebAppUrl, "chunk-9 messages never carry a WebApp button")
 
 		adminClient, adminToken, _ := testutil.SetupAdminClient(t)
 		resp, err := adminClient.GetCreatorApplicationWithResponse(context.Background(),
@@ -134,19 +181,52 @@ func TestTelegramLink(t *testing.T) {
 			"creator_application", appID, "creator_application_link_telegram")
 	})
 
-	t.Run("idempotent repeat from same TG returns success without changes", func(t *testing.T) {
+	t.Run("no-IG: success sends generic welcome, no UGC code, no ig.me", func(t *testing.T) {
 		t.Parallel()
 		tc := testutil.NewTestClient(t)
-		appID := submitApplication(t)
+		appID := submitWithRequest(t, validRequestNoIG(testutil.UniqueIIN()))
+
 		upd := testutil.DefaultTelegramUpdate(t)
 		upd.Text = "/start " + appID
+		since := time.Now().UTC()
+		requireNoSyncReply(t, testutil.SendTelegramUpdate(t, tc, upd))
 
-		first := testutil.SendTelegramUpdate(t, tc, upd)
-		require.Equal(t, replyLinkSuccess, singleReply(t, first, upd.ChatID))
-		second := testutil.SendTelegramUpdate(t, tc, upd)
-		require.Equal(t, replyLinkSuccess, singleReply(t, second, upd.ChatID))
+		sent := testutil.WaitForTelegramSent(t, upd.UserID, testutil.TelegramSentOptions{
+			Since:       since,
+			ExpectCount: 1,
+		})
+		require.Len(t, sent, 1)
+		require.Contains(t, sent[0].Text, "Спасибо за заявку")
+		require.NotContains(t, sent[0].Text, "UGC-")
+		require.NotContains(t, strings.ToLower(sent[0].Text), "ig.me")
+		require.Nil(t, sent[0].WebAppUrl)
+	})
 
-		// audit entry exists exactly once — repeated /start must not produce a
+	t.Run("idempotent repeat from same TG produces two welcome records", func(t *testing.T) {
+		t.Parallel()
+		tc := testutil.NewTestClient(t)
+		appID := submitWithRequest(t, validRequestWithIG(testutil.UniqueIIN()))
+		upd := testutil.DefaultTelegramUpdate(t)
+		upd.Text = "/start " + appID
+		since := time.Now().UTC()
+
+		requireNoSyncReply(t, testutil.SendTelegramUpdate(t, tc, upd))
+		// Wait for the first welcome before issuing the second /start so
+		// the count assertion below cannot race the first goroutine.
+		_ = testutil.WaitForTelegramSent(t, upd.UserID, testutil.TelegramSentOptions{
+			Since:       since,
+			ExpectCount: 1,
+		})
+		requireNoSyncReply(t, testutil.SendTelegramUpdate(t, tc, upd))
+
+		sent := testutil.WaitForTelegramSent(t, upd.UserID, testutil.TelegramSentOptions{
+			Since:       since,
+			ExpectCount: 2,
+		})
+		require.Len(t, sent, 2, "idempotent re-link must trigger a second welcome")
+		require.Equal(t, sent[0].Text, sent[1].Text, "both welcomes must be identical")
+
+		// Audit entry exists exactly once — repeated /start must not produce a
 		// second link audit row.
 		adminClient, adminToken, _ := testutil.SetupAdminClient(t)
 		entityType := "creator_application"
@@ -164,26 +244,43 @@ func TestTelegramLink(t *testing.T) {
 		require.Equal(t, 1, count, "idempotent repeat must not produce a second audit row")
 	})
 
-	t.Run("application already linked to a different TG", func(t *testing.T) {
+	t.Run("application already linked to a different TG: sync reply, intruder gets no welcome", func(t *testing.T) {
 		t.Parallel()
 		tc := testutil.NewTestClient(t)
-		appID := submitApplication(t)
+		appID := submitWithRequest(t, validRequestWithIG(testutil.UniqueIIN()))
 
 		first := testutil.DefaultTelegramUpdate(t)
 		first.Text = "/start " + appID
-		require.Equal(t, replyLinkSuccess, singleReply(t, testutil.SendTelegramUpdate(t, tc, first), first.ChatID))
+		firstSince := time.Now().UTC()
+		requireNoSyncReply(t, testutil.SendTelegramUpdate(t, tc, first))
+		// Wait for the first welcome so the intruder branch starts from a
+		// known steady state. firstSince is captured immediately before
+		// SendTelegramUpdate so the spy filter cannot drift onto records
+		// from a parallel test that happens to share a chat id.
+		_ = testutil.WaitForTelegramSent(t, first.UserID, testutil.TelegramSentOptions{
+			Since:       firstSince,
+			ExpectCount: 1,
+		})
 
 		intruder := testutil.DefaultTelegramUpdate(t)
 		intruder.Text = "/start " + appID
-		require.Equal(t, replyApplicationAlreadyLnk, singleReply(t, testutil.SendTelegramUpdate(t, tc, intruder), intruder.ChatID))
+		intruderSince := time.Now().UTC()
+		require.Equal(t, replyApplicationAlreadyLnk,
+			singleReply(t, testutil.SendTelegramUpdate(t, tc, intruder), intruder.ChatID))
+
+		// No new welcome for the intruder (notify is gated on commit-success).
+		// `EnsureNoNewTelegramSent` polls /test/telegram/sent for a window and
+		// fails the test if any record appears — a non-empty result fails the
+		// helper, an empty result over the full window passes.
+		testutil.EnsureNoNewTelegramSent(t, intruder.UserID, intruderSince, 1*time.Second)
 
 		adminClient, adminToken, _ := testutil.SetupAdminClient(t)
-		resp, err := adminClient.GetCreatorApplicationWithResponse(context.Background(),
+		detailResp, err := adminClient.GetCreatorApplicationWithResponse(context.Background(),
 			mustParseUUID(t, appID), testutil.WithAuth(adminToken))
 		require.NoError(t, err)
-		require.NotNil(t, resp.JSON200)
-		require.NotNil(t, resp.JSON200.Data.TelegramLink)
-		require.Equal(t, first.UserID, resp.JSON200.Data.TelegramLink.TelegramUserId,
+		require.NotNil(t, detailResp.JSON200)
+		require.NotNil(t, detailResp.JSON200.Data.TelegramLink)
+		require.Equal(t, first.UserID, detailResp.JSON200.Data.TelegramLink.TelegramUserId,
 			"original link must remain intact")
 	})
 }

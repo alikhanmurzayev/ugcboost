@@ -152,10 +152,13 @@ func TestHandler_Handle(t *testing.T) {
 		expectFallback(t, "/start 00000000-0000-0000-0000-000000000000")
 	})
 
-	t.Run("/start with mixed-case hex UUID → success", func(t *testing.T) {
+	t.Run("/start with mixed-case hex UUID → success, no sync reply", func(t *testing.T) {
 		t.Parallel()
 		linkSvc := tgmocks.NewMockLinkService(t)
 		log := logmocks.NewMockLogger(t)
+		// spy carries no EXPECT → any SendMessage call would surface as
+		// "unexpected call" through the mockery cleanup assertion. Welcome
+		// fires post-commit through the Notifier — async, not synchronous.
 		spy := tgmocks.NewMockSender(t)
 		h := telegram.NewHandler(linkSvc, log)
 
@@ -165,8 +168,6 @@ func TestHandler_Handle(t *testing.T) {
 				require.Equal(t, hexUUID, in.ApplicationID)
 			}).
 			Return(nil)
-		spy.EXPECT().SendMessage(mock.Anything, matchSend(4242, telegram.MessageLinkSuccess)).
-			Return(nil, nil)
 
 		h.Handle(context.Background(), spy, newUpdate("/start "+hexUUID))
 	})
@@ -181,7 +182,7 @@ func TestHandler_Handle(t *testing.T) {
 		expectFallback(t, "hi there")
 	})
 
-	t.Run("/start <uuid> → success", func(t *testing.T) {
+	t.Run("/start <uuid> → success, no sync reply (welcome via async notifier)", func(t *testing.T) {
 		t.Parallel()
 		linkSvc := tgmocks.NewMockLinkService(t)
 		log := logmocks.NewMockLogger(t)
@@ -196,8 +197,7 @@ func TestHandler_Handle(t *testing.T) {
 				require.Equal(t, "aidana", *in.TelegramUsername)
 			}).
 			Return(nil)
-		spy.EXPECT().SendMessage(mock.Anything, matchSend(4242, telegram.MessageLinkSuccess)).
-			Return(nil, nil)
+		// No EXPECT on spy.SendMessage — handler must not reply on success.
 
 		h.Handle(context.Background(), spy, newUpdate("/start "+validAppID))
 	})

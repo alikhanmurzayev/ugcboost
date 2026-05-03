@@ -143,6 +143,59 @@ func (_c *MockCreatorApplicationTelegramRepoFactory_NewCreatorApplicationRepo_Ca
 	return _c
 }
 
+// NewCreatorApplicationSocialRepo provides a mock function for the type MockCreatorApplicationTelegramRepoFactory
+func (_mock *MockCreatorApplicationTelegramRepoFactory) NewCreatorApplicationSocialRepo(db dbutil.DB) repository.CreatorApplicationSocialRepo {
+	ret := _mock.Called(db)
+
+	if len(ret) == 0 {
+		panic("no return value specified for NewCreatorApplicationSocialRepo")
+	}
+
+	var r0 repository.CreatorApplicationSocialRepo
+	if returnFunc, ok := ret.Get(0).(func(dbutil.DB) repository.CreatorApplicationSocialRepo); ok {
+		r0 = returnFunc(db)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(repository.CreatorApplicationSocialRepo)
+		}
+	}
+	return r0
+}
+
+// MockCreatorApplicationTelegramRepoFactory_NewCreatorApplicationSocialRepo_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'NewCreatorApplicationSocialRepo'
+type MockCreatorApplicationTelegramRepoFactory_NewCreatorApplicationSocialRepo_Call struct {
+	*mock.Call
+}
+
+// NewCreatorApplicationSocialRepo is a helper method to define mock.On call
+//   - db dbutil.DB
+func (_e *MockCreatorApplicationTelegramRepoFactory_Expecter) NewCreatorApplicationSocialRepo(db interface{}) *MockCreatorApplicationTelegramRepoFactory_NewCreatorApplicationSocialRepo_Call {
+	return &MockCreatorApplicationTelegramRepoFactory_NewCreatorApplicationSocialRepo_Call{Call: _e.mock.On("NewCreatorApplicationSocialRepo", db)}
+}
+
+func (_c *MockCreatorApplicationTelegramRepoFactory_NewCreatorApplicationSocialRepo_Call) Run(run func(db dbutil.DB)) *MockCreatorApplicationTelegramRepoFactory_NewCreatorApplicationSocialRepo_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 dbutil.DB
+		if args[0] != nil {
+			arg0 = args[0].(dbutil.DB)
+		}
+		run(
+			arg0,
+		)
+	})
+	return _c
+}
+
+func (_c *MockCreatorApplicationTelegramRepoFactory_NewCreatorApplicationSocialRepo_Call) Return(creatorApplicationSocialRepo repository.CreatorApplicationSocialRepo) *MockCreatorApplicationTelegramRepoFactory_NewCreatorApplicationSocialRepo_Call {
+	_c.Call.Return(creatorApplicationSocialRepo)
+	return _c
+}
+
+func (_c *MockCreatorApplicationTelegramRepoFactory_NewCreatorApplicationSocialRepo_Call) RunAndReturn(run func(db dbutil.DB) repository.CreatorApplicationSocialRepo) *MockCreatorApplicationTelegramRepoFactory_NewCreatorApplicationSocialRepo_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // NewCreatorApplicationTelegramLinkRepo provides a mock function for the type MockCreatorApplicationTelegramRepoFactory
 func (_mock *MockCreatorApplicationTelegramRepoFactory) NewCreatorApplicationTelegramLinkRepo(db dbutil.DB) repository.CreatorApplicationTelegramLinkRepo {
 	ret := _mock.Called(db)

@@ -1,5 +1,6 @@
 // Package webhooks — E2E тесты HTTP-поверхности /webhooks/* (chunk 8
-// creator-onboarding-roadmap, follow-up к PR #52 ревью).
+// creator-onboarding-roadmap, обновлено chunk 9 — chunk-8 placeholder с
+// WebApp-кнопкой выпилен, теперь идёт plain-text «Заявка ушла на модерацию»).
 //
 // TestSendPulseInstagramWebhook проходит по всем веткам I/O-матрицы
 // SendPulse-вебхука. На вход — заявка, поданная через лендинг (статус
@@ -15,8 +16,9 @@
 // Сценарии:
 //   - happy path: код, отправленный SendPulse'ом, совпадает с заявкой,
 //     IG-handle совпадает; ожидаем 200 {}, статус заявки moderation,
-//     audit-row с handle_changed=false, ровно одно TG-уведомление с WebApp-
-//     кнопкой на TMA;
+//     audit-row с handle_changed=false, ровно одно TG-уведомление —
+//     plain-text без inline-кнопок, без `tma`/`mini`/`webapp`/`ig.me`/`UGC-`,
+//     с подстрокой «модерацию»;
 //   - self-fix: тот же код, но username отличается от сохранённого handle;
 //     заявка переходит, audit-row помечает handle_changed=true, TG-нотификация
 //     уходит;
@@ -36,6 +38,12 @@
 // transitions / audit. SendPulse-секрет читается из env (по умолчанию —
 // значение из backend/.env, чтобы локальный go test "из коробки"
 // заработал против поднятого через make start-backend стенда).
+//
+// E2E test-mode contract (см. spec-creator-bot-notify-foundation): запись
+// в `/test/telegram/sent` фиксирует то, что бэк попытался отправить — не
+// факт доставки. В TeeSender-режиме (mock=false) на синтетических chat_id
+// реальный bot.SendMessage всегда падает; spy записывает params + Err.
+// `Err` намеренно НЕ ассертим — тесты verify outbound params, не доставку.
 package webhooks_test
 
 import (
@@ -50,6 +58,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/alikhanmurzayev/ugcboost/backend/e2e/apiclient"
+	"github.com/alikhanmurzayev/ugcboost/backend/e2e/testclient"
 	"github.com/alikhanmurzayev/ugcboost/backend/e2e/testutil"
 )
 
@@ -106,13 +115,7 @@ func TestSendPulseInstagramWebhook(t *testing.T) {
 			ExpectCount: 1,
 		})
 		require.Len(t, sent, 1)
-		require.NotEmpty(t, sent[0].Text, "verification notification must carry text")
-		require.NotNil(t, sent[0].WebAppUrl, "verification notification must attach a WebApp button")
-		require.True(t, strings.HasPrefix(*sent[0].WebAppUrl, "http"),
-			"WebApp URL must point at the TMA: %q", *sent[0].WebAppUrl)
-		// sent[0].Error may be populated under TeeSender (real Telegram path
-		// rejects synthetic chat ids); we only assert orchestration-level
-		// invariants — a record exists, with the expected ChatID + WebApp.
+		assertVerificationApprovedShape(t, sent[0])
 	})
 
 	t.Run("self-fix mismatch overwrites handle, stamps audit flag, notifies", func(t *testing.T) {
@@ -149,6 +152,7 @@ func TestSendPulseInstagramWebhook(t *testing.T) {
 			ExpectCount: 1,
 		})
 		require.Len(t, sent, 1)
+		assertVerificationApprovedShape(t, sent[0])
 	})
 
 	t.Run("repeat delivery after success is a no-op (no audit, no TG)", func(t *testing.T) {
@@ -348,6 +352,23 @@ func listVerificationAuditEntries(t *testing.T, c *apiclient.ClientWithResponses
 	require.Equal(t, http.StatusOK, resp.StatusCode())
 	require.NotNil(t, resp.JSON200)
 	return resp.JSON200.Data.Logs
+}
+
+// assertVerificationApprovedShape pins the chunk-9 contract for the
+// verification-approved Telegram notification: plain text without inline
+// keyboard, contains "модерацию", and never carries any of the substrings
+// the WebApp/TMA placeholder used to ship.
+func assertVerificationApprovedShape(t *testing.T, msg testclient.TelegramSentMessage) {
+	t.Helper()
+	require.NotEmpty(t, msg.Text, "verification notification must carry text")
+	require.Contains(t, msg.Text, "модерацию", "verification-approved must mention moderation")
+	require.Nil(t, msg.WebAppUrl, "chunk-9 verification-approved is plain text — no WebApp button")
+	lower := strings.ToLower(msg.Text)
+	for _, banned := range []string{"tma", "mini", "webapp", "ig.me", "ugc-"} {
+		require.NotContainsf(t, lower, banned, "verification-approved must not contain %q (text=%q)", banned, msg.Text)
+	}
+	// msg.Error may be populated under TeeSender (real Telegram path rejects
+	// synthetic chat ids); we only assert outbound params, never delivery.
 }
 
 // assertAuditPayload verifies all five fields the verification_auto handler

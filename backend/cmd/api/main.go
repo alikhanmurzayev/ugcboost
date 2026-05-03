@@ -94,10 +94,10 @@ func run() error {
 	if err != nil {
 		return err
 	}
-	registerNotifyWaiter(tgRig.NotifyWG, cl)
+	registerNotifyWaiter(tgRig.Notifier, cl)
 
-	creatorApplicationSvc := service.NewCreatorApplicationService(pool, repoFactory, tgRig.Sender, tgRig.NotifyWG, cfg.TMAPublicURL, appLogger)
-	creatorApplicationTelegramSvc := service.NewCreatorApplicationTelegramService(pool, repoFactory, appLogger)
+	creatorApplicationSvc := service.NewCreatorApplicationService(pool, repoFactory, tgRig.Notifier, appLogger)
+	creatorApplicationTelegramSvc := service.NewCreatorApplicationTelegramService(pool, repoFactory, tgRig.Notifier, appLogger)
 	dictionarySvc := service.NewDictionaryService(pool, repoFactory, appLogger)
 
 	tgHandler := telegram.NewHandler(creatorApplicationTelegramSvc, appLogger)

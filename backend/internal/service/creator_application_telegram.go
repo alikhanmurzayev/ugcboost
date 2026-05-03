@@ -13,6 +13,7 @@ import (
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/logger"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/middleware"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/repository"
+	"github.com/alikhanmurzayev/ugcboost/backend/internal/telegram"
 )
 
 // telegramBotActorIP is the synthetic marker the LinkTelegram path stamps on
@@ -20,11 +21,21 @@ import (
 const telegramBotActorIP = "telegram-bot"
 
 // CreatorApplicationTelegramRepoFactory is a narrow set of repos used by the
-// link service.
+// link service. NewCreatorApplicationSocialRepo is included so the post-commit
+// welcome path can pick the IG-vs-no-IG variant from inside the same TX as the
+// link write.
 type CreatorApplicationTelegramRepoFactory interface {
 	NewCreatorApplicationRepo(db dbutil.DB) repository.CreatorApplicationRepo
 	NewCreatorApplicationTelegramLinkRepo(db dbutil.DB) repository.CreatorApplicationTelegramLinkRepo
+	NewCreatorApplicationSocialRepo(db dbutil.DB) repository.CreatorApplicationSocialRepo
 	NewAuditRepo(db dbutil.DB) repository.AuditRepo
+}
+
+// creatorAppTelegramNotifier is the consumer-side contract: only the
+// LinkTelegram-driven welcome event. Defined here so the service does not
+// pull in the concrete *telegram.Notifier — accept interfaces, return structs.
+type creatorAppTelegramNotifier interface {
+	NotifyApplicationLinked(ctx context.Context, chatID int64, p telegram.ApplicationLinkedPayload)
 }
 
 // CreatorApplicationTelegramService binds a Telegram account to a creator
@@ -32,12 +43,18 @@ type CreatorApplicationTelegramRepoFactory interface {
 type CreatorApplicationTelegramService struct {
 	pool        dbutil.Pool
 	repoFactory CreatorApplicationTelegramRepoFactory
+	notifier    creatorAppTelegramNotifier
 	logger      logger.Logger
 }
 
 // NewCreatorApplicationTelegramService wires the service.
-func NewCreatorApplicationTelegramService(pool dbutil.Pool, repoFactory CreatorApplicationTelegramRepoFactory, log logger.Logger) *CreatorApplicationTelegramService {
-	return &CreatorApplicationTelegramService{pool: pool, repoFactory: repoFactory, logger: log}
+func NewCreatorApplicationTelegramService(pool dbutil.Pool, repoFactory CreatorApplicationTelegramRepoFactory, notifier creatorAppTelegramNotifier, log logger.Logger) *CreatorApplicationTelegramService {
+	return &CreatorApplicationTelegramService{
+		pool:        pool,
+		repoFactory: repoFactory,
+		notifier:    notifier,
+		logger:      log,
+	}
 }
 
 // LinkTelegram performs the link operation atomically. Behaviour mirrors the
@@ -52,6 +69,10 @@ func NewCreatorApplicationTelegramService(pool dbutil.Pool, repoFactory CreatorA
 //     a different TG hitting an already-linked application yields
 //     CodeTelegramApplicationAlreadyLinked.
 //   - One TG may be linked to many applications (no UNIQUE on telegram_user_id).
+//
+// On any commit-success path (new link OR idempotent re-link) the notifier is
+// asked to send a welcome — fire-and-forget through Notifier. Errors before
+// commit (already-linked-другим, ErrNotFound, fallback) skip the notify.
 func (s *CreatorApplicationTelegramService) LinkTelegram(ctx context.Context, in domain.TelegramLinkInput, now time.Time) error {
 	username := capOptionalString(in.TelegramUsername, domain.TelegramUsernameMaxLen)
 	firstName := capOptionalString(in.TelegramFirstName, domain.TelegramNameMaxLen)
@@ -59,11 +80,16 @@ func (s *CreatorApplicationTelegramService) LinkTelegram(ctx context.Context, in
 
 	ctx = middleware.WithClientIP(ctx, telegramBotActorIP)
 
-	var idempotent bool
+	var (
+		idempotent       bool
+		verificationCode string
+		hasInstagram     bool
+	)
 
 	err := dbutil.WithTx(ctx, s.pool, func(tx dbutil.DB) error {
 		appRepo := s.repoFactory.NewCreatorApplicationRepo(tx)
 		linkRepo := s.repoFactory.NewCreatorApplicationTelegramLinkRepo(tx)
+		socialRepo := s.repoFactory.NewCreatorApplicationSocialRepo(tx)
 		auditRepo := s.repoFactory.NewAuditRepo(tx)
 
 		appRow, err := appRepo.GetByID(ctx, in.ApplicationID)
@@ -72,6 +98,18 @@ func (s *CreatorApplicationTelegramService) LinkTelegram(ctx context.Context, in
 				return domain.ErrNotFound
 			}
 			return fmt.Errorf("get application: %w", err)
+		}
+		verificationCode = appRow.VerificationCode
+
+		socials, err := socialRepo.ListByApplicationID(ctx, in.ApplicationID)
+		if err != nil {
+			return fmt.Errorf("list socials: %w", err)
+		}
+		for _, sc := range socials {
+			if sc.Platform == domain.SocialPlatformInstagram {
+				hasInstagram = true
+				break
+			}
 		}
 
 		// Preflight read of the link row. Postgres aborts the whole
@@ -142,11 +180,19 @@ func (s *CreatorApplicationTelegramService) LinkTelegram(ctx context.Context, in
 		s.logger.Debug(ctx, "telegram link idempotent",
 			"application_id", in.ApplicationID,
 			"telegram_user_id", in.TelegramUserID)
-		return nil
+	} else {
+		s.logger.Info(ctx, "telegram linked to creator application",
+			"application_id", in.ApplicationID,
+			"telegram_user_id", in.TelegramUserID)
 	}
-	s.logger.Info(ctx, "telegram linked to creator application",
-		"application_id", in.ApplicationID,
-		"telegram_user_id", in.TelegramUserID)
+
+	// Welcome message after commit (both new-link and idempotent re-link). The
+	// Notifier owns the goroutine, timeout and WaitGroup; failures land in the
+	// app log without affecting the link result.
+	s.notifier.NotifyApplicationLinked(ctx, in.TelegramUserID, telegram.ApplicationLinkedPayload{
+		VerificationCode: verificationCode,
+		HasInstagram:     hasInstagram,
+	})
 	return nil
 }
 
