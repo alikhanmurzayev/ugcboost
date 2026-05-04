@@ -58,22 +58,20 @@ func waitFor(t *testing.T, label string, done <-chan struct{}) {
 // сигнал «текст изменился, но тест зеленеет».
 func expectedWelcomeWithIG(verificationCode string) string {
 	return "Здравствуйте! 👋\n\n" +
-		"Получили вашу заявку.\n" +
-		"Чтобы подтвердить Instagram, нужна одна минута:\n\n" +
-		"1. Скопируйте код (тап по блоку):\n\n" +
+		"Мы получили вашу заявку.\n" +
+		"Подтвердите, пожалуйста, что вы действительно владеете указанным аккаунтом Instagram:\n\n" +
+		"1. Скопируйте код:\n\n" +
 		"   <pre>" + verificationCode + "</pre>\n\n" +
 		"2. Откройте Direct и отправьте его нам:\n\n" +
-		"   https://ig.me/m/ugc_boost\n\n" +
-		"Напишу сюда, как только проверим."
+		"   https://ig.me/m/ugc_boost"
 }
 
 const (
 	expectedWelcomeNoIG = "Здравствуйте! 👋\n\n" +
-		"Спасибо за заявку! Обрабатываем.\n\n" +
-		"Напишу сюда, как только будет готово."
+		"Мы получили вашу заявку. Скоро сообщим здесь результаты отбора ✅"
 
-	expectedVerificationApproved = "Заявка ушла на модерацию ✅\n\n" +
-		"Напишу сюда, как только модератор примет решение."
+	expectedVerificationApproved = "Вы успешно подтвердили свой аккаунт ✅\n\n" +
+		"Скоро сообщим здесь результаты отбора 🖤"
 )
 
 func TestNotifier_NotifyApplicationLinked(t *testing.T) {

@@ -29,25 +29,23 @@ const igDirectURL = "https://ig.me/m/ugc_boost"
 // %s is the application's verification code (UGC-NNNNNN). HTML parse_mode
 // is required for the <pre> tap-to-copy block.
 const welcomeWithIGTemplate = "Здравствуйте! 👋\n\n" +
-	"Получили вашу заявку.\n" +
-	"Чтобы подтвердить Instagram, нужна одна минута:\n\n" +
-	"1. Скопируйте код (тап по блоку):\n\n" +
+	"Мы получили вашу заявку.\n" +
+	"Подтвердите, пожалуйста, что вы действительно владеете указанным аккаунтом Instagram:\n\n" +
+	"1. Скопируйте код:\n\n" +
 	"   <pre>%s</pre>\n\n" +
 	"2. Откройте Direct и отправьте его нам:\n\n" +
-	"   " + igDirectURL + "\n\n" +
-	"Напишу сюда, как только проверим."
+	"   " + igDirectURL
 
 // welcomeNoIGText is the welcome text sent right after a successful /start
 // link when the application has no Instagram social. We do not surface the
 // internal "manual verification" mechanic — the message stays generic.
 const welcomeNoIGText = "Здравствуйте! 👋\n\n" +
-	"Спасибо за заявку! Обрабатываем.\n\n" +
-	"Напишу сюда, как только будет готово."
+	"Мы получили вашу заявку. Скоро сообщим здесь результаты отбора ✅"
 
 // verificationApprovedText replaces the chunk-8 placeholder. No inline
 // keyboard — TMA is out of the onboarding flow per roadmap v2.
-const verificationApprovedText = "Заявка ушла на модерацию ✅\n\n" +
-	"Напишу сюда, как только модератор примет решение."
+const verificationApprovedText = "Вы успешно подтвердили свой аккаунт ✅\n\n" +
+	"Скоро сообщим здесь результаты отбора 🖤"
 
 // ApplicationLinkedPayload carries everything NotifyApplicationLinked needs
 // to pick the right welcome variant and substitute the verification code.

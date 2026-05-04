@@ -12,7 +12,8 @@
 // заявка submitted с Instagram → /start → INSERT link + audit, отсутствие
 // sync-reply, welcome через /test/telegram/sent с подстрокой `UGC-` и
 // URL `https://ig.me/m/ugc_boost`. Без-IG happy-path: заявка только с
-// TikTok → welcome без `UGC-` и `ig.me`, текст «Спасибо за заявку».
+// TikTok → welcome без `UGC-` и `ig.me`, текст «Скоро сообщим здесь
+// результаты отбора».
 // Idempotent re-link: тот же TG жмёт /start ещё раз → 2 идентичных
 // welcome-записи. «Чужой Telegram» — синхронный sync-reply
 // «уже связана с другим Telegram», 0 новых записей в spy.
@@ -75,8 +76,7 @@ const (
 	// Дублирование намеренное: e2e-пакет — отдельный модуль, и assert-by-equality
 	// требует, чтобы любое изменение копирайта одновременно ломало тест.
 	welcomeNoIGText = "Здравствуйте! 👋\n\n" +
-		"Спасибо за заявку! Обрабатываем.\n\n" +
-		"Напишу сюда, как только будет готово."
+		"Мы получили вашу заявку. Скоро сообщим здесь результаты отбора ✅"
 )
 
 // welcomeWithIGText собирает welcome-сообщение для IG-варианта, подставляя
@@ -85,13 +85,12 @@ const (
 // должно одновременно сломать тест.
 func welcomeWithIGText(verificationCode string) string {
 	return "Здравствуйте! 👋\n\n" +
-		"Получили вашу заявку.\n" +
-		"Чтобы подтвердить Instagram, нужна одна минута:\n\n" +
-		"1. Скопируйте код (тап по блоку):\n\n" +
+		"Мы получили вашу заявку.\n" +
+		"Подтвердите, пожалуйста, что вы действительно владеете указанным аккаунтом Instagram:\n\n" +
+		"1. Скопируйте код:\n\n" +
 		"   <pre>" + verificationCode + "</pre>\n\n" +
 		"2. Откройте Direct и отправьте его нам:\n\n" +
-		"   https://ig.me/m/ugc_boost\n\n" +
-		"Напишу сюда, как только проверим."
+		"   https://ig.me/m/ugc_boost"
 }
 
 // validRequestWithIG mirrors the helper from creator_application package
