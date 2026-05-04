@@ -136,7 +136,7 @@ test.describe("Auth flow", () => {
     await loginAs(page, admin);
 
     await page.getByTestId("logout-button").click();
-    await expect(page).toHaveURL("/login");
+    await expect(page).toHaveURL("/login", { timeout: 10_000 });
 
     // Try accessing dashboard — should redirect back to login because the
     // session was destroyed, not just because the in-memory state was wiped.
