@@ -232,12 +232,18 @@ func resolveDictionaryItem(code string, byCode map[string]domain.DictionaryEntry
 }
 
 // domainCreatorApplicationDetailSocialToAPI maps a domain social row onto its
-// API DTO, including the four verification fields. UUID parsing failure on
-// VerifiedByUserID surfaces as a wrapped error so the strict-server adapter
-// converts it into 500 — that field comes from a DB UUID column, so a parse
-// failure is genuine corruption, not user input.
+// API DTO, including the social uuid and the four verification fields. UUID
+// parsing failure on either ID or VerifiedByUserID surfaces as a wrapped
+// error so the strict-server adapter converts it into 500 — both fields come
+// from DB UUID columns, so a parse failure is genuine corruption rather than
+// user input.
 func domainCreatorApplicationDetailSocialToAPI(s domain.CreatorApplicationDetailSocial) (api.CreatorApplicationDetailSocial, error) {
+	socialID, err := uuid.Parse(s.ID)
+	if err != nil {
+		return api.CreatorApplicationDetailSocial{}, fmt.Errorf("parse social id %q: %w", s.ID, err)
+	}
 	out := api.CreatorApplicationDetailSocial{
+		Id:       socialID,
 		Platform: api.SocialPlatform(s.Platform),
 		Handle:   s.Handle,
 		Verified: s.Verified,
@@ -267,6 +273,30 @@ func sortDictionaryItem(a, b api.DictionaryItem) int {
 		return a.SortOrder - b.SortOrder
 	}
 	return strings.Compare(a.Code, b.Code)
+}
+
+// VerifyCreatorApplicationSocial handles
+// POST /creators/applications/{id}/socials/{socialId}/verify (admin-only).
+//
+// The action marks one social account as `manual`-verified under the admin's
+// responsibility and transitions the application from `verification` to
+// `moderation`. Authorisation runs first — non-admin callers see 403 without
+// the service ever being asked. The actor uuid comes from the bearer token
+// via middleware.UserIDFromContext; no body field is accepted to keep the
+// surface area minimal. Sentinel errors from the service map to user-facing
+// codes through respondError; success returns an empty object so the caller
+// refetches the application aggregate to observe state changes.
+func (s *Server) VerifyCreatorApplicationSocial(ctx context.Context, request api.VerifyCreatorApplicationSocialRequestObject) (api.VerifyCreatorApplicationSocialResponseObject, error) {
+	if err := s.authzService.CanVerifyCreatorApplicationSocialManually(ctx); err != nil {
+		return nil, err
+	}
+	actorUserID := middleware.UserIDFromContext(ctx)
+	if err := s.creatorApplicationService.VerifyApplicationSocialManually(
+		ctx, request.Id.String(), request.SocialId.String(), actorUserID,
+	); err != nil {
+		return nil, err
+	}
+	return api.VerifyCreatorApplicationSocial200JSONResponse{}, nil
 }
 
 // GetCreatorApplicationsCounts handles GET /creators/applications/counts

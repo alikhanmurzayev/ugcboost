@@ -11,6 +11,7 @@ import (
 	"github.com/AlekSi/pointer"
 	"github.com/cenkalti/backoff/v5"
 
+	"github.com/alikhanmurzayev/ugcboost/backend/internal/api"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/dbutil"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/domain"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/logger"
@@ -597,6 +598,7 @@ func (s *CreatorApplicationService) List(ctx context.Context, in domain.CreatorA
 		socials := make([]domain.CreatorApplicationDetailSocial, len(socialRows))
 		for j, sr := range socialRows {
 			socials[j] = domain.CreatorApplicationDetailSocial{
+				ID:               sr.ID,
 				Platform:         sr.Platform,
 				Handle:           sr.Handle,
 				Verified:         sr.Verified,
@@ -676,6 +678,7 @@ func (s *CreatorApplicationService) creatorApplicationDetailFromRows(
 	socs := make([]domain.CreatorApplicationDetailSocial, len(socials))
 	for i, s := range socials {
 		socs[i] = domain.CreatorApplicationDetailSocial{
+			ID:               s.ID,
 			Platform:         s.Platform,
 			Handle:           s.Handle,
 			Verified:         s.Verified,
@@ -853,6 +856,106 @@ func (s *CreatorApplicationService) VerifyInstagramByCode(ctx context.Context, c
 		s.notifyVerificationApproved(ctx, telegramUserID)
 	}
 	return status, nil
+}
+
+// VerifyApplicationSocialManually marks one social on an application as
+// `manual`-verified under an admin's responsibility and transitions the
+// application from `verification` to `moderation`. Strict precondition order
+// inside the single transaction: (1) load the application; (2) it must sit
+// in `verification`; (3) load the targeted social; (4) it must not be
+// already verified; (5) the creator must have linked Telegram via the bot.
+// Only after every check passes do we write — UpdateVerification, then the
+// state transition, then audit.
+//
+// No Telegram notification fires from this path: the creator did not prove
+// ownership themselves, so a "you're verified" push would be misleading.
+// The drawer UI already conveys the new state to the admin who triggered
+// the call; the creator learns about moderation outcome later via reject /
+// contract flows.
+func (s *CreatorApplicationService) VerifyApplicationSocialManually(ctx context.Context, applicationID, socialID, actorUserID string) error {
+	return dbutil.WithTx(ctx, s.pool, func(tx dbutil.DB) error {
+		appRepo := s.repoFactory.NewCreatorApplicationRepo(tx)
+		socialRepo := s.repoFactory.NewCreatorApplicationSocialRepo(tx)
+		linkRepo := s.repoFactory.NewCreatorApplicationTelegramLinkRepo(tx)
+		auditRepo := s.repoFactory.NewAuditRepo(tx)
+
+		appRow, err := appRepo.GetByID(ctx, applicationID)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return domain.ErrCreatorApplicationNotFound
+			}
+			return fmt.Errorf("manual verify: lookup application: %w", err)
+		}
+
+		if appRow.Status != domain.CreatorApplicationStatusVerification {
+			return domain.ErrCreatorApplicationNotInVerification
+		}
+
+		socials, err := socialRepo.ListByApplicationID(ctx, applicationID)
+		if err != nil {
+			return fmt.Errorf("manual verify: list socials: %w", err)
+		}
+		var target *repository.CreatorApplicationSocialRow
+		for _, sc := range socials {
+			if sc.ID == socialID {
+				target = sc
+				break
+			}
+		}
+		if target == nil {
+			return domain.ErrCreatorApplicationSocialNotFound
+		}
+
+		if target.Verified {
+			return domain.ErrCreatorApplicationSocialAlreadyVerified
+		}
+
+		if _, err := linkRepo.GetByApplicationID(ctx, applicationID); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return domain.ErrCreatorApplicationTelegramNotLinked
+			}
+			return fmt.Errorf("manual verify: get telegram link: %w", err)
+		}
+
+		now := time.Now().UTC()
+		if err := socialRepo.UpdateVerification(ctx, repository.UpdateSocialVerificationParams{
+			ID:               target.ID,
+			Handle:           target.Handle,
+			Verified:         true,
+			Method:           domain.SocialVerificationMethodManual,
+			VerifiedByUserID: pointer.ToString(actorUserID),
+			VerifiedAt:       now,
+		}); err != nil {
+			return fmt.Errorf("manual verify: update social: %w", err)
+		}
+
+		actor := actorUserID
+		if err := s.applyTransition(ctx, tx, appRow, domain.CreatorApplicationStatusModeration, &actor, domain.TransitionReasonManualVerify); err != nil {
+			return err
+		}
+
+		// writeAudit reads ActorID and ActorRole from ctx — handler middleware
+		// populates both in production, but unit tests pass a bare context.
+		// Re-stamping ctx with the known admin actor here keeps audit_logs
+		// faithful in both setups, no plumbing through writeAudit's signature.
+		auditCtx := contextWithActor(ctx, actor, string(api.Admin))
+		if err := writeAudit(auditCtx, auditRepo,
+			AuditActionCreatorApplicationVerificationManual,
+			AuditEntityTypeCreatorApplication,
+			appRow.ID,
+			nil,
+			map[string]any{
+				"application_id":  appRow.ID,
+				"social_id":       target.ID,
+				"social_platform": target.Platform,
+				"from_status":     appRow.Status,
+				"to_status":       domain.CreatorApplicationStatusModeration,
+			},
+		); err != nil {
+			return fmt.Errorf("manual verify: write audit: %w", err)
+		}
+		return nil
+	})
 }
 
 // applyTransition refuses transitions not declared in

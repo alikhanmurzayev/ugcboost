@@ -304,6 +304,75 @@ func (_c *MockCreatorApplicationService_Submit_Call) RunAndReturn(run func(ctx c
 	return _c
 }
 
+// VerifyApplicationSocialManually provides a mock function for the type MockCreatorApplicationService
+func (_mock *MockCreatorApplicationService) VerifyApplicationSocialManually(ctx context.Context, applicationID string, socialID string, actorUserID string) error {
+	ret := _mock.Called(ctx, applicationID, socialID, actorUserID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for VerifyApplicationSocialManually")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, string) error); ok {
+		r0 = returnFunc(ctx, applicationID, socialID, actorUserID)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockCreatorApplicationService_VerifyApplicationSocialManually_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'VerifyApplicationSocialManually'
+type MockCreatorApplicationService_VerifyApplicationSocialManually_Call struct {
+	*mock.Call
+}
+
+// VerifyApplicationSocialManually is a helper method to define mock.On call
+//   - ctx context.Context
+//   - applicationID string
+//   - socialID string
+//   - actorUserID string
+func (_e *MockCreatorApplicationService_Expecter) VerifyApplicationSocialManually(ctx interface{}, applicationID interface{}, socialID interface{}, actorUserID interface{}) *MockCreatorApplicationService_VerifyApplicationSocialManually_Call {
+	return &MockCreatorApplicationService_VerifyApplicationSocialManually_Call{Call: _e.mock.On("VerifyApplicationSocialManually", ctx, applicationID, socialID, actorUserID)}
+}
+
+func (_c *MockCreatorApplicationService_VerifyApplicationSocialManually_Call) Run(run func(ctx context.Context, applicationID string, socialID string, actorUserID string)) *MockCreatorApplicationService_VerifyApplicationSocialManually_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 string
+		if args[2] != nil {
+			arg2 = args[2].(string)
+		}
+		var arg3 string
+		if args[3] != nil {
+			arg3 = args[3].(string)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3,
+		)
+	})
+	return _c
+}
+
+func (_c *MockCreatorApplicationService_VerifyApplicationSocialManually_Call) Return(err error) *MockCreatorApplicationService_VerifyApplicationSocialManually_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockCreatorApplicationService_VerifyApplicationSocialManually_Call) RunAndReturn(run func(ctx context.Context, applicationID string, socialID string, actorUserID string) error) *MockCreatorApplicationService_VerifyApplicationSocialManually_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // VerifyInstagramByCode provides a mock function for the type MockCreatorApplicationService
 func (_mock *MockCreatorApplicationService) VerifyInstagramByCode(ctx context.Context, code string, igHandle string) (domain.VerifyInstagramStatus, error) {
 	ret := _mock.Called(ctx, code, igHandle)

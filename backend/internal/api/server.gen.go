@@ -6,7 +6,9 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"time"
 
@@ -367,6 +369,10 @@ type CreatorApplicationDetailData struct {
 type CreatorApplicationDetailSocial struct {
 	Handle string `json:"handle"`
 
+	// Id Stable identifier for the social row. Required by the admin
+	// manual-verify action (POST /creators/applications/{id}/socials/{socialId}/verify).
+	Id openapi_types.UUID `json:"id"`
+
 	// Method How a social account was verified. `auto` — webhook from SendPulse caught
 	// the verification code in an Instagram DM. `manual` — admin marked the
 	// social as verified from the application drawer.
@@ -585,6 +591,11 @@ type DictionaryListResult struct {
 	Data ListDictionaryData `json:"data"`
 }
 
+// EmptyResult Generic empty success envelope for endpoints that do not carry a
+// payload back. Clients should refetch the relevant resource to
+// observe state changes.
+type EmptyResult = map[string]interface{}
+
 // ErrorResponse defines model for ErrorResponse.
 type ErrorResponse struct {
 	Error APIError `json:"error"`
@@ -789,6 +800,9 @@ type ListAuditLogsParams struct {
 	PerPage *PerPageQueryParam `form:"perPage,omitempty" json:"perPage,omitempty"`
 }
 
+// VerifyCreatorApplicationSocialJSONBody defines parameters for VerifyCreatorApplicationSocial.
+type VerifyCreatorApplicationSocialJSONBody = map[string]interface{}
+
 // ListDictionaryParamsType defines parameters for ListDictionary.
 type ListDictionaryParamsType string
 
@@ -815,6 +829,9 @@ type SubmitCreatorApplicationJSONRequestBody = CreatorApplicationSubmitRequest
 
 // ListCreatorApplicationsJSONRequestBody defines body for ListCreatorApplications for application/json ContentType.
 type ListCreatorApplicationsJSONRequestBody = CreatorApplicationsListRequest
+
+// VerifyCreatorApplicationSocialJSONRequestBody defines body for VerifyCreatorApplicationSocial for application/json ContentType.
+type VerifyCreatorApplicationSocialJSONRequestBody = VerifyCreatorApplicationSocialJSONBody
 
 // SendPulseInstagramWebhookJSONRequestBody defines body for SendPulseInstagramWebhook for application/json ContentType.
 type SendPulseInstagramWebhookJSONRequestBody = SendPulseInstagramWebhookRequest
@@ -875,6 +892,9 @@ type ServerInterface interface {
 	// Get full creator application aggregate (admin only)
 	// (GET /creators/applications/{id})
 	GetCreatorApplication(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+	// Mark a creator application's social account as manually verified (admin only)
+	// (POST /creators/applications/{id}/socials/{socialId}/verify)
+	VerifyCreatorApplicationSocial(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, socialId openapi_types.UUID)
 	// List entries for a public dictionary (categories, cities)
 	// (GET /dictionaries/{type})
 	ListDictionary(w http.ResponseWriter, r *http.Request, pType ListDictionaryParamsType)
@@ -995,6 +1015,12 @@ func (_ Unimplemented) ListCreatorApplications(w http.ResponseWriter, r *http.Re
 // Get full creator application aggregate (admin only)
 // (GET /creators/applications/{id})
 func (_ Unimplemented) GetCreatorApplication(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Mark a creator application's social account as manually verified (admin only)
+// (POST /creators/applications/{id}/socials/{socialId}/verify)
+func (_ Unimplemented) VerifyCreatorApplicationSocial(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, socialId openapi_types.UUID) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -1493,6 +1519,46 @@ func (siw *ServerInterfaceWrapper) GetCreatorApplication(w http.ResponseWriter, 
 	handler.ServeHTTP(w, r)
 }
 
+// VerifyCreatorApplicationSocial operation middleware
+func (siw *ServerInterfaceWrapper) VerifyCreatorApplicationSocial(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "socialId" -------------
+	var socialId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "socialId", chi.URLParam(r, "socialId"), &socialId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "socialId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.VerifyCreatorApplicationSocial(w, r, id, socialId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListDictionary operation middleware
 func (siw *ServerInterfaceWrapper) ListDictionary(w http.ResponseWriter, r *http.Request) {
 
@@ -1712,6 +1778,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/creators/applications/{id}", wrapper.GetCreatorApplication)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/creators/applications/{id}/socials/{socialId}/verify", wrapper.VerifyCreatorApplicationSocial)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/dictionaries/{type}", wrapper.ListDictionary)
@@ -2517,6 +2586,82 @@ func (response GetCreatorApplicationdefaultJSONResponse) VisitGetCreatorApplicat
 	return json.NewEncoder(w).Encode(response.Body)
 }
 
+type VerifyCreatorApplicationSocialRequestObject struct {
+	Id       openapi_types.UUID `json:"id"`
+	SocialId openapi_types.UUID `json:"socialId"`
+	Body     *VerifyCreatorApplicationSocialJSONRequestBody
+}
+
+type VerifyCreatorApplicationSocialResponseObject interface {
+	VisitVerifyCreatorApplicationSocialResponse(w http.ResponseWriter) error
+}
+
+type VerifyCreatorApplicationSocial200JSONResponse EmptyResult
+
+func (response VerifyCreatorApplicationSocial200JSONResponse) VisitVerifyCreatorApplicationSocialResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type VerifyCreatorApplicationSocial401JSONResponse ErrorResponse
+
+func (response VerifyCreatorApplicationSocial401JSONResponse) VisitVerifyCreatorApplicationSocialResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type VerifyCreatorApplicationSocial403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response VerifyCreatorApplicationSocial403JSONResponse) VisitVerifyCreatorApplicationSocialResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type VerifyCreatorApplicationSocial404JSONResponse ErrorResponse
+
+func (response VerifyCreatorApplicationSocial404JSONResponse) VisitVerifyCreatorApplicationSocialResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type VerifyCreatorApplicationSocial409JSONResponse ErrorResponse
+
+func (response VerifyCreatorApplicationSocial409JSONResponse) VisitVerifyCreatorApplicationSocialResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type VerifyCreatorApplicationSocial422JSONResponse ErrorResponse
+
+func (response VerifyCreatorApplicationSocial422JSONResponse) VisitVerifyCreatorApplicationSocialResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(422)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type VerifyCreatorApplicationSocialdefaultJSONResponse struct {
+	Body       ErrorResponse
+	StatusCode int
+}
+
+func (response VerifyCreatorApplicationSocialdefaultJSONResponse) VisitVerifyCreatorApplicationSocialResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+
+	return json.NewEncoder(w).Encode(response.Body)
+}
+
 type ListDictionaryRequestObject struct {
 	Type ListDictionaryParamsType `json:"type"`
 }
@@ -2677,6 +2822,9 @@ type StrictServerInterface interface {
 	// Get full creator application aggregate (admin only)
 	// (GET /creators/applications/{id})
 	GetCreatorApplication(ctx context.Context, request GetCreatorApplicationRequestObject) (GetCreatorApplicationResponseObject, error)
+	// Mark a creator application's social account as manually verified (admin only)
+	// (POST /creators/applications/{id}/socials/{socialId}/verify)
+	VerifyCreatorApplicationSocial(ctx context.Context, request VerifyCreatorApplicationSocialRequestObject) (VerifyCreatorApplicationSocialResponseObject, error)
 	// List entries for a public dictionary (categories, cities)
 	// (GET /dictionaries/{type})
 	ListDictionary(ctx context.Context, request ListDictionaryRequestObject) (ListDictionaryResponseObject, error)
@@ -3213,6 +3361,43 @@ func (sh *strictHandler) GetCreatorApplication(w http.ResponseWriter, r *http.Re
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetCreatorApplicationResponseObject); ok {
 		if err := validResponse.VisitGetCreatorApplicationResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// VerifyCreatorApplicationSocial operation middleware
+func (sh *strictHandler) VerifyCreatorApplicationSocial(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, socialId openapi_types.UUID) {
+	var request VerifyCreatorApplicationSocialRequestObject
+
+	request.Id = id
+	request.SocialId = socialId
+
+	var body VerifyCreatorApplicationSocialJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		if !errors.Is(err, io.EOF) {
+			sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+			return
+		}
+	} else {
+		request.Body = &body
+	}
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.VerifyCreatorApplicationSocial(ctx, request.(VerifyCreatorApplicationSocialRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "VerifyCreatorApplicationSocial")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(VerifyCreatorApplicationSocialResponseObject); ok {
+		if err := validResponse.VisitVerifyCreatorApplicationSocialResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

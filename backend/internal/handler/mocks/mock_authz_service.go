@@ -541,6 +541,57 @@ func (_c *MockAuthzService_CanUpdateBrand_Call) RunAndReturn(run func(ctx contex
 	return _c
 }
 
+// CanVerifyCreatorApplicationSocialManually provides a mock function for the type MockAuthzService
+func (_mock *MockAuthzService) CanVerifyCreatorApplicationSocialManually(ctx context.Context) error {
+	ret := _mock.Called(ctx)
+
+	if len(ret) == 0 {
+		panic("no return value specified for CanVerifyCreatorApplicationSocialManually")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context) error); ok {
+		r0 = returnFunc(ctx)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockAuthzService_CanVerifyCreatorApplicationSocialManually_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'CanVerifyCreatorApplicationSocialManually'
+type MockAuthzService_CanVerifyCreatorApplicationSocialManually_Call struct {
+	*mock.Call
+}
+
+// CanVerifyCreatorApplicationSocialManually is a helper method to define mock.On call
+//   - ctx context.Context
+func (_e *MockAuthzService_Expecter) CanVerifyCreatorApplicationSocialManually(ctx interface{}) *MockAuthzService_CanVerifyCreatorApplicationSocialManually_Call {
+	return &MockAuthzService_CanVerifyCreatorApplicationSocialManually_Call{Call: _e.mock.On("CanVerifyCreatorApplicationSocialManually", ctx)}
+}
+
+func (_c *MockAuthzService_CanVerifyCreatorApplicationSocialManually_Call) Run(run func(ctx context.Context)) *MockAuthzService_CanVerifyCreatorApplicationSocialManually_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		run(
+			arg0,
+		)
+	})
+	return _c
+}
+
+func (_c *MockAuthzService_CanVerifyCreatorApplicationSocialManually_Call) Return(err error) *MockAuthzService_CanVerifyCreatorApplicationSocialManually_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockAuthzService_CanVerifyCreatorApplicationSocialManually_Call) RunAndReturn(run func(ctx context.Context) error) *MockAuthzService_CanVerifyCreatorApplicationSocialManually_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // CanViewBrand provides a mock function for the type MockAuthzService
 func (_mock *MockAuthzService) CanViewBrand(ctx context.Context, brandID string) error {
 	ret := _mock.Called(ctx, brandID)

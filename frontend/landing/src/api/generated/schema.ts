@@ -359,6 +359,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/creators/applications/{id}/socials/{socialId}/verify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                socialId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mark a creator application's social account as manually verified (admin only)
+         * @description Admin-only action that marks one social account on an application as
+         *     `manual`-verified under the admin's responsibility, then transitions
+         *     the application `verification → moderation` (manual verification is
+         *     the only path forward when the auto-verify webhook cannot run, e.g.
+         *     TikTok/Threads-only applications). The endpoint refuses to run
+         *     unless the creator has already linked Telegram via the bot — without
+         *     a chat we cannot reach them after approval.
+         *
+         *     The action is admin-only because it bypasses the SendPulse code
+         *     match — the admin asserts ownership of the handle by hand. No body
+         *     is accepted; the actor uuid comes from the bearer token. Empty
+         *     success payload by design — caller refetches the application to
+         *     observe the new status.
+         */
+        post: operations["verifyCreatorApplicationSocial"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/webhooks/sendpulse/instagram": {
         parameters: {
             query?: never;
@@ -650,6 +685,12 @@ export interface components {
             data: components["schemas"]["CreatorApplicationSubmitData"];
         };
         CreatorApplicationDetailSocial: {
+            /**
+             * Format: uuid
+             * @description Stable identifier for the social row. Required by the admin
+             *     manual-verify action (POST /creators/applications/{id}/socials/{socialId}/verify).
+             */
+            id: string;
             platform: components["schemas"]["SocialPlatform"];
             handle: string;
             /** @description Whether the creator's ownership of this social account has been confirmed. */
@@ -880,6 +921,12 @@ export interface components {
          *     same `{}` body.
          */
         SendPulseInstagramWebhookResult: Record<string, never>;
+        /**
+         * @description Generic empty success envelope for endpoints that do not carry a
+         *     payload back. Clients should refetch the relevant resource to
+         *     observe state changes.
+         */
+        EmptyResult: Record<string, never>;
     };
     responses: {
         /** @description Unexpected error */
@@ -1560,6 +1607,74 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             /** @description Application not found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            default: components["responses"]["UnexpectedError"];
+        };
+    };
+    verifyCreatorApplicationSocial: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                socialId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            /** @description Social marked verified, application moved to moderation. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmptyResult"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            /** @description Application or social not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Social already verified */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /**
+             * @description Application is not in `verification` status, or the creator has
+             *     not yet linked Telegram via the bot.
+             */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };

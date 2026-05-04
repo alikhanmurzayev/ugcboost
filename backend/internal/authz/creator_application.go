@@ -43,3 +43,16 @@ func (a *AuthzService) CanGetCreatorApplicationsCounts(ctx context.Context) erro
 	}
 	return nil
 }
+
+// CanVerifyCreatorApplicationSocialManually gates the manual-verify action
+// (POST /creators/applications/{id}/socials/{socialId}/verify). The action
+// asserts ownership of a social handle by hand, bypassing the SendPulse
+// proof, so non-admin callers must never reach the service layer. Returning
+// the same domain.ErrForbidden as the other moderation endpoints keeps the
+// 403 message and timing identical between them.
+func (a *AuthzService) CanVerifyCreatorApplicationSocialManually(ctx context.Context) error {
+	if middleware.RoleFromContext(ctx) != api.Admin {
+		return domain.ErrForbidden
+	}
+	return nil
+}

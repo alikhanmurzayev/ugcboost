@@ -360,6 +360,10 @@ type CreatorApplicationDetailData struct {
 type CreatorApplicationDetailSocial struct {
 	Handle string `json:"handle"`
 
+	// Id Stable identifier for the social row. Required by the admin
+	// manual-verify action (POST /creators/applications/{id}/socials/{socialId}/verify).
+	Id openapi_types.UUID `json:"id"`
+
 	// Method How a social account was verified. `auto` — webhook from SendPulse caught
 	// the verification code in an Instagram DM. `manual` — admin marked the
 	// social as verified from the application drawer.
@@ -578,6 +582,11 @@ type DictionaryListResult struct {
 	Data ListDictionaryData `json:"data"`
 }
 
+// EmptyResult Generic empty success envelope for endpoints that do not carry a
+// payload back. Clients should refetch the relevant resource to
+// observe state changes.
+type EmptyResult = map[string]interface{}
+
 // ErrorResponse defines model for ErrorResponse.
 type ErrorResponse struct {
 	Error APIError `json:"error"`
@@ -782,6 +791,9 @@ type ListAuditLogsParams struct {
 	PerPage *PerPageQueryParam `form:"perPage,omitempty" json:"perPage,omitempty"`
 }
 
+// VerifyCreatorApplicationSocialJSONBody defines parameters for VerifyCreatorApplicationSocial.
+type VerifyCreatorApplicationSocialJSONBody = map[string]interface{}
+
 // ListDictionaryParamsType defines parameters for ListDictionary.
 type ListDictionaryParamsType string
 
@@ -808,6 +820,9 @@ type SubmitCreatorApplicationJSONRequestBody = CreatorApplicationSubmitRequest
 
 // ListCreatorApplicationsJSONRequestBody defines body for ListCreatorApplications for application/json ContentType.
 type ListCreatorApplicationsJSONRequestBody = CreatorApplicationsListRequest
+
+// VerifyCreatorApplicationSocialJSONRequestBody defines body for VerifyCreatorApplicationSocial for application/json ContentType.
+type VerifyCreatorApplicationSocialJSONRequestBody = VerifyCreatorApplicationSocialJSONBody
 
 // SendPulseInstagramWebhookJSONRequestBody defines body for SendPulseInstagramWebhook for application/json ContentType.
 type SendPulseInstagramWebhookJSONRequestBody = SendPulseInstagramWebhookRequest
