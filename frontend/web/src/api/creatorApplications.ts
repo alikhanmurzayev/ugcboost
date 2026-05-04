@@ -42,3 +42,17 @@ export async function getCreatorApplicationsCounts() {
   }
   return data;
 }
+
+export async function verifyApplicationSocialManually(applicationId: string, socialId: string) {
+  const { data, error, response } = await client.POST(
+    "/creators/applications/{id}/socials/{socialId}/verify",
+    {
+      params: { path: { id: applicationId, socialId } },
+      body: {},
+    },
+  );
+  if (error) {
+    throw new ApiError(response.status, extractErrorCode(error));
+  }
+  return data;
+}

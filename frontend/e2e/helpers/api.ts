@@ -31,6 +31,14 @@ type SendTelegramMessageRequest =
   testComponents["schemas"]["SendTelegramMessageRequest"];
 type SendTelegramMessageResult =
   testComponents["schemas"]["SendTelegramMessageResult"];
+type LoginRequest = components["schemas"]["LoginRequest"];
+type LoginResult = components["schemas"]["LoginResult"];
+type GetCreatorApplicationResult =
+  components["schemas"]["GetCreatorApplicationResult"];
+type CreatorApplicationDetailData =
+  components["schemas"]["CreatorApplicationDetailData"];
+type SendPulseInstagramWebhookRequest =
+  components["schemas"]["SendPulseInstagramWebhookRequest"];
 
 export type SocialAccountInput = components["schemas"]["SocialAccountInput"];
 
@@ -428,4 +436,87 @@ function iinChecksum(first11: string): number | null {
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// loginAsAdmin authenticates the seeded admin via POST /auth/login at the
+// API level (not through the UI form) and returns the access token suitable
+// for an Authorization: Bearer header. Used by tests that need to call
+// admin endpoints directly — e.g. read application detail to discover a
+// social uuid before driving the UI.
+export async function loginAsAdmin(
+  request: APIRequestContext,
+  apiUrl: string,
+  email: string,
+  password: string,
+): Promise<string> {
+  const body: LoginRequest = { email, password };
+  const result = await postJson<LoginResult>(
+    request,
+    `${apiUrl}/auth/login`,
+    body,
+    200,
+  );
+  return result.data.accessToken;
+}
+
+// fetchApplicationDetail GETs /creators/applications/{id} with the admin
+// bearer and returns the unwrapped detail. Tests use it to look up the
+// stable uuid of a specific social before clicking a verify button keyed by
+// that id, and to assert post-action server state in the same flow.
+export async function fetchApplicationDetail(
+  request: APIRequestContext,
+  apiUrl: string,
+  applicationId: string,
+  token: string,
+): Promise<CreatorApplicationDetailData> {
+  const resp = await request.get(
+    `${apiUrl}/creators/applications/${applicationId}`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+  if (resp.status() !== 200) {
+    throw new Error(
+      `fetchApplicationDetail ${applicationId}: ${resp.status()} ${await resp.text()}`,
+    );
+  }
+  const result = (await resp.json()) as GetCreatorApplicationResult;
+  return result.data;
+}
+
+// SendPulseWebhookSecret defaults to the local-dev value baked into
+// backend/.env so out-of-the-box `make test-e2e-frontend` works against a
+// hand-spun stack. Override via the SENDPULSE_WEBHOOK_SECRET env var when
+// the backend is started with a non-default secret.
+const DEFAULT_SENDPULSE_SECRET = "local-dev-sendpulse-secret";
+
+function sendPulseSecret(): string {
+  return process.env.SENDPULSE_WEBHOOK_SECRET || DEFAULT_SENDPULSE_SECRET;
+}
+
+// triggerSendPulseInstagramWebhook posts the canonical "verified" payload
+// for the given application — mimicking what SendPulse sends when the
+// creator DMs their UGC-NNNNNN code to the Instagram bot. After the call
+// returns 200 the application's IG social is auto-verified and the
+// application sits in `verification` (single-social) or already in
+// `moderation` (multi-social with that one auto-verified row), per backend
+// state machine. Caller is expected to assert post-state via
+// fetchApplicationDetail.
+export async function triggerSendPulseInstagramWebhook(
+  request: APIRequestContext,
+  apiUrl: string,
+  opts: { username: string; verificationCode: string },
+): Promise<void> {
+  const body: SendPulseInstagramWebhookRequest = {
+    username: opts.username,
+    lastMessage: `Hi UGCBoost! My code is ${opts.verificationCode}`,
+    contactId: `contact-${opts.verificationCode}`,
+  };
+  const resp = await request.post(`${apiUrl}/webhooks/sendpulse/instagram`, {
+    headers: { Authorization: `Bearer ${sendPulseSecret()}` },
+    data: body,
+  });
+  if (resp.status() !== 200) {
+    throw new Error(
+      `triggerSendPulseInstagramWebhook: ${resp.status()} ${await resp.text()}`,
+    );
+  }
 }
