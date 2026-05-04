@@ -41,6 +41,20 @@ func respondError(w http.ResponseWriter, r *http.Request, err error, log logger.
 	}
 
 	switch {
+	case errors.Is(err, domain.ErrCreatorApplicationNotFound):
+		writeError(w, r, http.StatusNotFound, domain.CodeNotFound, "Заявка не найдена", log)
+	case errors.Is(err, domain.ErrCreatorApplicationSocialNotFound):
+		writeError(w, r, http.StatusNotFound, domain.CodeCreatorApplicationSocialNotFound,
+			"Соцсеть не найдена в этой заявке", log)
+	case errors.Is(err, domain.ErrCreatorApplicationSocialAlreadyVerified):
+		writeError(w, r, http.StatusConflict, domain.CodeCreatorApplicationSocialAlreadyVerified,
+			"Эта соцсеть уже верифицирована", log)
+	case errors.Is(err, domain.ErrCreatorApplicationNotInVerification):
+		writeError(w, r, http.StatusUnprocessableEntity, domain.CodeCreatorApplicationNotInVerification,
+			"Заявка уже не на этапе верификации", log)
+	case errors.Is(err, domain.ErrCreatorApplicationTelegramNotLinked):
+		writeError(w, r, http.StatusUnprocessableEntity, domain.CodeCreatorApplicationTelegramNotLinked,
+			"Креатор не привязал Telegram-бота — попросите его открыть бот по deep-link и повторите", log)
 	case errors.Is(err, domain.ErrNotFound), errors.Is(err, sql.ErrNoRows):
 		writeError(w, r, http.StatusNotFound, domain.CodeNotFound, "Resource not found", log)
 	case errors.Is(err, domain.ErrForbidden):

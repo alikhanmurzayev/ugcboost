@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -465,8 +466,8 @@ func TestServer_GetCreatorApplication(t *testing.T) {
 				// reversed to lock that contract.
 				Categories: []string{"fashion", "beauty"},
 				Socials: []domain.CreatorApplicationDetailSocial{
-					{Platform: domain.SocialPlatformInstagram, Handle: "aidana"},
-					{Platform: domain.SocialPlatformTikTok, Handle: "aidana_tt"},
+					{ID: "aaaaaaaa-1111-1111-1111-111111111111", Platform: domain.SocialPlatformInstagram, Handle: "aidana"},
+					{ID: "aaaaaaaa-2222-2222-2222-222222222222", Platform: domain.SocialPlatformTikTok, Handle: "aidana_tt"},
 				},
 				Consents: []domain.CreatorApplicationDetailConsent{
 					{ConsentType: domain.ConsentTypeProcessing, AcceptedAt: acceptedAt, DocumentVersion: "2026-04-20", IPAddress: "127.0.0.1", UserAgent: "ua/1"},
@@ -511,8 +512,8 @@ func TestServer_GetCreatorApplication(t *testing.T) {
 					{Code: "fashion", Name: "Мода", SortOrder: 20},
 				},
 				Socials: []api.CreatorApplicationDetailSocial{
-					{Platform: api.Instagram, Handle: "aidana"},
-					{Platform: api.Tiktok, Handle: "aidana_tt"},
+					{Id: uuid.MustParse("aaaaaaaa-1111-1111-1111-111111111111"), Platform: api.Instagram, Handle: "aidana"},
+					{Id: uuid.MustParse("aaaaaaaa-2222-2222-2222-222222222222"), Platform: api.Tiktok, Handle: "aidana_tt"},
 				},
 				Consents: []api.CreatorApplicationDetailConsent{
 					{ConsentType: api.Processing, AcceptedAt: acceptedAt, DocumentVersion: "2026-04-20", IpAddress: "127.0.0.1", UserAgent: "ua/1"},
@@ -872,7 +873,7 @@ func TestServer_ListCreatorApplications(t *testing.T) {
 					BirthDate:  birth, CityCode: "almaty",
 					Categories: []string{"fashion", "beauty"},
 					Socials: []domain.CreatorApplicationDetailSocial{
-						{Platform: domain.SocialPlatformInstagram, Handle: "aidana"},
+						{ID: "bbbbbbbb-1111-1111-1111-111111111111", Platform: domain.SocialPlatformInstagram, Handle: "aidana"},
 					},
 					TelegramLinked: true,
 					CreatedAt:      created, UpdatedAt: updated,
@@ -941,7 +942,7 @@ func TestServer_ListCreatorApplications(t *testing.T) {
 						{Code: "fashion", Name: "Мода", SortOrder: 20},
 					},
 					Socials: []api.CreatorApplicationDetailSocial{
-						{Platform: api.Instagram, Handle: "aidana"},
+						{Id: uuid.MustParse("bbbbbbbb-1111-1111-1111-111111111111"), Platform: api.Instagram, Handle: "aidana"},
 					},
 					TelegramLinked: true,
 					CreatedAt:      created,
@@ -1066,14 +1067,18 @@ func TestEscapeLikeWildcards_Handler(t *testing.T) {
 func TestDomainCreatorApplicationDetailSocialToAPI(t *testing.T) {
 	t.Parallel()
 
+	const validSocialID = "cccccccc-1111-1111-1111-111111111111"
+
 	t.Run("unverified default — verified=false plus three nils pass through", func(t *testing.T) {
 		t.Parallel()
 		got, err := domainCreatorApplicationDetailSocialToAPI(domain.CreatorApplicationDetailSocial{
+			ID:       validSocialID,
 			Platform: domain.SocialPlatformInstagram,
 			Handle:   "aidana",
 		})
 		require.NoError(t, err)
 		require.Equal(t, api.CreatorApplicationDetailSocial{
+			Id:       uuid.MustParse(validSocialID),
 			Platform: api.SocialPlatform(domain.SocialPlatformInstagram),
 			Handle:   "aidana",
 			Verified: false,
@@ -1087,6 +1092,7 @@ func TestDomainCreatorApplicationDetailSocialToAPI(t *testing.T) {
 		when := time.Date(2026, 5, 1, 12, 0, 0, 0, time.UTC)
 
 		got, err := domainCreatorApplicationDetailSocialToAPI(domain.CreatorApplicationDetailSocial{
+			ID:               validSocialID,
 			Platform:         domain.SocialPlatformInstagram,
 			Handle:           "aidana",
 			Verified:         true,
@@ -1095,6 +1101,7 @@ func TestDomainCreatorApplicationDetailSocialToAPI(t *testing.T) {
 			VerifiedAt:       &when,
 		})
 		require.NoError(t, err)
+		require.Equal(t, validSocialID, got.Id.String())
 		require.True(t, got.Verified)
 		require.NotNil(t, got.Method)
 		require.Equal(t, api.SocialVerificationMethod(method), *got.Method)
@@ -1110,6 +1117,7 @@ func TestDomainCreatorApplicationDetailSocialToAPI(t *testing.T) {
 		when := time.Date(2026, 5, 1, 12, 0, 0, 0, time.UTC)
 
 		got, err := domainCreatorApplicationDetailSocialToAPI(domain.CreatorApplicationDetailSocial{
+			ID:         validSocialID,
 			Platform:   domain.SocialPlatformInstagram,
 			Handle:     "aidana",
 			Verified:   true,
@@ -1124,10 +1132,23 @@ func TestDomainCreatorApplicationDetailSocialToAPI(t *testing.T) {
 		require.NotNil(t, got.VerifiedAt)
 	})
 
+	t.Run("invalid social ID — error wraps the bad value", func(t *testing.T) {
+		t.Parallel()
+		_, err := domainCreatorApplicationDetailSocialToAPI(domain.CreatorApplicationDetailSocial{
+			ID:       "not-a-uuid",
+			Platform: domain.SocialPlatformInstagram,
+			Handle:   "aidana",
+		})
+		require.Error(t, err)
+		require.ErrorContains(t, err, "social id")
+		require.ErrorContains(t, err, "not-a-uuid")
+	})
+
 	t.Run("invalid VerifiedByUserID — error wraps the bad value", func(t *testing.T) {
 		t.Parallel()
 		bad := "not-a-uuid"
 		_, err := domainCreatorApplicationDetailSocialToAPI(domain.CreatorApplicationDetailSocial{
+			ID:               validSocialID,
 			Platform:         domain.SocialPlatformInstagram,
 			Handle:           "aidana",
 			VerifiedByUserID: &bad,
@@ -1166,6 +1187,153 @@ func TestSortDictionaryItem(t *testing.T) {
 			api.DictionaryItem{Code: "x", SortOrder: 1},
 		)
 		require.Zero(t, got)
+	})
+}
+
+func TestServer_VerifyCreatorApplicationSocial(t *testing.T) {
+	t.Parallel()
+
+	const (
+		appUUID    = "11111111-2222-3333-4444-555555555555"
+		socialUUID = "66666666-7777-8888-9999-aaaaaaaaaaaa"
+		adminUUID  = "bbbbbbbb-cccc-dddd-eeee-ffffffffffff"
+		path       = "/creators/applications/" + appUUID + "/socials/" + socialUUID + "/verify"
+	)
+
+	t.Run("forbidden for manager — service is not consulted", func(t *testing.T) {
+		t.Parallel()
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanVerifyCreatorApplicationSocialManually(mock.Anything).Return(domain.ErrForbidden)
+
+		router := newTestRouter(t, serverWithAuthzAndCreatorAndDict(t, authz, nil, nil, logmocks.NewMockLogger(t)))
+		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, path, nil, withRole(adminUUID, api.BrandManager))
+		require.Equal(t, http.StatusForbidden, w.Code)
+		require.Equal(t, domain.CodeForbidden, resp.Error.Code)
+	})
+
+	t.Run("unauthenticated — auth middleware short-circuits before handler", func(t *testing.T) {
+		t.Parallel()
+		// AuthFromScopes wraps the route in production; here we install a
+		// minimal stand-in that delegates to respondError to keep the wire
+		// shape identical to prod 401s — no hand-crafted JSON literals.
+		log := logmocks.NewMockLogger(t)
+		r := chi.NewRouter()
+		r.Use(func(next http.Handler) http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+				if req.Header.Get("Authorization") == "" {
+					respondError(w, req, domain.ErrUnauthorized, log)
+					return
+				}
+				next.ServeHTTP(w, req)
+			})
+		})
+		api.HandlerWithOptions(NewStrictAPIHandler(serverWithAuthzAndCreatorAndDict(t, nil, nil, nil, log)), api.ChiServerOptions{
+			BaseRouter: r, ErrorHandlerFunc: HandleParamError(logmocks.NewMockLogger(t)),
+		})
+
+		req := httptest.NewRequest(http.MethodPost, path, bytes.NewReader([]byte(`{}`)))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		require.Equal(t, http.StatusUnauthorized, w.Code)
+
+		var body api.ErrorResponse
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+		require.Equal(t, domain.CodeUnauthorized, body.Error.Code)
+	})
+
+	t.Run("application not found surfaces as 404 NOT_FOUND", func(t *testing.T) {
+		t.Parallel()
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanVerifyCreatorApplicationSocialManually(mock.Anything).Return(nil)
+		creator := mocks.NewMockCreatorApplicationService(t)
+		creator.EXPECT().VerifyApplicationSocialManually(mock.Anything, appUUID, socialUUID, adminUUID).
+			Return(domain.ErrCreatorApplicationNotFound)
+
+		router := newTestRouter(t, serverWithAuthzAndCreatorAndDict(t, authz, creator, nil, logmocks.NewMockLogger(t)))
+		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, path, nil, withRole(adminUUID, api.Admin))
+		require.Equal(t, http.StatusNotFound, w.Code)
+		require.Equal(t, domain.CodeNotFound, resp.Error.Code)
+	})
+
+	t.Run("social not found surfaces as 404 with social-specific code", func(t *testing.T) {
+		t.Parallel()
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanVerifyCreatorApplicationSocialManually(mock.Anything).Return(nil)
+		creator := mocks.NewMockCreatorApplicationService(t)
+		creator.EXPECT().VerifyApplicationSocialManually(mock.Anything, appUUID, socialUUID, adminUUID).
+			Return(domain.ErrCreatorApplicationSocialNotFound)
+
+		router := newTestRouter(t, serverWithAuthzAndCreatorAndDict(t, authz, creator, nil, logmocks.NewMockLogger(t)))
+		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, path, nil, withRole(adminUUID, api.Admin))
+		require.Equal(t, http.StatusNotFound, w.Code)
+		require.Equal(t, domain.CodeCreatorApplicationSocialNotFound, resp.Error.Code)
+	})
+
+	t.Run("already verified surfaces as 409", func(t *testing.T) {
+		t.Parallel()
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanVerifyCreatorApplicationSocialManually(mock.Anything).Return(nil)
+		creator := mocks.NewMockCreatorApplicationService(t)
+		creator.EXPECT().VerifyApplicationSocialManually(mock.Anything, appUUID, socialUUID, adminUUID).
+			Return(domain.ErrCreatorApplicationSocialAlreadyVerified)
+
+		router := newTestRouter(t, serverWithAuthzAndCreatorAndDict(t, authz, creator, nil, logmocks.NewMockLogger(t)))
+		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, path, nil, withRole(adminUUID, api.Admin))
+		require.Equal(t, http.StatusConflict, w.Code)
+		require.Equal(t, domain.CodeCreatorApplicationSocialAlreadyVerified, resp.Error.Code)
+	})
+
+	t.Run("wrong status surfaces as 422 NOT_IN_VERIFICATION", func(t *testing.T) {
+		t.Parallel()
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanVerifyCreatorApplicationSocialManually(mock.Anything).Return(nil)
+		creator := mocks.NewMockCreatorApplicationService(t)
+		creator.EXPECT().VerifyApplicationSocialManually(mock.Anything, appUUID, socialUUID, adminUUID).
+			Return(domain.ErrCreatorApplicationNotInVerification)
+
+		router := newTestRouter(t, serverWithAuthzAndCreatorAndDict(t, authz, creator, nil, logmocks.NewMockLogger(t)))
+		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, path, nil, withRole(adminUUID, api.Admin))
+		require.Equal(t, http.StatusUnprocessableEntity, w.Code)
+		require.Equal(t, domain.CodeCreatorApplicationNotInVerification, resp.Error.Code)
+	})
+
+	t.Run("missing telegram link surfaces as 422 TELEGRAM_NOT_LINKED", func(t *testing.T) {
+		t.Parallel()
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanVerifyCreatorApplicationSocialManually(mock.Anything).Return(nil)
+		creator := mocks.NewMockCreatorApplicationService(t)
+		creator.EXPECT().VerifyApplicationSocialManually(mock.Anything, appUUID, socialUUID, adminUUID).
+			Return(domain.ErrCreatorApplicationTelegramNotLinked)
+
+		router := newTestRouter(t, serverWithAuthzAndCreatorAndDict(t, authz, creator, nil, logmocks.NewMockLogger(t)))
+		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, path, nil, withRole(adminUUID, api.Admin))
+		require.Equal(t, http.StatusUnprocessableEntity, w.Code)
+		require.Equal(t, domain.CodeCreatorApplicationTelegramNotLinked, resp.Error.Code)
+	})
+
+	t.Run("happy path: forwards actor and ids, returns empty 200 body", func(t *testing.T) {
+		t.Parallel()
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanVerifyCreatorApplicationSocialManually(mock.Anything).Return(nil)
+		creator := mocks.NewMockCreatorApplicationService(t)
+		var capturedAppID, capturedSocialID, capturedActor string
+		creator.EXPECT().VerifyApplicationSocialManually(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+			Run(func(_ context.Context, applicationID, socialID, actorUserID string) {
+				capturedAppID = applicationID
+				capturedSocialID = socialID
+				capturedActor = actorUserID
+			}).
+			Return(nil)
+
+		router := newTestRouter(t, serverWithAuthzAndCreatorAndDict(t, authz, creator, nil, logmocks.NewMockLogger(t)))
+		w, resp := doJSON[api.EmptyResult](t, router, http.MethodPost, path, nil, withRole(adminUUID, api.Admin))
+		require.Equal(t, http.StatusOK, w.Code)
+		require.Equal(t, api.EmptyResult{}, resp)
+
+		require.Equal(t, appUUID, capturedAppID)
+		require.Equal(t, socialUUID, capturedSocialID)
+		require.Equal(t, adminUUID, capturedActor)
 	})
 }
 

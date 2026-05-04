@@ -107,6 +107,22 @@ const (
 	CodeMissingConsent = "MISSING_CONSENT"
 	// 409 — application is already linked to a different Telegram account.
 	CodeTelegramApplicationAlreadyLinked = "TELEGRAM_APPLICATION_ALREADY_LINKED"
+	// 404 — manual verify target social row does not belong to the application
+	// (or does not exist at all). The application-level NOT_FOUND lives under
+	// the shared CodeNotFound, but the social-level miss carries its own code
+	// so admins know whether to refresh the drawer or refetch the list.
+	CodeCreatorApplicationSocialNotFound = "CREATOR_APPLICATION_SOCIAL_NOT_FOUND"
+	// 409 — manual verify target social row is already verified (auto or
+	// manual). Idempotency-bearing — repeats are user errors, not no-ops.
+	CodeCreatorApplicationSocialAlreadyVerified = "CREATOR_APPLICATION_SOCIAL_ALREADY_VERIFIED"
+	// 422 — manual verify is only legal while the application sits in
+	// `verification`. Once it has moved on (moderation/awaiting_contract/…)
+	// the action is rejected so admins do not silently re-trigger transitions.
+	CodeCreatorApplicationNotInVerification = "CREATOR_APPLICATION_NOT_IN_VERIFICATION"
+	// 422 — manual verify refuses to run when the creator has not opened the
+	// Telegram bot via /start. Without the link there is no chat to notify
+	// downstream and the moderator cannot follow up out-of-band.
+	CodeCreatorApplicationTelegramNotLinked = "CREATOR_APPLICATION_TELEGRAM_NOT_LINKED"
 )
 
 // Telegram metadata length caps applied at the service layer before persisting,
@@ -122,6 +138,28 @@ const (
 // the race after the service's HasActiveByIIN check). The service converts
 // it into a business error with CodeCreatorApplicationDuplicate.
 var ErrCreatorApplicationDuplicate = errors.New("creator application with this iin is already active")
+
+// ErrCreatorApplicationNotFound — no application exists for the supplied id.
+// Service raises it instead of leaking the underlying sql.ErrNoRows so the
+// handler maps a single sentinel to the user-facing 404 NOT_FOUND code.
+var ErrCreatorApplicationNotFound = errors.New("creator application not found")
+
+// ErrCreatorApplicationNotInVerification — the application is no longer in
+// the `verification` status, so manual verify cannot run. 422.
+var ErrCreatorApplicationNotInVerification = errors.New("creator application is not in verification status")
+
+// ErrCreatorApplicationSocialNotFound — the supplied socialID does not point
+// at a row attached to this application (404).
+var ErrCreatorApplicationSocialNotFound = errors.New("creator application social not found")
+
+// ErrCreatorApplicationSocialAlreadyVerified — the targeted social is
+// already verified (409). Repeats are user errors, not idempotency.
+var ErrCreatorApplicationSocialAlreadyVerified = errors.New("creator application social is already verified")
+
+// ErrCreatorApplicationTelegramNotLinked — the creator has not opened the
+// Telegram bot via /start, so we cannot manually verify yet (422). The
+// admin should ask the creator to open the deep-link first.
+var ErrCreatorApplicationTelegramNotLinked = errors.New("creator application has no telegram link")
 
 // ErrTelegramApplicationLinkConflict is raised by the repo on a PRIMARY KEY
 // violation on creator_application_telegram_links(application_id) — the
@@ -242,7 +280,11 @@ type TelegramLinkInput struct {
 // CreatorApplicationDetailSocial is one social account attached to the
 // application. Carries verification state so admin and creator surfaces can
 // reflect "verified / by whom / when / how" without a separate fetch.
+// ID surfaces here (and through the API) because the manual-verify action
+// targets a specific social row by uuid — admins must see which row their
+// click will mutate.
 type CreatorApplicationDetailSocial struct {
+	ID               string
 	Platform         string
 	Handle           string
 	Verified         bool
@@ -482,6 +524,7 @@ var ErrInvalidStatusTransition = errors.New("invalid creator application status 
 // constants — readers / dashboards rely on the bounded vocabulary.
 const (
 	TransitionReasonInstagramAuto = "instagram_auto"
+	TransitionReasonManualVerify  = "manual_verify"
 )
 
 // VerifyInstagramStatus is the explicit outcome the service returns to the

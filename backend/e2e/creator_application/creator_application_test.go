@@ -490,6 +490,14 @@ func buildExpectedDetail(t *testing.T, req apiclient.CreatorApplicationSubmitReq
 	}
 	sortSocials(socs)
 
+	// Social IDs are server-assigned UUIDs. They are not derivable from the
+	// submission request, so copy them from `got` after the per-row sorts
+	// align — same pattern as ApplicationId / CreatedAt above.
+	require.Len(t, got.Socials, len(socs), "got/expected social row count must match")
+	for i := range socs {
+		socs[i].Id = got.Socials[i].Id
+	}
+
 	var otherPtr *string
 	if otherText != "" {
 		s := otherText

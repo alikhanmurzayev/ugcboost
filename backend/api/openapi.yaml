@@ -638,6 +638,84 @@ paths:
         default:
           $ref: "#/components/responses/UnexpectedError"
 
+  /creators/applications/{id}/socials/{socialId}/verify:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: socialId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      operationId: verifyCreatorApplicationSocial
+      summary: Mark a creator application's social account as manually verified (admin only)
+      description: |
+        Admin-only action that marks one social account on an application as
+        `manual`-verified under the admin's responsibility, then transitions
+        the application `verification → moderation` (manual verification is
+        the only path forward when the auto-verify webhook cannot run, e.g.
+        TikTok/Threads-only applications). The endpoint refuses to run
+        unless the creator has already linked Telegram via the bot — without
+        a chat we cannot reach them after approval.
+
+        The action is admin-only because it bypasses the SendPulse code
+        match — the admin asserts ownership of the handle by hand. No body
+        is accepted; the actor uuid comes from the bearer token. Empty
+        success payload by design — caller refetches the application to
+        observe the new status.
+      tags: [creators]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        "200":
+          description: Social marked verified, application moved to moderation.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmptyResult"
+        "401":
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: Application or social not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Social already verified
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: |
+            Application is not in `verification` status, or the creator has
+            not yet linked Telegram via the bot.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: "#/components/responses/UnexpectedError"
+
   /webhooks/sendpulse/instagram:
     post:
       operationId: sendPulseInstagramWebhook
@@ -1195,8 +1273,14 @@ components:
 
     CreatorApplicationDetailSocial:
       type: object
-      required: [platform, handle, verified]
+      required: [id, platform, handle, verified]
       properties:
+        id:
+          type: string
+          format: uuid
+          description: |
+            Stable identifier for the social row. Required by the admin
+            manual-verify action (POST /creators/applications/{id}/socials/{socialId}/verify).
         platform:
           $ref: "#/components/schemas/SocialPlatform"
         handle:
@@ -1583,6 +1667,13 @@ components:
         Empty object — the SendPulse webhook never carries data back. Both
         success (200) and the constant-time auth failure (401) emit the
         same `{}` body.
+
+    EmptyResult:
+      type: object
+      description: |
+        Generic empty success envelope for endpoints that do not carry a
+        payload back. Clients should refetch the relevant resource to
+        observe state changes.
 
   securitySchemes:
     bearerAuth:

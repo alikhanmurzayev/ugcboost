@@ -1572,6 +1572,218 @@ func TestCreatorApplicationService_VerifyInstagramByCode(t *testing.T) {
 	})
 }
 
+// expectManualVerifyTxBegin wires the mock pool for the single WithTx call
+// inside VerifyApplicationSocialManually.
+func expectManualVerifyTxBegin(rig creatorServiceRig) {
+	rig.pool.EXPECT().Begin(mock.Anything).Return(testTx{}, nil)
+}
+
+// expectManualVerifyFactoryWiring registers every repo constructor the
+// VerifyApplicationSocialManually TX issues eagerly. Strip the tail in
+// early-exit tests where some constructors are unreachable.
+func expectManualVerifyFactoryWiring(rig creatorServiceRig) {
+	rig.factory.EXPECT().NewCreatorApplicationRepo(mock.Anything).Return(rig.appRepo)
+	rig.factory.EXPECT().NewCreatorApplicationSocialRepo(mock.Anything).Return(rig.appSocialRepo)
+	rig.factory.EXPECT().NewCreatorApplicationTelegramLinkRepo(mock.Anything).Return(rig.appTelegramLinkRepo)
+	rig.factory.EXPECT().NewAuditRepo(mock.Anything).Return(rig.auditRepo)
+}
+
+const (
+	manualVerifyAdminID  = "11111111-1111-1111-1111-111111111111"
+	manualVerifyAppID    = "22222222-2222-2222-2222-222222222222"
+	manualVerifySocialID = "33333333-3333-3333-3333-333333333333"
+)
+
+func TestCreatorApplicationService_VerifyApplicationSocialManually(t *testing.T) {
+	t.Parallel()
+
+	t.Run("happy path verifies, transitions, audits and never notifies", func(t *testing.T) {
+		t.Parallel()
+		rig := newCreatorServiceRig(t)
+		expectManualVerifyTxBegin(rig)
+		expectManualVerifyFactoryWiring(rig)
+		rig.factory.EXPECT().NewCreatorApplicationStatusTransitionRepo(mock.Anything).Return(rig.transitionRepo)
+
+		appRow := applicationRow(manualVerifyAppID)
+		rig.appRepo.EXPECT().GetByID(mock.Anything, manualVerifyAppID).Return(appRow, nil)
+		rig.appSocialRepo.EXPECT().ListByApplicationID(mock.Anything, manualVerifyAppID).
+			Return([]*repository.CreatorApplicationSocialRow{
+				{ID: manualVerifySocialID, ApplicationID: manualVerifyAppID, Platform: domain.SocialPlatformTikTok, Handle: "aidana_tt"},
+				{ID: "44444444-4444-4444-4444-444444444444", ApplicationID: manualVerifyAppID, Platform: domain.SocialPlatformInstagram, Handle: "aidana"},
+			}, nil)
+		rig.appTelegramLinkRepo.EXPECT().GetByApplicationID(mock.Anything, manualVerifyAppID).
+			Return(&repository.CreatorApplicationTelegramLinkRow{ApplicationID: manualVerifyAppID, TelegramUserID: 555}, nil)
+
+		var capturedSocial repository.UpdateSocialVerificationParams
+		rig.appSocialRepo.EXPECT().UpdateVerification(mock.Anything, mock.AnythingOfType("repository.UpdateSocialVerificationParams")).
+			Run(func(_ context.Context, params repository.UpdateSocialVerificationParams) {
+				capturedSocial = params
+			}).
+			Return(nil)
+		rig.appRepo.EXPECT().UpdateStatus(mock.Anything, manualVerifyAppID, domain.CreatorApplicationStatusModeration).Return(nil)
+
+		var capturedTransition repository.CreatorApplicationStatusTransitionRow
+		rig.transitionRepo.EXPECT().Insert(mock.Anything, mock.AnythingOfType("repository.CreatorApplicationStatusTransitionRow")).
+			Run(func(_ context.Context, row repository.CreatorApplicationStatusTransitionRow) {
+				capturedTransition = row
+			}).
+			Return(nil)
+
+		var capturedAudit repository.AuditLogRow
+		rig.auditRepo.EXPECT().Create(mock.Anything, mock.AnythingOfType("repository.AuditLogRow")).
+			Run(func(_ context.Context, row repository.AuditLogRow) {
+				capturedAudit = row
+			}).
+			Return(nil)
+
+		// Notifier is wired but configured WITHOUT EXPECT — mockery will fail
+		// the test at cleanup if the service touches it. This is the explicit
+		// "creator did not self-verify, so no push" assertion.
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.notifier, rig.logger)
+
+		err := svc.VerifyApplicationSocialManually(context.Background(), manualVerifyAppID, manualVerifySocialID, manualVerifyAdminID)
+		require.NoError(t, err)
+
+		require.Equal(t, manualVerifySocialID, capturedSocial.ID)
+		require.Equal(t, "aidana_tt", capturedSocial.Handle, "handle stays untouched on manual verify")
+		require.True(t, capturedSocial.Verified)
+		require.Equal(t, domain.SocialVerificationMethodManual, capturedSocial.Method)
+		require.NotNil(t, capturedSocial.VerifiedByUserID)
+		require.Equal(t, manualVerifyAdminID, *capturedSocial.VerifiedByUserID)
+		require.WithinDuration(t, time.Now().UTC(), capturedSocial.VerifiedAt, time.Minute)
+
+		require.Equal(t, manualVerifyAppID, capturedTransition.ApplicationID)
+		require.NotNil(t, capturedTransition.FromStatus)
+		require.Equal(t, domain.CreatorApplicationStatusVerification, *capturedTransition.FromStatus)
+		require.Equal(t, domain.CreatorApplicationStatusModeration, capturedTransition.ToStatus)
+		require.NotNil(t, capturedTransition.ActorID)
+		require.Equal(t, manualVerifyAdminID, *capturedTransition.ActorID)
+		require.NotNil(t, capturedTransition.Reason)
+		require.Equal(t, domain.TransitionReasonManualVerify, *capturedTransition.Reason)
+
+		require.Equal(t, AuditActionCreatorApplicationVerificationManual, capturedAudit.Action)
+		require.Equal(t, AuditEntityTypeCreatorApplication, capturedAudit.EntityType)
+		require.NotNil(t, capturedAudit.EntityID)
+		require.Equal(t, manualVerifyAppID, *capturedAudit.EntityID)
+		require.NotNil(t, capturedAudit.ActorID)
+		require.Equal(t, manualVerifyAdminID, *capturedAudit.ActorID)
+		var auditPayload map[string]any
+		require.NoError(t, json.Unmarshal(capturedAudit.NewValue, &auditPayload))
+		require.Equal(t, manualVerifyAppID, auditPayload["application_id"])
+		require.Equal(t, manualVerifySocialID, auditPayload["social_id"])
+		require.Equal(t, domain.SocialPlatformTikTok, auditPayload["social_platform"])
+		require.Equal(t, domain.CreatorApplicationStatusVerification, auditPayload["from_status"])
+		require.Equal(t, domain.CreatorApplicationStatusModeration, auditPayload["to_status"])
+	})
+
+	t.Run("application not found returns ErrCreatorApplicationNotFound and writes nothing", func(t *testing.T) {
+		t.Parallel()
+		rig := newCreatorServiceRig(t)
+		expectManualVerifyTxBegin(rig)
+		expectManualVerifyFactoryWiring(rig)
+
+		rig.appRepo.EXPECT().GetByID(mock.Anything, manualVerifyAppID).Return(nil, sql.ErrNoRows)
+
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.notifier, rig.logger)
+		err := svc.VerifyApplicationSocialManually(context.Background(), manualVerifyAppID, manualVerifySocialID, manualVerifyAdminID)
+		require.ErrorIs(t, err, domain.ErrCreatorApplicationNotFound)
+	})
+
+	t.Run("wrong status returns ErrCreatorApplicationNotInVerification and writes nothing", func(t *testing.T) {
+		t.Parallel()
+		rig := newCreatorServiceRig(t)
+		expectManualVerifyTxBegin(rig)
+		expectManualVerifyFactoryWiring(rig)
+
+		appRow := applicationRow(manualVerifyAppID)
+		appRow.Status = domain.CreatorApplicationStatusModeration
+		rig.appRepo.EXPECT().GetByID(mock.Anything, manualVerifyAppID).Return(appRow, nil)
+
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.notifier, rig.logger)
+		err := svc.VerifyApplicationSocialManually(context.Background(), manualVerifyAppID, manualVerifySocialID, manualVerifyAdminID)
+		require.ErrorIs(t, err, domain.ErrCreatorApplicationNotInVerification)
+	})
+
+	t.Run("social not in this application returns ErrCreatorApplicationSocialNotFound", func(t *testing.T) {
+		t.Parallel()
+		rig := newCreatorServiceRig(t)
+		expectManualVerifyTxBegin(rig)
+		expectManualVerifyFactoryWiring(rig)
+
+		appRow := applicationRow(manualVerifyAppID)
+		rig.appRepo.EXPECT().GetByID(mock.Anything, manualVerifyAppID).Return(appRow, nil)
+		// Two unrelated socials — none with manualVerifySocialID.
+		rig.appSocialRepo.EXPECT().ListByApplicationID(mock.Anything, manualVerifyAppID).
+			Return([]*repository.CreatorApplicationSocialRow{
+				{ID: "55555555-5555-5555-5555-555555555555", ApplicationID: manualVerifyAppID, Platform: domain.SocialPlatformTikTok, Handle: "x"},
+			}, nil)
+
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.notifier, rig.logger)
+		err := svc.VerifyApplicationSocialManually(context.Background(), manualVerifyAppID, manualVerifySocialID, manualVerifyAdminID)
+		require.ErrorIs(t, err, domain.ErrCreatorApplicationSocialNotFound)
+	})
+
+	t.Run("already verified social returns ErrCreatorApplicationSocialAlreadyVerified and writes nothing", func(t *testing.T) {
+		t.Parallel()
+		rig := newCreatorServiceRig(t)
+		expectManualVerifyTxBegin(rig)
+		expectManualVerifyFactoryWiring(rig)
+
+		appRow := applicationRow(manualVerifyAppID)
+		rig.appRepo.EXPECT().GetByID(mock.Anything, manualVerifyAppID).Return(appRow, nil)
+		rig.appSocialRepo.EXPECT().ListByApplicationID(mock.Anything, manualVerifyAppID).
+			Return([]*repository.CreatorApplicationSocialRow{
+				{ID: manualVerifySocialID, ApplicationID: manualVerifyAppID, Platform: domain.SocialPlatformTikTok, Handle: "aidana_tt", Verified: true, Method: pointer.ToString(domain.SocialVerificationMethodAuto)},
+			}, nil)
+
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.notifier, rig.logger)
+		err := svc.VerifyApplicationSocialManually(context.Background(), manualVerifyAppID, manualVerifySocialID, manualVerifyAdminID)
+		require.ErrorIs(t, err, domain.ErrCreatorApplicationSocialAlreadyVerified)
+	})
+
+	t.Run("missing telegram link returns ErrCreatorApplicationTelegramNotLinked and writes nothing", func(t *testing.T) {
+		t.Parallel()
+		rig := newCreatorServiceRig(t)
+		expectManualVerifyTxBegin(rig)
+		expectManualVerifyFactoryWiring(rig)
+
+		appRow := applicationRow(manualVerifyAppID)
+		rig.appRepo.EXPECT().GetByID(mock.Anything, manualVerifyAppID).Return(appRow, nil)
+		rig.appSocialRepo.EXPECT().ListByApplicationID(mock.Anything, manualVerifyAppID).
+			Return([]*repository.CreatorApplicationSocialRow{
+				{ID: manualVerifySocialID, ApplicationID: manualVerifyAppID, Platform: domain.SocialPlatformTikTok, Handle: "aidana_tt"},
+			}, nil)
+		rig.appTelegramLinkRepo.EXPECT().GetByApplicationID(mock.Anything, manualVerifyAppID).
+			Return(nil, sql.ErrNoRows)
+
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.notifier, rig.logger)
+		err := svc.VerifyApplicationSocialManually(context.Background(), manualVerifyAppID, manualVerifySocialID, manualVerifyAdminID)
+		require.ErrorIs(t, err, domain.ErrCreatorApplicationTelegramNotLinked)
+	})
+
+	t.Run("update social db error rolls back tx and bubbles", func(t *testing.T) {
+		t.Parallel()
+		rig := newCreatorServiceRig(t)
+		expectManualVerifyTxBegin(rig)
+		expectManualVerifyFactoryWiring(rig)
+
+		appRow := applicationRow(manualVerifyAppID)
+		rig.appRepo.EXPECT().GetByID(mock.Anything, manualVerifyAppID).Return(appRow, nil)
+		rig.appSocialRepo.EXPECT().ListByApplicationID(mock.Anything, manualVerifyAppID).
+			Return([]*repository.CreatorApplicationSocialRow{
+				{ID: manualVerifySocialID, ApplicationID: manualVerifyAppID, Platform: domain.SocialPlatformTikTok, Handle: "aidana_tt"},
+			}, nil)
+		rig.appTelegramLinkRepo.EXPECT().GetByApplicationID(mock.Anything, manualVerifyAppID).
+			Return(&repository.CreatorApplicationTelegramLinkRow{ApplicationID: manualVerifyAppID, TelegramUserID: 555}, nil)
+		rig.appSocialRepo.EXPECT().UpdateVerification(mock.Anything, mock.Anything).
+			Return(errors.New("update failed"))
+
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.notifier, rig.logger)
+		err := svc.VerifyApplicationSocialManually(context.Background(), manualVerifyAppID, manualVerifySocialID, manualVerifyAdminID)
+		require.ErrorContains(t, err, "update failed")
+	})
+}
+
 func TestCreatorApplicationService_applyTransition(t *testing.T) {
 	t.Parallel()
 
