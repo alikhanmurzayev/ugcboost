@@ -72,6 +72,11 @@ const (
 
 	expectedVerificationApproved = "Вы успешно подтвердили свой аккаунт ✅\n\n" +
 		"Скоро сообщим здесь результаты отбора 🖤"
+
+	expectedApplicationRejected = "Здравствуйте! Благодарим вас за интерес к платформе UGC boost.\n\n" +
+		"Мы внимательно рассмотрели вашу заявку, профиль, контент и текущие показатели аккаунта. К сожалению, на данном этапе ваша заявка не прошла модерацию платформы.\n\n" +
+		"Это не является оценкой вашего потенциала как креатора — просто сейчас ваш профиль не полностью совпадает с критериями отбора для текущих fashion-кампаний и запросов брендов на платформе 🙏\n\n" +
+		"Желаем вам дальнейшего роста и удачи в ваших проектах 🤍"
 )
 
 func TestNotifier_NotifyApplicationLinked(t *testing.T) {
@@ -180,6 +185,54 @@ func TestNotifier_NotifyVerificationApproved(t *testing.T) {
 		n := telegram.NewNotifier(sender, log)
 		require.NotPanics(t, func() {
 			n.NotifyVerificationApproved(context.Background(), 99)
+		})
+		waitFor(t, t.Name(), sendDone)
+		n.Wait()
+	})
+}
+
+func TestNotifier_NotifyApplicationRejected(t *testing.T) {
+	t.Parallel()
+
+	t.Run("posts exact reject message without parse mode or inline keyboard", func(t *testing.T) {
+		t.Parallel()
+		sender := tgmocks.NewMockSender(t)
+		log := logmocks.NewMockLogger(t)
+		captured, sendDone := captureSend(t, sender, nil)
+
+		n := telegram.NewNotifier(sender, log)
+		n.NotifyApplicationRejected(context.Background(), 12345)
+		waitFor(t, t.Name(), sendDone)
+		n.Wait()
+
+		require.NotNil(t, *captured)
+		chatID, ok := (*captured).ChatID.(int64)
+		require.True(t, ok)
+		require.Equal(t, int64(12345), chatID)
+		require.Equal(t, expectedApplicationRejected, (*captured).Text)
+		require.Empty(t, (*captured).ParseMode, "application-rejected is plain text — no parse mode")
+		require.Nil(t, (*captured).ReplyMarkup, "no inline keyboard on chunk-13 reject message")
+	})
+
+	t.Run("sender error logged with chat id and op", func(t *testing.T) {
+		t.Parallel()
+		sender := tgmocks.NewMockSender(t)
+		log := logmocks.NewMockLogger(t)
+		_, sendDone := captureSend(t, sender, errors.New("network down"))
+		log.EXPECT().Error(mock.Anything, "telegram notify failed",
+			mock.MatchedBy(func(args []any) bool {
+				m := map[string]any{}
+				for i := 0; i+1 < len(args); i += 2 {
+					if k, ok := args[i].(string); ok {
+						m[k] = args[i+1]
+					}
+				}
+				return m["op"] == "application_rejected" && m["chat_id"] == int64(77)
+			})).Once()
+
+		n := telegram.NewNotifier(sender, log)
+		require.NotPanics(t, func() {
+			n.NotifyApplicationRejected(context.Background(), 77)
 		})
 		waitFor(t, t.Name(), sendDone)
 		n.Wait()

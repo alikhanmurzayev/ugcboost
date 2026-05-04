@@ -47,6 +47,14 @@ const welcomeNoIGText = "Здравствуйте! 👋\n\n" +
 const verificationApprovedText = "Вы успешно подтвердили свой аккаунт ✅\n\n" +
 	"Скоро сообщим здесь результаты отбора 🖤"
 
+// applicationRejectedText is the static reject message (chunk 13). The wording
+// is time-bound (mentions fashion-кампаний) and is rotated by replacing this
+// constant in a separate PR — no Config switch, no template fan-out.
+const applicationRejectedText = "Здравствуйте! Благодарим вас за интерес к платформе UGC boost.\n\n" +
+	"Мы внимательно рассмотрели вашу заявку, профиль, контент и текущие показатели аккаунта. К сожалению, на данном этапе ваша заявка не прошла модерацию платформы.\n\n" +
+	"Это не является оценкой вашего потенциала как креатора — просто сейчас ваш профиль не полностью совпадает с критериями отбора для текущих fashion-кампаний и запросов брендов на платформе 🙏\n\n" +
+	"Желаем вам дальнейшего роста и удачи в ваших проектах 🤍"
+
 // ApplicationLinkedPayload carries everything NotifyApplicationLinked needs
 // to pick the right welcome variant and substitute the verification code.
 type ApplicationLinkedPayload struct {
@@ -119,6 +127,15 @@ func (n *Notifier) NotifyVerificationApproved(ctx context.Context, chatID int64)
 	n.fire(ctx, "verification_approved", chatID, &bot.SendMessageParams{
 		ChatID: chatID,
 		Text:   verificationApprovedText,
+	})
+}
+
+// NotifyApplicationRejected sends the static reject message after admin reject
+// commits. Plain text — no inline keyboard, no parse mode.
+func (n *Notifier) NotifyApplicationRejected(ctx context.Context, chatID int64) {
+	n.fire(ctx, "application_rejected", chatID, &bot.SendMessageParams{
+		ChatID: chatID,
+		Text:   applicationRejectedText,
 	})
 }
 

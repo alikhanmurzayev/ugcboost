@@ -2039,7 +2039,7 @@ func TestCreatorApplicationService_RejectApplication(t *testing.T) {
 		domain.CreatorApplicationStatusModeration,
 	} {
 		fromStatus := fromStatus
-		t.Run("happy path from "+fromStatus+" — transitions, audits, never notifies", func(t *testing.T) {
+		t.Run("happy path from "+fromStatus+" — transitions, audits, notifies linked telegram", func(t *testing.T) {
 			t.Parallel()
 			rig := newCreatorServiceRig(t)
 			expectRejectTxBegin(rig)
@@ -2065,11 +2065,25 @@ func TestCreatorApplicationService_RejectApplication(t *testing.T) {
 				}).
 				Return(nil)
 
-			// Notifier configured WITHOUT EXPECT — mockery fails the test
-			// at cleanup if the service tries to push anything.
+			rig.factory.EXPECT().NewCreatorApplicationTelegramLinkRepo(mock.Anything).Return(rig.appTelegramLinkRepo)
+			rig.appTelegramLinkRepo.EXPECT().GetByApplicationID(mock.Anything, rejectAppID).
+				Return(&repository.CreatorApplicationTelegramLinkRow{
+					ApplicationID:  rejectAppID,
+					TelegramUserID: 12345,
+				}, nil)
+
+			var capturedChat int64
+			rig.notifier.EXPECT().NotifyApplicationRejected(mock.Anything, int64(12345)).
+				Run(func(_ context.Context, chatID int64) {
+					capturedChat = chatID
+				}).
+				Once()
+
 			svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.notifier, rig.logger)
 			err := svc.RejectApplication(context.Background(), rejectAppID, rejectAdminID)
 			require.NoError(t, err)
+
+			require.Equal(t, int64(12345), capturedChat)
 
 			require.Equal(t, rejectAppID, capturedTransition.ApplicationID)
 			require.NotNil(t, capturedTransition.FromStatus)
@@ -2091,6 +2105,70 @@ func TestCreatorApplicationService_RejectApplication(t *testing.T) {
 				string(capturedAudit.NewValue))
 		})
 	}
+
+	t.Run("happy path without telegram link — warns, never notifies", func(t *testing.T) {
+		t.Parallel()
+		rig := newCreatorServiceRig(t)
+		expectRejectTxBegin(rig)
+		expectRejectFactoryWiring(rig)
+		rig.factory.EXPECT().NewCreatorApplicationStatusTransitionRepo(mock.Anything).Return(rig.transitionRepo)
+
+		appRow := applicationRow(rejectAppID)
+		rig.appRepo.EXPECT().GetByID(mock.Anything, rejectAppID).Return(appRow, nil)
+		rig.appRepo.EXPECT().UpdateStatus(mock.Anything, rejectAppID, domain.CreatorApplicationStatusRejected).Return(nil)
+		rig.transitionRepo.EXPECT().Insert(mock.Anything, mock.Anything).Return(nil)
+		rig.auditRepo.EXPECT().Create(mock.Anything, mock.Anything).Return(nil)
+
+		rig.factory.EXPECT().NewCreatorApplicationTelegramLinkRepo(mock.Anything).Return(rig.appTelegramLinkRepo)
+		rig.appTelegramLinkRepo.EXPECT().GetByApplicationID(mock.Anything, rejectAppID).
+			Return(nil, sql.ErrNoRows)
+
+		rig.logger.EXPECT().Warn(mock.Anything,
+			"creator application rejected without telegram link",
+			mock.MatchedBy(func(args []any) bool {
+				return len(args) == 2 && args[0] == "application_id" && args[1] == rejectAppID
+			})).Once()
+
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.notifier, rig.logger)
+		err := svc.RejectApplication(context.Background(), rejectAppID, rejectAdminID)
+		require.NoError(t, err)
+	})
+
+	t.Run("link lookup error logged, never notifies, reject still succeeds", func(t *testing.T) {
+		t.Parallel()
+		rig := newCreatorServiceRig(t)
+		expectRejectTxBegin(rig)
+		expectRejectFactoryWiring(rig)
+		rig.factory.EXPECT().NewCreatorApplicationStatusTransitionRepo(mock.Anything).Return(rig.transitionRepo)
+
+		appRow := applicationRow(rejectAppID)
+		rig.appRepo.EXPECT().GetByID(mock.Anything, rejectAppID).Return(appRow, nil)
+		rig.appRepo.EXPECT().UpdateStatus(mock.Anything, rejectAppID, domain.CreatorApplicationStatusRejected).Return(nil)
+		rig.transitionRepo.EXPECT().Insert(mock.Anything, mock.Anything).Return(nil)
+		rig.auditRepo.EXPECT().Create(mock.Anything, mock.Anything).Return(nil)
+
+		lookupErr := errors.New("db down")
+		rig.factory.EXPECT().NewCreatorApplicationTelegramLinkRepo(mock.Anything).Return(rig.appTelegramLinkRepo)
+		rig.appTelegramLinkRepo.EXPECT().GetByApplicationID(mock.Anything, rejectAppID).
+			Return(nil, lookupErr)
+
+		rig.logger.EXPECT().Error(mock.Anything,
+			"creator application reject notify lookup failed",
+			mock.MatchedBy(func(args []any) bool {
+				if len(args) != 4 {
+					return false
+				}
+				if args[0] != "application_id" || args[1] != rejectAppID || args[2] != "error" {
+					return false
+				}
+				gotErr, ok := args[3].(error)
+				return ok && errors.Is(gotErr, lookupErr)
+			})).Once()
+
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.notifier, rig.logger)
+		err := svc.RejectApplication(context.Background(), rejectAppID, rejectAdminID)
+		require.NoError(t, err)
+	})
 }
 
 func TestCreatorApplicationService_applyTransition(t *testing.T) {

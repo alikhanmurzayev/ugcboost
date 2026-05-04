@@ -54,12 +54,12 @@ func creatorApplicationListInputToRepo(in domain.CreatorApplicationListInput) re
 	}
 }
 
-// creatorAppNotifier is the consumer-side contract: only the verification-
-// approved event the SendPulse path fires. Defined here so the service does
-// not pull in the concrete *telegram.Notifier — accept interfaces, return
-// structs.
+// creatorAppNotifier is the consumer-side contract: SendPulse verification
+// approval and admin reject. Defined here so the service does not pull in
+// the concrete *telegram.Notifier — accept interfaces, return structs.
 type creatorAppNotifier interface {
 	NotifyVerificationApproved(ctx context.Context, chatID int64)
+	NotifyApplicationRejected(ctx context.Context, chatID int64)
 }
 
 type CreatorApplicationService struct {
@@ -1009,12 +1009,11 @@ func (s *CreatorApplicationService) VerifyApplicationSocialManually(ctx context.
 // (which the state machine guards against any other source status); (4)
 // audit row pinned to the same TX so a rollback also rolls back the audit.
 //
-// No Telegram notification fires from this path. Chunk 14 owns reaching the
-// creator with a single static template; the link / chat id / Telegram
-// metadata stays untouched on the application so the notifier can find the
-// chat without an extra lookup roundtrip.
+// After the transaction commits, notifyApplicationRejected fires the static
+// Telegram message fire-and-forget. Lookup / send failures degrade to a log
+// — the reject itself never reverts and the HTTP caller still sees 200.
 func (s *CreatorApplicationService) RejectApplication(ctx context.Context, applicationID, actorUserID string) error {
-	return dbutil.WithTx(ctx, s.pool, func(tx dbutil.DB) error {
+	if err := dbutil.WithTx(ctx, s.pool, func(tx dbutil.DB) error {
 		appRepo := s.repoFactory.NewCreatorApplicationRepo(tx)
 		auditRepo := s.repoFactory.NewAuditRepo(tx)
 
@@ -1056,7 +1055,12 @@ func (s *CreatorApplicationService) RejectApplication(ctx context.Context, appli
 			return fmt.Errorf("reject application: write audit: %w", err)
 		}
 		return nil
-	})
+	}); err != nil {
+		return err
+	}
+
+	s.notifyApplicationRejected(ctx, applicationID)
+	return nil
 }
 
 // applyTransition refuses transitions not declared in
@@ -1108,4 +1112,26 @@ func (s *CreatorApplicationService) notifyVerificationApproved(ctx context.Conte
 		return
 	}
 	s.notifier.NotifyVerificationApproved(ctx, *telegramUserID)
+}
+
+// notifyApplicationRejected runs after RejectApplication's tx commits.
+// Lookup / send failures are logged but never surfaced — the reject is
+// already permanent and the HTTP caller has seen 200. ctx is detached
+// from the request lifetime so a client disconnect or shutdown cancel
+// between commit and lookup cannot drop the notify silently — symmetric
+// to Notifier.fire's own WithoutCancel for the send call.
+func (s *CreatorApplicationService) notifyApplicationRejected(ctx context.Context, applicationID string) {
+	ctx = context.WithoutCancel(ctx)
+	link, err := s.repoFactory.NewCreatorApplicationTelegramLinkRepo(s.pool).GetByApplicationID(ctx, applicationID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			s.logger.Warn(ctx, "creator application rejected without telegram link",
+				"application_id", applicationID)
+			return
+		}
+		s.logger.Error(ctx, "creator application reject notify lookup failed",
+			"application_id", applicationID, "error", err)
+		return
+	}
+	s.notifier.NotifyApplicationRejected(ctx, link.TelegramUserID)
 }
