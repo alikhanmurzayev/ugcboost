@@ -56,3 +56,16 @@ export async function verifyApplicationSocialManually(applicationId: string, soc
   }
   return data;
 }
+
+export async function rejectApplication(applicationId: string) {
+  const { data, error, response } = await client.POST(
+    "/creators/applications/{id}/reject",
+    {
+      params: { path: { id: applicationId } },
+    },
+  );
+  if (error) {
+    throw new ApiError(response.status, extractErrorCode(error));
+  }
+  return data;
+}

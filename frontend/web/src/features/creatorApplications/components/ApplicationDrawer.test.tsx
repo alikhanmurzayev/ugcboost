@@ -2,8 +2,10 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import * as React from "react";
 import type { ApplicationDetail } from "../types";
 import ApplicationDrawer from "./ApplicationDrawer";
+import { useDrawerContext } from "./drawerContext";
 
 vi.mock("@/api/creatorApplications", () => ({
   verifyApplicationSocialManually: vi.fn(),
@@ -78,7 +80,10 @@ function makeDetail(
   } as ApplicationDetail;
 }
 
-function renderDrawer(detail: ApplicationDetail = makeDetail()) {
+function renderDrawer(
+  detail: ApplicationDetail = makeDetail(),
+  options: { footer?: React.ReactNode } = {},
+) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
@@ -89,6 +94,7 @@ function renderDrawer(detail: ApplicationDetail = makeDetail()) {
         application={detail}
         open
         onClose={onClose}
+        footer={options.footer}
       />
     </QueryClientProvider>,
   );
@@ -166,5 +172,67 @@ describe("ApplicationDrawer — verify modal wiring", () => {
       screen.queryByTestId("verify-confirm-dialog"),
     ).not.toBeInTheDocument();
     expect(onClose).not.toHaveBeenCalled();
+  });
+});
+
+describe("ApplicationDrawer — footer slot", () => {
+  it("does NOT render drawer-footer when footer prop is omitted", () => {
+    renderDrawer();
+    expect(screen.queryByTestId("drawer-footer")).not.toBeInTheDocument();
+  });
+
+  it("renders drawer-footer with the passed ReactNode when footer prop is set", () => {
+    renderDrawer(makeDetail(), {
+      footer: <span data-testid="custom-footer-content">my action</span>,
+    });
+    expect(screen.getByTestId("drawer-footer")).toBeInTheDocument();
+    expect(screen.getByTestId("custom-footer-content")).toHaveTextContent(
+      "my action",
+    );
+  });
+});
+
+describe("ApplicationDrawer — DrawerContext + apiError banner", () => {
+  function FooterErrorTrigger() {
+    const { onApiError } = useDrawerContext();
+    return (
+      <button
+        type="button"
+        data-testid="raise-api-error"
+        onClick={() => onApiError("боль")}
+      >
+        raise
+      </button>
+    );
+  }
+
+  it("provides DrawerContext to footer; setting onApiError shows banner with that text", async () => {
+    renderDrawer(makeDetail(), { footer: <FooterErrorTrigger /> });
+
+    expect(screen.queryByTestId("drawer-api-error")).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByTestId("raise-api-error"));
+
+    expect(screen.getByTestId("drawer-api-error")).toHaveTextContent("боль");
+  });
+
+  it("verify dialog 4xx error surfaces in unified drawer-api-error banner", async () => {
+    const { ApiError } = await import("@/api/client");
+    const { verifyApplicationSocialManually } = await import(
+      "@/api/creatorApplications"
+    );
+    vi.mocked(verifyApplicationSocialManually).mockRejectedValueOnce(
+      new ApiError(422, "CREATOR_APPLICATION_NOT_IN_VERIFICATION"),
+    );
+
+    renderDrawer();
+
+    await userEvent.click(screen.getByTestId(`verify-social-${TT_ID}`));
+    await userEvent.click(screen.getByTestId("verify-confirm-submit"));
+
+    await screen.findByTestId("drawer-api-error");
+    expect(screen.getByTestId("drawer-api-error")).toHaveTextContent(
+      "Заявка уже не на этапе верификации",
+    );
   });
 });

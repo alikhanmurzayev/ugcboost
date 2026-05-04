@@ -68,8 +68,8 @@ Living document. Покрывает путь от подачи заявки на
 ### Группа 3. Reject
 
 - [x] **12. Бэк: reject заявки админом.** Admin-endpoint, доступен на `verification` и `moderation`. Body пустой (тело уведомления для креатора захардкожено в chunk 13). Перевод в `rejected`. Audit + state-history. Переходы добавляются в текущую state-machine, без миграций. PR #58, спека архивирована — `_bmad-output/implementation-artifacts/archive/2026-05-04-spec-creator-application-reject.md`
-- [~] **13. Бот: уведомление о rejected.** Расширение существующего `*telegram.Notifier` (chunk 8) — после commit'а reject-перехода fire-and-forget Telegram-сообщение. Текст статичный, вшит одной константой, итерируется отдельным PR'ом. Lookup chat_id через `creator_application_telegram_link`; при отсутствии link — warn в логе сервиса, без fallback-каналов. Зависит от 12. Спека — `_bmad-output/implementation-artifacts/spec-creator-application-reject-notify.md`
-- [ ] **14. Фронт-админка: action reject в drawer на verification-экране.** Кнопка «Отклонить заявку» с подтверждением (без feedback-поля — body endpoint'а пустой, текст для креатора статичный из chunk 13). Зависит от 12 и 13. E2E — расширение spec'а из 6.5 или новый рядом
+- [x] **13. Бот: уведомление о rejected.** Расширение существующего `*telegram.Notifier` (chunk 8) — после commit'а reject-перехода fire-and-forget Telegram-сообщение. Текст статичный, вшит одной константой, итерируется отдельным PR'ом. Lookup chat_id через `creator_application_telegram_link`; при отсутствии link — warn в логе сервиса, без fallback-каналов. Зависит от 12. PR #59, спека архивирована — `_bmad-output/implementation-artifacts/archive/2026-05-04-spec-creator-application-reject-notify.md`
+- [~] **14. Фронт-админка: action reject в drawer на verification-экране.** Кнопка «Отклонить заявку» с подтверждением (без feedback-поля — body endpoint'а пустой, текст для креатора статичный из chunk 13). Зависит от 12 и 13. E2E — расширение spec'а из 6.5 или новый рядом. Спека — `_bmad-output/implementation-artifacts/spec-creator-application-reject-frontend.md`
 
 ### Группа 4. Админка-экран модерации
 
