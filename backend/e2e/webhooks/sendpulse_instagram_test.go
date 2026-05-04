@@ -1,6 +1,7 @@
 // Package webhooks — E2E тесты HTTP-поверхности /webhooks/* (chunk 8
 // creator-onboarding-roadmap, обновлено chunk 9 — chunk-8 placeholder с
-// WebApp-кнопкой выпилен, теперь идёт plain-text «Заявка ушла на модерацию»).
+// WebApp-кнопкой выпилен, теперь идёт plain-text «Вы успешно подтвердили
+// свой аккаунт»).
 //
 // TestSendPulseInstagramWebhook проходит по всем веткам I/O-матрицы
 // SendPulse-вебхука. На вход — заявка, поданная через лендинг (статус
@@ -18,7 +19,7 @@
 //     IG-handle совпадает; ожидаем 200 {}, статус заявки moderation,
 //     audit-row с handle_changed=false, ровно одно TG-уведомление —
 //     plain-text без inline-кнопок, без `tma`/`mini`/`webapp`/`ig.me`/`UGC-`,
-//     с подстрокой «модерацию»;
+//     с фразой «успешно подтвердили»;
 //   - self-fix: тот же код, но username отличается от сохранённого handle;
 //     заявка переходит, audit-row помечает handle_changed=true, TG-нотификация
 //     уходит;
@@ -358,8 +359,8 @@ func listVerificationAuditEntries(t *testing.T, c *apiclient.ClientWithResponses
 // keyboard. Дублирует константу из internal/telegram/notifier.go: e2e-пакет —
 // отдельный модуль, и assert-by-equality требует, чтобы любое изменение
 // копирайта одновременно ломало тест.
-const verificationApprovedText = "Заявка ушла на модерацию ✅\n\n" +
-	"Напишу сюда, как только модератор примет решение."
+const verificationApprovedText = "Вы успешно подтвердили свой аккаунт ✅\n\n" +
+	"Скоро сообщим здесь результаты отбора 🖤"
 
 // assertVerificationApprovedShape сверяет, что бэк отправил ровно
 // verificationApprovedText без WebApp-кнопки. msg.Error может быть
