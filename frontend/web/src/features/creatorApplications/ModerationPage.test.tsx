@@ -138,6 +138,22 @@ describe("ModerationPage — list rendering", () => {
     ).toBeInTheDocument();
     expect(screen.getByTestId("moderation-total")).toHaveTextContent("1");
   });
+
+  it("renders city column and omits telegram column", async () => {
+    vi.mocked(listCreatorApplications).mockResolvedValueOnce({
+      data: { items: [FIXTURE_ITEM], total: 1, page: 1, perPage: 50 },
+    });
+
+    renderPage("/creator-applications/moderation");
+
+    const row = await screen.findByTestId(`row-${FIXTURE_ITEM.id}`);
+    expect(row).toHaveTextContent(FIXTURE_ITEM.city.name);
+    expect(screen.queryByTestId("row-telegram-linked")).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId("row-telegram-not-linked"),
+    ).not.toBeInTheDocument();
+    expect(screen.getByTestId("th-city")).toBeInTheDocument();
+  });
 });
 
 describe("ModerationPage — drawer toggle via URL", () => {
@@ -176,7 +192,7 @@ describe("ModerationPage — drawer toggle via URL", () => {
     });
   });
 
-  it("renders reject button in drawer footer for moderation status", async () => {
+  it("renders reject + disabled approve in drawer footer for moderation", async () => {
     vi.mocked(listCreatorApplications).mockResolvedValue({
       data: { items: [FIXTURE_ITEM], total: 1, page: 1, perPage: 50 },
     });
@@ -187,6 +203,8 @@ describe("ModerationPage — drawer toggle via URL", () => {
     renderPage(`/creator-applications/moderation?id=${FIXTURE_ITEM.id}`);
 
     expect(await screen.findByTestId("reject-button")).toBeInTheDocument();
+    const approve = await screen.findByTestId("approve-button");
+    expect(approve).toBeDisabled();
   });
 
   it("closes drawer when close button clicked", async () => {

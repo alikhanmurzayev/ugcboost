@@ -88,6 +88,20 @@ context:
 
 ## Spec Change Log
 
+**2026-05-04 — User-feedback iteration after first manual review on staging.** Алихан проверил руками, накидал 5 правок:
+
+1. Sidebar badge counter не обновлялся live → `DashboardLayout` countsQuery: `refetchInterval: 15_000` (плюс уже работающий invalidate из reject-флоу). Сбрасывается раз в 15 секунд + на возврат фокуса (default v5).
+2. Фильтр «Период подачи» неявный → label в i18n: `filters.date` → «Период подачи заявки» (бэк всегда фильтрует по `created_at` — точная дата подачи с лендоса).
+3. Фильтр «Telegram» бесполезен на moderation (у всех в стейдже привязан) → `ApplicationFilters` получает prop `showTelegramFilter?: boolean` (default `true` — VerificationPage без изменений). ModerationPage передаёт `false`.
+4. Колонки таблицы:
+   - **Добавлена** «Город» (sortable по `city_name`).
+   - **Убрана** «Telegram» (вместе с `TelegramCell` / `TelegramIcon` хелперами в файле — они стали мёртвыми).
+   - «Подана» (`createdAt`) — была корректна, оставлена.
+   - «В этапе» (`updatedAt`) — была корректна, оставлена.
+5. Approve-кнопка (disabled placeholder) для visual reservation — overrides Boundaries → Never «Approve-кнопка в любом виде». Кнопка disabled, не активна, нужна чтобы видеть финальный layout footer'а в drawer'е. Реальная активация остаётся в chunk 19.
+
+KEEP (что не меняется): I/O Matrix, dependency на chunk 14 reject pattern (теперь с дополнительным approve-плейсхолдером справа), backwards-compat sort.ts, RoleGuard поведение, удалённый stub.
+
 ## Design Notes
 
 **`sort.ts` рефактор — минимальный, обратно-совместимый.** Сейчас `parseSortFromUrl`, `serializeSort`, `fieldForColumn` опираются на модульные константы `DEFAULT_SORT` и `COLUMN_TO_FIELD`. Чтобы не плодить дубли утилит, добавить опциональный параметр-перегрузку: при отсутствии — поведение прежнее (важно для VerificationPage и его теста). ModerationPage передаёт свой defaults и column-map.

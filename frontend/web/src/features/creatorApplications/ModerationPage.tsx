@@ -147,7 +147,7 @@ export default function ModerationPage() {
         {t("stages.moderation.description")}
       </p>
 
-      <ApplicationFilters />
+      <ApplicationFilters showTelegramFilter={false} />
 
       {listQuery.isLoading ? (
         <Spinner className="mt-6" />
@@ -270,17 +270,13 @@ function buildColumns(t: (key: string) => string): Column<Application>[] {
       render: (row) => <CategoryChips categories={row.categories} />,
     },
     {
-      key: "telegram",
-      header: t("columns.telegram"),
+      key: "city",
+      header: t("columns.city"),
       render: (row) => (
-        <TelegramCell
-          linked={row.telegramLinked}
-          linkedLabel={t("telegramLinked")}
-          notLinkedLabel={t("telegramNotLinked")}
-        />
+        <span className="text-gray-700">{row.city.name}</span>
       ),
-      align: "right",
-      width: "w-20",
+      sortable: true,
+      width: "w-32",
     },
     {
       key: "submittedAt",
@@ -300,45 +296,6 @@ function buildColumns(t: (key: string) => string): Column<Application>[] {
   ];
 }
 
-function TelegramCell({
-  linked,
-  linkedLabel,
-  notLinkedLabel,
-}: {
-  linked: boolean;
-  linkedLabel: string;
-  notLinkedLabel: string;
-}) {
-  const label = linked ? linkedLabel : notLinkedLabel;
-  return (
-    <span
-      title={label}
-      aria-label={label}
-      data-testid={
-        linked ? "row-telegram-linked" : "row-telegram-not-linked"
-      }
-      className={`inline-flex h-5 w-5 items-center justify-center ${
-        linked ? "text-sky-500" : "text-gray-300"
-      }`}
-    >
-      <TelegramIcon />
-    </span>
-  );
-}
-
-function TelegramIcon() {
-  return (
-    <svg
-      className="h-4 w-4"
-      viewBox="0 0 24 24"
-      fill="currentColor"
-      aria-hidden="true"
-    >
-      <path d="M9.78 18.65l.28-4.23 7.68-6.92c.34-.31-.07-.46-.52-.19L7.74 13.3 3.64 12c-.88-.25-.89-.86.2-1.3L19.52 4.6c.73-.33 1.43.18 1.15 1.3l-3.05 13.53c-.19.85-.7 1.06-1.42.66l-3.92-2.9-1.88 1.83c-.22.22-.4.4-.82.4l.3-2.27z" />
-    </svg>
-  );
-}
-
 function formatShortDate(iso: string): string {
   return new Date(iso).toLocaleDateString("ru", {
     day: "numeric",
@@ -350,6 +307,7 @@ function activeColumnForSort(field: string): string | undefined {
   if (field === "full_name") return "fullName";
   if (field === "created_at") return "submittedAt";
   if (field === "updated_at") return "hoursInStage";
+  if (field === "city_name") return "city";
   return undefined;
 }
 

@@ -39,6 +39,7 @@ export default function DashboardLayout() {
     queryKey: creatorApplicationKeys.counts(),
     queryFn: getCreatorApplicationsCounts,
     enabled: isAdmin,
+    refetchInterval: 15_000,
   });
 
   const counts = countsQuery.data?.data?.items;
