@@ -1,10 +1,14 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+import type { components } from "@/api/generated/schema";
 import Spinner from "@/shared/components/Spinner";
-import SocialLink from "./SocialLink";
 import CategoryChip from "./CategoryChip";
+import SocialAdminRow from "./SocialAdminRow";
+import VerifyManualDialog from "./VerifyManualDialog";
 import { calcAge } from "../filters";
 import type { ApplicationDetail } from "../types";
+
+type DetailSocial = components["schemas"]["CreatorApplicationDetailSocial"];
 
 interface ApplicationDrawerProps {
   application: ApplicationDetail | undefined;
@@ -83,7 +87,7 @@ export default function ApplicationDrawer({
               {t("loadError")}
             </p>
           ) : (
-            <ApplicationBody application={application} />
+            <ApplicationBody application={application} onCloseDrawer={onClose} />
           )}
         </div>
       </div>
@@ -182,10 +186,19 @@ function NavButton({
   );
 }
 
-function ApplicationBody({ application }: { application: ApplicationDetail }) {
+function ApplicationBody({
+  application,
+  onCloseDrawer,
+}: {
+  application: ApplicationDetail;
+  onCloseDrawer: () => void;
+}) {
   const { t } = useTranslation("creatorApplications");
   const age = calcAge(application.birthDate);
   const tg = application.telegramLink;
+  const telegramLinked = !!tg;
+  const [verifyTarget, setVerifyTarget] = useState<DetailSocial | null>(null);
+  const [verifyError, setVerifyError] = useState("");
 
   return (
     <>
@@ -197,6 +210,16 @@ function ApplicationBody({ application }: { application: ApplicationDetail }) {
           {t("drawer.submittedAt")}: {formatDateTime(application.createdAt)}
         </p>
       </div>
+
+      {verifyError && (
+        <div
+          className="mt-3 rounded-button border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+          role="alert"
+          data-testid="verify-error-banner"
+        >
+          {verifyError}
+        </div>
+      )}
 
       <dl className="mt-5 grid grid-cols-2 gap-x-6 gap-y-4">
         <Field
@@ -255,13 +278,16 @@ function ApplicationBody({ application }: { application: ApplicationDetail }) {
           fullWidth
           label={t("drawer.socials")}
           value={
-            <div className="flex flex-wrap gap-x-5 gap-y-1.5">
+            <div className="flex flex-col" data-testid="drawer-socials">
               {application.socials.map((s) => (
-                <SocialLink
-                  key={`${s.platform}-${s.handle}`}
-                  platform={s.platform}
-                  handle={s.handle}
-                  showHandle
+                <SocialAdminRow
+                  key={s.id}
+                  social={s}
+                  telegramLinked={telegramLinked}
+                  onVerifyClick={(target) => {
+                    setVerifyError("");
+                    setVerifyTarget(target);
+                  }}
                 />
               ))}
             </div>
@@ -298,6 +324,17 @@ function ApplicationBody({ application }: { application: ApplicationDetail }) {
           }
         />
       </dl>
+
+      {verifyTarget && (
+        <VerifyManualDialog
+          open
+          applicationId={application.id}
+          social={verifyTarget}
+          onClose={() => setVerifyTarget(null)}
+          onCloseDrawer={onCloseDrawer}
+          onApiError={(msg) => setVerifyError(msg)}
+        />
+      )}
     </>
   );
 }

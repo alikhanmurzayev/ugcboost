@@ -24,6 +24,7 @@ import {
   listCreatorApplications,
   getCreatorApplication,
   getCreatorApplicationsCounts,
+  verifyApplicationSocialManually,
 } from "./creatorApplications";
 
 const mockedPost = vi.mocked(client.POST);
@@ -159,5 +160,63 @@ describe("getCreatorApplicationsCounts", () => {
       status: 403,
       code: "FORBIDDEN",
     });
+  });
+});
+
+describe("verifyApplicationSocialManually", () => {
+  it("calls POST /creators/applications/{id}/socials/{socialId}/verify with empty body", async () => {
+    mockedPost.mockResolvedValueOnce({
+      data: { data: {} },
+      response: { status: 200 } as Response,
+    });
+
+    await verifyApplicationSocialManually("app-1", "soc-2");
+
+    expect(mockedPost).toHaveBeenCalledWith(
+      "/creators/applications/{id}/socials/{socialId}/verify",
+      {
+        params: { path: { id: "app-1", socialId: "soc-2" } },
+        body: {},
+      },
+    );
+  });
+
+  it("throws ApiError on 422 TELEGRAM_NOT_LINKED", async () => {
+    mockedPost.mockResolvedValueOnce({
+      error: { error: { code: "CREATOR_APPLICATION_TELEGRAM_NOT_LINKED" } },
+      response: { status: 422 } as Response,
+    });
+
+    await expect(
+      verifyApplicationSocialManually("app-1", "soc-2"),
+    ).rejects.toMatchObject({
+      status: 422,
+      code: "CREATOR_APPLICATION_TELEGRAM_NOT_LINKED",
+    });
+  });
+
+  it("throws ApiError on 409 SOCIAL_ALREADY_VERIFIED", async () => {
+    mockedPost.mockResolvedValueOnce({
+      error: { error: { code: "CREATOR_APPLICATION_SOCIAL_ALREADY_VERIFIED" } },
+      response: { status: 409 } as Response,
+    });
+
+    await expect(
+      verifyApplicationSocialManually("app-1", "soc-2"),
+    ).rejects.toMatchObject({
+      status: 409,
+      code: "CREATOR_APPLICATION_SOCIAL_ALREADY_VERIFIED",
+    });
+  });
+
+  it("falls back to INTERNAL_ERROR on malformed error body", async () => {
+    mockedPost.mockResolvedValueOnce({
+      error: {},
+      response: { status: 500 } as Response,
+    });
+
+    await expect(
+      verifyApplicationSocialManually("app-1", "soc-2"),
+    ).rejects.toBeInstanceOf(ApiError);
   });
 });
