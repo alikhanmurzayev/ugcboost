@@ -36,7 +36,7 @@
  * захламление БД flak'ает соседние воркеры.
  */
 import { randomUUID } from "node:crypto";
-import { test, expect, type APIRequestContext, type Page } from "@playwright/test";
+import { test, expect, type Page } from "@playwright/test";
 import {
   fetchApplicationDetail,
   linkTelegramToApplication,
@@ -44,11 +44,11 @@ import {
   seedAdmin,
   seedCreatorApplication,
 } from "../helpers/api";
+import { collectTelegramSent } from "../helpers/telegram";
 
 const API_URL = process.env.API_URL || "http://localhost:8080";
 const CLEANUP_TIMEOUT_MS = 5_000;
 const TG_SILENCE_WINDOW_MS = 5_000;
-const TG_POLL_INTERVAL_MS = 250;
 
 test.describe("Admin manual verify action", () => {
   let cleanupStack: Array<() => Promise<void>>;
@@ -328,42 +328,6 @@ function findSocial(
   const row = socials.find((s) => s.platform === platform);
   if (!row) throw new Error(`social not found for platform ${platform}`);
   return row;
-}
-
-interface SentMessageLite {
-  chatId: number;
-  text: string;
-  sentAt: string;
-}
-
-// collectTelegramSent polls /test/telegram/sent for `windowMs` and returns
-// every record whose chatId matches. The poll is cumulative — a record
-// captured at any point during the window stays in the result. Used to
-// assert both presence (with subsequent shape checks) and absence.
-async function collectTelegramSent(
-  request: APIRequestContext,
-  apiUrl: string,
-  chatId: number,
-  since: string,
-  windowMs: number,
-): Promise<SentMessageLite[]> {
-  const deadline = Date.now() + windowMs;
-  const seen = new Map<string, SentMessageLite>();
-  while (Date.now() < deadline) {
-    const resp = await request.get(`${apiUrl}/test/telegram/sent`, {
-      params: { chatId: String(chatId), since },
-    });
-    if (resp.status() === 200) {
-      const body = (await resp.json()) as {
-        data: { messages: SentMessageLite[] };
-      };
-      for (const m of body.data.messages) {
-        seen.set(`${m.chatId}|${m.sentAt}|${m.text}`, m);
-      }
-    }
-    await new Promise((r) => setTimeout(r, TG_POLL_INTERVAL_MS));
-  }
-  return Array.from(seen.values());
 }
 
 async function withTimeout<T>(

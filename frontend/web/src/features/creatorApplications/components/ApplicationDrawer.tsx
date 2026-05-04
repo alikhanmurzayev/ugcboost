@@ -1,4 +1,10 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { useTranslation } from "react-i18next";
 import type { components } from "@/api/generated/schema";
 import Spinner from "@/shared/components/Spinner";
@@ -7,6 +13,7 @@ import SocialAdminRow from "./SocialAdminRow";
 import VerifyManualDialog from "./VerifyManualDialog";
 import { calcAge } from "../filters";
 import type { ApplicationDetail } from "../types";
+import { DrawerContext } from "./drawerContext";
 
 type DetailSocial = components["schemas"]["CreatorApplicationDetailSocial"];
 
@@ -20,24 +27,30 @@ interface ApplicationDrawerProps {
   onNext?: () => void;
   canPrev?: boolean;
   canNext?: boolean;
+  footer?: ReactNode;
 }
 
-export default function ApplicationDrawer({
+export default function ApplicationDrawer(props: ApplicationDrawerProps) {
+  if (!props.open) return null;
+  return <OpenDrawer {...props} />;
+}
+
+function OpenDrawer({
   application,
   isLoading,
   isError,
-  open,
   onClose,
   onPrev,
   onNext,
   canPrev,
   canNext,
+  footer,
 }: ApplicationDrawerProps) {
   const { t } = useTranslation("creatorApplications");
   const dialogRef = useRef<HTMLDivElement>(null);
+  const [apiError, setApiError] = useState("");
 
   useEffect(() => {
-    if (!open) return;
     dialogRef.current?.focus();
 
     function handleKey(e: KeyboardEvent) {
@@ -47,51 +60,78 @@ export default function ApplicationDrawer({
     }
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, [open, onClose, onPrev, onNext, canPrev, canNext]);
+  }, [onClose, onPrev, onNext, canPrev, canNext]);
 
-  if (!open) return null;
+  const ctx = useMemo(
+    () => ({ onApiError: setApiError, onCloseDrawer: onClose }),
+    [onClose],
+  );
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <button
-        type="button"
-        aria-label="Закрыть окно"
-        onClick={onClose}
-        data-testid="drawer-backdrop"
-        className="absolute inset-0 cursor-default bg-black/30 focus:outline-none"
-      />
-      <div
-        ref={dialogRef}
-        role="dialog"
-        aria-modal="true"
-        tabIndex={-1}
-        className="relative z-10 flex max-h-[90vh] w-[680px] max-w-full flex-col overflow-hidden rounded-card bg-white shadow-xl outline-none"
-        data-testid="drawer"
-      >
-        <DrawerHeader
-          title={application ? buildFullName(application) : ""}
-          onClose={onClose}
-          onPrev={onPrev}
-          onNext={onNext}
-          canPrev={canPrev}
-          canNext={canNext}
-          prevLabel={t("drawerNav.prev")}
-          nextLabel={t("drawerNav.next")}
+    <DrawerContext.Provider value={ctx}>
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <button
+          type="button"
+          aria-label="Закрыть окно"
+          onClick={onClose}
+          data-testid="drawer-backdrop"
+          className="absolute inset-0 cursor-default bg-black/30 focus:outline-none"
         />
+        <div
+          ref={dialogRef}
+          role="dialog"
+          aria-modal="true"
+          tabIndex={-1}
+          className="relative z-10 flex max-h-[90vh] w-[680px] max-w-full flex-col overflow-hidden rounded-card bg-white shadow-xl outline-none"
+          data-testid="drawer"
+        >
+          <DrawerHeader
+            title={application ? buildFullName(application) : ""}
+            onClose={onClose}
+            onPrev={onPrev}
+            onNext={onNext}
+            canPrev={canPrev}
+            canNext={canNext}
+            prevLabel={t("drawerNav.prev")}
+            nextLabel={t("drawerNav.next")}
+          />
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
-          {isLoading ? (
-            <Spinner className="mt-4" />
-          ) : isError || !application ? (
-            <p className="text-gray-500" data-testid="drawer-error">
-              {t("loadError")}
-            </p>
-          ) : (
-            <ApplicationBody application={application} onCloseDrawer={onClose} />
+          <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
+            {apiError && (
+              <div
+                className="mb-3 rounded-button border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+                role="alert"
+                data-testid="drawer-api-error"
+              >
+                {apiError}
+              </div>
+            )}
+            {isLoading ? (
+              <Spinner className="mt-4" />
+            ) : isError || !application ? (
+              <p className="text-gray-500" data-testid="drawer-error">
+                {t("loadError")}
+              </p>
+            ) : (
+              <ApplicationBody
+                application={application}
+                onCloseDrawer={onClose}
+                onApiError={setApiError}
+              />
+            )}
+          </div>
+
+          {footer && (
+            <footer
+              className="shrink-0 border-t border-surface-300 bg-white px-6 py-3"
+              data-testid="drawer-footer"
+            >
+              {footer}
+            </footer>
           )}
         </div>
       </div>
-    </div>
+    </DrawerContext.Provider>
   );
 }
 
@@ -189,16 +229,17 @@ function NavButton({
 function ApplicationBody({
   application,
   onCloseDrawer,
+  onApiError,
 }: {
   application: ApplicationDetail;
   onCloseDrawer: () => void;
+  onApiError: (message: string) => void;
 }) {
   const { t } = useTranslation("creatorApplications");
   const age = calcAge(application.birthDate);
   const tg = application.telegramLink;
   const telegramLinked = !!tg;
   const [verifyTarget, setVerifyTarget] = useState<DetailSocial | null>(null);
-  const [verifyError, setVerifyError] = useState("");
 
   return (
     <>
@@ -210,16 +251,6 @@ function ApplicationBody({
           {t("drawer.submittedAt")}: {formatDateTime(application.createdAt)}
         </p>
       </div>
-
-      {verifyError && (
-        <div
-          className="mt-3 rounded-button border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
-          role="alert"
-          data-testid="verify-error-banner"
-        >
-          {verifyError}
-        </div>
-      )}
 
       <dl className="mt-5 grid grid-cols-2 gap-x-6 gap-y-4">
         <Field
@@ -285,7 +316,7 @@ function ApplicationBody({
                   social={s}
                   telegramLinked={telegramLinked}
                   onVerifyClick={(target) => {
-                    setVerifyError("");
+                    onApiError("");
                     setVerifyTarget(target);
                   }}
                 />
@@ -332,7 +363,7 @@ function ApplicationBody({
           social={verifyTarget}
           onClose={() => setVerifyTarget(null)}
           onCloseDrawer={onCloseDrawer}
-          onApiError={(msg) => setVerifyError(msg)}
+          onApiError={onApiError}
         />
       )}
     </>

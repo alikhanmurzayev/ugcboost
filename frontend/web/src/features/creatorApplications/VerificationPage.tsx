@@ -10,6 +10,7 @@ import { creatorApplicationKeys } from "@/shared/constants/queryKeys";
 import Spinner from "@/shared/components/Spinner";
 import ErrorState from "@/shared/components/ErrorState";
 import ApplicationsTable, { type Column } from "./components/ApplicationsTable";
+import ApplicationActions from "./components/ApplicationActions";
 import ApplicationDrawer from "./components/ApplicationDrawer";
 import ApplicationFilters from "./components/ApplicationFilters";
 import { CategoryChips } from "./components/CategoryChip";
@@ -204,6 +205,7 @@ export default function VerificationPage() {
         onNext={goNext}
         canPrev={canPrev}
         canNext={canNext}
+        footer={<ApplicationActions application={detailQuery.data?.data} />}
       />
     </div>
   );
