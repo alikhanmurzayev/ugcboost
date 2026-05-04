@@ -1,20 +1,35 @@
 // Package creator_applications — E2E HTTP-поверхность
-// POST /creators/applications/{id}/reject (chunk 12 onboarding-roadmap'а):
-// admin отклоняет заявку из `verification` или `moderation`, заявка
-// переходит в терминал `rejected`, в админ-аггрегате появляется блок
-// `rejection`, telegram_link остаётся живым (понадобится chunk 14 для
-// уведомления) и **никакого** Telegram-пуша от этого чанка не уходит —
-// нотификация отправится отдельным сервисом в chunk 14, текст там статичный.
+// POST /creators/applications/{id}/reject (chunk 12 + chunk 13 onboarding-
+// roadmap'а): admin отклоняет заявку из `verification` или `moderation`,
+// заявка переходит в терминал `rejected`, в админ-аггрегате появляется блок
+// `rejection`, telegram_link выживает на reject'е, а сразу после коммита
+// fire-and-forget уходит статическое Telegram-сообщение (chunk 13 расширил
+// сервис-слой нотификацией; до этого чанка assert был negative).
 //
-// TestRejectCreatorApplication прогоняет всю I/O-матрицу одной функцией:
-// сначала authn/authz (401/403), затем 404 на random uuid, затем happy path
-// из verification и из moderation (последний достигается через SendPulse-
-// webhook → moderation), затем граничные случаи — повторный reject = 422,
-// admin GET до reject'а не содержит блока (omitempty-инвариант openapi),
-// telegram_link на reject'е сохраняется. Все t.Run параллельны, каждый
-// создаёт изолированную заявку через SetupCreatorApplicationViaLanding и
-// чистится в LIFO-стеке (E2E_CLEANUP), родительская заявка тащит соцсети,
-// audit, transitions и telegram_link каскадом.
+// TestRejectCreatorApplication прогоняет всю I/O-матрицу одной функцией.
+// Сначала authn/authz (401/403) и 404 на random uuid. Дальше идёт happy
+// path из verification: креатор привязал Telegram, после reject'а в
+// /test/telegram/sent появляется ровно одна запись с константой
+// expectedRejectText, plain text, без WebAppUrl и без upstream-ошибки.
+// Аналогичный сценарий из moderation сначала прогоняет SendPulse-webhook
+// → moderation (он сам шлёт verification-approved push, мы дренируем его
+// до фиксации курсора), потом reject снова добавляет ровно одну reject-
+// запись с тем же текстом.
+//
+// Отдельный сценарий happy_verification_no_telegram_link воспроизводит
+// заявку без LinkTelegramToApplication: reject 200, admin GET detail
+// показывает telegramLink == nil, для контрольного chat_id за 5-секундное
+// окно не появляется ни одной записи (notify коротко-замыкается warn'ом
+// в логе сервиса). Repeat-reject подтверждает идемпотентность: первый
+// 200 порождает один push, второй вызов 422'ится за tx до notify, и
+// окно после первого ack'а остаётся пустым.
+//
+// detail-before-reject и telegram_link-survives-reject держат omitempty-
+// инвариант openapi и контракт сохранения linka на reject'е. Все t.Run
+// параллельны, каждый создаёт изолированную заявку через
+// SetupCreatorApplicationViaLanding и чистится в LIFO-стеке
+// (E2E_CLEANUP), родительская заявка тащит соцсети, audit, transitions
+// и telegram_link каскадом.
 package creator_applications_test
 
 import (
@@ -27,6 +42,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/alikhanmurzayev/ugcboost/backend/e2e/apiclient"
+	"github.com/alikhanmurzayev/ugcboost/backend/e2e/testclient"
 	"github.com/alikhanmurzayev/ugcboost/backend/e2e/testutil"
 )
 
@@ -38,12 +54,17 @@ const auditActionCreatorApplicationReject = "creator_application_reject"
 // auditEntityTypeCreatorApplicationReject mirrors AuditEntityTypeCreatorApplication.
 const auditEntityTypeCreatorApplicationReject = "creator_application"
 
-// telegramSilenceWindowReject — same 5-second contract as manual_verify_test.go:
-// after happy reject we wait the worst-case post-commit delay and assert no
-// new push records appeared. Chunk 14 will own the actual notification and
-// will replace this assertion with a positive expectation against the same
-// spy.
+// telegramSilenceWindowReject — окно ожидания для негативных ассертов
+// (контрольный chat без link'а; курсор после первого reject в
+// idempotency-сценарии). Совпадает с happy-таймаутом WaitForTelegramSent.
 const telegramSilenceWindowReject = 5 * time.Second
+
+// expectedRejectText must be kept in sync with
+// internal/telegram/notifier.go::applicationRejectedText.
+const expectedRejectText = "Здравствуйте! Благодарим вас за интерес к платформе UGC boost.\n\n" +
+	"Мы внимательно рассмотрели вашу заявку, профиль, контент и текущие показатели аккаунта. К сожалению, на данном этапе ваша заявка не прошла модерацию платформы.\n\n" +
+	"Это не является оценкой вашего потенциала как креатора — просто сейчас ваш профиль не полностью совпадает с критериями отбора для текущих fashion-кампаний и запросов брендов на платформе 🙏\n\n" +
+	"Желаем вам дальнейшего роста и удачи в ваших проектах 🤍"
 
 func TestRejectCreatorApplication(t *testing.T) {
 	t.Parallel()
@@ -96,7 +117,7 @@ func TestRejectCreatorApplication(t *testing.T) {
 			"non-rejected заявка не должна нести rejection-блок (omitempty)")
 	})
 
-	t.Run("happy path from verification — rejects, audit, telegram_link preserved, no TG push", func(t *testing.T) {
+	t.Run("happy path from verification — rejects, audit, telegram_link preserved, push sent", func(t *testing.T) {
 		t.Parallel()
 		setup := testutil.SetupCreatorApplicationViaLanding(t)
 		appID := setup.ApplicationID
@@ -104,7 +125,7 @@ func TestRejectCreatorApplication(t *testing.T) {
 
 		c, adminToken, _ := testutil.SetupAdminClient(t)
 
-		// Snapshot the spy timestamp BEFORE the call so the silence window
+		// Snapshot the spy timestamp BEFORE the call so the wait window
 		// query observes only post-action records.
 		since := time.Now().UTC()
 
@@ -126,9 +147,6 @@ func TestRejectCreatorApplication(t *testing.T) {
 		// through with captured-input on the mock).
 		require.NotEqual(t, uuid.Nil, detail.Rejection.RejectedByUserId)
 
-		// telegram_link preserved — chunk 14 needs the chat to send the
-		// rejection notification, and any future broadcast flow needs it
-		// for outreach.
 		require.NotNil(t, detail.TelegramLink, "telegram_link must survive reject")
 		require.Equal(t, tg.UserID, detail.TelegramLink.TelegramUserId)
 
@@ -137,13 +155,18 @@ func TestRejectCreatorApplication(t *testing.T) {
 			auditActionCreatorApplicationReject)
 		require.NotNil(t, audit.NewValue)
 
-		// Doctrine-bearing assert: chunk 12 не дёргает Telegram-нотификатор.
-		// Chunk 14 заменит этот ассерт на позитивное ожидание (одно сообщение
-		// со статическим текстом).
-		testutil.EnsureNoNewTelegramSent(t, tg.UserID, since, telegramSilenceWindowReject)
+		// Chunk 13: одно фиксированное reject-сообщение fire-and-forget
+		// после commit'а. Полная сверка text/chat/markup защищает от
+		// silent drift текста или появления keyboard'а в будущем.
+		msgs := testutil.WaitForTelegramSent(t, tg.UserID, testutil.TelegramSentOptions{
+			Since:       since,
+			ExpectCount: 1,
+		})
+		require.Len(t, msgs, 1)
+		assertRejectPushExact(t, msgs[0], tg.UserID, since)
 	})
 
-	t.Run("happy path from moderation — rejection.fromStatus reflects moderation", func(t *testing.T) {
+	t.Run("happy path from moderation — rejection.fromStatus reflects moderation, push sent", func(t *testing.T) {
 		t.Parallel()
 		// Drive the application from verification → moderation through the
 		// canonical SendPulse path, then reject it. The fromStatus in the
@@ -164,9 +187,8 @@ func TestRejectCreatorApplication(t *testing.T) {
 		require.Equal(t, apiclient.Moderation, preReject.Status, "precondition: SendPulse must have moved the app")
 
 		// SendPulse fires a "verification approved" push asynchronously
-		// post-commit. Drain it before capturing the silence-window cursor
-		// — otherwise EnsureNoNewTelegramSent below would observe this
-		// pre-existing approval as a chunk-12-induced send.
+		// post-commit. Drain it before capturing the reject cursor — the
+		// reject-window query below must observe only the reject push.
 		_ = testutil.WaitForTelegramSent(t, tg.UserID, testutil.TelegramSentOptions{
 			Since:       webhookSince,
 			ExpectCount: 1,
@@ -188,25 +210,68 @@ func TestRejectCreatorApplication(t *testing.T) {
 		require.NotEqual(t, uuid.Nil, detail.Rejection.RejectedByUserId)
 		require.NotNil(t, detail.TelegramLink, "telegram_link must survive reject from moderation")
 
-		// SendPulse-path notification fires *one* push (verification approved).
-		// Reject itself must not add anything — silence window catches a
-		// spurious extra push if chunk 12 ever tries to notify.
-		testutil.EnsureNoNewTelegramSent(t, tg.UserID, since, telegramSilenceWindowReject)
+		msgs := testutil.WaitForTelegramSent(t, tg.UserID, testutil.TelegramSentOptions{
+			Since:       since,
+			ExpectCount: 1,
+		})
+		require.Len(t, msgs, 1)
+		assertRejectPushExact(t, msgs[0], tg.UserID, since)
 	})
 
-	t.Run("repeat reject returns 422 NOT_REJECTABLE; one transition row per application", func(t *testing.T) {
+	t.Run("happy path without telegram link — rejects, warns, no push", func(t *testing.T) {
+		t.Parallel()
+		// Никаких LinkTelegramToApplication: reject должен пройти 200,
+		// admin GET detail отдать telegramLink == nil, а notify
+		// коротко-замкнуться warn'ом в сервис-логе. Контрольный
+		// dummy_chat защищает от ложного позитива на чужие
+		// параллельные тесты.
+		setup := testutil.SetupCreatorApplicationViaLanding(t)
+		appID := setup.ApplicationID
+		c, adminToken, _ := testutil.SetupAdminClient(t)
+
+		dummyChatID := testutil.UniqueTelegramUserID()
+		since := time.Now().UTC()
+
+		appUUID := uuid.MustParse(appID)
+		resp, err := c.RejectCreatorApplicationWithResponse(context.Background(), appUUID,
+			testutil.WithAuth(adminToken))
+		require.NoError(t, err)
+		require.Equal(t, http.StatusOK, resp.StatusCode())
+		require.NotNil(t, resp.JSON200)
+
+		detail := getApplicationDetailForReject(t, c, adminToken, appID)
+		require.Equal(t, apiclient.Rejected, detail.Status)
+		require.NotNil(t, detail.Rejection)
+		require.Equal(t, apiclient.Verification, detail.Rejection.FromStatus)
+		require.Nil(t, detail.TelegramLink, "no LinkTelegramToApplication — admin detail must report nil link")
+
+		testutil.EnsureNoNewTelegramSent(t, dummyChatID, since, telegramSilenceWindowReject)
+	})
+
+	t.Run("repeat reject returns 422 NOT_REJECTABLE; one transition row, one push", func(t *testing.T) {
 		t.Parallel()
 		setup := testutil.SetupCreatorApplicationViaLanding(t)
 		appID := setup.ApplicationID
-		testutil.LinkTelegramToApplication(t, appID)
+		tg := testutil.LinkTelegramToApplication(t, appID)
 		c, adminToken, _ := testutil.SetupAdminClient(t)
 
 		appUUID := uuid.MustParse(appID)
+		firstSince := time.Now().UTC()
 		first, err := c.RejectCreatorApplicationWithResponse(context.Background(), appUUID,
 			testutil.WithAuth(adminToken))
 		require.NoError(t, err)
 		require.Equal(t, http.StatusOK, first.StatusCode())
 
+		// Wait for the first push so the second-attempt cursor below is
+		// strictly past the only legitimate send.
+		msgs := testutil.WaitForTelegramSent(t, tg.UserID, testutil.TelegramSentOptions{
+			Since:       firstSince,
+			ExpectCount: 1,
+		})
+		require.Len(t, msgs, 1)
+		assertRejectPushExact(t, msgs[0], tg.UserID, firstSince)
+
+		afterFirst := time.Now().UTC()
 		second, err := c.RejectCreatorApplicationWithResponse(context.Background(), appUUID,
 			testutil.WithAuth(adminToken))
 		require.NoError(t, err)
@@ -220,8 +285,26 @@ func TestRejectCreatorApplication(t *testing.T) {
 		require.Equal(t, apiclient.Rejected, detail.Status)
 		require.NotNil(t, detail.Rejection)
 		require.Equal(t, apiclient.Verification, detail.Rejection.FromStatus)
+
+		// Second 422 short-circuits inside WithTx — notify must not fire.
+		testutil.EnsureNoNewTelegramSent(t, tg.UserID, afterFirst, telegramSilenceWindowReject)
 	})
 
+}
+
+// assertRejectPushExact сверяет outbound-параметры reject-push'а: chat id,
+// точный текст, plain mode (no WebApp). msg.Error намеренно не ассертим —
+// под TeeSender'ом реальный bot.SendMessage отвергает синтетический chat
+// id и spy фиксирует upstream-ошибку, но это не дефект fire-and-forget
+// pipeline'а (см. backend/e2e/webhooks/sendpulse_instagram_test.go ::
+// assertVerificationApprovedShape для того же контракта).
+func assertRejectPushExact(t *testing.T, msg testclient.TelegramSentMessage, chatID int64, since time.Time) {
+	t.Helper()
+	require.Equal(t, chatID, msg.ChatId)
+	require.Equal(t, expectedRejectText, msg.Text)
+	require.Nil(t, msg.WebAppUrl, "reject message must be plain — no WebApp keyboard")
+	require.True(t, !msg.SentAt.Before(since), "sent_at must be at or after the cursor")
+	require.WithinDuration(t, time.Now().UTC(), msg.SentAt, telegramSilenceWindowReject*2)
 }
 
 // getApplicationDetailForReject is the local copy of the same helper the

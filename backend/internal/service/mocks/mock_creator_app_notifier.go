@@ -37,6 +37,52 @@ func (_m *MockcreatorAppNotifier) EXPECT() *MockcreatorAppNotifier_Expecter {
 	return &MockcreatorAppNotifier_Expecter{mock: &_m.Mock}
 }
 
+// NotifyApplicationRejected provides a mock function for the type MockcreatorAppNotifier
+func (_mock *MockcreatorAppNotifier) NotifyApplicationRejected(ctx context.Context, chatID int64) {
+	_mock.Called(ctx, chatID)
+	return
+}
+
+// MockcreatorAppNotifier_NotifyApplicationRejected_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'NotifyApplicationRejected'
+type MockcreatorAppNotifier_NotifyApplicationRejected_Call struct {
+	*mock.Call
+}
+
+// NotifyApplicationRejected is a helper method to define mock.On call
+//   - ctx context.Context
+//   - chatID int64
+func (_e *MockcreatorAppNotifier_Expecter) NotifyApplicationRejected(ctx interface{}, chatID interface{}) *MockcreatorAppNotifier_NotifyApplicationRejected_Call {
+	return &MockcreatorAppNotifier_NotifyApplicationRejected_Call{Call: _e.mock.On("NotifyApplicationRejected", ctx, chatID)}
+}
+
+func (_c *MockcreatorAppNotifier_NotifyApplicationRejected_Call) Run(run func(ctx context.Context, chatID int64)) *MockcreatorAppNotifier_NotifyApplicationRejected_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 int64
+		if args[1] != nil {
+			arg1 = args[1].(int64)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockcreatorAppNotifier_NotifyApplicationRejected_Call) Return() *MockcreatorAppNotifier_NotifyApplicationRejected_Call {
+	_c.Call.Return()
+	return _c
+}
+
+func (_c *MockcreatorAppNotifier_NotifyApplicationRejected_Call) RunAndReturn(run func(ctx context.Context, chatID int64)) *MockcreatorAppNotifier_NotifyApplicationRejected_Call {
+	_c.Run(run)
+	return _c
+}
+
 // NotifyVerificationApproved provides a mock function for the type MockcreatorAppNotifier
 func (_mock *MockcreatorAppNotifier) NotifyVerificationApproved(ctx context.Context, chatID int64) {
 	_mock.Called(ctx, chatID)

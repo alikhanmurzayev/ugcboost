@@ -3,7 +3,7 @@ title: "Roadmap: онбординг креатора до approved"
 type: roadmap
 status: living
 created: "2026-04-29"
-updated: "2026-05-03"
+updated: "2026-05-04"
 revisions:
   - "2026-05-02: добавлен chunk 5 — POST /creators/applications/counts для бейджа в админке; нумерация 5–11 сдвинута на 6–12"
   - "2026-05-02: chunk 5 в работе — GET /creators/applications/counts (массив пар, sparse) + API hygiene (dedup enums/responses, BrandInput, DictionaryItem, pagination через PaginationInput, camelCase query везде)"
@@ -13,6 +13,7 @@ revisions:
   - "2026-05-02: бывшие chunks 7–8 переработаны на основе концепции верификации (`creator-verification-concept.md`) — расщеплены на 9 более мелких чанков 7–15 (бэк first, потом фронт-админка, потом TMA); reject и withdraw вынесены из бывшего chunk 10 в отдельные ранние чанки; прежние 9–12 сдвинуты на 16–19"
   - "2026-05-02: reject/withdraw перенесены ЗА верификационный flow в TMA — приоритет: сначала довести верификацию целиком (7 → 12), потом отказы/отзывы. Бывший 12 (verify+reject в drawer) расщеплён: verify-часть стала chunk 10, reject-часть — chunk 14. Нумерация 10–19 → 10–20."
   - "2026-05-03: chunk 8 готов, выкачен в прод (PR #52). TMA целиком выпилен из онбординг-флоу — креатор-канал = только Telegram-бот (текстовые сообщения + inline-кнопки). frontend/tma/ и прототип в web остаются как future-work, не удаляются. tma-auth-foundation.md удалён. Договор / TrustMe / подпись и withdraw как UI-фича уходят из этого roadmap'а: онбординг кончается на approved, договор — за ним в campaign-roadmap. State-machine v2: терминалы только approved + rejected; withdrawn остаётся как зарезервированный терминал без объявленных переходов; уходят awaiting_contract / contract_sent / signed. approved окончательный, обратного перехода нет. Ad-hoc broadcast существующим ~100 prod-заявкам (приветствие + код) — локальный скрипт вне репо, не chunk. Нумерация после реструктуризации: 9–21."
+  - "2026-05-04: chunk 12 готов (PR #58, бэк reject). В группе 3 swap'нуты chunks 13 ↔ 14: новый chunk 13 — Telegram-уведомление о rejected (приоритет: чтобы admin-action из chunk 12 сразу давал креатору сигнал), новый chunk 14 — фронт-кнопка reject в drawer (теперь работает на полностью готовом backend + notify flow). Chunk 16 (экран модерации) обновлён — переиспользует обработчик reject из chunk 14."
 ---
 
 # Roadmap: онбординг креатора до approved
@@ -66,16 +67,16 @@ Living document. Покрывает путь от подачи заявки на
 
 ### Группа 3. Reject
 
-- [~] **12. Бэк: reject заявки админом.** Admin-endpoint, доступен на `verification` и `moderation`. Body — feedback. Перевод в `rejected`. Audit + state-history. Переходы добавляются в текущую state-machine, без миграций
-- [ ] **13. Фронт-админка: action reject в drawer на verification-экране.** Кнопка «Отклонить заявку» с диалогом feedback. Зависит от 12. E2E — расширение spec'а из 6.5 или новый рядом
-- [ ] **14. Бот: уведомление о rejected.** Расширение notify-сервиса из chunk 9 — креатор получает сообщение с reason. Дёргается после commit на reject-переходе. Зависит от 9 и 12
+- [x] **12. Бэк: reject заявки админом.** Admin-endpoint, доступен на `verification` и `moderation`. Body пустой (тело уведомления для креатора захардкожено в chunk 13). Перевод в `rejected`. Audit + state-history. Переходы добавляются в текущую state-machine, без миграций. PR #58, спека архивирована — `_bmad-output/implementation-artifacts/archive/2026-05-04-spec-creator-application-reject.md`
+- [~] **13. Бот: уведомление о rejected.** Расширение существующего `*telegram.Notifier` (chunk 8) — после commit'а reject-перехода fire-and-forget Telegram-сообщение. Текст статичный, вшит одной константой, итерируется отдельным PR'ом. Lookup chat_id через `creator_application_telegram_link`; при отсутствии link — warn в логе сервиса, без fallback-каналов. Зависит от 12. Спека — `_bmad-output/implementation-artifacts/spec-creator-application-reject-notify.md`
+- [ ] **14. Фронт-админка: action reject в drawer на verification-экране.** Кнопка «Отклонить заявку» с подтверждением (без feedback-поля — body endpoint'а пустой, текст для креатора статичный из chunk 13). Зависит от 12 и 13. E2E — расширение spec'а из 6.5 или новый рядом
 
 ### Группа 4. Админка-экран модерации
 
 Сейчас в админке есть только экран `verification` (chunk 6). После manual/auto verify заявка уходит в `moderation` и пропадает из видимости — для approve и reject модератор должен видеть отдельный список. Прототип Айданы содержит макет — переносим в реальный фронт.
 
 - [ ] **15. (Опционально) Бэк: list/detail-ручка enhancement для модерации.** Аудит того, что уже отдаётся в item-shape (chunk 4) и detail (chunk 7) — достаточно ли модератору для принятия решения. Возможные расширения: verified-поля соцсетей в list-item, что-то по аудитории/линк-агрегатам. Если ничего не нужно — пустой PR не делаем, чанк закрываем как N/A
-- [ ] **16. Фронт-админка: экран списка заявок на модерации + drawer.** Перенос из прототипа Айданы в реальный `features/creatorApplications/`. По аналогии с chunk 6: список заявок в `moderation` + карточка-drawer + RoleGuard(ADMIN) + бейдж в sidebar. Action reject — переиспользует обработчик из chunk 13, ставится сразу в этом drawer'е. Action approve — добавится позже в chunk 19. E2E — отдельным под-чанком 16.5 после стабилизации UI (по паттерну 6/6.5)
+- [ ] **16. Фронт-админка: экран списка заявок на модерации + drawer.** Перенос из прототипа Айданы в реальный `features/creatorApplications/`. По аналогии с chunk 6: список заявок в `moderation` + карточка-drawer + RoleGuard(ADMIN) + бейдж в sidebar. Action reject — переиспользует обработчик из chunk 14, ставится сразу в этом drawer'е. Action approve — добавится позже в chunk 19. E2E — отдельным под-чанком 16.5 после стабилизации UI (по паттерну 6/6.5)
 
 ### Группа 5. Approve
 
