@@ -87,7 +87,7 @@ func welcomeWithIGText(verificationCode string) string {
 	return "Здравствуйте! 👋\n\n" +
 		"Мы получили вашу заявку.\n" +
 		"Подтвердите, пожалуйста, что вы действительно владеете указанным аккаунтом Instagram:\n\n" +
-		"1. Скопируйте код:\n\n" +
+		"1. Скопируйте код:\n" +
 		"   <pre>" + verificationCode + "</pre>\n\n" +
 		"2. Откройте Direct и отправьте его нам:\n\n" +
 		"   https://ig.me/m/ugc_boost"

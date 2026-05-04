@@ -31,7 +31,7 @@ const igDirectURL = "https://ig.me/m/ugc_boost"
 const welcomeWithIGTemplate = "Здравствуйте! 👋\n\n" +
 	"Мы получили вашу заявку.\n" +
 	"Подтвердите, пожалуйста, что вы действительно владеете указанным аккаунтом Instagram:\n\n" +
-	"1. Скопируйте код:\n\n" +
+	"1. Скопируйте код:\n" +
 	"   <pre>%s</pre>\n\n" +
 	"2. Откройте Direct и отправьте его нам:\n\n" +
 	"   " + igDirectURL
