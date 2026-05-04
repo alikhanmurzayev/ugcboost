@@ -38,6 +38,80 @@ func (_m *MockCreatorApplicationStatusTransitionRepo) EXPECT() *MockCreatorAppli
 	return &MockCreatorApplicationStatusTransitionRepo_Expecter{mock: &_m.Mock}
 }
 
+// GetLatestByApplicationAndToStatus provides a mock function for the type MockCreatorApplicationStatusTransitionRepo
+func (_mock *MockCreatorApplicationStatusTransitionRepo) GetLatestByApplicationAndToStatus(ctx context.Context, applicationID string, toStatus string) (*repository.CreatorApplicationStatusTransitionRow, error) {
+	ret := _mock.Called(ctx, applicationID, toStatus)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetLatestByApplicationAndToStatus")
+	}
+
+	var r0 *repository.CreatorApplicationStatusTransitionRow
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) (*repository.CreatorApplicationStatusTransitionRow, error)); ok {
+		return returnFunc(ctx, applicationID, toStatus)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) *repository.CreatorApplicationStatusTransitionRow); ok {
+		r0 = returnFunc(ctx, applicationID, toStatus)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*repository.CreatorApplicationStatusTransitionRow)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string) error); ok {
+		r1 = returnFunc(ctx, applicationID, toStatus)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockCreatorApplicationStatusTransitionRepo_GetLatestByApplicationAndToStatus_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetLatestByApplicationAndToStatus'
+type MockCreatorApplicationStatusTransitionRepo_GetLatestByApplicationAndToStatus_Call struct {
+	*mock.Call
+}
+
+// GetLatestByApplicationAndToStatus is a helper method to define mock.On call
+//   - ctx context.Context
+//   - applicationID string
+//   - toStatus string
+func (_e *MockCreatorApplicationStatusTransitionRepo_Expecter) GetLatestByApplicationAndToStatus(ctx interface{}, applicationID interface{}, toStatus interface{}) *MockCreatorApplicationStatusTransitionRepo_GetLatestByApplicationAndToStatus_Call {
+	return &MockCreatorApplicationStatusTransitionRepo_GetLatestByApplicationAndToStatus_Call{Call: _e.mock.On("GetLatestByApplicationAndToStatus", ctx, applicationID, toStatus)}
+}
+
+func (_c *MockCreatorApplicationStatusTransitionRepo_GetLatestByApplicationAndToStatus_Call) Run(run func(ctx context.Context, applicationID string, toStatus string)) *MockCreatorApplicationStatusTransitionRepo_GetLatestByApplicationAndToStatus_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 string
+		if args[2] != nil {
+			arg2 = args[2].(string)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockCreatorApplicationStatusTransitionRepo_GetLatestByApplicationAndToStatus_Call) Return(creatorApplicationStatusTransitionRow *repository.CreatorApplicationStatusTransitionRow, err error) *MockCreatorApplicationStatusTransitionRepo_GetLatestByApplicationAndToStatus_Call {
+	_c.Call.Return(creatorApplicationStatusTransitionRow, err)
+	return _c
+}
+
+func (_c *MockCreatorApplicationStatusTransitionRepo_GetLatestByApplicationAndToStatus_Call) RunAndReturn(run func(ctx context.Context, applicationID string, toStatus string) (*repository.CreatorApplicationStatusTransitionRow, error)) *MockCreatorApplicationStatusTransitionRepo_GetLatestByApplicationAndToStatus_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Insert provides a mock function for the type MockCreatorApplicationStatusTransitionRepo
 func (_mock *MockCreatorApplicationStatusTransitionRepo) Insert(ctx context.Context, row repository.CreatorApplicationStatusTransitionRow) error {
 	ret := _mock.Called(ctx, row)

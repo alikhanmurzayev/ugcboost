@@ -236,6 +236,69 @@ func (_c *MockCreatorApplicationService_List_Call) RunAndReturn(run func(ctx con
 	return _c
 }
 
+// RejectApplication provides a mock function for the type MockCreatorApplicationService
+func (_mock *MockCreatorApplicationService) RejectApplication(ctx context.Context, applicationID string, actorUserID string) error {
+	ret := _mock.Called(ctx, applicationID, actorUserID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for RejectApplication")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) error); ok {
+		r0 = returnFunc(ctx, applicationID, actorUserID)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockCreatorApplicationService_RejectApplication_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'RejectApplication'
+type MockCreatorApplicationService_RejectApplication_Call struct {
+	*mock.Call
+}
+
+// RejectApplication is a helper method to define mock.On call
+//   - ctx context.Context
+//   - applicationID string
+//   - actorUserID string
+func (_e *MockCreatorApplicationService_Expecter) RejectApplication(ctx interface{}, applicationID interface{}, actorUserID interface{}) *MockCreatorApplicationService_RejectApplication_Call {
+	return &MockCreatorApplicationService_RejectApplication_Call{Call: _e.mock.On("RejectApplication", ctx, applicationID, actorUserID)}
+}
+
+func (_c *MockCreatorApplicationService_RejectApplication_Call) Run(run func(ctx context.Context, applicationID string, actorUserID string)) *MockCreatorApplicationService_RejectApplication_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 string
+		if args[2] != nil {
+			arg2 = args[2].(string)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockCreatorApplicationService_RejectApplication_Call) Return(err error) *MockCreatorApplicationService_RejectApplication_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockCreatorApplicationService_RejectApplication_Call) RunAndReturn(run func(ctx context.Context, applicationID string, actorUserID string) error) *MockCreatorApplicationService_RejectApplication_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Submit provides a mock function for the type MockCreatorApplicationService
 func (_mock *MockCreatorApplicationService) Submit(ctx context.Context, in domain.CreatorApplicationInput) (*domain.CreatorApplicationSubmission, error) {
 	ret := _mock.Called(ctx, in)

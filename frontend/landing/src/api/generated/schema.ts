@@ -394,6 +394,45 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/creators/applications/{id}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reject a creator application (admin only)
+         * @description Admin-only action that moves an application to the terminal `rejected`
+         *     status from either `verification` or `moderation`. The state-machine
+         *     edge is guarded server-side: any other source status returns 422
+         *     `CREATOR_APPLICATION_NOT_REJECTABLE`. The rejection is persisted as a
+         *     `creator_application_status_transitions` row plus an audit entry; the
+         *     Telegram link is preserved on the application so the bot can later
+         *     notify the creator (chunk 14) and so future broadcast flows can still
+         *     reach this account.
+         *
+         *     No body is accepted — there are no categorisation fields, no internal
+         *     notes, no creator-facing message in the request. The Telegram message
+         *     sent to the creator (chunk 14) is a single static template; updates to
+         *     that copy ship via separate PRs and are not parameterised here.
+         *
+         *     Repeated rejection of an already-rejected application returns 422
+         *     `CREATOR_APPLICATION_NOT_REJECTABLE`. This is intentional: callers
+         *     observing 422 know the action did not happen on this request, while
+         *     the database state remains the canonical source of truth.
+         */
+        post: operations["rejectCreatorApplication"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/webhooks/sendpulse/instagram": {
         parameters: {
             query?: never;
@@ -789,6 +828,26 @@ export interface components {
              *     action only when not yet bound.
              */
             telegramBotUrl: string;
+            /**
+             * @description Present only when `status` is `rejected`. Mirrors the
+             *     `verifiedByUserId` / `verifiedAt` shape used on socials: it carries
+             *     who took the action, when, and which status it transitioned from.
+             *     The rejected application's other fields (telegramLink, socials,
+             *     consents) stay populated so downstream flows (chunk 14 notifier,
+             *     future broadcasts) can still reach the creator.
+             */
+            rejection?: components["schemas"]["CreatorApplicationRejection"] | null;
+        };
+        /**
+         * @description Reject metadata derived from the latest
+         *     `creator_application_status_transitions` row with `to_status=rejected`.
+         */
+        CreatorApplicationRejection: {
+            fromStatus: components["schemas"]["CreatorApplicationStatus"];
+            /** Format: date-time */
+            rejectedAt: string;
+            /** Format: uuid */
+            rejectedByUserId: string;
         };
         GetCreatorApplicationResult: {
             data: components["schemas"]["CreatorApplicationDetailData"];
@@ -1673,6 +1732,61 @@ export interface operations {
             /**
              * @description Application is not in `verification` status, or the creator has
              *     not yet linked Telegram via the bot.
+             */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            default: components["responses"]["UnexpectedError"];
+        };
+    };
+    rejectCreatorApplication: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Application moved to `rejected`. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmptyResult"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            /** @description Application not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /**
+             * @description Application is not in a status from which `rejected` is reachable
+             *     (`verification` or `moderation`). Includes the case of repeating
+             *     reject on an already-rejected application.
              */
             422: {
                 headers: {

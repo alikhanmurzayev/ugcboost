@@ -55,6 +55,9 @@ func respondError(w http.ResponseWriter, r *http.Request, err error, log logger.
 	case errors.Is(err, domain.ErrCreatorApplicationTelegramNotLinked):
 		writeError(w, r, http.StatusUnprocessableEntity, domain.CodeCreatorApplicationTelegramNotLinked,
 			"Креатор не привязал Telegram-бота — попросите его открыть бот по deep-link и повторите", log)
+	case errors.Is(err, domain.ErrCreatorApplicationNotRejectable):
+		writeError(w, r, http.StatusUnprocessableEntity, domain.CodeCreatorApplicationNotRejectable,
+			"Заявку нельзя отклонить в текущем статусе. Допустимые статусы для отклонения — verification или moderation.", log)
 	case errors.Is(err, domain.ErrNotFound), errors.Is(err, sql.ErrNoRows):
 		writeError(w, r, http.StatusNotFound, domain.CodeNotFound, "Resource not found", log)
 	case errors.Is(err, domain.ErrForbidden):

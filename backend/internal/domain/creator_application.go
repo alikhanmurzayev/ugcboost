@@ -123,6 +123,11 @@ const (
 	// Telegram bot via /start. Without the link there is no chat to notify
 	// downstream and the moderator cannot follow up out-of-band.
 	CodeCreatorApplicationTelegramNotLinked = "CREATOR_APPLICATION_TELEGRAM_NOT_LINKED"
+	// 422 — admin reject is only legal while the application sits in
+	// `verification` or `moderation`. Any other status (including a second
+	// reject of an already-rejected application) is refused so the operation
+	// cannot silently re-trigger transitions or contradict the state machine.
+	CodeCreatorApplicationNotRejectable = "CREATOR_APPLICATION_NOT_REJECTABLE"
 )
 
 // Telegram metadata length caps applied at the service layer before persisting,
@@ -160,6 +165,12 @@ var ErrCreatorApplicationSocialAlreadyVerified = errors.New("creator application
 // Telegram bot via /start, so we cannot manually verify yet (422). The
 // admin should ask the creator to open the deep-link first.
 var ErrCreatorApplicationTelegramNotLinked = errors.New("creator application has no telegram link")
+
+// ErrCreatorApplicationNotRejectable — admin reject was attempted on an
+// application whose current status is neither `verification` nor
+// `moderation`. Includes the case of repeating reject on an already-
+// rejected application. 422.
+var ErrCreatorApplicationNotRejectable = errors.New("creator application is not in a rejectable status")
 
 // ErrTelegramApplicationLinkConflict is raised by the repo on a PRIMARY KEY
 // violation on creator_application_telegram_links(application_id) — the
@@ -254,6 +265,17 @@ type CreatorApplicationDetail struct {
 	Socials           []CreatorApplicationDetailSocial
 	Consents          []CreatorApplicationDetailConsent
 	TelegramLink      *CreatorApplicationTelegramLink
+	Rejection         *CreatorApplicationRejection
+}
+
+// CreatorApplicationRejection mirrors the wire-level CreatorApplicationRejection
+// schema and is populated only for applications in the `rejected` status. The
+// fields are derived from the latest creator_application_status_transitions row
+// where to_status='rejected' (from_status / created_at / actor_id).
+type CreatorApplicationRejection struct {
+	FromStatus       string
+	RejectedAt       time.Time
+	RejectedByUserID string
 }
 
 // CreatorApplicationTelegramLink describes the Telegram account bound to an
@@ -498,6 +520,10 @@ func NormalizeInstagramHandle(h string) string {
 var creatorApplicationAllowedTransitions = map[string]map[string]bool{
 	CreatorApplicationStatusVerification: {
 		CreatorApplicationStatusModeration: true,
+		CreatorApplicationStatusRejected:   true,
+	},
+	CreatorApplicationStatusModeration: {
+		CreatorApplicationStatusRejected: true,
 	},
 }
 
@@ -525,6 +551,7 @@ var ErrInvalidStatusTransition = errors.New("invalid creator application status 
 const (
 	TransitionReasonInstagramAuto = "instagram_auto"
 	TransitionReasonManualVerify  = "manual_verify"
+	TransitionReasonReject        = "reject_admin"
 )
 
 // VerifyInstagramStatus is the explicit outcome the service returns to the

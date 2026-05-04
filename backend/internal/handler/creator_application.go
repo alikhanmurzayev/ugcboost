@@ -184,6 +184,22 @@ func domainCreatorApplicationDetailToAPI(
 			LinkedAt:          d.TelegramLink.LinkedAt,
 		}
 	}
+	var rejection *api.CreatorApplicationRejection
+	if d.Rejection != nil {
+		fromStatus, err := mapCreatorApplicationStatusToAPI(d.Rejection.FromStatus)
+		if err != nil {
+			return api.CreatorApplicationDetailData{}, err
+		}
+		rejectedBy, err := uuid.Parse(d.Rejection.RejectedByUserID)
+		if err != nil {
+			return api.CreatorApplicationDetailData{}, fmt.Errorf("parse rejected_by_user_id %q: %w", d.Rejection.RejectedByUserID, err)
+		}
+		rejection = &api.CreatorApplicationRejection{
+			FromStatus:       fromStatus,
+			RejectedAt:       d.Rejection.RejectedAt,
+			RejectedByUserId: rejectedBy,
+		}
+	}
 	return api.CreatorApplicationDetailData{
 		Id:                id,
 		LastName:          d.LastName,
@@ -204,6 +220,7 @@ func domainCreatorApplicationDetailToAPI(
 		Consents:          cons,
 		TelegramLink:      tgLink,
 		TelegramBotUrl:    telegramBotURL,
+		Rejection:         rejection,
 	}, nil
 }
 
@@ -297,6 +314,27 @@ func (s *Server) VerifyCreatorApplicationSocial(ctx context.Context, request api
 		return nil, err
 	}
 	return api.VerifyCreatorApplicationSocial200JSONResponse{}, nil
+}
+
+// RejectCreatorApplication handles POST /creators/applications/{id}/reject
+// (admin-only). It moves an application to the terminal `rejected` status
+// from either `verification` or `moderation`. Authorisation runs first so
+// non-admin callers see 403 without the service ever being asked. The actor
+// uuid comes from the bearer token via middleware.UserIDFromContext; no body
+// is accepted (no internal note, no category, no creator-facing message —
+// the Telegram template is static and ships separately in chunk 14). Sentinel
+// errors from the service map to user-facing codes through respondError;
+// success returns an empty object so the caller refetches the aggregate to
+// observe the new state and the populated rejection block.
+func (s *Server) RejectCreatorApplication(ctx context.Context, request api.RejectCreatorApplicationRequestObject) (api.RejectCreatorApplicationResponseObject, error) {
+	if err := s.authzService.CanRejectCreatorApplication(ctx); err != nil {
+		return nil, err
+	}
+	actorUserID := middleware.UserIDFromContext(ctx)
+	if err := s.creatorApplicationService.RejectApplication(ctx, request.Id.String(), actorUserID); err != nil {
+		return nil, err
+	}
+	return api.RejectCreatorApplication200JSONResponse{}, nil
 }
 
 // GetCreatorApplicationsCounts handles GET /creators/applications/counts

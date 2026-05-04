@@ -1030,6 +1030,143 @@ func TestCreatorApplicationService_GetByID(t *testing.T) {
 			},
 		}, got)
 	})
+
+	t.Run("rejected app populates rejection block from latest transition", func(t *testing.T) {
+		t.Parallel()
+		rig := newCreatorServiceRig(t)
+		actor := "cccc3333-3333-3333-3333-333333333333"
+		fromStatus := domain.CreatorApplicationStatusModeration
+		reason := domain.TransitionReasonReject
+		rejectedAt := time.Date(2026, 5, 4, 12, 0, 0, 0, time.UTC)
+
+		rig.factory.EXPECT().NewCreatorApplicationRepo(mock.Anything).Return(rig.appRepo)
+		rig.factory.EXPECT().NewCreatorApplicationCategoryRepo(mock.Anything).Return(rig.appCategoryRepo)
+		rig.factory.EXPECT().NewCreatorApplicationSocialRepo(mock.Anything).Return(rig.appSocialRepo)
+		rig.factory.EXPECT().NewCreatorApplicationConsentRepo(mock.Anything).Return(rig.appConsentRepo)
+		rig.factory.EXPECT().NewCreatorApplicationTelegramLinkRepo(mock.Anything).Return(rig.appTelegramLinkRepo)
+		rig.factory.EXPECT().NewCreatorApplicationStatusTransitionRepo(mock.Anything).Return(rig.transitionRepo)
+
+		rig.appRepo.EXPECT().GetByID(mock.Anything, appID).
+			Return(&repository.CreatorApplicationRow{ID: appID, Status: domain.CreatorApplicationStatusRejected}, nil)
+		rig.appCategoryRepo.EXPECT().ListByApplicationID(mock.Anything, appID).Return(nil, nil)
+		rig.appSocialRepo.EXPECT().ListByApplicationID(mock.Anything, appID).Return(nil, nil)
+		rig.appConsentRepo.EXPECT().ListByApplicationID(mock.Anything, appID).Return(nil, nil)
+		rig.appTelegramLinkRepo.EXPECT().GetByApplicationID(mock.Anything, appID).Return(nil, sql.ErrNoRows)
+		rig.transitionRepo.EXPECT().GetLatestByApplicationAndToStatus(mock.Anything, appID, domain.CreatorApplicationStatusRejected).
+			Return(&repository.CreatorApplicationStatusTransitionRow{
+				ID:            "tx-1",
+				ApplicationID: appID,
+				FromStatus:    pointer.ToString(fromStatus),
+				ToStatus:      domain.CreatorApplicationStatusRejected,
+				ActorID:       pointer.ToString(actor),
+				Reason:        pointer.ToString(reason),
+				CreatedAt:     rejectedAt,
+			}, nil)
+
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.notifier, rig.logger)
+		got, err := svc.GetByID(context.Background(), appID)
+		require.NoError(t, err)
+		require.NotNil(t, got.Rejection)
+		require.Equal(t, &domain.CreatorApplicationRejection{
+			FromStatus:       fromStatus,
+			RejectedAt:       rejectedAt,
+			RejectedByUserID: actor,
+		}, got.Rejection)
+	})
+
+	t.Run("rejected app without transition row degrades to nil rejection + warn", func(t *testing.T) {
+		t.Parallel()
+		rig := newCreatorServiceRig(t)
+		rig.factory.EXPECT().NewCreatorApplicationRepo(mock.Anything).Return(rig.appRepo)
+		rig.factory.EXPECT().NewCreatorApplicationCategoryRepo(mock.Anything).Return(rig.appCategoryRepo)
+		rig.factory.EXPECT().NewCreatorApplicationSocialRepo(mock.Anything).Return(rig.appSocialRepo)
+		rig.factory.EXPECT().NewCreatorApplicationConsentRepo(mock.Anything).Return(rig.appConsentRepo)
+		rig.factory.EXPECT().NewCreatorApplicationTelegramLinkRepo(mock.Anything).Return(rig.appTelegramLinkRepo)
+		rig.factory.EXPECT().NewCreatorApplicationStatusTransitionRepo(mock.Anything).Return(rig.transitionRepo)
+
+		rig.appRepo.EXPECT().GetByID(mock.Anything, appID).
+			Return(&repository.CreatorApplicationRow{ID: appID, Status: domain.CreatorApplicationStatusRejected}, nil)
+		rig.appCategoryRepo.EXPECT().ListByApplicationID(mock.Anything, appID).Return(nil, nil)
+		rig.appSocialRepo.EXPECT().ListByApplicationID(mock.Anything, appID).Return(nil, nil)
+		rig.appConsentRepo.EXPECT().ListByApplicationID(mock.Anything, appID).Return(nil, nil)
+		rig.appTelegramLinkRepo.EXPECT().GetByApplicationID(mock.Anything, appID).Return(nil, sql.ErrNoRows)
+		rig.transitionRepo.EXPECT().GetLatestByApplicationAndToStatus(mock.Anything, appID, domain.CreatorApplicationStatusRejected).
+			Return(nil, sql.ErrNoRows)
+		rig.logger.EXPECT().Warn(mock.Anything,
+			"creator application detail: rejected without transition row",
+			mock.MatchedBy(func(args []any) bool {
+				return len(args) == 2 && args[0] == "application_id" && args[1] == appID
+			})).Once()
+
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.notifier, rig.logger)
+		got, err := svc.GetByID(context.Background(), appID)
+		require.NoError(t, err)
+		require.Nil(t, got.Rejection)
+	})
+
+	t.Run("rejected app with nil from_status degrades to nil rejection + warn", func(t *testing.T) {
+		t.Parallel()
+		rig := newCreatorServiceRig(t)
+		rig.factory.EXPECT().NewCreatorApplicationRepo(mock.Anything).Return(rig.appRepo)
+		rig.factory.EXPECT().NewCreatorApplicationCategoryRepo(mock.Anything).Return(rig.appCategoryRepo)
+		rig.factory.EXPECT().NewCreatorApplicationSocialRepo(mock.Anything).Return(rig.appSocialRepo)
+		rig.factory.EXPECT().NewCreatorApplicationConsentRepo(mock.Anything).Return(rig.appConsentRepo)
+		rig.factory.EXPECT().NewCreatorApplicationTelegramLinkRepo(mock.Anything).Return(rig.appTelegramLinkRepo)
+		rig.factory.EXPECT().NewCreatorApplicationStatusTransitionRepo(mock.Anything).Return(rig.transitionRepo)
+
+		rig.appRepo.EXPECT().GetByID(mock.Anything, appID).
+			Return(&repository.CreatorApplicationRow{ID: appID, Status: domain.CreatorApplicationStatusRejected}, nil)
+		rig.appCategoryRepo.EXPECT().ListByApplicationID(mock.Anything, appID).Return(nil, nil)
+		rig.appSocialRepo.EXPECT().ListByApplicationID(mock.Anything, appID).Return(nil, nil)
+		rig.appConsentRepo.EXPECT().ListByApplicationID(mock.Anything, appID).Return(nil, nil)
+		rig.appTelegramLinkRepo.EXPECT().GetByApplicationID(mock.Anything, appID).Return(nil, sql.ErrNoRows)
+		rig.transitionRepo.EXPECT().GetLatestByApplicationAndToStatus(mock.Anything, appID, domain.CreatorApplicationStatusRejected).
+			Return(&repository.CreatorApplicationStatusTransitionRow{
+				ID:            "tx-1",
+				ApplicationID: appID,
+				FromStatus:    nil,
+				ToStatus:      domain.CreatorApplicationStatusRejected,
+				ActorID:       pointer.ToString("cccc3333-3333-3333-3333-333333333333"),
+				CreatedAt:     time.Now().UTC(),
+			}, nil)
+		rig.logger.EXPECT().Warn(mock.Anything,
+			"creator application detail: rejected transition row has nil actor or from_status",
+			mock.MatchedBy(func(args []any) bool {
+				return len(args) == 4 &&
+					args[0] == "application_id" && args[1] == appID &&
+					args[2] == "transition_id" && args[3] == "tx-1"
+			})).Once()
+
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.notifier, rig.logger)
+		got, err := svc.GetByID(context.Background(), appID)
+		require.NoError(t, err)
+		require.Nil(t, got.Rejection)
+	})
+
+	t.Run("rejected app with transition repo error wraps", func(t *testing.T) {
+		t.Parallel()
+		rig := newCreatorServiceRig(t)
+		rig.factory.EXPECT().NewCreatorApplicationRepo(mock.Anything).Return(rig.appRepo)
+		rig.factory.EXPECT().NewCreatorApplicationCategoryRepo(mock.Anything).Return(rig.appCategoryRepo)
+		rig.factory.EXPECT().NewCreatorApplicationSocialRepo(mock.Anything).Return(rig.appSocialRepo)
+		rig.factory.EXPECT().NewCreatorApplicationConsentRepo(mock.Anything).Return(rig.appConsentRepo)
+		rig.factory.EXPECT().NewCreatorApplicationTelegramLinkRepo(mock.Anything).Return(rig.appTelegramLinkRepo)
+		rig.factory.EXPECT().NewCreatorApplicationStatusTransitionRepo(mock.Anything).Return(rig.transitionRepo)
+
+		rig.appRepo.EXPECT().GetByID(mock.Anything, appID).
+			Return(&repository.CreatorApplicationRow{ID: appID, Status: domain.CreatorApplicationStatusRejected}, nil)
+		rig.appCategoryRepo.EXPECT().ListByApplicationID(mock.Anything, appID).Return(nil, nil)
+		rig.appSocialRepo.EXPECT().ListByApplicationID(mock.Anything, appID).Return(nil, nil)
+		rig.appConsentRepo.EXPECT().ListByApplicationID(mock.Anything, appID).Return(nil, nil)
+		rig.appTelegramLinkRepo.EXPECT().GetByApplicationID(mock.Anything, appID).Return(nil, sql.ErrNoRows)
+		rig.transitionRepo.EXPECT().GetLatestByApplicationAndToStatus(mock.Anything, appID, domain.CreatorApplicationStatusRejected).
+			Return(nil, errors.New("tx db down"))
+
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.notifier, rig.logger)
+		_, err := svc.GetByID(context.Background(), appID)
+		require.ErrorContains(t, err, "get rejection transition")
+		require.ErrorContains(t, err, "tx db down")
+	})
 }
 
 func TestCreatorApplicationService_List(t *testing.T) {
@@ -1782,6 +1919,178 @@ func TestCreatorApplicationService_VerifyApplicationSocialManually(t *testing.T)
 		err := svc.VerifyApplicationSocialManually(context.Background(), manualVerifyAppID, manualVerifySocialID, manualVerifyAdminID)
 		require.ErrorContains(t, err, "update failed")
 	})
+}
+
+// expectRejectTxBegin wires the mock pool for the single WithTx call inside
+// RejectApplication.
+func expectRejectTxBegin(rig creatorServiceRig) {
+	rig.pool.EXPECT().Begin(mock.Anything).Return(testTx{}, nil)
+}
+
+// expectRejectFactoryWiring registers every repo constructor the
+// RejectApplication TX issues. NewCreatorApplicationRepo also covers the
+// inner applyTransition lookup; NewCreatorApplicationStatusTransitionRepo
+// is set even on early-exit tests so partial-wiring noise stays out of test
+// failures (mockery only fails on unmet expectations, not on unused ones).
+func expectRejectFactoryWiring(rig creatorServiceRig) {
+	rig.factory.EXPECT().NewCreatorApplicationRepo(mock.Anything).Return(rig.appRepo)
+	rig.factory.EXPECT().NewAuditRepo(mock.Anything).Return(rig.auditRepo)
+}
+
+const (
+	rejectAdminID = "aaaa1111-1111-1111-1111-111111111111"
+	rejectAppID   = "bbbb2222-2222-2222-2222-222222222222"
+)
+
+func TestCreatorApplicationService_RejectApplication(t *testing.T) {
+	t.Parallel()
+
+	t.Run("application not found returns ErrCreatorApplicationNotFound and writes nothing", func(t *testing.T) {
+		t.Parallel()
+		rig := newCreatorServiceRig(t)
+		expectRejectTxBegin(rig)
+		expectRejectFactoryWiring(rig)
+
+		rig.appRepo.EXPECT().GetByID(mock.Anything, rejectAppID).Return(nil, sql.ErrNoRows)
+
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.notifier, rig.logger)
+		err := svc.RejectApplication(context.Background(), rejectAppID, rejectAdminID)
+		require.ErrorIs(t, err, domain.ErrCreatorApplicationNotFound)
+	})
+
+	t.Run("get application repo error wrapped", func(t *testing.T) {
+		t.Parallel()
+		rig := newCreatorServiceRig(t)
+		expectRejectTxBegin(rig)
+		expectRejectFactoryWiring(rig)
+
+		rig.appRepo.EXPECT().GetByID(mock.Anything, rejectAppID).Return(nil, errors.New("db down"))
+
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.notifier, rig.logger)
+		err := svc.RejectApplication(context.Background(), rejectAppID, rejectAdminID)
+		require.ErrorContains(t, err, "reject application: lookup application")
+		require.ErrorContains(t, err, "db down")
+	})
+
+	notRejectableStatuses := []string{
+		domain.CreatorApplicationStatusRejected,
+		domain.CreatorApplicationStatusWithdrawn,
+		domain.CreatorApplicationStatusAwaitingContract,
+		domain.CreatorApplicationStatusContractSent,
+		domain.CreatorApplicationStatusSigned,
+	}
+	for _, status := range notRejectableStatuses {
+		status := status
+		t.Run("not rejectable from "+status+" returns ErrCreatorApplicationNotRejectable and writes nothing", func(t *testing.T) {
+			t.Parallel()
+			rig := newCreatorServiceRig(t)
+			expectRejectTxBegin(rig)
+			expectRejectFactoryWiring(rig)
+
+			appRow := applicationRow(rejectAppID)
+			appRow.Status = status
+			rig.appRepo.EXPECT().GetByID(mock.Anything, rejectAppID).Return(appRow, nil)
+
+			svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.notifier, rig.logger)
+			err := svc.RejectApplication(context.Background(), rejectAppID, rejectAdminID)
+			require.ErrorIs(t, err, domain.ErrCreatorApplicationNotRejectable)
+		})
+	}
+
+	t.Run("update status error rolls back tx and bubbles", func(t *testing.T) {
+		t.Parallel()
+		rig := newCreatorServiceRig(t)
+		expectRejectTxBegin(rig)
+		expectRejectFactoryWiring(rig)
+		rig.factory.EXPECT().NewCreatorApplicationStatusTransitionRepo(mock.Anything).Return(rig.transitionRepo)
+
+		appRow := applicationRow(rejectAppID)
+		rig.appRepo.EXPECT().GetByID(mock.Anything, rejectAppID).Return(appRow, nil)
+		rig.appRepo.EXPECT().UpdateStatus(mock.Anything, rejectAppID, domain.CreatorApplicationStatusRejected).
+			Return(errors.New("update boom"))
+
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.notifier, rig.logger)
+		err := svc.RejectApplication(context.Background(), rejectAppID, rejectAdminID)
+		require.ErrorContains(t, err, "apply transition")
+		require.ErrorContains(t, err, "update boom")
+	})
+
+	t.Run("audit write error wrapped — caller sees reject application context", func(t *testing.T) {
+		t.Parallel()
+		rig := newCreatorServiceRig(t)
+		expectRejectTxBegin(rig)
+		expectRejectFactoryWiring(rig)
+		rig.factory.EXPECT().NewCreatorApplicationStatusTransitionRepo(mock.Anything).Return(rig.transitionRepo)
+
+		appRow := applicationRow(rejectAppID)
+		rig.appRepo.EXPECT().GetByID(mock.Anything, rejectAppID).Return(appRow, nil)
+		rig.appRepo.EXPECT().UpdateStatus(mock.Anything, rejectAppID, domain.CreatorApplicationStatusRejected).Return(nil)
+		rig.transitionRepo.EXPECT().Insert(mock.Anything, mock.Anything).Return(nil)
+		rig.auditRepo.EXPECT().Create(mock.Anything, mock.Anything).Return(errors.New("audit boom"))
+
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.notifier, rig.logger)
+		err := svc.RejectApplication(context.Background(), rejectAppID, rejectAdminID)
+		require.ErrorContains(t, err, "reject application: write audit")
+		require.ErrorContains(t, err, "audit boom")
+	})
+
+	for _, fromStatus := range []string{
+		domain.CreatorApplicationStatusVerification,
+		domain.CreatorApplicationStatusModeration,
+	} {
+		fromStatus := fromStatus
+		t.Run("happy path from "+fromStatus+" — transitions, audits, never notifies", func(t *testing.T) {
+			t.Parallel()
+			rig := newCreatorServiceRig(t)
+			expectRejectTxBegin(rig)
+			expectRejectFactoryWiring(rig)
+			rig.factory.EXPECT().NewCreatorApplicationStatusTransitionRepo(mock.Anything).Return(rig.transitionRepo)
+
+			appRow := applicationRow(rejectAppID)
+			appRow.Status = fromStatus
+			rig.appRepo.EXPECT().GetByID(mock.Anything, rejectAppID).Return(appRow, nil)
+			rig.appRepo.EXPECT().UpdateStatus(mock.Anything, rejectAppID, domain.CreatorApplicationStatusRejected).Return(nil)
+
+			var capturedTransition repository.CreatorApplicationStatusTransitionRow
+			rig.transitionRepo.EXPECT().Insert(mock.Anything, mock.AnythingOfType("repository.CreatorApplicationStatusTransitionRow")).
+				Run(func(_ context.Context, row repository.CreatorApplicationStatusTransitionRow) {
+					capturedTransition = row
+				}).
+				Return(nil)
+
+			var capturedAudit repository.AuditLogRow
+			rig.auditRepo.EXPECT().Create(mock.Anything, mock.AnythingOfType("repository.AuditLogRow")).
+				Run(func(_ context.Context, row repository.AuditLogRow) {
+					capturedAudit = row
+				}).
+				Return(nil)
+
+			// Notifier configured WITHOUT EXPECT — mockery fails the test
+			// at cleanup if the service tries to push anything.
+			svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.notifier, rig.logger)
+			err := svc.RejectApplication(context.Background(), rejectAppID, rejectAdminID)
+			require.NoError(t, err)
+
+			require.Equal(t, rejectAppID, capturedTransition.ApplicationID)
+			require.NotNil(t, capturedTransition.FromStatus)
+			require.Equal(t, fromStatus, *capturedTransition.FromStatus)
+			require.Equal(t, domain.CreatorApplicationStatusRejected, capturedTransition.ToStatus)
+			require.NotNil(t, capturedTransition.ActorID)
+			require.Equal(t, rejectAdminID, *capturedTransition.ActorID)
+			require.NotNil(t, capturedTransition.Reason)
+			require.Equal(t, domain.TransitionReasonReject, *capturedTransition.Reason)
+
+			require.Equal(t, AuditActionCreatorApplicationReject, capturedAudit.Action)
+			require.Equal(t, AuditEntityTypeCreatorApplication, capturedAudit.EntityType)
+			require.NotNil(t, capturedAudit.EntityID)
+			require.Equal(t, rejectAppID, *capturedAudit.EntityID)
+			require.NotNil(t, capturedAudit.ActorID)
+			require.Equal(t, rejectAdminID, *capturedAudit.ActorID)
+			require.JSONEq(t,
+				`{"application_id":"`+rejectAppID+`","from_status":"`+fromStatus+`","to_status":"rejected"}`,
+				string(capturedAudit.NewValue))
+		})
+	}
 }
 
 func TestCreatorApplicationService_applyTransition(t *testing.T) {
