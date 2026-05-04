@@ -421,6 +421,57 @@ func (_c *MockAuthzService_CanListCreatorApplications_Call) RunAndReturn(run fun
 	return _c
 }
 
+// CanRejectCreatorApplication provides a mock function for the type MockAuthzService
+func (_mock *MockAuthzService) CanRejectCreatorApplication(ctx context.Context) error {
+	ret := _mock.Called(ctx)
+
+	if len(ret) == 0 {
+		panic("no return value specified for CanRejectCreatorApplication")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context) error); ok {
+		r0 = returnFunc(ctx)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockAuthzService_CanRejectCreatorApplication_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'CanRejectCreatorApplication'
+type MockAuthzService_CanRejectCreatorApplication_Call struct {
+	*mock.Call
+}
+
+// CanRejectCreatorApplication is a helper method to define mock.On call
+//   - ctx context.Context
+func (_e *MockAuthzService_Expecter) CanRejectCreatorApplication(ctx interface{}) *MockAuthzService_CanRejectCreatorApplication_Call {
+	return &MockAuthzService_CanRejectCreatorApplication_Call{Call: _e.mock.On("CanRejectCreatorApplication", ctx)}
+}
+
+func (_c *MockAuthzService_CanRejectCreatorApplication_Call) Run(run func(ctx context.Context)) *MockAuthzService_CanRejectCreatorApplication_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		run(
+			arg0,
+		)
+	})
+	return _c
+}
+
+func (_c *MockAuthzService_CanRejectCreatorApplication_Call) Return(err error) *MockAuthzService_CanRejectCreatorApplication_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockAuthzService_CanRejectCreatorApplication_Call) RunAndReturn(run func(ctx context.Context) error) *MockAuthzService_CanRejectCreatorApplication_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // CanRemoveManager provides a mock function for the type MockAuthzService
 func (_mock *MockAuthzService) CanRemoveManager(ctx context.Context, brandID string, userID string) error {
 	ret := _mock.Called(ctx, brandID, userID)

@@ -160,6 +160,9 @@ type ClientInterface interface {
 	// GetCreatorApplication request
 	GetCreatorApplication(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// RejectCreatorApplication request
+	RejectCreatorApplication(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// VerifyCreatorApplicationSocialWithBody request with any body
 	VerifyCreatorApplicationSocialWithBody(ctx context.Context, id openapi_types.UUID, socialId openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -479,6 +482,18 @@ func (c *Client) ListCreatorApplications(ctx context.Context, body ListCreatorAp
 
 func (c *Client) GetCreatorApplication(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetCreatorApplicationRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) RejectCreatorApplication(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRejectCreatorApplicationRequest(c.Server, id)
 	if err != nil {
 		return nil, err
 	}
@@ -1334,6 +1349,40 @@ func NewGetCreatorApplicationRequest(server string, id openapi_types.UUID) (*htt
 	return req, nil
 }
 
+// NewRejectCreatorApplicationRequest generates requests for RejectCreatorApplication
+func NewRejectCreatorApplicationRequest(server string, id openapi_types.UUID) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/creators/applications/%s/reject", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewVerifyCreatorApplicationSocialRequest calls the generic VerifyCreatorApplicationSocial builder with application/json body
 func NewVerifyCreatorApplicationSocialRequest(server string, id openapi_types.UUID, socialId openapi_types.UUID, body VerifyCreatorApplicationSocialJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
@@ -1601,6 +1650,9 @@ type ClientWithResponsesInterface interface {
 
 	// GetCreatorApplicationWithResponse request
 	GetCreatorApplicationWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetCreatorApplicationResponse, error)
+
+	// RejectCreatorApplicationWithResponse request
+	RejectCreatorApplicationWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*RejectCreatorApplicationResponse, error)
 
 	// VerifyCreatorApplicationSocialWithBodyWithResponse request with any body
 	VerifyCreatorApplicationSocialWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, socialId openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*VerifyCreatorApplicationSocialResponse, error)
@@ -2060,6 +2112,33 @@ func (r GetCreatorApplicationResponse) StatusCode() int {
 	return 0
 }
 
+type RejectCreatorApplicationResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *EmptyResult
+	JSON401      *ErrorResponse
+	JSON403      *Forbidden
+	JSON404      *ErrorResponse
+	JSON422      *ErrorResponse
+	JSONDefault  *UnexpectedError
+}
+
+// Status returns HTTPResponse.Status
+func (r RejectCreatorApplicationResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r RejectCreatorApplicationResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type VerifyCreatorApplicationSocialResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -2383,6 +2462,15 @@ func (c *ClientWithResponses) GetCreatorApplicationWithResponse(ctx context.Cont
 		return nil, err
 	}
 	return ParseGetCreatorApplicationResponse(rsp)
+}
+
+// RejectCreatorApplicationWithResponse request returning *RejectCreatorApplicationResponse
+func (c *ClientWithResponses) RejectCreatorApplicationWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*RejectCreatorApplicationResponse, error) {
+	rsp, err := c.RejectCreatorApplication(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRejectCreatorApplicationResponse(rsp)
 }
 
 // VerifyCreatorApplicationSocialWithBodyWithResponse request with arbitrary body returning *VerifyCreatorApplicationSocialResponse
@@ -3207,6 +3295,67 @@ func ParseGetCreatorApplicationResponse(rsp *http.Response) (*GetCreatorApplicat
 			return nil, err
 		}
 		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest UnexpectedError
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseRejectCreatorApplicationResponse parses an HTTP response from a RejectCreatorApplicationWithResponse call
+func ParseRejectCreatorApplicationResponse(rsp *http.Response) (*RejectCreatorApplicationResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &RejectCreatorApplicationResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest EmptyResult
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON422 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
 		var dest UnexpectedError

@@ -56,3 +56,16 @@ func (a *AuthzService) CanVerifyCreatorApplicationSocialManually(ctx context.Con
 	}
 	return nil
 }
+
+// CanRejectCreatorApplication gates the admin reject action
+// (POST /creators/applications/{id}/reject). Reject is a terminal transition
+// with operational consequences (creator gets a notification, application
+// becomes immutable), so non-admin callers must never reach the service
+// layer. Same domain.ErrForbidden as the other creator-application endpoints
+// to keep 403 message and timing identical between them.
+func (a *AuthzService) CanRejectCreatorApplication(ctx context.Context) error {
+	if middleware.RoleFromContext(ctx) != api.Admin {
+		return domain.ErrForbidden
+	}
+	return nil
+}

@@ -716,6 +716,72 @@ paths:
         default:
           $ref: "#/components/responses/UnexpectedError"
 
+  /creators/applications/{id}/reject:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      operationId: rejectCreatorApplication
+      summary: Reject a creator application (admin only)
+      description: |
+        Admin-only action that moves an application to the terminal `rejected`
+        status from either `verification` or `moderation`. The state-machine
+        edge is guarded server-side: any other source status returns 422
+        `CREATOR_APPLICATION_NOT_REJECTABLE`. The rejection is persisted as a
+        `creator_application_status_transitions` row plus an audit entry; the
+        Telegram link is preserved on the application so the bot can later
+        notify the creator (chunk 14) and so future broadcast flows can still
+        reach this account.
+
+        No body is accepted — there are no categorisation fields, no internal
+        notes, no creator-facing message in the request. The Telegram message
+        sent to the creator (chunk 14) is a single static template; updates to
+        that copy ship via separate PRs and are not parameterised here.
+
+        Repeated rejection of an already-rejected application returns 422
+        `CREATOR_APPLICATION_NOT_REJECTABLE`. This is intentional: callers
+        observing 422 know the action did not happen on this request, while
+        the database state remains the canonical source of truth.
+      tags: [creators]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Application moved to `rejected`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmptyResult"
+        "401":
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: Application not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: |
+            Application is not in a status from which `rejected` is reachable
+            (`verification` or `moderation`). Includes the case of repeating
+            reject on an already-rejected application.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: "#/components/responses/UnexpectedError"
+
   /webhooks/sendpulse/instagram:
     post:
       operationId: sendPulseInstagramWebhook
@@ -1441,6 +1507,33 @@ components:
             `telegramLink` is null. Always returned regardless of link state so
             the response shape stays stable; the frontend renders the copy
             action only when not yet bound.
+        rejection:
+          allOf:
+            - $ref: "#/components/schemas/CreatorApplicationRejection"
+          nullable: true
+          description: |
+            Present only when `status` is `rejected`. Mirrors the
+            `verifiedByUserId` / `verifiedAt` shape used on socials: it carries
+            who took the action, when, and which status it transitioned from.
+            The rejected application's other fields (telegramLink, socials,
+            consents) stay populated so downstream flows (chunk 14 notifier,
+            future broadcasts) can still reach the creator.
+
+    CreatorApplicationRejection:
+      type: object
+      description: |
+        Reject metadata derived from the latest
+        `creator_application_status_transitions` row with `to_status=rejected`.
+      required: [fromStatus, rejectedAt, rejectedByUserId]
+      properties:
+        fromStatus:
+          $ref: "#/components/schemas/CreatorApplicationStatus"
+        rejectedAt:
+          type: string
+          format: date-time
+        rejectedByUserId:
+          type: string
+          format: uuid
 
     GetCreatorApplicationResult:
       type: object

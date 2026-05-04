@@ -331,6 +331,14 @@ type CreatorApplicationDetailData struct {
 	MiddleName *string `json:"middleName,omitempty"`
 	Phone      string  `json:"phone"`
 
+	// Rejection Present only when `status` is `rejected`. Mirrors the
+	// `verifiedByUserId` / `verifiedAt` shape used on socials: it carries
+	// who took the action, when, and which status it transitioned from.
+	// The rejected application's other fields (telegramLink, socials,
+	// consents) stay populated so downstream flows (chunk 14 notifier,
+	// future broadcasts) can still reach the creator.
+	Rejection *CreatorApplicationRejection `json:"rejection,omitempty"`
+
 	// Socials Social accounts attached to the application, sorted by platform then handle.
 	Socials []CreatorApplicationDetailSocial `json:"socials"`
 
@@ -416,6 +424,16 @@ type CreatorApplicationListItem struct {
 // CreatorApplicationListSortField Sort field for the admin list. Mapped to a SQL column / expression on
 // the backend. Unknown values are rejected with 422.
 type CreatorApplicationListSortField string
+
+// CreatorApplicationRejection Reject metadata derived from the latest
+// `creator_application_status_transitions` row with `to_status=rejected`.
+type CreatorApplicationRejection struct {
+	// FromStatus Lifecycle status of a creator application. Values follow the state
+	// machine described in `_bmad-output/planning-artifacts/creator-application-state-machine.md`.
+	FromStatus       CreatorApplicationStatus `json:"fromStatus"`
+	RejectedAt       time.Time                `json:"rejectedAt"`
+	RejectedByUserId openapi_types.UUID       `json:"rejectedByUserId"`
+}
 
 // CreatorApplicationStatus Lifecycle status of a creator application. Values follow the state
 // machine described in `_bmad-output/planning-artifacts/creator-application-state-machine.md`.

@@ -607,6 +607,79 @@ func TestServer_GetCreatorApplication(t *testing.T) {
 			Code: "atyrau", Name: "atyrau", SortOrder: 0,
 		}, resp.Data.City)
 	})
+
+	t.Run("rejected app maps rejection block", func(t *testing.T) {
+		t.Parallel()
+		appID := uuid.MustParse("11111111-2222-3333-4444-555555555555")
+		actorID := uuid.MustParse("aaaa1111-1111-1111-1111-111111111111")
+		birth := time.Date(1995, 5, 15, 0, 0, 0, 0, time.UTC)
+		created := time.Date(2026, 4, 20, 18, 0, 0, 0, time.UTC)
+		rejectedAt := time.Date(2026, 5, 4, 12, 0, 0, 0, time.UTC)
+
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanViewCreatorApplication(mock.Anything).Return(nil)
+		creator := mocks.NewMockCreatorApplicationService(t)
+		creator.EXPECT().GetByID(mock.Anything, appID.String()).
+			Return(&domain.CreatorApplicationDetail{
+				ID:       appID.String(),
+				LastName: "Тест", FirstName: "Тест",
+				IIN:       "950515312348",
+				BirthDate: birth, Phone: "+77001234567",
+				CityCode:  "almaty",
+				Status:    domain.CreatorApplicationStatusRejected,
+				CreatedAt: created, UpdatedAt: created,
+				Rejection: &domain.CreatorApplicationRejection{
+					FromStatus:       domain.CreatorApplicationStatusModeration,
+					RejectedAt:       rejectedAt,
+					RejectedByUserID: actorID.String(),
+				},
+			}, nil)
+		dict := mocks.NewMockDictionaryService(t)
+		dict.EXPECT().List(mock.Anything, domain.DictionaryTypeCategories).Return(nil, nil)
+		dict.EXPECT().List(mock.Anything, domain.DictionaryTypeCities).
+			Return([]domain.DictionaryEntry{{Code: "almaty", Name: "Алматы", SortOrder: 100}}, nil)
+
+		router := newTestRouter(t, serverWithAuthzAndCreatorAndDict(t, authz, creator, dict, logmocks.NewMockLogger(t)))
+		w, resp := doJSON[api.GetCreatorApplicationResult](t, router, http.MethodGet, appPath, nil)
+		require.Equal(t, http.StatusOK, w.Code)
+		require.Equal(t, api.Rejected, resp.Data.Status)
+		require.NotNil(t, resp.Data.Rejection)
+		require.Equal(t, &api.CreatorApplicationRejection{
+			FromStatus:       api.Moderation,
+			RejectedAt:       rejectedAt,
+			RejectedByUserId: actorID,
+		}, resp.Data.Rejection)
+	})
+
+	t.Run("non-rejected app omits rejection block", func(t *testing.T) {
+		t.Parallel()
+		appID := uuid.MustParse("11111111-2222-3333-4444-555555555555")
+		birth := time.Date(1995, 5, 15, 0, 0, 0, 0, time.UTC)
+		created := time.Date(2026, 4, 20, 18, 0, 0, 0, time.UTC)
+
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanViewCreatorApplication(mock.Anything).Return(nil)
+		creator := mocks.NewMockCreatorApplicationService(t)
+		creator.EXPECT().GetByID(mock.Anything, appID.String()).
+			Return(&domain.CreatorApplicationDetail{
+				ID:       appID.String(),
+				LastName: "Тест", FirstName: "Тест",
+				IIN:       "950515312348",
+				BirthDate: birth, Phone: "+77001234567",
+				CityCode:  "almaty",
+				Status:    domain.CreatorApplicationStatusVerification,
+				CreatedAt: created, UpdatedAt: created,
+			}, nil)
+		dict := mocks.NewMockDictionaryService(t)
+		dict.EXPECT().List(mock.Anything, domain.DictionaryTypeCategories).Return(nil, nil)
+		dict.EXPECT().List(mock.Anything, domain.DictionaryTypeCities).
+			Return([]domain.DictionaryEntry{{Code: "almaty", Name: "Алматы", SortOrder: 100}}, nil)
+
+		router := newTestRouter(t, serverWithAuthzAndCreatorAndDict(t, authz, creator, dict, logmocks.NewMockLogger(t)))
+		w, resp := doJSON[api.GetCreatorApplicationResult](t, router, http.MethodGet, appPath, nil)
+		require.Equal(t, http.StatusOK, w.Code)
+		require.Nil(t, resp.Data.Rejection)
+	})
 }
 
 func TestMapCreatorApplicationStatusToAPI(t *testing.T) {
@@ -1333,6 +1406,104 @@ func TestServer_VerifyCreatorApplicationSocial(t *testing.T) {
 
 		require.Equal(t, appUUID, capturedAppID)
 		require.Equal(t, socialUUID, capturedSocialID)
+		require.Equal(t, adminUUID, capturedActor)
+	})
+}
+
+func TestServer_RejectCreatorApplication(t *testing.T) {
+	t.Parallel()
+
+	const (
+		appUUID   = "33333333-4444-5555-6666-777777777777"
+		adminUUID = "88888888-9999-aaaa-bbbb-cccccccccccc"
+		path      = "/creators/applications/" + appUUID + "/reject"
+	)
+
+	t.Run("forbidden for manager — service is not consulted", func(t *testing.T) {
+		t.Parallel()
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanRejectCreatorApplication(mock.Anything).Return(domain.ErrForbidden)
+
+		router := newTestRouter(t, serverWithAuthzAndCreatorAndDict(t, authz, nil, nil, logmocks.NewMockLogger(t)))
+		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, path, nil, withRole(adminUUID, api.BrandManager))
+		require.Equal(t, http.StatusForbidden, w.Code)
+		require.Equal(t, domain.CodeForbidden, resp.Error.Code)
+	})
+
+	t.Run("unauthenticated — auth middleware short-circuits before handler", func(t *testing.T) {
+		t.Parallel()
+		log := logmocks.NewMockLogger(t)
+		r := chi.NewRouter()
+		r.Use(func(next http.Handler) http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+				if req.Header.Get("Authorization") == "" {
+					respondError(w, req, domain.ErrUnauthorized, log)
+					return
+				}
+				next.ServeHTTP(w, req)
+			})
+		})
+		api.HandlerWithOptions(NewStrictAPIHandler(serverWithAuthzAndCreatorAndDict(t, nil, nil, nil, log)), api.ChiServerOptions{
+			BaseRouter: r, ErrorHandlerFunc: HandleParamError(logmocks.NewMockLogger(t)),
+		})
+
+		req := httptest.NewRequest(http.MethodPost, path, nil)
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		require.Equal(t, http.StatusUnauthorized, w.Code)
+
+		var body api.ErrorResponse
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+		require.Equal(t, domain.CodeUnauthorized, body.Error.Code)
+	})
+
+	t.Run("application not found surfaces as 404 NOT_FOUND", func(t *testing.T) {
+		t.Parallel()
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanRejectCreatorApplication(mock.Anything).Return(nil)
+		creator := mocks.NewMockCreatorApplicationService(t)
+		creator.EXPECT().RejectApplication(mock.Anything, appUUID, adminUUID).
+			Return(domain.ErrCreatorApplicationNotFound)
+
+		router := newTestRouter(t, serverWithAuthzAndCreatorAndDict(t, authz, creator, nil, logmocks.NewMockLogger(t)))
+		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, path, nil, withRole(adminUUID, api.Admin))
+		require.Equal(t, http.StatusNotFound, w.Code)
+		require.Equal(t, domain.CodeNotFound, resp.Error.Code)
+	})
+
+	t.Run("not rejectable surfaces as 422 NOT_REJECTABLE", func(t *testing.T) {
+		t.Parallel()
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanRejectCreatorApplication(mock.Anything).Return(nil)
+		creator := mocks.NewMockCreatorApplicationService(t)
+		creator.EXPECT().RejectApplication(mock.Anything, appUUID, adminUUID).
+			Return(domain.ErrCreatorApplicationNotRejectable)
+
+		router := newTestRouter(t, serverWithAuthzAndCreatorAndDict(t, authz, creator, nil, logmocks.NewMockLogger(t)))
+		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, path, nil, withRole(adminUUID, api.Admin))
+		require.Equal(t, http.StatusUnprocessableEntity, w.Code)
+		require.Equal(t, domain.CodeCreatorApplicationNotRejectable, resp.Error.Code)
+	})
+
+	t.Run("happy path: forwards actor and id, returns empty 200 body", func(t *testing.T) {
+		t.Parallel()
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanRejectCreatorApplication(mock.Anything).Return(nil)
+		creator := mocks.NewMockCreatorApplicationService(t)
+		var capturedAppID, capturedActor string
+		creator.EXPECT().RejectApplication(mock.Anything, mock.Anything, mock.Anything).
+			Run(func(_ context.Context, applicationID, actorUserID string) {
+				capturedAppID = applicationID
+				capturedActor = actorUserID
+			}).
+			Return(nil)
+
+		router := newTestRouter(t, serverWithAuthzAndCreatorAndDict(t, authz, creator, nil, logmocks.NewMockLogger(t)))
+		w, resp := doJSON[api.EmptyResult](t, router, http.MethodPost, path, nil, withRole(adminUUID, api.Admin))
+		require.Equal(t, http.StatusOK, w.Code)
+		require.Equal(t, api.EmptyResult{}, resp)
+
+		require.Equal(t, appUUID, capturedAppID)
 		require.Equal(t, adminUUID, capturedActor)
 	})
 }

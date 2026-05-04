@@ -38,12 +38,16 @@ type CreatorApplicationStatusTransitionRow struct {
 	CreatedAt     time.Time `db:"created_at"`
 }
 
-var creatorApplicationStatusTransitionInsertMapper = stom.MustNewStom(CreatorApplicationStatusTransitionRow{}).SetTag(string(tagInsert))
+var (
+	creatorApplicationStatusTransitionSelectColumns = sortColumns(stom.MustNewStom(CreatorApplicationStatusTransitionRow{}).SetTag(string(tagSelect)).TagValues())
+	creatorApplicationStatusTransitionInsertMapper  = stom.MustNewStom(CreatorApplicationStatusTransitionRow{}).SetTag(string(tagInsert))
+)
 
 // CreatorApplicationStatusTransitionRepo lists all public methods of the
 // transition repository.
 type CreatorApplicationStatusTransitionRepo interface {
 	Insert(ctx context.Context, row CreatorApplicationStatusTransitionRow) error
+	GetLatestByApplicationAndToStatus(ctx context.Context, applicationID, toStatus string) (*CreatorApplicationStatusTransitionRow, error)
 }
 
 type creatorApplicationStatusTransitionRepository struct {
@@ -57,4 +61,24 @@ func (r *creatorApplicationStatusTransitionRepository) Insert(ctx context.Contex
 		SetMap(toMap(row, creatorApplicationStatusTransitionInsertMapper))
 	_, err := dbutil.Exec(ctx, r.db, q)
 	return err
+}
+
+// GetLatestByApplicationAndToStatus returns the most recent transition row for
+// the given application/to-status pair. Multiple matches can exist if the
+// state machine ever cycles through the same status more than once; callers
+// only care about the latest, so the helper sorts by created_at desc and
+// limits to 1. Wrapped sql.ErrNoRows surfaces when no match exists — callers
+// (the read aggregate that builds the rejection block) interpret it as "the
+// status was reached without a recorded transition" and fall back to a
+// log-warn-without-block degradation.
+func (r *creatorApplicationStatusTransitionRepository) GetLatestByApplicationAndToStatus(ctx context.Context, applicationID, toStatus string) (*CreatorApplicationStatusTransitionRow, error) {
+	q := sq.Select(creatorApplicationStatusTransitionSelectColumns...).
+		From(TableCreatorApplicationStatusTransitions).
+		Where(sq.Eq{
+			CreatorApplicationStatusTransitionColumnApplicationID: applicationID,
+			CreatorApplicationStatusTransitionColumnToStatus:      toStatus,
+		}).
+		OrderBy(CreatorApplicationStatusTransitionColumnCreatedAt + " DESC").
+		Limit(1)
+	return dbutil.One[CreatorApplicationStatusTransitionRow](ctx, r.db, q)
 }

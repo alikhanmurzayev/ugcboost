@@ -2,8 +2,10 @@ package repository
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/AlekSi/pointer"
 	"github.com/pashagolub/pgxmock/v4"
@@ -67,6 +69,71 @@ func TestCreatorApplicationStatusTransitionRepository_Insert(t *testing.T) {
 			ToStatus:      "moderation",
 			Reason:        pointer.ToString("instagram_auto"),
 		})
+		require.ErrorContains(t, err, "db down")
+	})
+}
+
+func TestCreatorApplicationStatusTransitionRepository_GetLatestByApplicationAndToStatus(t *testing.T) {
+	t.Parallel()
+
+	const sqlStmt = "SELECT actor_id, application_id, created_at, from_status, id, reason, to_status " +
+		"FROM creator_application_status_transitions " +
+		"WHERE application_id = $1 AND to_status = $2 " +
+		"ORDER BY created_at DESC LIMIT 1"
+
+	cols := []string{"actor_id", "application_id", "created_at", "from_status", "id", "reason", "to_status"}
+
+	t.Run("success returns row", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &creatorApplicationStatusTransitionRepository{db: mock}
+
+		actor := "00000000-0000-0000-0000-000000000aaa"
+		from := "verification"
+		reason := "reject_admin"
+		createdAt := time.Date(2026, 5, 4, 12, 0, 0, 0, time.UTC)
+
+		mock.ExpectQuery(sqlStmt).
+			WithArgs("app-1", "rejected").
+			WillReturnRows(pgxmock.NewRows(cols).
+				AddRow(&actor, "app-1", createdAt, &from, "tx-1", &reason, "rejected"))
+
+		got, err := repo.GetLatestByApplicationAndToStatus(context.Background(), "app-1", "rejected")
+		require.NoError(t, err)
+		require.Equal(t, &CreatorApplicationStatusTransitionRow{
+			ID:            "tx-1",
+			ApplicationID: "app-1",
+			FromStatus:    &from,
+			ToStatus:      "rejected",
+			ActorID:       &actor,
+			Reason:        &reason,
+			CreatedAt:     createdAt,
+		}, got)
+	})
+
+	t.Run("not found returns wrapped sql.ErrNoRows", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &creatorApplicationStatusTransitionRepository{db: mock}
+
+		mock.ExpectQuery(sqlStmt).
+			WithArgs("missing", "rejected").
+			WillReturnRows(pgxmock.NewRows(cols))
+
+		_, err := repo.GetLatestByApplicationAndToStatus(context.Background(), "missing", "rejected")
+		require.ErrorIs(t, err, sql.ErrNoRows)
+	})
+
+	t.Run("propagates error", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &creatorApplicationStatusTransitionRepository{db: mock}
+
+		mock.ExpectQuery(sqlStmt).
+			WithArgs("app-1", "rejected").
+			WillReturnError(errors.New("db down"))
+
+		_, err := repo.GetLatestByApplicationAndToStatus(context.Background(), "app-1", "rejected")
 		require.ErrorContains(t, err, "db down")
 	})
 }

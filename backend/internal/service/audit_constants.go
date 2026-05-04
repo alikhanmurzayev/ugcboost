@@ -15,6 +15,7 @@ const (
 	AuditActionCreatorApplicationLinkTelegram       = "creator_application_link_telegram"
 	AuditActionCreatorApplicationVerificationAuto   = "creator_application_verification_auto"
 	AuditActionCreatorApplicationVerificationManual = "creator_application_verification_manual"
+	AuditActionCreatorApplicationReject             = "creator_application_reject"
 )
 
 // Audit entity types used alongside AuditAction* values.

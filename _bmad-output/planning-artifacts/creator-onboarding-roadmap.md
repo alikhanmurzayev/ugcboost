@@ -62,11 +62,11 @@ Living document. Покрывает путь от подачи заявки на
 ### Группа 2. Ручная верификация
 
 - [x] **10. Бэк: manual verify соцсети админом.** Admin-endpoint, действие из карточки заявки. Помечает конкретную соцсеть как `manual`-верифицированную → авто-переход `verification → moderation`, если это первая верификация. Audit + state-history. Зависит от 7
-- [~] **11. Фронт-админка: action verify в drawer карточки.** Кнопка «Подтвердить вручную» с выбором соцсети. На текущем экране `verification` (chunk 6). Зависит от 10. E2E — расширение spec'а из 6.5 или новый рядом
+- [x] **11. Фронт-админка: action verify в drawer карточки.** Кнопка «Подтвердить вручную» с выбором соцсети. На текущем экране `verification` (chunk 6). Зависит от 10. E2E — расширение spec'а из 6.5 или новый рядом
 
 ### Группа 3. Reject
 
-- [ ] **12. Бэк: reject заявки админом.** Admin-endpoint, доступен на `verification` и `moderation`. Body — feedback. Перевод в `rejected`. Audit + state-history. Переходы добавляются в текущую state-machine, без миграций
+- [~] **12. Бэк: reject заявки админом.** Admin-endpoint, доступен на `verification` и `moderation`. Body — feedback. Перевод в `rejected`. Audit + state-history. Переходы добавляются в текущую state-machine, без миграций
 - [ ] **13. Фронт-админка: action reject в drawer на verification-экране.** Кнопка «Отклонить заявку» с диалогом feedback. Зависит от 12. E2E — расширение spec'а из 6.5 или новый рядом
 - [ ] **14. Бот: уведомление о rejected.** Расширение notify-сервиса из chunk 9 — креатор получает сообщение с reason. Дёргается после commit на reject-переходе. Зависит от 9 и 12
 

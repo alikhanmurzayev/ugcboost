@@ -519,6 +519,12 @@ func trimOptional(s *string) *string {
 // pool — no transaction is needed because nothing changes here. sql.ErrNoRows
 // from the main lookup is returned as-is (already wrapped by dbutil through
 // %w) so the handler can map it to 404 via errors.Is.
+//
+// When the application is in `rejected`, a fifth read fetches the latest
+// `to_status=rejected` transition row to populate the Rejection block. A
+// missing or malformed transition row degrades gracefully: the block stays nil
+// and a warn lands in the logs — better to surface a partial read than to
+// throw 500 on legacy data that predates the chunk-12 invariant.
 func (s *CreatorApplicationService) GetByID(ctx context.Context, id string) (*domain.CreatorApplicationDetail, error) {
 	appRow, err := s.repoFactory.NewCreatorApplicationRepo(s.pool).GetByID(ctx, id)
 	if err != nil {
@@ -545,7 +551,45 @@ func (s *CreatorApplicationService) GetByID(ctx context.Context, id string) (*do
 		return nil, fmt.Errorf("get telegram link: %w", err)
 	}
 
-	return s.creatorApplicationDetailFromRows(appRow, categoryRows, socialRows, consentRows, linkRow), nil
+	detail := s.creatorApplicationDetailFromRows(appRow, categoryRows, socialRows, consentRows, linkRow)
+
+	if appRow.Status == domain.CreatorApplicationStatusRejected {
+		rejection, err := s.loadRejection(ctx, id)
+		if err != nil {
+			return nil, err
+		}
+		detail.Rejection = rejection
+	}
+
+	return detail, nil
+}
+
+// loadRejection fetches the most recent reject-transition row for an
+// application and shapes it into the domain block. sql.ErrNoRows or partial
+// data (nil from_status / actor_id — the schema permits both, the chunk-12
+// invariant requires both) degrades to a nil block + warn log so admins still
+// see the rejected status even when the transition row is missing.
+func (s *CreatorApplicationService) loadRejection(ctx context.Context, applicationID string) (*domain.CreatorApplicationRejection, error) {
+	transitionRepo := s.repoFactory.NewCreatorApplicationStatusTransitionRepo(s.pool)
+	row, err := transitionRepo.GetLatestByApplicationAndToStatus(ctx, applicationID, domain.CreatorApplicationStatusRejected)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			s.logger.Warn(ctx, "creator application detail: rejected without transition row",
+				"application_id", applicationID)
+			return nil, nil
+		}
+		return nil, fmt.Errorf("get rejection transition: %w", err)
+	}
+	if row.FromStatus == nil || row.ActorID == nil {
+		s.logger.Warn(ctx, "creator application detail: rejected transition row has nil actor or from_status",
+			"application_id", applicationID, "transition_id", row.ID)
+		return nil, nil
+	}
+	return &domain.CreatorApplicationRejection{
+		FromStatus:       *row.FromStatus,
+		RejectedAt:       row.CreatedAt,
+		RejectedByUserID: *row.ActorID,
+	}, nil
 }
 
 // List returns one page of applications matching the validated filter set.
@@ -953,6 +997,63 @@ func (s *CreatorApplicationService) VerifyApplicationSocialManually(ctx context.
 			},
 		); err != nil {
 			return fmt.Errorf("manual verify: write audit: %w", err)
+		}
+		return nil
+	})
+}
+
+// RejectApplication moves an application from `verification` or `moderation`
+// to the terminal `rejected` status under an admin's responsibility. Strict
+// preconditions inside a single transaction: (1) load the application; (2)
+// the current status must be in the rejectable set; (3) write the transition
+// (which the state machine guards against any other source status); (4)
+// audit row pinned to the same TX so a rollback also rolls back the audit.
+//
+// No Telegram notification fires from this path. Chunk 14 owns reaching the
+// creator with a single static template; the link / chat id / Telegram
+// metadata stays untouched on the application so the notifier can find the
+// chat without an extra lookup roundtrip.
+func (s *CreatorApplicationService) RejectApplication(ctx context.Context, applicationID, actorUserID string) error {
+	return dbutil.WithTx(ctx, s.pool, func(tx dbutil.DB) error {
+		appRepo := s.repoFactory.NewCreatorApplicationRepo(tx)
+		auditRepo := s.repoFactory.NewAuditRepo(tx)
+
+		appRow, err := appRepo.GetByID(ctx, applicationID)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return domain.ErrCreatorApplicationNotFound
+			}
+			return fmt.Errorf("reject application: lookup application: %w", err)
+		}
+
+		if appRow.Status != domain.CreatorApplicationStatusVerification &&
+			appRow.Status != domain.CreatorApplicationStatusModeration {
+			return domain.ErrCreatorApplicationNotRejectable
+		}
+
+		actor := actorUserID
+		fromStatus := appRow.Status
+		if err := s.applyTransition(ctx, tx, appRow, domain.CreatorApplicationStatusRejected, &actor, domain.TransitionReasonReject); err != nil {
+			return err
+		}
+
+		// writeAudit reads ActorID and ActorRole from ctx — handler middleware
+		// populates both in production, but unit tests pass a bare context.
+		// Re-stamping ctx with the known admin actor here keeps audit_logs
+		// faithful in both setups, no plumbing through writeAudit's signature.
+		auditCtx := contextWithActor(ctx, actor, string(api.Admin))
+		if err := writeAudit(auditCtx, auditRepo,
+			AuditActionCreatorApplicationReject,
+			AuditEntityTypeCreatorApplication,
+			appRow.ID,
+			nil,
+			map[string]any{
+				"application_id": appRow.ID,
+				"from_status":    fromStatus,
+				"to_status":      domain.CreatorApplicationStatusRejected,
+			},
+		); err != nil {
+			return fmt.Errorf("reject application: write audit: %w", err)
 		}
 		return nil
 	})

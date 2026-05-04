@@ -340,6 +340,14 @@ type CreatorApplicationDetailData struct {
 	MiddleName *string `json:"middleName,omitempty"`
 	Phone      string  `json:"phone"`
 
+	// Rejection Present only when `status` is `rejected`. Mirrors the
+	// `verifiedByUserId` / `verifiedAt` shape used on socials: it carries
+	// who took the action, when, and which status it transitioned from.
+	// The rejected application's other fields (telegramLink, socials,
+	// consents) stay populated so downstream flows (chunk 14 notifier,
+	// future broadcasts) can still reach the creator.
+	Rejection *CreatorApplicationRejection `json:"rejection,omitempty"`
+
 	// Socials Social accounts attached to the application, sorted by platform then handle.
 	Socials []CreatorApplicationDetailSocial `json:"socials"`
 
@@ -425,6 +433,16 @@ type CreatorApplicationListItem struct {
 // CreatorApplicationListSortField Sort field for the admin list. Mapped to a SQL column / expression on
 // the backend. Unknown values are rejected with 422.
 type CreatorApplicationListSortField string
+
+// CreatorApplicationRejection Reject metadata derived from the latest
+// `creator_application_status_transitions` row with `to_status=rejected`.
+type CreatorApplicationRejection struct {
+	// FromStatus Lifecycle status of a creator application. Values follow the state
+	// machine described in `_bmad-output/planning-artifacts/creator-application-state-machine.md`.
+	FromStatus       CreatorApplicationStatus `json:"fromStatus"`
+	RejectedAt       time.Time                `json:"rejectedAt"`
+	RejectedByUserId openapi_types.UUID       `json:"rejectedByUserId"`
+}
 
 // CreatorApplicationStatus Lifecycle status of a creator application. Values follow the state
 // machine described in `_bmad-output/planning-artifacts/creator-application-state-machine.md`.
@@ -892,6 +910,9 @@ type ServerInterface interface {
 	// Get full creator application aggregate (admin only)
 	// (GET /creators/applications/{id})
 	GetCreatorApplication(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+	// Reject a creator application (admin only)
+	// (POST /creators/applications/{id}/reject)
+	RejectCreatorApplication(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
 	// Mark a creator application's social account as manually verified (admin only)
 	// (POST /creators/applications/{id}/socials/{socialId}/verify)
 	VerifyCreatorApplicationSocial(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, socialId openapi_types.UUID)
@@ -1015,6 +1036,12 @@ func (_ Unimplemented) ListCreatorApplications(w http.ResponseWriter, r *http.Re
 // Get full creator application aggregate (admin only)
 // (GET /creators/applications/{id})
 func (_ Unimplemented) GetCreatorApplication(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Reject a creator application (admin only)
+// (POST /creators/applications/{id}/reject)
+func (_ Unimplemented) RejectCreatorApplication(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -1519,6 +1546,37 @@ func (siw *ServerInterfaceWrapper) GetCreatorApplication(w http.ResponseWriter, 
 	handler.ServeHTTP(w, r)
 }
 
+// RejectCreatorApplication operation middleware
+func (siw *ServerInterfaceWrapper) RejectCreatorApplication(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RejectCreatorApplication(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // VerifyCreatorApplicationSocial operation middleware
 func (siw *ServerInterfaceWrapper) VerifyCreatorApplicationSocial(w http.ResponseWriter, r *http.Request) {
 
@@ -1778,6 +1836,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/creators/applications/{id}", wrapper.GetCreatorApplication)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/creators/applications/{id}/reject", wrapper.RejectCreatorApplication)
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/creators/applications/{id}/socials/{socialId}/verify", wrapper.VerifyCreatorApplicationSocial)
@@ -2586,6 +2647,71 @@ func (response GetCreatorApplicationdefaultJSONResponse) VisitGetCreatorApplicat
 	return json.NewEncoder(w).Encode(response.Body)
 }
 
+type RejectCreatorApplicationRequestObject struct {
+	Id openapi_types.UUID `json:"id"`
+}
+
+type RejectCreatorApplicationResponseObject interface {
+	VisitRejectCreatorApplicationResponse(w http.ResponseWriter) error
+}
+
+type RejectCreatorApplication200JSONResponse EmptyResult
+
+func (response RejectCreatorApplication200JSONResponse) VisitRejectCreatorApplicationResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type RejectCreatorApplication401JSONResponse ErrorResponse
+
+func (response RejectCreatorApplication401JSONResponse) VisitRejectCreatorApplicationResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type RejectCreatorApplication403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response RejectCreatorApplication403JSONResponse) VisitRejectCreatorApplicationResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type RejectCreatorApplication404JSONResponse ErrorResponse
+
+func (response RejectCreatorApplication404JSONResponse) VisitRejectCreatorApplicationResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type RejectCreatorApplication422JSONResponse ErrorResponse
+
+func (response RejectCreatorApplication422JSONResponse) VisitRejectCreatorApplicationResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(422)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type RejectCreatorApplicationdefaultJSONResponse struct {
+	Body       ErrorResponse
+	StatusCode int
+}
+
+func (response RejectCreatorApplicationdefaultJSONResponse) VisitRejectCreatorApplicationResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+
+	return json.NewEncoder(w).Encode(response.Body)
+}
+
 type VerifyCreatorApplicationSocialRequestObject struct {
 	Id       openapi_types.UUID `json:"id"`
 	SocialId openapi_types.UUID `json:"socialId"`
@@ -2822,6 +2948,9 @@ type StrictServerInterface interface {
 	// Get full creator application aggregate (admin only)
 	// (GET /creators/applications/{id})
 	GetCreatorApplication(ctx context.Context, request GetCreatorApplicationRequestObject) (GetCreatorApplicationResponseObject, error)
+	// Reject a creator application (admin only)
+	// (POST /creators/applications/{id}/reject)
+	RejectCreatorApplication(ctx context.Context, request RejectCreatorApplicationRequestObject) (RejectCreatorApplicationResponseObject, error)
 	// Mark a creator application's social account as manually verified (admin only)
 	// (POST /creators/applications/{id}/socials/{socialId}/verify)
 	VerifyCreatorApplicationSocial(ctx context.Context, request VerifyCreatorApplicationSocialRequestObject) (VerifyCreatorApplicationSocialResponseObject, error)
@@ -3361,6 +3490,32 @@ func (sh *strictHandler) GetCreatorApplication(w http.ResponseWriter, r *http.Re
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetCreatorApplicationResponseObject); ok {
 		if err := validResponse.VisitGetCreatorApplicationResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// RejectCreatorApplication operation middleware
+func (sh *strictHandler) RejectCreatorApplication(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request RejectCreatorApplicationRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.RejectCreatorApplication(ctx, request.(RejectCreatorApplicationRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RejectCreatorApplication")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(RejectCreatorApplicationResponseObject); ok {
+		if err := validResponse.VisitRejectCreatorApplicationResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
