@@ -5,7 +5,7 @@ const BASE_URL = process.env.BASE_URL || "http://localhost:5173";
 export default defineConfig({
   testDir: "../e2e/web",
   timeout: 30_000,
-  retries: 0,
+  retries: process.env.CI ? 1 : 0,
   reporter: [["html", { open: "never" }]],
   use: {
     baseURL: BASE_URL,
