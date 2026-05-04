@@ -10,6 +10,16 @@ export interface SortState {
 
 export const DEFAULT_SORT: SortState = { sort: "created_at", order: "desc" };
 
+export type ColumnFieldMap = Record<string, ApiSortField | undefined>;
+
+export const DEFAULT_COLUMN_TO_FIELD: ColumnFieldMap = {
+  fullName: "full_name",
+  submittedAt: "created_at",
+  hoursInStage: "created_at",
+  city: "city_name",
+  birthDate: "birth_date",
+};
+
 const VALID_SORT_FIELDS: readonly ApiSortField[] = [
   "created_at",
   "updated_at",
@@ -20,23 +30,27 @@ const VALID_SORT_FIELDS: readonly ApiSortField[] = [
 
 const VALID_ORDERS: readonly ApiOrder[] = ["asc", "desc"];
 
-export function parseSortFromUrl(sp: URLSearchParams): SortState {
+export function parseSortFromUrl(
+  sp: URLSearchParams,
+  defaults: SortState = DEFAULT_SORT,
+): SortState {
   const sortParam = sp.get("sort");
   const orderParam = sp.get("order");
   const sort = (VALID_SORT_FIELDS as readonly string[]).includes(sortParam ?? "")
     ? (sortParam as ApiSortField)
-    : DEFAULT_SORT.sort;
+    : defaults.sort;
   const order = (VALID_ORDERS as readonly string[]).includes(orderParam ?? "")
     ? (orderParam as ApiOrder)
-    : DEFAULT_SORT.order;
+    : defaults.order;
   return { sort, order };
 }
 
-export function serializeSort(sp: URLSearchParams, sortState: SortState): void {
-  if (
-    sortState.sort === DEFAULT_SORT.sort &&
-    sortState.order === DEFAULT_SORT.order
-  ) {
+export function serializeSort(
+  sp: URLSearchParams,
+  sortState: SortState,
+  defaults: SortState = DEFAULT_SORT,
+): void {
+  if (sortState.sort === defaults.sort && sortState.order === defaults.order) {
     sp.delete("sort");
     sp.delete("order");
   } else {
@@ -50,14 +64,9 @@ export function toggleSort(prev: SortState, field: ApiSortField): SortState {
   return { sort: field, order: prev.order === "asc" ? "desc" : "asc" };
 }
 
-const COLUMN_TO_FIELD: Record<string, ApiSortField | undefined> = {
-  fullName: "full_name",
-  submittedAt: "created_at",
-  hoursInStage: "created_at",
-  city: "city_name",
-  birthDate: "birth_date",
-};
-
-export function fieldForColumn(columnKey: string): ApiSortField | undefined {
-  return COLUMN_TO_FIELD[columnKey];
+export function fieldForColumn(
+  columnKey: string,
+  map: ColumnFieldMap = DEFAULT_COLUMN_TO_FIELD,
+): ApiSortField | undefined {
+  return map[columnKey];
 }

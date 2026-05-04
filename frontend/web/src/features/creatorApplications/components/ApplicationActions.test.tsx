@@ -77,14 +77,16 @@ beforeEach(() => {
 });
 
 describe("ApplicationActions — switch by status", () => {
-  it("renders reject button for verification status", () => {
-    renderInDrawer(makeDetail({ status: "verification" }));
-    expect(screen.getByTestId("application-actions")).toBeInTheDocument();
-    expect(screen.getByTestId("reject-button")).toBeInTheDocument();
-  });
+  it.each(["verification", "moderation"] as const)(
+    "renders reject button for %s status",
+    (status) => {
+      renderInDrawer(makeDetail({ status }));
+      expect(screen.getByTestId("application-actions")).toBeInTheDocument();
+      expect(screen.getByTestId("reject-button")).toBeInTheDocument();
+    },
+  );
 
   it.each([
-    "moderation",
     "awaiting_contract",
     "contract_sent",
     "signed",

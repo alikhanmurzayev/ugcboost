@@ -14,6 +14,7 @@ export default function ApplicationActions({ application }: ApplicationActionsPr
   const status: ApplicationStatus = application.status;
   switch (status) {
     case "verification":
+    case "moderation":
       return (
         <div className="flex items-center justify-end" data-testid="application-actions">
           <RejectApplicationDialog
@@ -24,7 +25,6 @@ export default function ApplicationActions({ application }: ApplicationActionsPr
           />
         </div>
       );
-    case "moderation":
     case "awaiting_contract":
     case "contract_sent":
     case "signed":

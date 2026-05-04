@@ -45,6 +45,9 @@ export default function DashboardLayout() {
   const verificationCount = countsQuery.isError
     ? undefined
     : (counts?.find((c) => c.status === "verification")?.count ?? 0);
+  const moderationCount = countsQuery.isError
+    ? undefined
+    : (counts?.find((c) => c.status === "moderation")?.count ?? 0);
 
   const navGroups: NavGroup[] = isAdmin
     ? [
@@ -68,6 +71,7 @@ export default function DashboardLayout() {
             {
               to: ROUTES.CREATOR_APP_MODERATION,
               label: t("creatorApplications:stages.moderation.title"),
+              badge: moderationCount,
             },
             {
               to: ROUTES.CREATOR_APP_CONTRACTS,
