@@ -10,7 +10,7 @@ import BrandsPage from "@/features/brands/BrandsPage";
 import BrandDetailPage from "@/features/brands/BrandDetailPage";
 import AuditLogPage from "@/features/audit/AuditLogPage";
 import VerificationPage from "@/features/creatorApplications/VerificationPage";
-import ModerationPage from "@/features/creatorApplications/stubs/ModerationPage";
+import ModerationPage from "@/features/creatorApplications/ModerationPage";
 import ContractsPage from "@/features/creatorApplications/stubs/ContractsPage";
 import RejectedPage from "@/features/creatorApplications/stubs/RejectedPage";
 import CreatorsPage from "@/features/creatorApplications/stubs/CreatorsPage";

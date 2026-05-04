@@ -15,7 +15,13 @@ import {
 import DateRangePicker from "./DateRangePicker";
 import SearchableMultiselect from "./SearchableMultiselect";
 
-export default function ApplicationFilters() {
+interface ApplicationFiltersProps {
+  showTelegramFilter?: boolean;
+}
+
+export default function ApplicationFilters({
+  showTelegramFilter = true,
+}: ApplicationFiltersProps = {}) {
   const { t } = useTranslation("creatorApplications");
   const [searchParams, setSearchParams] = useSearchParams();
   const [open, setOpen] = useState(false);
@@ -206,19 +212,21 @@ export default function ApplicationFilters() {
             />
           </FilterRow>
 
-          <FilterRow label={t("filters.telegram")} className="mt-3">
-            <TelegramLinkedSegment
-              value={filters.telegramLinked}
-              onChange={(telegramLinked) =>
-                update({ ...filters, telegramLinked })
-              }
-              labels={{
-                any: t("filters.anyTelegram"),
-                linked: t("filters.telegramLinked"),
-                notLinked: t("filters.telegramNotLinked"),
-              }}
-            />
-          </FilterRow>
+          {showTelegramFilter && (
+            <FilterRow label={t("filters.telegram")} className="mt-3">
+              <TelegramLinkedSegment
+                value={filters.telegramLinked}
+                onChange={(telegramLinked) =>
+                  update({ ...filters, telegramLinked })
+                }
+                labels={{
+                  any: t("filters.anyTelegram"),
+                  linked: t("filters.telegramLinked"),
+                  notLinked: t("filters.telegramNotLinked"),
+                }}
+              />
+            </FilterRow>
+          )}
         </div>
       )}
     </div>

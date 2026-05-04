@@ -41,6 +41,10 @@ function renderLayout(initialUrl = "/") {
               path="creator-applications/verification"
               element={<div>Verification stub</div>}
             />
+            <Route
+              path="creator-applications/moderation"
+              element={<div>Moderation stub</div>}
+            />
             <Route path="brands" element={<div>Brands stub</div>} />
             <Route path="audit" element={<div>Audit stub</div>} />
           </Route>
@@ -101,6 +105,26 @@ describe("DashboardLayout — admin nav", () => {
     });
   });
 
+  it("shows moderation badge from counts", async () => {
+    setUser(Roles.ADMIN);
+    vi.mocked(getCreatorApplicationsCounts).mockResolvedValue({
+      data: {
+        items: [
+          { status: "verification", count: 7 },
+          { status: "moderation", count: 2 },
+        ],
+      },
+    });
+
+    renderLayout();
+
+    await waitFor(() => {
+      expect(
+        screen.getByTestId("nav-badge-creator-applications/moderation"),
+      ).toHaveTextContent("2");
+    });
+  });
+
   it("hides badge when counts query errors", async () => {
     setUser(Roles.ADMIN);
     vi.mocked(getCreatorApplicationsCounts).mockRejectedValue(
@@ -117,7 +141,13 @@ describe("DashboardLayout — admin nav", () => {
       screen.queryByTestId("nav-badge-creator-applications/verification"),
     ).not.toBeInTheDocument();
     expect(
+      screen.queryByTestId("nav-badge-creator-applications/moderation"),
+    ).not.toBeInTheDocument();
+    expect(
       screen.getByTestId("nav-link-creator-applications/verification"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId("nav-link-creator-applications/moderation"),
     ).toBeInTheDocument();
   });
 
@@ -135,6 +165,23 @@ describe("DashboardLayout — admin nav", () => {
 
     expect(
       screen.queryByTestId("nav-badge-creator-applications/verification"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("hides moderation badge when count is zero (sparse miss)", async () => {
+    setUser(Roles.ADMIN);
+    vi.mocked(getCreatorApplicationsCounts).mockResolvedValue({
+      data: { items: [{ status: "verification", count: 3 }] },
+    });
+
+    renderLayout();
+
+    await waitFor(() => {
+      expect(getCreatorApplicationsCounts).toHaveBeenCalled();
+    });
+
+    expect(
+      screen.queryByTestId("nav-badge-creator-applications/moderation"),
     ).not.toBeInTheDocument();
   });
 });

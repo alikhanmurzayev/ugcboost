@@ -78,4 +78,55 @@ describe("fieldForColumn", () => {
     expect(fieldForColumn("socials")).toBeUndefined();
     expect(fieldForColumn("categories")).toBeUndefined();
   });
+
+  it("respects custom column map override", () => {
+    const map = { hoursInStage: "updated_at" as const };
+    expect(fieldForColumn("hoursInStage", map)).toBe("updated_at");
+    expect(fieldForColumn("fullName", map)).toBeUndefined();
+  });
+});
+
+describe("parseSortFromUrl with custom defaults", () => {
+  it("falls back to provided defaults when params absent", () => {
+    expect(
+      parseSortFromUrl(new URLSearchParams(), {
+        sort: "updated_at",
+        order: "asc",
+      }),
+    ).toEqual({ sort: "updated_at", order: "asc" });
+  });
+
+  it("returns parsed values when valid, ignoring custom defaults", () => {
+    expect(
+      parseSortFromUrl(new URLSearchParams("sort=full_name&order=desc"), {
+        sort: "updated_at",
+        order: "asc",
+      }),
+    ).toEqual({ sort: "full_name", order: "desc" });
+  });
+});
+
+describe("serializeSort with custom defaults", () => {
+  it("removes keys when state equals provided defaults", () => {
+    const sp = new URLSearchParams("sort=updated_at&order=asc&page=3");
+    serializeSort(
+      sp,
+      { sort: "updated_at", order: "asc" },
+      { sort: "updated_at", order: "asc" },
+    );
+    expect(sp.has("sort")).toBe(false);
+    expect(sp.has("order")).toBe(false);
+    expect(sp.get("page")).toBe("3");
+  });
+
+  it("writes keys when state differs from provided defaults", () => {
+    const sp = new URLSearchParams();
+    serializeSort(
+      sp,
+      { sort: "created_at", order: "desc" },
+      { sort: "updated_at", order: "asc" },
+    );
+    expect(sp.get("sort")).toBe("created_at");
+    expect(sp.get("order")).toBe("desc");
+  });
 });

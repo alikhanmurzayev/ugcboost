@@ -6,7 +6,8 @@
       "description": "Креаторы подтверждают владение аккаунтом в Telegram-боте."
     },
     "moderation": {
-      "title": "Модерация"
+      "title": "Модерация",
+      "description": "Модератор проверяет соцсети и принимает решение по заявке."
     },
     "contracts": {
       "title": "Договоры"
@@ -38,6 +39,7 @@
     "fullName": "ФИО",
     "socials": "Соцсети",
     "categories": "Категории",
+    "city": "Город",
     "submittedAt": "Подана",
     "hoursInStage": "В этапе",
     "telegram": "Telegram"
@@ -60,7 +62,7 @@
     "anyCity": "Любой город",
     "anyCategory": "Любая категория",
     "active": "Активные фильтры",
-    "date": "Период подачи",
+    "date": "Период подачи заявки",
     "age": "Возраст",
     "searchCity": "Найти город",
     "searchCategory": "Найти категорию",
@@ -83,7 +85,9 @@
     "verifyManual": "Подтвердить вручную",
     "verifying": "Подтверждение...",
     "reject": "Отклонить заявку",
-    "rejecting": "Отклонение..."
+    "rejecting": "Отклонение...",
+    "approve": "Одобрить заявку",
+    "approveDisabledHint": "Скоро"
   },
   "verifyDialog": {
     "title": "Подтвердить владение вручную?",

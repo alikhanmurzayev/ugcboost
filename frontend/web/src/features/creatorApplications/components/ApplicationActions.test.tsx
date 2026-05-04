@@ -77,14 +77,23 @@ beforeEach(() => {
 });
 
 describe("ApplicationActions — switch by status", () => {
-  it("renders reject button for verification status", () => {
+  it("renders reject button for verification status (no approve)", () => {
     renderInDrawer(makeDetail({ status: "verification" }));
     expect(screen.getByTestId("application-actions")).toBeInTheDocument();
     expect(screen.getByTestId("reject-button")).toBeInTheDocument();
+    expect(screen.queryByTestId("approve-button")).not.toBeInTheDocument();
+  });
+
+  it("renders reject + disabled approve placeholder for moderation status", () => {
+    renderInDrawer(makeDetail({ status: "moderation" }));
+    expect(screen.getByTestId("application-actions")).toBeInTheDocument();
+    expect(screen.getByTestId("reject-button")).toBeInTheDocument();
+    const approve = screen.getByTestId("approve-button");
+    expect(approve).toBeInTheDocument();
+    expect(approve).toBeDisabled();
   });
 
   it.each([
-    "moderation",
     "awaiting_contract",
     "contract_sent",
     "signed",
@@ -94,6 +103,7 @@ describe("ApplicationActions — switch by status", () => {
     renderInDrawer(makeDetail({ status }));
     expect(screen.queryByTestId("application-actions")).not.toBeInTheDocument();
     expect(screen.queryByTestId("reject-button")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("approve-button")).not.toBeInTheDocument();
   });
 
   it("renders nothing when application is undefined", () => {
