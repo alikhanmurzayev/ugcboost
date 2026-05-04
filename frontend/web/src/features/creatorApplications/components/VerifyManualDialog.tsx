@@ -6,15 +6,9 @@ import { verifyApplicationSocialManually } from "@/api/creatorApplications";
 import { ApiError } from "@/api/client";
 import { creatorApplicationKeys } from "@/shared/constants/queryKeys";
 import { getErrorMessage } from "@/shared/i18n/errors";
-import type { SocialPlatform } from "../types";
+import { PLATFORM_LABELS } from "../types";
 
 type DetailSocial = components["schemas"]["CreatorApplicationDetailSocial"];
-
-const PLATFORM_LABELS: Record<SocialPlatform, string> = {
-  instagram: "Instagram",
-  tiktok: "TikTok",
-  threads: "Threads",
-};
 
 interface VerifyManualDialogProps {
   open: boolean;

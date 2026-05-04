@@ -5,3 +5,9 @@ export type ApplicationDetail = components["schemas"]["CreatorApplicationDetailD
 export type ApplicationStatus = components["schemas"]["CreatorApplicationStatus"];
 export type SocialPlatform = components["schemas"]["SocialPlatform"];
 export type DictionaryItem = components["schemas"]["DictionaryItem"];
+
+export const PLATFORM_LABELS: Record<SocialPlatform, string> = {
+  instagram: "Instagram",
+  tiktok: "TikTok",
+  threads: "Threads",
+};

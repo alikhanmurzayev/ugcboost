@@ -1,15 +1,9 @@
 import { useTranslation } from "react-i18next";
 import type { components } from "@/api/generated/schema";
-import type { SocialPlatform } from "../types";
+import { PLATFORM_LABELS } from "../types";
 import SocialLink from "./SocialLink";
 
 type DetailSocial = components["schemas"]["CreatorApplicationDetailSocial"];
-
-const PLATFORM_LABELS: Record<SocialPlatform, string> = {
-  instagram: "Instagram",
-  tiktok: "TikTok",
-  threads: "Threads",
-};
 
 interface SocialAdminRowProps {
   social: DetailSocial;
@@ -46,7 +40,6 @@ export default function SocialAdminRow({
           <button
             type="button"
             disabled
-            aria-disabled="true"
             data-testid={`verify-social-${social.id}`}
             className="inline-flex cursor-not-allowed items-center rounded-button border border-surface-300 bg-white px-3 py-1 text-xs font-medium text-gray-400"
           >

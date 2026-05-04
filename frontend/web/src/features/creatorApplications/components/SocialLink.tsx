@@ -1,10 +1,4 @@
-import type { SocialPlatform } from "../types";
-
-const PLATFORM_LABELS: Record<SocialPlatform, string> = {
-  instagram: "Instagram",
-  tiktok: "TikTok",
-  threads: "Threads",
-};
+import { PLATFORM_LABELS, type SocialPlatform } from "../types";
 
 const PLATFORM_ICON_SRC: Record<SocialPlatform, string> = {
   instagram: "/social/instagram.svg",

@@ -24,6 +24,7 @@ vi.mock("@/api/client", async () => {
 
 import { verifyApplicationSocialManually } from "@/api/creatorApplications";
 import { ApiError } from "@/api/client";
+import { getErrorMessage } from "@/shared/i18n/errors";
 
 type DetailSocial = components["schemas"]["CreatorApplicationDetailSocial"];
 
@@ -129,7 +130,7 @@ describe("VerifyManualDialog — 4xx error handling", () => {
     ["CREATOR_APPLICATION_TELEGRAM_NOT_LINKED", 422],
     ["CREATOR_APPLICATION_SOCIAL_ALREADY_VERIFIED", 409],
   ])(
-    "on %s (%i) → onApiError + invalidate + close modal, drawer stays",
+    "on %s (%i) → onApiError(localized) + invalidate + close modal, drawer stays",
     async (code, status) => {
       vi.mocked(verifyApplicationSocialManually).mockRejectedValueOnce(
         new ApiError(status, code),
@@ -139,7 +140,7 @@ describe("VerifyManualDialog — 4xx error handling", () => {
       await userEvent.click(screen.getByTestId("verify-confirm-submit"));
 
       await waitFor(() => {
-        expect(onApiError).toHaveBeenCalledTimes(1);
+        expect(onApiError).toHaveBeenCalledWith(getErrorMessage(code));
       });
       expect(invalidateSpy).toHaveBeenCalledWith({
         queryKey: ["creator-applications"],
@@ -149,16 +150,17 @@ describe("VerifyManualDialog — 4xx error handling", () => {
     },
   );
 
-  it("on 404 SOCIAL_NOT_FOUND → onApiError + invalidate + close modal AND drawer", async () => {
+  it("on 404 SOCIAL_NOT_FOUND → onApiError(localized) + invalidate + close modal AND drawer", async () => {
+    const code = "CREATOR_APPLICATION_SOCIAL_NOT_FOUND";
     vi.mocked(verifyApplicationSocialManually).mockRejectedValueOnce(
-      new ApiError(404, "CREATOR_APPLICATION_SOCIAL_NOT_FOUND"),
+      new ApiError(404, code),
     );
     const { invalidateSpy, onClose, onCloseDrawer, onApiError } = setup();
 
     await userEvent.click(screen.getByTestId("verify-confirm-submit"));
 
     await waitFor(() => {
-      expect(onApiError).toHaveBeenCalledTimes(1);
+      expect(onApiError).toHaveBeenCalledWith(getErrorMessage(code));
     });
     expect(invalidateSpy).toHaveBeenCalledWith({
       queryKey: ["creator-applications"],
@@ -167,16 +169,17 @@ describe("VerifyManualDialog — 4xx error handling", () => {
     expect(onCloseDrawer).toHaveBeenCalledTimes(1);
   });
 
-  it("on 404 NOT_FOUND (generic) → onApiError + invalidate + close modal AND drawer", async () => {
+  it("on 404 NOT_FOUND (generic) → onApiError(localized) + invalidate + close modal AND drawer", async () => {
+    const code = "NOT_FOUND";
     vi.mocked(verifyApplicationSocialManually).mockRejectedValueOnce(
-      new ApiError(404, "NOT_FOUND"),
+      new ApiError(404, code),
     );
     const { invalidateSpy, onClose, onCloseDrawer, onApiError } = setup();
 
     await userEvent.click(screen.getByTestId("verify-confirm-submit"));
 
     await waitFor(() => {
-      expect(onApiError).toHaveBeenCalledTimes(1);
+      expect(onApiError).toHaveBeenCalledWith(getErrorMessage(code));
     });
     expect(invalidateSpy).toHaveBeenCalled();
     expect(onClose).toHaveBeenCalledTimes(1);
