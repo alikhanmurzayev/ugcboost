@@ -25,6 +25,13 @@
 - No direct pushes to `main` — only via Pull Request with approval
 - Use `gh pr create` to open PRs
 
+## Roadmaps
+
+Living-документы с нарезкой на чанки (один чанк ≈ один PR с релизом).
+
+- **Активный:** [campaign-roadmap.md](_bmad-output/planning-artifacts/campaign-roadmap.md) — путь от `approved`-креатора до билета на мероприятие 13–14 мая. Дедлайн функционала — 9 мая.
+- **Завершённый:** [creator-onboarding-roadmap.md](_bmad-output/planning-artifacts/archive/2026-04-30-creator-onboarding-roadmap.md) — онбординг креатора (форма заявки → верификация → approved). Закрыт 2026-05-05.
+
 ## Start claude code session without tmux:
    ```bash
    claude --dangerously-skip-permissions --remote-control --effort max -c
