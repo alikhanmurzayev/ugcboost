@@ -109,6 +109,13 @@ const (
 		"Мы внимательно рассмотрели вашу заявку, профиль, контент и текущие показатели аккаунта. К сожалению, на данном этапе ваша заявка не прошла модерацию платформы.\n\n" +
 		"Это не является оценкой вашего потенциала как креатора — просто сейчас ваш профиль не полностью совпадает с критериями отбора для текущих fashion-кампаний и запросов брендов на платформе 🙏\n\n" +
 		"Желаем вам дальнейшего роста и удачи в ваших проектах 🤍"
+
+	expectedApplicationApproved = "Здравствуйте!\n\n" +
+		"Рады сообщить, что ваша заявка прошла модерацию 😍 Ваш профиль, визуальный стиль и контент соответствуют критериям отбора для участия в fashion-кампаниях платформы UGC boost 💫\n\n" +
+		"В ближайшее время мы отправим вам детали участия в EURASIAN FASHION WEEK и договор для подписания.\n\n" +
+		"Добро пожаловать на платформу UGC boost 💫\n\n" +
+		"После Недели моды мы планируем запустить приложение в App Store и добавить новые возможности для UGC-сотрудничества с брендами и партнерами EURASIAN FASHION WEEK.\n\n" +
+		"Оставайтесь с нами — впереди много масштабных проектов!"
 )
 
 func TestNotifier_NotifyApplicationLinked(t *testing.T) {
@@ -268,6 +275,54 @@ func TestNotifier_NotifyApplicationRejected(t *testing.T) {
 		n := newSingleShotNotifier(sender, log)
 		require.NotPanics(t, func() {
 			n.NotifyApplicationRejected(context.Background(), 77)
+		})
+		waitFor(t, t.Name(), sendDone)
+		n.Wait()
+	})
+}
+
+func TestNotifier_NotifyApplicationApproved(t *testing.T) {
+	t.Parallel()
+
+	t.Run("posts exact approve message without parse mode or inline keyboard", func(t *testing.T) {
+		t.Parallel()
+		sender := tgmocks.NewMockSender(t)
+		log := logmocks.NewMockLogger(t)
+		captured, sendDone := captureSend(t, sender, nil)
+
+		n := telegram.NewNotifier(sender, log)
+		n.NotifyApplicationApproved(context.Background(), 31415)
+		waitFor(t, t.Name(), sendDone)
+		n.Wait()
+
+		require.NotNil(t, *captured)
+		chatID, ok := (*captured).ChatID.(int64)
+		require.True(t, ok)
+		require.Equal(t, int64(31415), chatID)
+		require.Equal(t, expectedApplicationApproved, (*captured).Text)
+		require.Empty(t, (*captured).ParseMode, "application-approved is plain text — no parse mode")
+		require.Nil(t, (*captured).ReplyMarkup, "no inline keyboard on approve message")
+	})
+
+	t.Run("sender error logged with chat id and op", func(t *testing.T) {
+		t.Parallel()
+		sender := tgmocks.NewMockSender(t)
+		log := logmocks.NewMockLogger(t)
+		_, sendDone := captureSend(t, sender, errors.New("network down"))
+		log.EXPECT().Error(mock.Anything, "telegram notify failed",
+			mock.MatchedBy(func(args []any) bool {
+				m := map[string]any{}
+				for i := 0; i+1 < len(args); i += 2 {
+					if k, ok := args[i].(string); ok {
+						m[k] = args[i+1]
+					}
+				}
+				return m["op"] == "application_approved" && m["chat_id"] == int64(88)
+			})).Once()
+
+		n := newSingleShotNotifier(sender, log)
+		require.NotPanics(t, func() {
+			n.NotifyApplicationApproved(context.Background(), 88)
 		})
 		waitFor(t, t.Name(), sendDone)
 		n.Wait()

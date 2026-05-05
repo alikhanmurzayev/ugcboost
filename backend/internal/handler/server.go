@@ -49,6 +49,7 @@ type AuthzService interface {
 	CanGetCreatorApplicationsCounts(ctx context.Context) error
 	CanVerifyCreatorApplicationSocialManually(ctx context.Context) error
 	CanRejectCreatorApplication(ctx context.Context) error
+	CanApproveCreatorApplication(ctx context.Context) error
 }
 
 // AuditLogService is the interface Server needs from the audit service.
@@ -68,6 +69,7 @@ type CreatorApplicationService interface {
 	VerifyInstagramByCode(ctx context.Context, code, igHandle string) (domain.VerifyInstagramStatus, error)
 	VerifyApplicationSocialManually(ctx context.Context, applicationID, socialID, actorUserID string) error
 	RejectApplication(ctx context.Context, applicationID, actorUserID string) error
+	ApproveApplication(ctx context.Context, applicationID, actorUserID string) (string, error)
 }
 
 // DictionaryService is the interface Server needs to serve public dictionaries

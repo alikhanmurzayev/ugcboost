@@ -433,6 +433,51 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/creators/applications/{id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve a creator application (admin only)
+         * @description Admin-only action that promotes an application from `moderation` to the
+         *     terminal `approved` status. The transition is guarded server-side: any
+         *     other source status returns 422 `CREATOR_APPLICATION_NOT_APPROVABLE`.
+         *     The approve also snapshots the application into the new `creators`
+         *     entity (plus its socials and categories) inside the same transaction,
+         *     so a creator row is guaranteed to exist if and only if the application
+         *     moved to `approved`. The approval is persisted as a
+         *     `creator_application_status_transitions` row plus an audit entry.
+         *
+         *     The application's Telegram link is required: an application without a
+         *     link is refused with 422 `CREATOR_APPLICATION_TELEGRAM_NOT_LINKED`,
+         *     because the only channel for the bot to notify the approved creator
+         *     is the bound chat. After commit, the bot sends a static congratulation
+         *     message — updates to that copy ship via separate PRs.
+         *
+         *     No body is accepted; the response carries the freshly-created
+         *     `creatorId` so callers can immediately navigate to the creator
+         *     aggregate (read endpoint ships in a follow-up chunk).
+         *
+         *     Repeated approve of an already-approved application returns 422
+         *     `CREATOR_APPLICATION_NOT_APPROVABLE`. Concurrent approves on the same
+         *     application produce exactly one 200 (winner) and exactly one 422; the
+         *     UNIQUE constraint on `creators.source_application_id` aborts the loser
+         *     atomically along with the entire transaction it tried to run.
+         */
+        post: operations["approveCreatorApplication"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/webhooks/sendpulse/instagram": {
         parameters: {
             query?: never;
@@ -986,6 +1031,17 @@ export interface components {
          *     observe state changes.
          */
         EmptyResult: Record<string, never>;
+        /** @description Payload returned by POST /creators/applications/{id}/approve. */
+        CreatorApprovalData: {
+            /**
+             * Format: uuid
+             * @description ID of the creator row created by the approve action.
+             */
+            creatorId: string;
+        };
+        CreatorApprovalResult: {
+            data: components["schemas"]["CreatorApprovalData"];
+        };
     };
     responses: {
         /** @description Unexpected error */
@@ -1787,6 +1843,62 @@ export interface operations {
              * @description Application is not in a status from which `rejected` is reachable
              *     (`verification` or `moderation`). Includes the case of repeating
              *     reject on an already-rejected application.
+             */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            default: components["responses"]["UnexpectedError"];
+        };
+    };
+    approveCreatorApplication: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Application moved to `approved`; `creatorId` returned. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreatorApprovalResult"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            /** @description Application not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /**
+             * @description Application is not in a status from which `approved` is reachable
+             *     (only `moderation`), the application has no Telegram link, the
+             *     corresponding creator row already exists or the Telegram account
+             *     is already taken by another creator.
              */
             422: {
                 headers: {

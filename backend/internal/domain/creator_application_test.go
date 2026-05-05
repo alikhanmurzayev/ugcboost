@@ -139,13 +139,30 @@ func TestIsCreatorApplicationTransitionAllowed(t *testing.T) {
 		))
 	})
 
-	t.Run("future transitions not yet declared", func(t *testing.T) {
+	t.Run("moderation → approved allowed", func(t *testing.T) {
 		t.Parallel()
-		// Moderation → approved belongs to chunk 18; until that chunk lands the
-		// helper must reject it so the service surfaces the invalid-transition
-		// sentinel instead of silently committing.
-		require.False(t, IsCreatorApplicationTransitionAllowed(
+		require.True(t, IsCreatorApplicationTransitionAllowed(
 			CreatorApplicationStatusModeration,
+			CreatorApplicationStatusApproved,
+		))
+	})
+
+	t.Run("approved is terminal — outbound edges rejected", func(t *testing.T) {
+		t.Parallel()
+		require.False(t, IsCreatorApplicationTransitionAllowed(
+			CreatorApplicationStatusApproved,
+			CreatorApplicationStatusModeration,
+		))
+		require.False(t, IsCreatorApplicationTransitionAllowed(
+			CreatorApplicationStatusApproved,
+			CreatorApplicationStatusRejected,
+		))
+	})
+
+	t.Run("verification → approved disallowed (must go through moderation)", func(t *testing.T) {
+		t.Parallel()
+		require.False(t, IsCreatorApplicationTransitionAllowed(
+			CreatorApplicationStatusVerification,
 			CreatorApplicationStatusApproved,
 		))
 	})

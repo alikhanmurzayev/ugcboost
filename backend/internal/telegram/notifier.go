@@ -68,6 +68,16 @@ const applicationRejectedText = "Здравствуйте! Благодарим 
 	"Это не является оценкой вашего потенциала как креатора — просто сейчас ваш профиль не полностью совпадает с критериями отбора для текущих fashion-кампаний и запросов брендов на платформе 🙏\n\n" +
 	"Желаем вам дальнейшего роста и удачи в ваших проектах 🤍"
 
+// applicationApprovedText is the static congratulation sent after admin
+// approve commits. Plain text, no parse_mode, no inline keyboard. Iterated
+// by replacing this constant in a separate PR — no Config switch.
+const applicationApprovedText = "Здравствуйте!\n\n" +
+	"Рады сообщить, что ваша заявка прошла модерацию 😍 Ваш профиль, визуальный стиль и контент соответствуют критериям отбора для участия в fashion-кампаниях платформы UGC boost 💫\n\n" +
+	"В ближайшее время мы отправим вам детали участия в EURASIAN FASHION WEEK и договор для подписания.\n\n" +
+	"Добро пожаловать на платформу UGC boost 💫\n\n" +
+	"После Недели моды мы планируем запустить приложение в App Store и добавить новые возможности для UGC-сотрудничества с брендами и партнерами EURASIAN FASHION WEEK.\n\n" +
+	"Оставайтесь с нами — впереди много масштабных проектов!"
+
 // ApplicationLinkedPayload carries everything NotifyApplicationLinked needs
 // to pick the right welcome variant and substitute the verification code.
 type ApplicationLinkedPayload struct {
@@ -181,6 +191,15 @@ func (n *Notifier) NotifyApplicationRejected(ctx context.Context, chatID int64) 
 	n.fire(ctx, "application_rejected", chatID, &bot.SendMessageParams{
 		ChatID: chatID,
 		Text:   applicationRejectedText,
+	})
+}
+
+// NotifyApplicationApproved sends the static congratulation message after
+// admin approve commits. Plain text — no inline keyboard, no parse mode.
+func (n *Notifier) NotifyApplicationApproved(ctx context.Context, chatID int64) {
+	n.fire(ctx, "application_approved", chatID, &bot.SendMessageParams{
+		ChatID: chatID,
+		Text:   applicationApprovedText,
 	})
 }
 

@@ -2,8 +2,8 @@
 title: "Approve action для заявки креатора (chunk 18b)"
 type: feature
 created: "2026-05-05"
-status: draft
-baseline_commit: "TBD — фиксируется после merge PR chunk 18a"
+status: in-progress
+baseline_commit: "18ed697"
 context:
   - docs/standards/
   - _bmad-output/planning-artifacts/creator-onboarding-roadmap.md
@@ -56,9 +56,17 @@ context:
 
 Текст сообщения — статический в `internal/telegram/messages.go` (как `applicationRejectedText`):
 
-> Поздравляем! Ваша заявка одобрена ✅
+> Здравствуйте!
 >
-> Скоро вернёмся с предложениями по сотрудничеству 🖤
+> Рады сообщить, что ваша заявка прошла модерацию 😍 Ваш профиль, визуальный стиль и контент соответствуют критериям отбора для участия в fashion-кампаниях платформы UGC boost 💫
+>
+> В ближайшее время мы отправим вам детали участия в EURASIAN FASHION WEEK и договор для подписания.
+>
+> Добро пожаловать на платформу UGC boost 💫
+>
+> После Недели моды мы планируем запустить приложение в App Store и добавить новые возможности для UGC-сотрудничества с брендами и партнерами EURASIAN FASHION WEEK.
+>
+> Оставайтесь с нами — впереди много масштабных проектов!
 
 Plain text, без `parse_mode`, без inline-keyboard. Итерируется отдельным PR'ом заменой константы.
 
@@ -161,7 +169,7 @@ Plain text, без `parse_mode`, без inline-keyboard. Итерируется 
 
 ## Code Map
 
-> Baseline — TBD (фиксируется после merge PR 18a).
+> Baseline — `18ed697` (merge commit PR #65, 18a).
 
 - `backend/api/openapi.yaml` —
   - Новый path `POST /creators/applications/{id}/approve`.
@@ -202,23 +210,23 @@ Plain text, без `parse_mode`, без inline-keyboard. Итерируется 
 ## Tasks & Acceptance
 
 **Pre-execution gates:**
-- [ ] PR 18a (foundation) смержен в main; baseline_commit зафиксирован.
-- [ ] `make migrate-up` локально работает — таблицы из 18a на месте.
-- [ ] `make test-unit-backend` зелёный на baseline.
+- [x] PR 18a (foundation) смержен в main; baseline_commit зафиксирован (`18ed697`).
+- [x] `make migrate-up` локально работает — таблицы из 18a на месте.
+- [x] `make test-unit-backend` зелёный на baseline.
 
 **Execution:**
-- [ ] OpenAPI: 1 path + 1 response schema + 3 ErrorCode. `make generate-api`.
-- [ ] Domain: types Creator/CreatorSocial/CreatorCategory + helper NewCreatorFromApplication + user-facing codes для 3 sentinel'ов из 18a + TransitionReasonApprove + расширение transition map.
-- [ ] Audit: action-константа.
-- [ ] Authz: CanApproveCreatorApplication + unit-тесты.
-- [ ] Service: расширение CreatorApplicationRepoFactory + creatorAppNotifier интерфейсов; `make generate-mocks`. Метод ApproveApplication + notifyApplicationApproved + unit-тесты по матрице.
-- [ ] Handler: ApproveCreatorApplication + 3 новых case в response.go + unit-тесты.
-- [ ] Telegram: applicationApprovedText + NotifyApplicationApproved + unit-тесты.
-- [ ] testapi: `CleanupEntityRequest.type=creator` enum + handler-case `creatorRepo.DeleteForTests`. `make generate-api`.
-- [ ] testutil: `DeleteCreatorForTests` (новый файл `creator.go`).
-- [ ] E2E: approve_test.go по матрице. Happy: 200 + `creatorId` UUID + GET application status=approved + WaitForTelegramSent + успешный `DeleteCreatorForTests` в cleanup. Полная structural-проверка БД откладывается на 18c.
-- [ ] Локальный smoke: 9 шагов из § Local Smoke Acceptance.
-- [ ] Roadmap: chunk 18.5 → `[~]` старт, `[x]` merge.
+- [x] OpenAPI: 1 path + 1 response schema + 3 ErrorCode. `make generate-api`.
+- [x] Domain: types Creator/CreatorSocial/CreatorCategory + helper NewCreatorFromApplication + user-facing codes для 3 sentinel'ов из 18a + TransitionReasonApprove + расширение transition map.
+- [x] Audit: action-константа.
+- [x] Authz: CanApproveCreatorApplication + unit-тесты.
+- [x] Service: расширение CreatorApplicationRepoFactory + creatorAppNotifier интерфейсов; `make generate-mocks`. Метод ApproveApplication + notifyApplicationApproved + unit-тесты по матрице. (Дополнительно: `GetByIDForUpdate` на CreatorApplicationRepo для сериализации concurrent approve race — Postgres без явного row-lock'а возвращает `iin_unique` раньше `source_application_id_unique`, что разъезжается с § Decisions.)
+- [x] Handler: ApproveCreatorApplication + 3 новых case в response.go + unit-тесты.
+- [x] Telegram: applicationApprovedText + NotifyApplicationApproved + unit-тесты.
+- [x] testapi: `CleanupEntityRequest.type=creator` enum + handler-case `creatorRepo.DeleteForTests`. `make generate-api`.
+- [x] testutil: `DeleteCreatorForTests` + `RegisterCreatorCleanup` (новый файл `creator.go`).
+- [x] E2E: approve_test.go по матрице. Happy: 200 + `creatorId` UUID + GET application status=approved + WaitForTelegramSent + успешный `DeleteCreatorForTests` в cleanup. Полная structural-проверка БД откладывается на 18c.
+- [x] Локальный smoke (через изолированный e2e happy + прямой psql): creators / creator_socials / creator_categories / creator_application_status_transitions / audit_logs — все по 1+ row, поля 1-в-1.
+- [x] Roadmap: chunk 18.5 → `[~]` старт; `[x]` ставится через /finalize после merge.
 
 **Acceptance Criteria:**
 - Given admin Bearer + app `moderation` + link, when POST approve, then 200 `{creatorId}`; admin GET application → `status=approved`; `WaitForTelegramSent` → 1 approve-message; `DeleteCreatorForTests(creatorId)` в cleanup'е успешен (доказывает запись).

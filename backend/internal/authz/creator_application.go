@@ -69,3 +69,16 @@ func (a *AuthzService) CanRejectCreatorApplication(ctx context.Context) error {
 	}
 	return nil
 }
+
+// CanApproveCreatorApplication gates the admin approve action
+// (POST /creators/applications/{id}/approve). Approve is a terminal transition
+// that materialises the creator entity and dispatches a notification, so
+// non-admin callers must never reach the service layer. Same domain.ErrForbidden
+// shape as the other creator-application endpoints to keep 403 message and
+// timing identical.
+func (a *AuthzService) CanApproveCreatorApplication(ctx context.Context) error {
+	if middleware.RoleFromContext(ctx) != api.Admin {
+		return domain.ErrForbidden
+	}
+	return nil
+}

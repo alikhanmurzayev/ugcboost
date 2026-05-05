@@ -517,6 +517,7 @@ var creatorApplicationAllowedTransitions = map[string]map[string]bool{
 		CreatorApplicationStatusRejected:   true,
 	},
 	CreatorApplicationStatusModeration: {
+		CreatorApplicationStatusApproved: true,
 		CreatorApplicationStatusRejected: true,
 	},
 }
@@ -546,6 +547,7 @@ const (
 	TransitionReasonInstagramAuto = "instagram_auto"
 	TransitionReasonManualVerify  = "manual_verify"
 	TransitionReasonReject        = "reject_admin"
+	TransitionReasonApprove       = "approve_admin"
 )
 
 // VerifyInstagramStatus is the explicit outcome the service returns to the

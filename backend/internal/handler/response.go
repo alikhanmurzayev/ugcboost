@@ -58,6 +58,15 @@ func respondError(w http.ResponseWriter, r *http.Request, err error, log logger.
 	case errors.Is(err, domain.ErrCreatorApplicationNotRejectable):
 		writeError(w, r, http.StatusUnprocessableEntity, domain.CodeCreatorApplicationNotRejectable,
 			"Заявку нельзя отклонить в текущем статусе. Допустимые статусы для отклонения — verification или moderation.", log)
+	case errors.Is(err, domain.ErrCreatorApplicationNotApprovable):
+		writeError(w, r, http.StatusUnprocessableEntity, domain.CodeCreatorApplicationNotApprovable,
+			"Заявку нельзя одобрить в текущем статусе. Допустимый статус для одобрения — moderation.", log)
+	case errors.Is(err, domain.ErrCreatorAlreadyExists):
+		writeError(w, r, http.StatusUnprocessableEntity, domain.CodeCreatorAlreadyExists,
+			"Креатор с таким ИИН уже существует. Сверьте данные с реестром или удалите дубль креатора.", log)
+	case errors.Is(err, domain.ErrCreatorTelegramAlreadyTaken):
+		writeError(w, r, http.StatusUnprocessableEntity, domain.CodeCreatorTelegramAlreadyTaken,
+			"Этот Telegram-аккаунт уже привязан к другому креатору. Освободите его или попросите креатора сменить аккаунт.", log)
 	case errors.Is(err, domain.ErrNotFound), errors.Is(err, sql.ErrNoRows):
 		writeError(w, r, http.StatusNotFound, domain.CodeNotFound, "Resource not found", log)
 	case errors.Is(err, domain.ErrForbidden):

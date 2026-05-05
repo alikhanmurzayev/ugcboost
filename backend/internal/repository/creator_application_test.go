@@ -290,6 +290,57 @@ func TestCreatorApplicationRepository_GetByID(t *testing.T) {
 	})
 }
 
+func TestCreatorApplicationRepository_GetByIDForUpdate(t *testing.T) {
+	t.Parallel()
+
+	const sqlStmt = "SELECT address, birth_date, category_other_text, city_code, created_at, first_name, id, iin, last_name, middle_name, phone, status, updated_at, verification_code FROM creator_applications WHERE id = $1 FOR UPDATE"
+
+	t.Run("success maps row with FOR UPDATE clause", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &creatorApplicationRepository{db: mock}
+		birth := time.Date(1995, 5, 15, 0, 0, 0, 0, time.UTC)
+		created := time.Date(2026, 4, 20, 18, 0, 0, 0, time.UTC)
+		updated := time.Date(2026, 4, 21, 9, 0, 0, 0, time.UTC)
+
+		mock.ExpectQuery(sqlStmt).
+			WithArgs("app-1").
+			WillReturnRows(pgxmock.NewRows([]string{"address", "birth_date", "category_other_text", "city_code", "created_at", "first_name", "id", "iin", "last_name", "middle_name", "phone", "status", "updated_at", "verification_code"}).
+				AddRow(nil, birth, nil, "almaty", created, "Айдана", "app-1", "950515312348", "Муратова", pointer.ToString("Ивановна"), "+77001234567", "moderation", updated, "UGC-000777"))
+
+		got, err := repo.GetByIDForUpdate(context.Background(), "app-1")
+		require.NoError(t, err)
+		require.Equal(t, "app-1", got.ID)
+		require.Equal(t, "moderation", got.Status)
+	})
+
+	t.Run("propagates sql.ErrNoRows", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &creatorApplicationRepository{db: mock}
+
+		mock.ExpectQuery(sqlStmt).
+			WithArgs("missing").
+			WillReturnError(pgx.ErrNoRows)
+
+		_, err := repo.GetByIDForUpdate(context.Background(), "missing")
+		require.ErrorIs(t, err, sql.ErrNoRows)
+	})
+
+	t.Run("propagates other errors", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &creatorApplicationRepository{db: mock}
+
+		mock.ExpectQuery(sqlStmt).
+			WithArgs("app-1").
+			WillReturnError(errors.New("db down"))
+
+		_, err := repo.GetByIDForUpdate(context.Background(), "app-1")
+		require.ErrorContains(t, err, "db down")
+	})
+}
+
 func TestCreatorApplicationRepository_GetByVerificationCodeAndStatus(t *testing.T) {
 	t.Parallel()
 

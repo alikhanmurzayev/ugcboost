@@ -337,6 +337,33 @@ func (s *Server) RejectCreatorApplication(ctx context.Context, request api.Rejec
 	return api.RejectCreatorApplication200JSONResponse{}, nil
 }
 
+// ApproveCreatorApplication handles POST /creators/applications/{id}/approve
+// (admin-only). It promotes an application from `moderation` to the terminal
+// `approved` status, materialising the snapshot creator + socials + categories
+// in the same transaction. Authorisation runs first so non-admin callers see
+// 403 without the service being asked. The actor uuid comes from the bearer
+// token via middleware.UserIDFromContext; no body is accepted (the approve
+// has no fields). The service returns the freshly-created creator id which
+// the handler echoes back so callers can immediately follow up with the
+// (forthcoming) creator-aggregate read endpoint.
+func (s *Server) ApproveCreatorApplication(ctx context.Context, request api.ApproveCreatorApplicationRequestObject) (api.ApproveCreatorApplicationResponseObject, error) {
+	if err := s.authzService.CanApproveCreatorApplication(ctx); err != nil {
+		return nil, err
+	}
+	actorUserID := middleware.UserIDFromContext(ctx)
+	creatorIDStr, err := s.creatorApplicationService.ApproveApplication(ctx, request.Id.String(), actorUserID)
+	if err != nil {
+		return nil, err
+	}
+	creatorID, err := uuid.Parse(creatorIDStr)
+	if err != nil {
+		return nil, fmt.Errorf("parse new creator id %q: %w", creatorIDStr, err)
+	}
+	return api.ApproveCreatorApplication200JSONResponse{
+		Data: api.CreatorApprovalData{CreatorId: creatorID},
+	}, nil
+}
+
 // GetCreatorApplicationsCounts handles GET /creators/applications/counts
 // (admin-only). It returns one (status, count) pair per status that currently
 // has at least one application — the response is **sparse** by design, see the

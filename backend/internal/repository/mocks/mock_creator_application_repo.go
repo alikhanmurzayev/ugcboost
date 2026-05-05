@@ -293,6 +293,74 @@ func (_c *MockCreatorApplicationRepo_GetByID_Call) RunAndReturn(run func(ctx con
 	return _c
 }
 
+// GetByIDForUpdate provides a mock function for the type MockCreatorApplicationRepo
+func (_mock *MockCreatorApplicationRepo) GetByIDForUpdate(ctx context.Context, id string) (*repository.CreatorApplicationRow, error) {
+	ret := _mock.Called(ctx, id)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetByIDForUpdate")
+	}
+
+	var r0 *repository.CreatorApplicationRow
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) (*repository.CreatorApplicationRow, error)); ok {
+		return returnFunc(ctx, id)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) *repository.CreatorApplicationRow); ok {
+		r0 = returnFunc(ctx, id)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*repository.CreatorApplicationRow)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string) error); ok {
+		r1 = returnFunc(ctx, id)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockCreatorApplicationRepo_GetByIDForUpdate_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetByIDForUpdate'
+type MockCreatorApplicationRepo_GetByIDForUpdate_Call struct {
+	*mock.Call
+}
+
+// GetByIDForUpdate is a helper method to define mock.On call
+//   - ctx context.Context
+//   - id string
+func (_e *MockCreatorApplicationRepo_Expecter) GetByIDForUpdate(ctx interface{}, id interface{}) *MockCreatorApplicationRepo_GetByIDForUpdate_Call {
+	return &MockCreatorApplicationRepo_GetByIDForUpdate_Call{Call: _e.mock.On("GetByIDForUpdate", ctx, id)}
+}
+
+func (_c *MockCreatorApplicationRepo_GetByIDForUpdate_Call) Run(run func(ctx context.Context, id string)) *MockCreatorApplicationRepo_GetByIDForUpdate_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockCreatorApplicationRepo_GetByIDForUpdate_Call) Return(creatorApplicationRow *repository.CreatorApplicationRow, err error) *MockCreatorApplicationRepo_GetByIDForUpdate_Call {
+	_c.Call.Return(creatorApplicationRow, err)
+	return _c
+}
+
+func (_c *MockCreatorApplicationRepo_GetByIDForUpdate_Call) RunAndReturn(run func(ctx context.Context, id string) (*repository.CreatorApplicationRow, error)) *MockCreatorApplicationRepo_GetByIDForUpdate_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // GetByVerificationCodeAndStatus provides a mock function for the type MockCreatorApplicationRepo
 func (_mock *MockCreatorApplicationRepo) GetByVerificationCodeAndStatus(ctx context.Context, code string, status string) (*repository.CreatorApplicationRow, error) {
 	ret := _mock.Called(ctx, code, status)

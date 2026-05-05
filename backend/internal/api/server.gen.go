@@ -582,6 +582,18 @@ type CreatorApplicationsListResult struct {
 	Data CreatorApplicationsListData `json:"data"`
 }
 
+// CreatorApprovalData Payload returned by POST /creators/applications/{id}/approve.
+type CreatorApprovalData struct {
+	// CreatorId ID of the creator row created by the approve action.
+	CreatorId openapi_types.UUID `json:"creatorId"`
+}
+
+// CreatorApprovalResult defines model for CreatorApprovalResult.
+type CreatorApprovalResult struct {
+	// Data Payload returned by POST /creators/applications/{id}/approve.
+	Data CreatorApprovalData `json:"data"`
+}
+
 // DictionaryItem Single entry from a public dictionary (categories, cities, etc.).
 // Reused for the dictionary-listing endpoint and for hydrated dictionary
 // references on creator-application reads, where the backend falls back
@@ -904,6 +916,9 @@ type ServerInterface interface {
 	// Get full creator application aggregate (admin only)
 	// (GET /creators/applications/{id})
 	GetCreatorApplication(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+	// Approve a creator application (admin only)
+	// (POST /creators/applications/{id}/approve)
+	ApproveCreatorApplication(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
 	// Reject a creator application (admin only)
 	// (POST /creators/applications/{id}/reject)
 	RejectCreatorApplication(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
@@ -1030,6 +1045,12 @@ func (_ Unimplemented) ListCreatorApplications(w http.ResponseWriter, r *http.Re
 // Get full creator application aggregate (admin only)
 // (GET /creators/applications/{id})
 func (_ Unimplemented) GetCreatorApplication(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Approve a creator application (admin only)
+// (POST /creators/applications/{id}/approve)
+func (_ Unimplemented) ApproveCreatorApplication(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -1540,6 +1561,37 @@ func (siw *ServerInterfaceWrapper) GetCreatorApplication(w http.ResponseWriter, 
 	handler.ServeHTTP(w, r)
 }
 
+// ApproveCreatorApplication operation middleware
+func (siw *ServerInterfaceWrapper) ApproveCreatorApplication(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ApproveCreatorApplication(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // RejectCreatorApplication operation middleware
 func (siw *ServerInterfaceWrapper) RejectCreatorApplication(w http.ResponseWriter, r *http.Request) {
 
@@ -1830,6 +1882,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/creators/applications/{id}", wrapper.GetCreatorApplication)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/creators/applications/{id}/approve", wrapper.ApproveCreatorApplication)
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/creators/applications/{id}/reject", wrapper.RejectCreatorApplication)
@@ -2641,6 +2696,71 @@ func (response GetCreatorApplicationdefaultJSONResponse) VisitGetCreatorApplicat
 	return json.NewEncoder(w).Encode(response.Body)
 }
 
+type ApproveCreatorApplicationRequestObject struct {
+	Id openapi_types.UUID `json:"id"`
+}
+
+type ApproveCreatorApplicationResponseObject interface {
+	VisitApproveCreatorApplicationResponse(w http.ResponseWriter) error
+}
+
+type ApproveCreatorApplication200JSONResponse CreatorApprovalResult
+
+func (response ApproveCreatorApplication200JSONResponse) VisitApproveCreatorApplicationResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type ApproveCreatorApplication401JSONResponse ErrorResponse
+
+func (response ApproveCreatorApplication401JSONResponse) VisitApproveCreatorApplicationResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type ApproveCreatorApplication403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response ApproveCreatorApplication403JSONResponse) VisitApproveCreatorApplicationResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type ApproveCreatorApplication404JSONResponse ErrorResponse
+
+func (response ApproveCreatorApplication404JSONResponse) VisitApproveCreatorApplicationResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type ApproveCreatorApplication422JSONResponse ErrorResponse
+
+func (response ApproveCreatorApplication422JSONResponse) VisitApproveCreatorApplicationResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(422)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type ApproveCreatorApplicationdefaultJSONResponse struct {
+	Body       ErrorResponse
+	StatusCode int
+}
+
+func (response ApproveCreatorApplicationdefaultJSONResponse) VisitApproveCreatorApplicationResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+
+	return json.NewEncoder(w).Encode(response.Body)
+}
+
 type RejectCreatorApplicationRequestObject struct {
 	Id openapi_types.UUID `json:"id"`
 }
@@ -2942,6 +3062,9 @@ type StrictServerInterface interface {
 	// Get full creator application aggregate (admin only)
 	// (GET /creators/applications/{id})
 	GetCreatorApplication(ctx context.Context, request GetCreatorApplicationRequestObject) (GetCreatorApplicationResponseObject, error)
+	// Approve a creator application (admin only)
+	// (POST /creators/applications/{id}/approve)
+	ApproveCreatorApplication(ctx context.Context, request ApproveCreatorApplicationRequestObject) (ApproveCreatorApplicationResponseObject, error)
 	// Reject a creator application (admin only)
 	// (POST /creators/applications/{id}/reject)
 	RejectCreatorApplication(ctx context.Context, request RejectCreatorApplicationRequestObject) (RejectCreatorApplicationResponseObject, error)
@@ -3484,6 +3607,32 @@ func (sh *strictHandler) GetCreatorApplication(w http.ResponseWriter, r *http.Re
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetCreatorApplicationResponseObject); ok {
 		if err := validResponse.VisitGetCreatorApplicationResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ApproveCreatorApplication operation middleware
+func (sh *strictHandler) ApproveCreatorApplication(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request ApproveCreatorApplicationRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ApproveCreatorApplication(ctx, request.(ApproveCreatorApplicationRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ApproveCreatorApplication")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ApproveCreatorApplicationResponseObject); ok {
+		if err := validResponse.VisitApproveCreatorApplicationResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
