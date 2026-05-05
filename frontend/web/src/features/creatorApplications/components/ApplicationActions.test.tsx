@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ApplicationDetail } from "../types";
 import ApplicationActions from "./ApplicationActions";
@@ -7,6 +8,7 @@ import ApplicationDrawer from "./ApplicationDrawer";
 
 vi.mock("@/api/creatorApplications", () => ({
   rejectApplication: vi.fn(),
+  approveApplication: vi.fn(),
   verifyApplicationSocialManually: vi.fn(),
 }));
 
@@ -84,13 +86,16 @@ describe("ApplicationActions — switch by status", () => {
     expect(screen.queryByTestId("approve-button")).not.toBeInTheDocument();
   });
 
-  it("renders reject + disabled approve placeholder for moderation status", () => {
+  it("renders reject + active approve trigger for moderation status, click opens approve-confirm-dialog", async () => {
     renderInDrawer(makeDetail({ status: "moderation" }));
     expect(screen.getByTestId("application-actions")).toBeInTheDocument();
     expect(screen.getByTestId("reject-button")).toBeInTheDocument();
     const approve = screen.getByTestId("approve-button");
     expect(approve).toBeInTheDocument();
-    expect(approve).toBeDisabled();
+    expect(approve).not.toBeDisabled();
+    expect(screen.queryByTestId("approve-confirm-dialog")).not.toBeInTheDocument();
+    await userEvent.click(approve);
+    expect(screen.getByTestId("approve-confirm-dialog")).toBeInTheDocument();
   });
 
   it.each(["approved", "rejected", "withdrawn"] as const)(

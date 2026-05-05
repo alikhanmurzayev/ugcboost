@@ -21,8 +21,9 @@
  * подачи, IIN, дата рождения с pluralYears, телефон с tel:href, "Алматы",
  * категории включая drawer-category-other-text, единственный
  * social-admin-row с verified-badge "Подтверждено · авто", drawer-telegram-
- * linked с @username, footer = reject-кнопка + approve-button disabled с
- * title="Скоро".
+ * linked с @username, footer = reject-кнопка + активный approve-button
+ * (его confirm-flow и race-422 закрывает spec
+ * admin-creator-applications-moderation-approve-action.spec.ts).
  *
  * TT manual-verified — TT-only заявка, привязанный TG, manual-verify через
  * admin API двигает заявку из verification в moderation. Drawer отображает
@@ -34,9 +35,9 @@
  * trailing-space, drawer-telegram-not-linked + drawer-copy-bot-message
  * видны — закрывает контракт filter(Boolean) и fallback-блок Telegram.
  *
- * Approve — disabled-кнопка + title="Скоро" в drawer-footer любой
- * moderation-заявки. Click игнорируется на уровне браузера (disabled
- * атрибут), мы ассертим только видимое состояние.
+ * Approve — активная emerald-кнопка в drawer-footer любой moderation-
+ * заявки; полный confirm-flow и race-сценарии вынесены в соседний spec
+ * admin-creator-applications-moderation-approve-action.spec.ts.
  *
  * Колонки thead — структурный assert: present "Город" / отсутствует
  * "Telegram". Закрывает что moderation скрывает Telegram-колонку
@@ -288,8 +289,7 @@ test.describe("Admin moderation flow", () => {
     await expect(footer.getByTestId("reject-button")).toBeEnabled();
     const approve = footer.getByTestId("approve-button");
     await expect(approve).toBeVisible();
-    await expect(approve).toBeDisabled();
-    await expect(approve).toHaveAttribute("title", "Скоро");
+    await expect(approve).toBeEnabled();
     await expect(approve).toHaveText("Одобрить заявку");
   });
 

@@ -1,7 +1,7 @@
-import { useTranslation } from "react-i18next";
 import type { ApplicationDetail, ApplicationStatus } from "../types";
 import { useDrawerContext } from "./drawerContext";
 import RejectApplicationDialog from "./RejectApplicationDialog";
+import ApproveApplicationDialog from "./ApproveApplicationDialog";
 
 interface ApplicationActionsProps {
   application: ApplicationDetail | undefined;
@@ -9,7 +9,6 @@ interface ApplicationActionsProps {
 
 export default function ApplicationActions({ application }: ApplicationActionsProps) {
   const { onApiError, onCloseDrawer } = useDrawerContext();
-  const { t } = useTranslation("creatorApplications");
 
   if (!application) return null;
 
@@ -38,15 +37,11 @@ export default function ApplicationActions({ application }: ApplicationActionsPr
             onApiError={onApiError}
             onCloseDrawer={onCloseDrawer}
           />
-          <button
-            type="button"
-            disabled
-            data-testid="approve-button"
-            title={t("actions.approveDisabledHint")}
-            className="cursor-not-allowed rounded-button border border-emerald-600 bg-white px-4 py-2 text-sm font-semibold text-emerald-700 opacity-60"
-          >
-            {t("actions.approve")}
-          </button>
+          <ApproveApplicationDialog
+            applicationId={application.id}
+            onApiError={onApiError}
+            onCloseDrawer={onCloseDrawer}
+          />
         </div>
       );
     case "approved":

@@ -37,9 +37,12 @@
     "CREATOR_NOT_FOUND": "Креатор не найден",
     "CREATOR_APPLICATION_NOT_IN_VERIFICATION": "Заявка уже не на этапе верификации",
     "CREATOR_APPLICATION_NOT_REJECTABLE": "Заявку нельзя отклонить в текущем статусе",
+    "CREATOR_APPLICATION_NOT_APPROVABLE": "Заявку нельзя одобрить — статус изменился. Обновите страницу.",
     "CREATOR_APPLICATION_TELEGRAM_NOT_LINKED": "Креатор отвязал Telegram — попросите привязать заново",
     "CREATOR_APPLICATION_SOCIAL_ALREADY_VERIFIED": "Эта соцсеть уже подтверждена",
     "CREATOR_APPLICATION_SOCIAL_NOT_FOUND": "Соцсеть больше не привязана к заявке",
+    "CREATOR_ALREADY_EXISTS": "Креатор с этим ИИН уже существует. Найдите его в реестре.",
+    "CREATOR_TELEGRAM_ALREADY_TAKEN": "Этот Telegram уже привязан к другому креатору.",
     "unknown": "Произошла ошибка"
   }
 }
