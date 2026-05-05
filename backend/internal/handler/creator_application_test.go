@@ -691,9 +691,7 @@ func TestMapCreatorApplicationStatusToAPI(t *testing.T) {
 	}{
 		{domain.CreatorApplicationStatusVerification, api.Verification},
 		{domain.CreatorApplicationStatusModeration, api.Moderation},
-		{domain.CreatorApplicationStatusAwaitingContract, api.AwaitingContract},
-		{domain.CreatorApplicationStatusContractSent, api.ContractSent},
-		{domain.CreatorApplicationStatusSigned, api.Signed},
+		{domain.CreatorApplicationStatusApproved, api.Approved},
 		{domain.CreatorApplicationStatusRejected, api.Rejected},
 		{domain.CreatorApplicationStatusWithdrawn, api.Withdrawn},
 	}

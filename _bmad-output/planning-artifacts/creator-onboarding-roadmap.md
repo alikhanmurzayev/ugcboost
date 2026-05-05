@@ -3,7 +3,7 @@ title: "Roadmap: онбординг креатора до approved"
 type: roadmap
 status: living
 created: "2026-04-29"
-updated: "2026-05-04"
+updated: "2026-05-05"
 revisions:
   - "2026-05-02: добавлен chunk 5 — POST /creators/applications/counts для бейджа в админке; нумерация 5–11 сдвинута на 6–12"
   - "2026-05-02: chunk 5 в работе — GET /creators/applications/counts (массив пар, sparse) + API hygiene (dedup enums/responses, BrandInput, DictionaryItem, pagination через PaginationInput, camelCase query везде)"
@@ -15,6 +15,7 @@ revisions:
   - "2026-05-03: chunk 8 готов, выкачен в прод (PR #52). TMA целиком выпилен из онбординг-флоу — креатор-канал = только Telegram-бот (текстовые сообщения + inline-кнопки). frontend/tma/ и прототип в web остаются как future-work, не удаляются. tma-auth-foundation.md удалён. Договор / TrustMe / подпись и withdraw как UI-фича уходят из этого roadmap'а: онбординг кончается на approved, договор — за ним в campaign-roadmap. State-machine v2: терминалы только approved + rejected; withdrawn остаётся как зарезервированный терминал без объявленных переходов; уходят awaiting_contract / contract_sent / signed. approved окончательный, обратного перехода нет. Ad-hoc broadcast существующим ~100 prod-заявкам (приветствие + код) — локальный скрипт вне репо, не chunk. Нумерация после реструктуризации: 9–21."
   - "2026-05-04: chunk 12 готов (PR #58, бэк reject). В группе 3 swap'нуты chunks 13 ↔ 14: новый chunk 13 — Telegram-уведомление о rejected (приоритет: чтобы admin-action из chunk 12 сразу давал креатору сигнал), новый chunk 14 — фронт-кнопка reject в drawer (теперь работает на полностью готовом backend + notify flow). Chunk 16 (экран модерации) обновлён — переиспользует обработчик reject из chunk 14."
   - "2026-05-04: chunk 14 готов (PR #60, фронт reject в drawer). Outlined-red trigger в новом sticky-footer'е drawer'а, conditional confirm-modal по telegramLink, единый apiError-banner для verify/reject через DrawerContext, exhaustive-switch container ApplicationActions готов под chunk 19/16. Спека архивирована — `_bmad-output/implementation-artifacts/archive/2026-05-04-spec-creator-application-reject-frontend.md`. Группа 3 (Reject) закрыта целиком."
+  - "2026-05-05: chunk 17 готов — state-machine v2: дропнуты `awaiting_contract` / `contract_sent` / `signed`, добавлен терминал `approved`, partial unique index по ИИН на active-set `{verification, moderation}`. Forward-only миграция (guard на старые статусы → транзитный CHECK → финальный 5-значный CHECK). Выпилен мёртвый «Договоры»-flow на фронте (stub-страница `ContractsPage` + роут + menu item + i18n-ключ `stages.contracts`). `creatorApplicationAllowedTransitions` не тронут — переход `moderation → approved` подключит chunk 18. Living-docs: `creator-application-state-machine.md` переписан целиком (секция «Видимые состояния для креатора (TMA)» удалена — креатор узнаёт о переходах только через Telegram-бот), `creator-verification-concept.md` сжат под 2 active-статуса. Спека — `_bmad-output/implementation-artifacts/spec-creator-application-state-machine-v2.md`."
 ---
 
 # Roadmap: онбординг креатора до approved
@@ -82,7 +83,7 @@ Living document. Покрывает путь от подачи заявки на
 
 ### Группа 5. Approve
 
-- [ ] **17. State-machine v2.** Один чанк: design-doc (`creator-application-state-machine.md` + `creator-verification-concept.md`) и forward-миграция. Drop из enum значений `awaiting_contract` / `contract_sent` / `signed`. Add `approved`. `withdrawn` оставляем как зарезервированный терминал без объявленных переходов (на будущее). Active-set partial unique index по IIN = `{verification, moderation}`. Обновить domain-константы / `creatorApplicationAllowedTransitions` / unit / e2e
+- [x] **17. State-machine v2.** Один чанк: design-doc (`creator-application-state-machine.md` + `creator-verification-concept.md`) и forward-миграция. Drop из enum значений `awaiting_contract` / `contract_sent` / `signed`. Add `approved`. `withdrawn` оставляем как зарезервированный терминал без объявленных переходов (на будущее). Active-set partial unique index по IIN = `{verification, moderation}`. Обновлены domain-константы / unit / e2e (без изменений в `creatorApplicationAllowedTransitions` — переход `moderation → approved` подключит chunk 18). Дополнительно выпилен мёртвый «Договоры»-flow на фронте: stub `ContractsPage`, роут, menu item, i18n-ключ. Спека — `_bmad-output/implementation-artifacts/spec-creator-application-state-machine-v2.md`
 - [ ] **18. Бэк: approve заявки админом.** Admin-endpoint, переход `moderation → approved`. В одной `WithTx` — переход статуса + создание row в `users` с `role=creator`, привязанной к этой заявке + audit + state-history. `approved` — окончательный, обратного перехода нет. Зависит от 17
 - [ ] **19. Фронт-админка: action approve в drawer на moderation-экране.** Кнопка «Одобрить заявку» с подтверждением. Зависит от 16 и 18. E2E — расширение spec'а из 16.5 или новый рядом
 - [ ] **20. Бот: уведомление об approved.** Расширение notify-сервиса. Креатор получает сообщение, что одобрен и ждёт деталей сотрудничества. Дёргается после commit на approve-переходе. Зависит от 9 и 18

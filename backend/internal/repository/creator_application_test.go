@@ -19,7 +19,7 @@ import (
 func TestCreatorApplicationRepository_HasActiveByIIN(t *testing.T) {
 	t.Parallel()
 
-	const sqlStmt = "SELECT 1 FROM creator_applications WHERE iin = $1 AND status IN ($2,$3,$4,$5) LIMIT 1"
+	const sqlStmt = "SELECT 1 FROM creator_applications WHERE iin = $1 AND status IN ($2,$3) LIMIT 1"
 
 	t.Run("found returns true", func(t *testing.T) {
 		t.Parallel()
@@ -27,7 +27,7 @@ func TestCreatorApplicationRepository_HasActiveByIIN(t *testing.T) {
 		repo := &creatorApplicationRepository{db: mock}
 
 		mock.ExpectQuery(sqlStmt).
-			WithArgs("950515312348", "verification", "moderation", "awaiting_contract", "contract_sent").
+			WithArgs("950515312348", "verification", "moderation").
 			WillReturnRows(pgxmock.NewRows([]string{"?column?"}).AddRow(1))
 
 		ok, err := repo.HasActiveByIIN(context.Background(), "950515312348")
@@ -41,7 +41,7 @@ func TestCreatorApplicationRepository_HasActiveByIIN(t *testing.T) {
 		repo := &creatorApplicationRepository{db: mock}
 
 		mock.ExpectQuery(sqlStmt).
-			WithArgs("950515312348", "verification", "moderation", "awaiting_contract", "contract_sent").
+			WithArgs("950515312348", "verification", "moderation").
 			WillReturnError(pgx.ErrNoRows)
 
 		ok, err := repo.HasActiveByIIN(context.Background(), "950515312348")
@@ -55,7 +55,7 @@ func TestCreatorApplicationRepository_HasActiveByIIN(t *testing.T) {
 		repo := &creatorApplicationRepository{db: mock}
 
 		mock.ExpectQuery(sqlStmt).
-			WithArgs("950515312348", "verification", "moderation", "awaiting_contract", "contract_sent").
+			WithArgs("950515312348", "verification", "moderation").
 			WillReturnError(errors.New("db exploded"))
 
 		ok, err := repo.HasActiveByIIN(context.Background(), "950515312348")

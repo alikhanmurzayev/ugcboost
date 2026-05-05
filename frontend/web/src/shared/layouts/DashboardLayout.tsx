@@ -75,10 +75,6 @@ export default function DashboardLayout() {
               badge: moderationCount,
             },
             {
-              to: ROUTES.CREATOR_APP_CONTRACTS,
-              label: t("creatorApplications:stages.contracts.title"),
-            },
-            {
               to: ROUTES.CREATOR_APP_REJECTED,
               label: t("creatorApplications:stages.rejected.title"),
             },

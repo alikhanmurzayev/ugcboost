@@ -1975,9 +1975,7 @@ func TestCreatorApplicationService_RejectApplication(t *testing.T) {
 	notRejectableStatuses := []string{
 		domain.CreatorApplicationStatusRejected,
 		domain.CreatorApplicationStatusWithdrawn,
-		domain.CreatorApplicationStatusAwaitingContract,
-		domain.CreatorApplicationStatusContractSent,
-		domain.CreatorApplicationStatusSigned,
+		domain.CreatorApplicationStatusApproved,
 	}
 	for _, status := range notRejectableStatuses {
 		status := status
@@ -2179,18 +2177,18 @@ func TestCreatorApplicationService_applyTransition(t *testing.T) {
 		rig := newCreatorServiceRig(t)
 		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.notifier, rig.logger)
 
-		// signed → moderation is not declared in the state machine; the
+		// approved → moderation is not declared in the state machine; the
 		// helper must reject it before any repo wiring.
 		err := svc.applyTransition(
 			context.Background(),
 			testTx{},
-			&repository.CreatorApplicationRow{ID: "app-1", Status: domain.CreatorApplicationStatusSigned},
+			&repository.CreatorApplicationRow{ID: "app-1", Status: domain.CreatorApplicationStatusApproved},
 			domain.CreatorApplicationStatusModeration,
 			nil,
 			"",
 		)
 		require.ErrorIs(t, err, domain.ErrInvalidStatusTransition)
-		require.ErrorContains(t, err, domain.CreatorApplicationStatusSigned)
+		require.ErrorContains(t, err, domain.CreatorApplicationStatusApproved)
 		require.ErrorContains(t, err, domain.CreatorApplicationStatusModeration)
 	})
 }

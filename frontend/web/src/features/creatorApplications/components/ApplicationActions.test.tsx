@@ -93,18 +93,15 @@ describe("ApplicationActions — switch by status", () => {
     expect(approve).toBeDisabled();
   });
 
-  it.each([
-    "awaiting_contract",
-    "contract_sent",
-    "signed",
-    "rejected",
-    "withdrawn",
-  ] as const)("renders nothing for %s status", (status) => {
-    renderInDrawer(makeDetail({ status }));
-    expect(screen.queryByTestId("application-actions")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("reject-button")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("approve-button")).not.toBeInTheDocument();
-  });
+  it.each(["approved", "rejected", "withdrawn"] as const)(
+    "renders nothing for %s status",
+    (status) => {
+      renderInDrawer(makeDetail({ status }));
+      expect(screen.queryByTestId("application-actions")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("reject-button")).not.toBeInTheDocument();
+      expect(screen.queryByTestId("approve-button")).not.toBeInTheDocument();
+    },
+  );
 
   it("renders nothing when application is undefined", () => {
     renderInDrawer(undefined);
