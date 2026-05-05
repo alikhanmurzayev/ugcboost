@@ -1,10 +1,12 @@
 ---
 title: "Roadmap: онбординг креатора до approved"
 type: roadmap
-status: living
+status: completed
 created: "2026-04-29"
 updated: "2026-05-05"
+completed: "2026-05-05"
 revisions:
+  - "2026-05-05: roadmap закрыт. Граница онбординга достигнута — chunk 18.6 в проде, креатор виден в общем реестре `creators` после approve. Дальнейшая работа (договор, кампании, рассылки) переезжает в `campaign-roadmap.md`. Файл переименован в `archive/2026-04-30-creator-onboarding-roadmap.md`. Открытые chunks 9 (notify-сервис фундамент — растворился в chunks 8/13/18 inline), 15 (опциональный enhancement модерации — N/A), 21 (LiveDune автомодерация — за границей онбординга, всплывёт отдельным roadmap'ом)."
   - "2026-05-02: добавлен chunk 5 — POST /creators/applications/counts для бейджа в админке; нумерация 5–11 сдвинута на 6–12"
   - "2026-05-02: chunk 5 в работе — GET /creators/applications/counts (массив пар, sparse) + API hygiene (dedup enums/responses, BrandInput, DictionaryItem, pagination через PaginationInput, camelCase query везде)"
   - "2026-05-02: добавлен chunk 6.5 — Playwright e2e на admin verification flow (отделён от chunk 6 чтобы не блокировать UI и писать тесты на стабилизированном интерфейсе)"
@@ -20,7 +22,7 @@ revisions:
 
 # Roadmap: онбординг креатора до approved
 
-Living document. Покрывает путь от подачи заявки на лендинге до перехода заявки в `approved`. Договор и сотрудничество по конкретной кампании — за границей этого roadmap'а, в отдельном campaign-roadmap. Обновляется по ходу реализации.
+**Завершён 2026-05-05.** Покрывал путь от подачи заявки на лендинге до перехода заявки в `approved`. Граница онбординга достигнута — креатор после approve виден в общем реестре `creators` (chunks 18–18.6). Договор и сотрудничество по конкретной кампании — в `campaign-roadmap.md`.
 
 ## Как использовать
 
