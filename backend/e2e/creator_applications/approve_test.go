@@ -15,27 +15,37 @@
 // поздравительный пуш через бот). Repeat-approve той же заявки — второй
 // 422 NOT_APPROVABLE, в БД остаётся ровно одна creator-row.
 //
-// Happy path начинается из `moderation`: SetupCreatorApplicationViaLanding
-// → LinkTelegramToApplication → manual-verify первой соцсети админом
-// (auto-переход verification → moderation) → POST approve. Ассерты:
-// 200 + non-zero `creatorId`, admin GET application detail отдаёт
-// `status=approved`, audit-row `creator_application_approve` присутствует,
-// одно `application_approved` сообщение в /test/telegram/sent с точным
-// текстом константы expectedApproveText, plain mode без WebApp-keyboard.
-// DeleteCreatorForTests против вернувшегося `creatorId` отрабатывает
-// 204 — это функциональное доказательство, что creator-row действительно
-// записан в БД (без read-API в 18b сверка идёт через cleanup-эффект:
-// 404 от testapi означал бы отсутствие row, тест бы упал). Полная
-// structural-сверка агрегата (все 30+ полей creators + verified-копия в
-// socials 1:1 + категории) откладывается на 18c вместе с GET /creators.
+// Happy-path расщеплён на два сценария — happy_full и happy_sparse —
+// собранных через переиспользуемый testutil-pipeline
+// SetupCreatorApplicationInModeration. happy_full настраивает заявку с
+// заполненными nullable (middle_name + address + category_other_text), 3
+// категориями и 3 социалками: IG auto-verified через SendPulse webhook,
+// TT и Threads остаются unverified. Это компромисс относительно spec'и
+// (которая просит "IG auto / TT manual / Threads non-verified") — публичный
+// API верифицирует только до первого успешного perехода verification →
+// moderation; вторая верификация на той же заявке возвращает
+// NOT_IN_VERIFICATION. Один verified social + два unverified покрывают все
+// три ветки маппинга в creator_socials (auto-method, raw verification
+// snapshot, "верификация не делалась") без нарушения state machine.
+// happy_sparse — заявка с middleName=nil, address=nil, categoryOtherText=nil,
+// одной IG auto-verified социалкой и одной категорией; защищает omitempty/
+// null-семантику openapi на стороне аггрегата креатора. Оба сценария после
+// approve дёргают GET /creators/{creatorId} и сверяют ответ с фикстурой
+// через AssertCreatorAggregateMatchesSetup (поле-в-поле, sorted socials по
+// (platform, handle), sorted categories по code). WaitForTelegramSent в
+// каждом ловит ровно одно application_approved сообщение с точным текстом
+// expectedApproveText, plain mode без WebApp-keyboard.
 //
 // Concurrent approve race — два goroutine POST approve на одну заявку
 // под `-race`. UNIQUE constraint creators_source_application_id_unique
 // гарантирует, что ровно один TX выживает: один 200, один 422
 // NOT_APPROVABLE. В cleanup-стеке регистрируется creator-row выжившего
 // goroutine'а (тест парсит `creatorId` из выигрышного ответа). Все
-// t.Run параллельны; каждый создаёт изолированную заявку через
-// SetupCreatorApplicationViaLanding с auto-cleanup.
+// t.Run параллельны; positive setup'ы идут через
+// SetupCreatorApplicationInModeration с auto-cleanup, негативные сценарии
+// (verification, no-link) собирают заявку ad-hoc через
+// SetupCreatorApplicationViaLanding потому что helper требует уже
+// дошедшего до moderation состояния.
 package creator_applications_test
 
 import (
@@ -46,6 +56,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/AlekSi/pointer"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
@@ -135,18 +146,8 @@ func TestApproveCreatorApplication(t *testing.T) {
 
 	t.Run("not approvable without telegram link returns 422 TELEGRAM_NOT_LINKED", func(t *testing.T) {
 		t.Parallel()
-		// Manually move to moderation through SendPulse. Skip
-		// LinkTelegramToApplication — but then SendPulse webhook can't
-		// match by chat. Use manual-verify path with a synthetic link
-		// that we then purposefully drop? Not supported. Instead seed an
-		// app, link Telegram (so manual-verify can run), drive to
-		// moderation, then... we can't unlink. Drop the link via direct
-		// test endpoint? testapi does not expose that.
-		//
-		// To exercise the no-link branch end-to-end we cannot reach
-		// `moderation` (link prerequisite) without first linking. Use a
-		// shortcut: SendPulse webhook does not require an existing link to
-		// move verification → moderation; `link` stays optional through
+		// SendPulse webhook does not require an existing link to move
+		// verification → moderation; `link` stays optional through
 		// auto-verify (the post-commit notify just warn-logs without a
 		// chat). After SendPulse, the application is in `moderation`
 		// with no telegram-link, ready for the approve guard to fire.
@@ -177,87 +178,145 @@ func TestApproveCreatorApplication(t *testing.T) {
 		require.Equal(t, apiclient.Moderation, stillModeration.Status, "БД не должна меняться при отказе")
 	})
 
-	t.Run("happy path from moderation — approves, audits, snapshots creator, push sent", func(t *testing.T) {
+	t.Run("happy_full — заполнённые nullable + 3 социалки + 3 категории, GET aggregate full match", func(t *testing.T) {
 		t.Parallel()
-		setup, adminToken, tgUserID := seedApprovableApplication(t)
-		appID := setup.ApplicationID
+		fx := testutil.SetupCreatorApplicationInModeration(t, testutil.CreatorApplicationFixture{
+			MiddleName:        pointer.ToString("Ивановна"),
+			Address:           pointer.ToString("ул. Абая 10"),
+			CategoryCodes:     []string{"beauty", "fashion", "other"},
+			CategoryOtherText: pointer.ToString("стримы"),
+			Socials: []testutil.SocialFixture{
+				{Platform: string(apiclient.Instagram), Handle: "aidana_full", Verification: testutil.VerificationAutoIG},
+				{Platform: string(apiclient.Tiktok), Handle: "aidana_tt_full", Verification: testutil.VerificationNone},
+				{Platform: string(apiclient.Threads), Handle: "aidana_th_full", Verification: testutil.VerificationNone},
+			},
+		})
 
 		c := testutil.NewAPIClient(t)
+		appUUID := uuid.MustParse(fx.ApplicationID)
 		since := time.Now().UTC()
-
-		appUUID := uuid.MustParse(appID)
-		resp, err := c.ApproveCreatorApplicationWithResponse(context.Background(), appUUID,
-			testutil.WithAuth(adminToken))
+		approveResp, err := c.ApproveCreatorApplicationWithResponse(context.Background(), appUUID,
+			testutil.WithAuth(fx.AdminToken))
 		require.NoError(t, err)
-		require.Equal(t, http.StatusOK, resp.StatusCode())
-		require.NotNil(t, resp.JSON200)
-		creatorID := resp.JSON200.Data.CreatorId
+		require.Equal(t, http.StatusOK, approveResp.StatusCode())
+		require.NotNil(t, approveResp.JSON200)
+		creatorID := approveResp.JSON200.Data.CreatorId
 		require.NotEqual(t, uuid.Nil, creatorID)
 		// Cleanup the creator before LIFO-tries to drop the parent app:
 		// creators.source_application_id has no ON DELETE clause, so the
 		// app cannot be removed while a creator still references it.
 		testutil.RegisterCreatorCleanup(t, creatorID.String())
 
-		detail := getApplicationDetailForApprove(t, c, adminToken, appID)
+		detail := getApplicationDetailForApprove(t, c, fx.AdminToken, fx.ApplicationID)
 		require.Equal(t, apiclient.Approved, detail.Status)
 
-		audit := testutil.FindAuditEntry(t, c, adminToken,
-			auditEntityTypeCreatorApplicationApprove, appID,
+		audit := testutil.FindAuditEntry(t, c, fx.AdminToken,
+			auditEntityTypeCreatorApplicationApprove, fx.ApplicationID,
 			auditActionCreatorApplicationApprove)
 		require.NotNil(t, audit.NewValue)
 
-		msgs := testutil.WaitForTelegramSent(t, tgUserID, testutil.TelegramSentOptions{
+		getResp, err := c.GetCreatorWithResponse(context.Background(), creatorID,
+			testutil.WithAuth(fx.AdminToken))
+		require.NoError(t, err)
+		require.Equal(t, http.StatusOK, getResp.StatusCode())
+		require.NotNil(t, getResp.JSON200)
+		testutil.AssertCreatorAggregateMatchesSetup(t, fx, creatorID.String(), getResp.JSON200.Data)
+
+		msgs := testutil.WaitForTelegramSent(t, fx.TelegramUserID, testutil.TelegramSentOptions{
 			Since:       since,
 			ExpectCount: 1,
 		})
 		require.Len(t, msgs, 1)
-		assertApprovePushExact(t, msgs[0], tgUserID, since)
+		assertApprovePushExact(t, msgs[0], fx.TelegramUserID, since)
+	})
+
+	t.Run("happy_sparse — все nullable=nil, 1 IG auto-verified, 1 категория", func(t *testing.T) {
+		t.Parallel()
+		fx := testutil.SetupCreatorApplicationInModeration(t, testutil.CreatorApplicationFixture{
+			CategoryCodes: []string{"beauty"},
+			Socials: []testutil.SocialFixture{
+				{Platform: string(apiclient.Instagram), Handle: "aidana_sparse", Verification: testutil.VerificationAutoIG},
+			},
+		})
+
+		c := testutil.NewAPIClient(t)
+		appUUID := uuid.MustParse(fx.ApplicationID)
+		since := time.Now().UTC()
+		approveResp, err := c.ApproveCreatorApplicationWithResponse(context.Background(), appUUID,
+			testutil.WithAuth(fx.AdminToken))
+		require.NoError(t, err)
+		require.Equal(t, http.StatusOK, approveResp.StatusCode())
+		require.NotNil(t, approveResp.JSON200)
+		creatorID := approveResp.JSON200.Data.CreatorId
+		require.NotEqual(t, uuid.Nil, creatorID)
+		testutil.RegisterCreatorCleanup(t, creatorID.String())
+
+		getResp, err := c.GetCreatorWithResponse(context.Background(), creatorID,
+			testutil.WithAuth(fx.AdminToken))
+		require.NoError(t, err)
+		require.Equal(t, http.StatusOK, getResp.StatusCode())
+		require.NotNil(t, getResp.JSON200)
+		testutil.AssertCreatorAggregateMatchesSetup(t, fx, creatorID.String(), getResp.JSON200.Data)
+
+		msgs := testutil.WaitForTelegramSent(t, fx.TelegramUserID, testutil.TelegramSentOptions{
+			Since:       since,
+			ExpectCount: 1,
+		})
+		require.Len(t, msgs, 1)
+		assertApprovePushExact(t, msgs[0], fx.TelegramUserID, since)
 	})
 
 	t.Run("repeat approve returns 422 NOT_APPROVABLE; one creator row, one push", func(t *testing.T) {
 		t.Parallel()
-		setup, adminToken, tgUserID := seedApprovableApplication(t)
-		appID := setup.ApplicationID
+		fx := testutil.SetupCreatorApplicationInModeration(t, testutil.CreatorApplicationFixture{
+			CategoryCodes: []string{"beauty"},
+			Socials: []testutil.SocialFixture{
+				{Platform: string(apiclient.Instagram), Handle: "aidana_repeat", Verification: testutil.VerificationAutoIG},
+			},
+		})
 		c := testutil.NewAPIClient(t)
-
-		appUUID := uuid.MustParse(appID)
+		appUUID := uuid.MustParse(fx.ApplicationID)
 		firstSince := time.Now().UTC()
 		first, err := c.ApproveCreatorApplicationWithResponse(context.Background(), appUUID,
-			testutil.WithAuth(adminToken))
+			testutil.WithAuth(fx.AdminToken))
 		require.NoError(t, err)
 		require.Equal(t, http.StatusOK, first.StatusCode())
 		require.NotNil(t, first.JSON200)
 		testutil.RegisterCreatorCleanup(t, first.JSON200.Data.CreatorId.String())
 
 		// Drain the first push so the second-attempt window is past it.
-		msgs := testutil.WaitForTelegramSent(t, tgUserID, testutil.TelegramSentOptions{
+		msgs := testutil.WaitForTelegramSent(t, fx.TelegramUserID, testutil.TelegramSentOptions{
 			Since:       firstSince,
 			ExpectCount: 1,
 		})
 		require.Len(t, msgs, 1)
-		assertApprovePushExact(t, msgs[0], tgUserID, firstSince)
+		assertApprovePushExact(t, msgs[0], fx.TelegramUserID, firstSince)
 
 		afterFirst := time.Now().UTC()
 		second, err := c.ApproveCreatorApplicationWithResponse(context.Background(), appUUID,
-			testutil.WithAuth(adminToken))
+			testutil.WithAuth(fx.AdminToken))
 		require.NoError(t, err)
 		require.Equal(t, http.StatusUnprocessableEntity, second.StatusCode())
 		require.NotNil(t, second.JSON422)
 		require.Equal(t, "CREATOR_APPLICATION_NOT_APPROVABLE", second.JSON422.Error.Code)
 
 		// Status stays approved; second 422 short-circuited inside WithTx, no notify.
-		detail := getApplicationDetailForApprove(t, c, adminToken, appID)
+		detail := getApplicationDetailForApprove(t, c, fx.AdminToken, fx.ApplicationID)
 		require.Equal(t, apiclient.Approved, detail.Status)
-		testutil.EnsureNoNewTelegramSent(t, tgUserID, afterFirst, telegramSilenceWindowApprove)
+		testutil.EnsureNoNewTelegramSent(t, fx.TelegramUserID, afterFirst, telegramSilenceWindowApprove)
 	})
 
 	t.Run("concurrent approve race — exactly one 200, exactly one 422", func(t *testing.T) {
 		t.Parallel()
-		setup, adminToken, _ := seedApprovableApplication(t)
-		appID := setup.ApplicationID
+		fx := testutil.SetupCreatorApplicationInModeration(t, testutil.CreatorApplicationFixture{
+			CategoryCodes: []string{"beauty"},
+			Socials: []testutil.SocialFixture{
+				{Platform: string(apiclient.Instagram), Handle: "aidana_race", Verification: testutil.VerificationAutoIG},
+			},
+		})
 
 		c := testutil.NewAPIClient(t)
-		appUUID := uuid.MustParse(appID)
+		appUUID := uuid.MustParse(fx.ApplicationID)
 
 		var (
 			wg          sync.WaitGroup
@@ -272,7 +331,7 @@ func TestApproveCreatorApplication(t *testing.T) {
 			go func() {
 				defer wg.Done()
 				resp, err := c.ApproveCreatorApplicationWithResponse(context.Background(), appUUID,
-					testutil.WithAuth(adminToken))
+					testutil.WithAuth(fx.AdminToken))
 				require.NoError(t, err)
 				switch resp.StatusCode() {
 				case http.StatusOK:
@@ -298,37 +357,6 @@ func TestApproveCreatorApplication(t *testing.T) {
 		require.NotEqual(t, uuid.Nil, winnerUUID)
 		testutil.RegisterCreatorCleanup(t, winnerUUID.String())
 	})
-}
-
-// seedApprovableApplication submits an application, links Telegram and
-// manually-verifies the first social so the application lands in
-// `moderation`. Returns (setup, adminToken, telegramUserID) so callers can
-// drive POST approve and assert the post-commit notify against the linked
-// chat. Manual-verify is used (not SendPulse webhook) so this seeding step
-// itself does NOT produce a verification-approved push that the approve
-// test would have to drain.
-func seedApprovableApplication(t *testing.T) (testutil.SetupCreatorApplicationViaLandingResult, string, int64) {
-	t.Helper()
-	setup := testutil.SetupCreatorApplicationViaLanding(t)
-	appID := setup.ApplicationID
-	tg := testutil.LinkTelegramToApplication(t, appID)
-
-	c, adminToken, _ := testutil.SetupAdminClient(t)
-	detail := getApplicationDetailForApprove(t, c, adminToken, appID)
-	require.NotEmpty(t, detail.Socials, "seeded application must have at least one social")
-	first := detail.Socials[0]
-
-	appUUID := uuid.MustParse(appID)
-	resp, err := c.VerifyCreatorApplicationSocialWithResponse(context.Background(),
-		appUUID, first.Id,
-		apiclient.VerifyCreatorApplicationSocialJSONRequestBody{},
-		testutil.WithAuth(adminToken))
-	require.NoError(t, err)
-	require.Equal(t, http.StatusOK, resp.StatusCode())
-
-	postManual := getApplicationDetailForApprove(t, c, adminToken, appID)
-	require.Equal(t, apiclient.Moderation, postManual.Status, "manual-verify must move the app to moderation")
-	return setup, adminToken, tg.UserID
 }
 
 // assertApprovePushExact mirrors assertRejectPushExact but for the approve

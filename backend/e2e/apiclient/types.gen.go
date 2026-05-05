@@ -275,6 +275,89 @@ type BrandResult struct {
 // ConsentType Canonical consent type captured at creator application submission.
 type ConsentType string
 
+// CreatorAggregate Full creator profile assembled from `creators` plus the snapshot tables
+// `creator_socials` and `creator_categories`. The Telegram block is
+// flattened (no separate object) because the only path to materialise a
+// creator is via approve, which guarantees a Telegram link existed at
+// that moment. City and category codes are returned alongside their
+// localised names hydrated from the active public dictionaries; missing
+// dictionary entries degrade to a `name == code` fallback.
+type CreatorAggregate struct {
+	Address   *string            `json:"address,omitempty"`
+	BirthDate openapi_types.Date `json:"birthDate"`
+
+	// Categories Categories sorted by code.
+	Categories []CreatorAggregateCategory `json:"categories"`
+
+	// CategoryOtherText Free-text niche description; non-null only when categories include "other".
+	CategoryOtherText *string `json:"categoryOtherText,omitempty"`
+
+	// CityCode Stable city code copied from the originating application.
+	CityCode string `json:"cityCode"`
+
+	// CityName Localised city label hydrated from the active cities dictionary; falls back to `cityCode` when the entry has been deactivated.
+	CityName  string             `json:"cityName"`
+	CreatedAt time.Time          `json:"createdAt"`
+	FirstName string             `json:"firstName"`
+	Id        openapi_types.UUID `json:"id"`
+
+	// Iin Kazakhstani individual identification number (12 digits).
+	Iin        string  `json:"iin"`
+	LastName   string  `json:"lastName"`
+	MiddleName *string `json:"middleName,omitempty"`
+	Phone      string  `json:"phone"`
+
+	// Socials Social accounts sorted by (platform, handle).
+	Socials []CreatorAggregateSocial `json:"socials"`
+
+	// SourceApplicationId ID of the originating creator application; allows admin and analytics joins.
+	SourceApplicationId openapi_types.UUID `json:"sourceApplicationId"`
+	TelegramFirstName   *string            `json:"telegramFirstName,omitempty"`
+	TelegramLastName    *string            `json:"telegramLastName,omitempty"`
+
+	// TelegramUserId Telegram numeric user id (BIGINT) — stable identifier of the linked account.
+	TelegramUserId   int64     `json:"telegramUserId"`
+	TelegramUsername *string   `json:"telegramUsername,omitempty"`
+	UpdatedAt        time.Time `json:"updatedAt"`
+}
+
+// CreatorAggregateCategory One category linked to a creator. `code` is the stable machine
+// identifier copied from the application; `name` is hydrated from the
+// active categories dictionary at read time, with a fallback to `code`
+// when the dictionary entry has been deactivated.
+type CreatorAggregateCategory struct {
+	Code string `json:"code"`
+	Name string `json:"name"`
+}
+
+// CreatorAggregateSocial Snapshot of one social account attached to a creator at the moment of
+// approve. The verification fields are copied from the application's
+// social row 1:1 — they reflect the verification state at approval time
+// even if the dictionary or the originating application later changes.
+type CreatorAggregateSocial struct {
+	// CreatedAt When the snapshot row was inserted into creator_socials.
+	CreatedAt time.Time          `json:"createdAt"`
+	Handle    string             `json:"handle"`
+	Id        openapi_types.UUID `json:"id"`
+
+	// Method How a social account was verified. `auto` — webhook from SendPulse caught
+	// the verification code in an Instagram DM. `manual` — admin marked the
+	// social as verified from the application drawer.
+	Method *SocialVerificationMethod `json:"method,omitempty"`
+
+	// Platform Supported social network for creator accounts (MVP scope).
+	Platform SocialPlatform `json:"platform"`
+
+	// Verified Whether ownership of this social account was confirmed at approval time.
+	Verified bool `json:"verified"`
+
+	// VerifiedAt When verification succeeded; null when the row stays unverified.
+	VerifiedAt *time.Time `json:"verifiedAt,omitempty"`
+
+	// VerifiedByUserId Admin who pressed manual-verify; null on auto-verified and unverified rows.
+	VerifiedByUserId *openapi_types.UUID `json:"verifiedByUserId,omitempty"`
+}
+
 // CreatorApplicationDetailConsent defines model for CreatorApplicationDetailConsent.
 type CreatorApplicationDetailConsent struct {
 	AcceptedAt time.Time `json:"acceptedAt"`
@@ -624,6 +707,18 @@ type GetBrandResult struct {
 // GetCreatorApplicationResult defines model for GetCreatorApplicationResult.
 type GetCreatorApplicationResult struct {
 	Data CreatorApplicationDetailData `json:"data"`
+}
+
+// GetCreatorResult defines model for GetCreatorResult.
+type GetCreatorResult struct {
+	// Data Full creator profile assembled from `creators` plus the snapshot tables
+	// `creator_socials` and `creator_categories`. The Telegram block is
+	// flattened (no separate object) because the only path to materialise a
+	// creator is via approve, which guarantees a Telegram link existed at
+	// that moment. City and category codes are returned alongside their
+	// localised names hydrated from the active public dictionaries; missing
+	// dictionary entries degrade to a `name == code` fallback.
+	Data CreatorAggregate `json:"data"`
 }
 
 // HealthResponse defines model for HealthResponse.

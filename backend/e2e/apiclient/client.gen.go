@@ -171,6 +171,9 @@ type ClientInterface interface {
 
 	VerifyCreatorApplicationSocial(ctx context.Context, id openapi_types.UUID, socialId openapi_types.UUID, body VerifyCreatorApplicationSocialJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// GetCreator request
+	GetCreator(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// ListDictionary request
 	ListDictionary(ctx context.Context, pType ListDictionaryParamsType, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -533,6 +536,18 @@ func (c *Client) VerifyCreatorApplicationSocialWithBody(ctx context.Context, id 
 
 func (c *Client) VerifyCreatorApplicationSocial(ctx context.Context, id openapi_types.UUID, socialId openapi_types.UUID, body VerifyCreatorApplicationSocialJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewVerifyCreatorApplicationSocialRequest(c.Server, id, socialId, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetCreator(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetCreatorRequest(c.Server, id)
 	if err != nil {
 		return nil, err
 	}
@@ -1486,6 +1501,40 @@ func NewVerifyCreatorApplicationSocialRequestWithBody(server string, id openapi_
 	return req, nil
 }
 
+// NewGetCreatorRequest generates requests for GetCreator
+func NewGetCreatorRequest(server string, id openapi_types.UUID) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/creators/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewListDictionaryRequest generates requests for ListDictionary
 func NewListDictionaryRequest(server string, pType ListDictionaryParamsType) (*http.Request, error) {
 	var err error
@@ -1710,6 +1759,9 @@ type ClientWithResponsesInterface interface {
 	VerifyCreatorApplicationSocialWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, socialId openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*VerifyCreatorApplicationSocialResponse, error)
 
 	VerifyCreatorApplicationSocialWithResponse(ctx context.Context, id openapi_types.UUID, socialId openapi_types.UUID, body VerifyCreatorApplicationSocialJSONRequestBody, reqEditors ...RequestEditorFn) (*VerifyCreatorApplicationSocialResponse, error)
+
+	// GetCreatorWithResponse request
+	GetCreatorWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetCreatorResponse, error)
 
 	// ListDictionaryWithResponse request
 	ListDictionaryWithResponse(ctx context.Context, pType ListDictionaryParamsType, reqEditors ...RequestEditorFn) (*ListDictionaryResponse, error)
@@ -2246,6 +2298,32 @@ func (r VerifyCreatorApplicationSocialResponse) StatusCode() int {
 	return 0
 }
 
+type GetCreatorResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *GetCreatorResult
+	JSON401      *ErrorResponse
+	JSON403      *Forbidden
+	JSON404      *ErrorResponse
+	JSONDefault  *UnexpectedError
+}
+
+// Status returns HTTPResponse.Status
+func (r GetCreatorResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetCreatorResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type ListDictionaryResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -2576,6 +2654,15 @@ func (c *ClientWithResponses) VerifyCreatorApplicationSocialWithResponse(ctx con
 		return nil, err
 	}
 	return ParseVerifyCreatorApplicationSocialResponse(rsp)
+}
+
+// GetCreatorWithResponse request returning *GetCreatorResponse
+func (c *ClientWithResponses) GetCreatorWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetCreatorResponse, error) {
+	rsp, err := c.GetCreator(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetCreatorResponse(rsp)
 }
 
 // ListDictionaryWithResponse request returning *ListDictionaryResponse
@@ -3573,6 +3660,60 @@ func ParseVerifyCreatorApplicationSocialResponse(rsp *http.Response) (*VerifyCre
 			return nil, err
 		}
 		response.JSON422 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest UnexpectedError
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetCreatorResponse parses an HTTP response from a GetCreatorWithResponse call
+func ParseGetCreatorResponse(rsp *http.Response) (*GetCreatorResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetCreatorResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest GetCreatorResult
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
 		var dest UnexpectedError

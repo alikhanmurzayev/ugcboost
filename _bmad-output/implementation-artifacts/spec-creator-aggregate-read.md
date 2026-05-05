@@ -2,8 +2,8 @@
 title: "GET creator-aggregate + полное E2E через fixture-helper (chunk 18c)"
 type: feature
 created: "2026-05-05"
-status: draft
-baseline_commit: "TBD — фиксируется после merge PR chunk 18b"
+status: in-progress
+baseline_commit: "467c318"
 context:
   - docs/standards/
   - _bmad-output/planning-artifacts/creator-onboarding-roadmap.md
