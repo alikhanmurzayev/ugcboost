@@ -29,6 +29,9 @@ type CreatorApplicationRepoFactory interface {
 	NewCreatorApplicationTelegramLinkRepo(db dbutil.DB) repository.CreatorApplicationTelegramLinkRepo
 	NewCreatorApplicationStatusTransitionRepo(db dbutil.DB) repository.CreatorApplicationStatusTransitionRepo
 	NewAuditRepo(db dbutil.DB) repository.AuditRepo
+	NewCreatorRepo(db dbutil.DB) repository.CreatorRepo
+	NewCreatorSocialRepo(db dbutil.DB) repository.CreatorSocialRepo
+	NewCreatorCategoryRepo(db dbutil.DB) repository.CreatorCategoryRepo
 }
 
 // creatorApplicationListInputToRepo translates the validated handler input
@@ -60,6 +63,7 @@ func creatorApplicationListInputToRepo(in domain.CreatorApplicationListInput) re
 type creatorAppNotifier interface {
 	NotifyVerificationApproved(ctx context.Context, chatID int64)
 	NotifyApplicationRejected(ctx context.Context, chatID int64)
+	NotifyApplicationApproved(ctx context.Context, chatID int64)
 }
 
 type CreatorApplicationService struct {
@@ -1134,4 +1138,183 @@ func (s *CreatorApplicationService) notifyApplicationRejected(ctx context.Contex
 		return
 	}
 	s.notifier.NotifyApplicationRejected(ctx, link.TelegramUserID)
+}
+
+// ApproveApplication promotes an application from `moderation` to the terminal
+// `approved` status under an admin's responsibility, snapshotting the
+// application into the new creator entity in the same transaction.
+//
+// Strict preconditions inside a single transaction: (1) load the application;
+// (2) the current status must be `moderation`; (3) the Telegram link must be
+// present (otherwise we have no channel to congratulate the creator);
+// (4) snapshot socials and categories of the application; (5) write the
+// state-machine transition; (6) INSERT the creator row + bulk INSERT socials
+// and categories under the freshly-created creator id; (7) audit row pinned
+// to the same TX so a rollback also rolls back the audit.
+//
+// After the transaction commits, notifyApplicationApproved fires the static
+// Telegram message fire-and-forget. Lookup / send failures degrade to a log
+// — the approve itself never reverts and the HTTP caller still sees the
+// new creator id.
+func (s *CreatorApplicationService) ApproveApplication(ctx context.Context, applicationID, actorUserID string) (string, error) {
+	var createdCreatorID string
+	if err := dbutil.WithTx(ctx, s.pool, func(tx dbutil.DB) error {
+		appRepo := s.repoFactory.NewCreatorApplicationRepo(tx)
+		linkRepo := s.repoFactory.NewCreatorApplicationTelegramLinkRepo(tx)
+		appSocialRepo := s.repoFactory.NewCreatorApplicationSocialRepo(tx)
+		appCategoryRepo := s.repoFactory.NewCreatorApplicationCategoryRepo(tx)
+		creatorRepo := s.repoFactory.NewCreatorRepo(tx)
+		creatorSocialRepo := s.repoFactory.NewCreatorSocialRepo(tx)
+		creatorCategoryRepo := s.repoFactory.NewCreatorCategoryRepo(tx)
+		auditRepo := s.repoFactory.NewAuditRepo(tx)
+
+		// FOR UPDATE serialises concurrent approves on the same application
+		// row: TX2 blocks here until TX1 commits, then sees status='approved'
+		// and returns NotApprovable. Without the lock the race surfaces as
+		// whichever creators_*_unique index Postgres checks first (oid order),
+		// which is not guaranteed to be source_application_id_unique.
+		appRow, err := appRepo.GetByIDForUpdate(ctx, applicationID)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return domain.ErrCreatorApplicationNotFound
+			}
+			return fmt.Errorf("approve application: lookup application: %w", err)
+		}
+		if appRow.Status != domain.CreatorApplicationStatusModeration {
+			return domain.ErrCreatorApplicationNotApprovable
+		}
+
+		linkRow, err := linkRepo.GetByApplicationID(ctx, applicationID)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return domain.ErrCreatorApplicationTelegramNotLinked
+			}
+			return fmt.Errorf("approve application: lookup telegram link: %w", err)
+		}
+
+		appSocials, err := appSocialRepo.ListByApplicationID(ctx, applicationID)
+		if err != nil {
+			return fmt.Errorf("approve application: list socials: %w", err)
+		}
+		appCategories, err := appCategoryRepo.ListByApplicationID(ctx, applicationID)
+		if err != nil {
+			return fmt.Errorf("approve application: list categories: %w", err)
+		}
+
+		actor := actorUserID
+		fromStatus := appRow.Status
+		if err := s.applyTransition(ctx, tx, appRow, domain.CreatorApplicationStatusApproved, &actor, domain.TransitionReasonApprove); err != nil {
+			return err
+		}
+
+		creator := domain.NewCreatorFromApplication(domain.CreatorSnapshotInput{
+			ApplicationID:     appRow.ID,
+			IIN:               appRow.IIN,
+			LastName:          appRow.LastName,
+			FirstName:         appRow.FirstName,
+			MiddleName:        appRow.MiddleName,
+			BirthDate:         appRow.BirthDate,
+			Phone:             appRow.Phone,
+			CityCode:          appRow.CityCode,
+			Address:           appRow.Address,
+			CategoryOtherText: appRow.CategoryOtherText,
+			TelegramUserID:    linkRow.TelegramUserID,
+			TelegramUsername:  linkRow.TelegramUsername,
+			TelegramFirstName: linkRow.TelegramFirstName,
+			TelegramLastName:  linkRow.TelegramLastName,
+		})
+		creatorRow, err := creatorRepo.Create(ctx, repository.CreatorRow{
+			IIN:                 creator.IIN,
+			LastName:            creator.LastName,
+			FirstName:           creator.FirstName,
+			MiddleName:          creator.MiddleName,
+			BirthDate:           creator.BirthDate,
+			Phone:               creator.Phone,
+			CityCode:            creator.CityCode,
+			Address:             creator.Address,
+			CategoryOtherText:   creator.CategoryOtherText,
+			TelegramUserID:      creator.TelegramUserID,
+			TelegramUsername:    creator.TelegramUsername,
+			TelegramFirstName:   creator.TelegramFirstName,
+			TelegramLastName:    creator.TelegramLastName,
+			SourceApplicationID: creator.SourceApplicationID,
+		})
+		if err != nil {
+			return err
+		}
+
+		socialRows := make([]repository.CreatorSocialRow, len(appSocials))
+		for i, sc := range appSocials {
+			socialRows[i] = repository.CreatorSocialRow{
+				CreatorID:        creatorRow.ID,
+				Platform:         sc.Platform,
+				Handle:           sc.Handle,
+				Verified:         sc.Verified,
+				Method:           sc.Method,
+				VerifiedByUserID: sc.VerifiedByUserID,
+				VerifiedAt:       sc.VerifiedAt,
+			}
+		}
+		if err := creatorSocialRepo.InsertMany(ctx, socialRows); err != nil {
+			return fmt.Errorf("approve application: insert creator socials: %w", err)
+		}
+
+		categoryRows := make([]repository.CreatorCategoryRow, len(appCategories))
+		for i, code := range appCategories {
+			categoryRows[i] = repository.CreatorCategoryRow{
+				CreatorID:    creatorRow.ID,
+				CategoryCode: code,
+			}
+		}
+		if err := creatorCategoryRepo.InsertMany(ctx, categoryRows); err != nil {
+			return fmt.Errorf("approve application: insert creator categories: %w", err)
+		}
+
+		auditCtx := contextWithActor(ctx, actor, string(api.Admin))
+		if err := writeAudit(auditCtx, auditRepo,
+			AuditActionCreatorApplicationApprove,
+			AuditEntityTypeCreatorApplication,
+			appRow.ID,
+			nil,
+			map[string]any{
+				"application_id": appRow.ID,
+				"creator_id":     creatorRow.ID,
+				"from_status":    fromStatus,
+				"to_status":      domain.CreatorApplicationStatusApproved,
+			},
+		); err != nil {
+			return fmt.Errorf("approve application: write audit: %w", err)
+		}
+
+		createdCreatorID = creatorRow.ID
+		return nil
+	}); err != nil {
+		return "", err
+	}
+
+	s.notifyApplicationApproved(ctx, applicationID)
+	return createdCreatorID, nil
+}
+
+// notifyApplicationApproved runs after ApproveApplication's tx commits.
+// Mirrors notifyApplicationRejected: a second link lookup keeps the notify
+// step semantically separate from the transaction. Lookup / send failures are
+// logged but never surfaced — the approve is permanent and the HTTP caller
+// has already received the new creator id. The presence of the link is also
+// guaranteed by the transactional guard, so an sql.ErrNoRows here would mean
+// a delete-after-commit race rather than a precondition violation.
+func (s *CreatorApplicationService) notifyApplicationApproved(ctx context.Context, applicationID string) {
+	ctx = context.WithoutCancel(ctx)
+	link, err := s.repoFactory.NewCreatorApplicationTelegramLinkRepo(s.pool).GetByApplicationID(ctx, applicationID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			s.logger.Warn(ctx, "creator application approved without telegram link",
+				"application_id", applicationID)
+			return
+		}
+		s.logger.Error(ctx, "creator application approve notify lookup failed",
+			"application_id", applicationID, "error", err)
+		return
+	}
+	s.notifier.NotifyApplicationApproved(ctx, link.TelegramUserID)
 }

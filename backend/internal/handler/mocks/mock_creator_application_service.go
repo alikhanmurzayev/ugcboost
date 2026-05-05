@@ -38,6 +38,78 @@ func (_m *MockCreatorApplicationService) EXPECT() *MockCreatorApplicationService
 	return &MockCreatorApplicationService_Expecter{mock: &_m.Mock}
 }
 
+// ApproveApplication provides a mock function for the type MockCreatorApplicationService
+func (_mock *MockCreatorApplicationService) ApproveApplication(ctx context.Context, applicationID string, actorUserID string) (string, error) {
+	ret := _mock.Called(ctx, applicationID, actorUserID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ApproveApplication")
+	}
+
+	var r0 string
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) (string, error)); ok {
+		return returnFunc(ctx, applicationID, actorUserID)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) string); ok {
+		r0 = returnFunc(ctx, applicationID, actorUserID)
+	} else {
+		r0 = ret.Get(0).(string)
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string) error); ok {
+		r1 = returnFunc(ctx, applicationID, actorUserID)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockCreatorApplicationService_ApproveApplication_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ApproveApplication'
+type MockCreatorApplicationService_ApproveApplication_Call struct {
+	*mock.Call
+}
+
+// ApproveApplication is a helper method to define mock.On call
+//   - ctx context.Context
+//   - applicationID string
+//   - actorUserID string
+func (_e *MockCreatorApplicationService_Expecter) ApproveApplication(ctx interface{}, applicationID interface{}, actorUserID interface{}) *MockCreatorApplicationService_ApproveApplication_Call {
+	return &MockCreatorApplicationService_ApproveApplication_Call{Call: _e.mock.On("ApproveApplication", ctx, applicationID, actorUserID)}
+}
+
+func (_c *MockCreatorApplicationService_ApproveApplication_Call) Run(run func(ctx context.Context, applicationID string, actorUserID string)) *MockCreatorApplicationService_ApproveApplication_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 string
+		if args[2] != nil {
+			arg2 = args[2].(string)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockCreatorApplicationService_ApproveApplication_Call) Return(s string, err error) *MockCreatorApplicationService_ApproveApplication_Call {
+	_c.Call.Return(s, err)
+	return _c
+}
+
+func (_c *MockCreatorApplicationService_ApproveApplication_Call) RunAndReturn(run func(ctx context.Context, applicationID string, actorUserID string) (string, error)) *MockCreatorApplicationService_ApproveApplication_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Counts provides a mock function for the type MockCreatorApplicationService
 func (_mock *MockCreatorApplicationService) Counts(ctx context.Context) (map[string]int64, error) {
 	ret := _mock.Called(ctx)

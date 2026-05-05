@@ -1506,6 +1506,147 @@ func TestServer_RejectCreatorApplication(t *testing.T) {
 	})
 }
 
+func TestServer_ApproveCreatorApplication(t *testing.T) {
+	t.Parallel()
+
+	const (
+		appUUID     = "11111111-1111-1111-1111-111111111111"
+		adminUUID   = "22222222-2222-2222-2222-222222222222"
+		creatorUUID = "33333333-3333-3333-3333-333333333333"
+		path        = "/creators/applications/" + appUUID + "/approve"
+	)
+
+	t.Run("forbidden for manager — service is not consulted", func(t *testing.T) {
+		t.Parallel()
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanApproveCreatorApplication(mock.Anything).Return(domain.ErrForbidden)
+
+		router := newTestRouter(t, serverWithAuthzAndCreatorAndDict(t, authz, nil, nil, logmocks.NewMockLogger(t)))
+		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, path, nil, withRole(adminUUID, api.BrandManager))
+		require.Equal(t, http.StatusForbidden, w.Code)
+		require.Equal(t, domain.CodeForbidden, resp.Error.Code)
+	})
+
+	t.Run("unauthenticated — auth middleware short-circuits before handler", func(t *testing.T) {
+		t.Parallel()
+		log := logmocks.NewMockLogger(t)
+		r := chi.NewRouter()
+		r.Use(func(next http.Handler) http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+				if req.Header.Get("Authorization") == "" {
+					respondError(w, req, domain.ErrUnauthorized, log)
+					return
+				}
+				next.ServeHTTP(w, req)
+			})
+		})
+		api.HandlerWithOptions(NewStrictAPIHandler(serverWithAuthzAndCreatorAndDict(t, nil, nil, nil, log)), api.ChiServerOptions{
+			BaseRouter: r, ErrorHandlerFunc: HandleParamError(logmocks.NewMockLogger(t)),
+		})
+
+		req := httptest.NewRequest(http.MethodPost, path, nil)
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		require.Equal(t, http.StatusUnauthorized, w.Code)
+
+		var body api.ErrorResponse
+		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &body))
+		require.Equal(t, domain.CodeUnauthorized, body.Error.Code)
+	})
+
+	t.Run("application not found surfaces as 404 NOT_FOUND", func(t *testing.T) {
+		t.Parallel()
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanApproveCreatorApplication(mock.Anything).Return(nil)
+		creator := mocks.NewMockCreatorApplicationService(t)
+		creator.EXPECT().ApproveApplication(mock.Anything, appUUID, adminUUID).
+			Return("", domain.ErrCreatorApplicationNotFound)
+
+		router := newTestRouter(t, serverWithAuthzAndCreatorAndDict(t, authz, creator, nil, logmocks.NewMockLogger(t)))
+		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, path, nil, withRole(adminUUID, api.Admin))
+		require.Equal(t, http.StatusNotFound, w.Code)
+		require.Equal(t, domain.CodeNotFound, resp.Error.Code)
+	})
+
+	t.Run("not approvable surfaces as 422 NOT_APPROVABLE", func(t *testing.T) {
+		t.Parallel()
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanApproveCreatorApplication(mock.Anything).Return(nil)
+		creator := mocks.NewMockCreatorApplicationService(t)
+		creator.EXPECT().ApproveApplication(mock.Anything, appUUID, adminUUID).
+			Return("", domain.ErrCreatorApplicationNotApprovable)
+
+		router := newTestRouter(t, serverWithAuthzAndCreatorAndDict(t, authz, creator, nil, logmocks.NewMockLogger(t)))
+		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, path, nil, withRole(adminUUID, api.Admin))
+		require.Equal(t, http.StatusUnprocessableEntity, w.Code)
+		require.Equal(t, domain.CodeCreatorApplicationNotApprovable, resp.Error.Code)
+	})
+
+	t.Run("telegram not linked surfaces as 422 TELEGRAM_NOT_LINKED", func(t *testing.T) {
+		t.Parallel()
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanApproveCreatorApplication(mock.Anything).Return(nil)
+		creator := mocks.NewMockCreatorApplicationService(t)
+		creator.EXPECT().ApproveApplication(mock.Anything, appUUID, adminUUID).
+			Return("", domain.ErrCreatorApplicationTelegramNotLinked)
+
+		router := newTestRouter(t, serverWithAuthzAndCreatorAndDict(t, authz, creator, nil, logmocks.NewMockLogger(t)))
+		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, path, nil, withRole(adminUUID, api.Admin))
+		require.Equal(t, http.StatusUnprocessableEntity, w.Code)
+		require.Equal(t, domain.CodeCreatorApplicationTelegramNotLinked, resp.Error.Code)
+	})
+
+	t.Run("creator already exists surfaces as 422 CREATOR_ALREADY_EXISTS", func(t *testing.T) {
+		t.Parallel()
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanApproveCreatorApplication(mock.Anything).Return(nil)
+		creator := mocks.NewMockCreatorApplicationService(t)
+		creator.EXPECT().ApproveApplication(mock.Anything, appUUID, adminUUID).
+			Return("", domain.ErrCreatorAlreadyExists)
+
+		router := newTestRouter(t, serverWithAuthzAndCreatorAndDict(t, authz, creator, nil, logmocks.NewMockLogger(t)))
+		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, path, nil, withRole(adminUUID, api.Admin))
+		require.Equal(t, http.StatusUnprocessableEntity, w.Code)
+		require.Equal(t, domain.CodeCreatorAlreadyExists, resp.Error.Code)
+	})
+
+	t.Run("telegram already taken surfaces as 422 CREATOR_TELEGRAM_ALREADY_TAKEN", func(t *testing.T) {
+		t.Parallel()
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanApproveCreatorApplication(mock.Anything).Return(nil)
+		creator := mocks.NewMockCreatorApplicationService(t)
+		creator.EXPECT().ApproveApplication(mock.Anything, appUUID, adminUUID).
+			Return("", domain.ErrCreatorTelegramAlreadyTaken)
+
+		router := newTestRouter(t, serverWithAuthzAndCreatorAndDict(t, authz, creator, nil, logmocks.NewMockLogger(t)))
+		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, path, nil, withRole(adminUUID, api.Admin))
+		require.Equal(t, http.StatusUnprocessableEntity, w.Code)
+		require.Equal(t, domain.CodeCreatorTelegramAlreadyTaken, resp.Error.Code)
+	})
+
+	t.Run("happy path: forwards actor and id, returns creatorId in 200 body", func(t *testing.T) {
+		t.Parallel()
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanApproveCreatorApplication(mock.Anything).Return(nil)
+		creator := mocks.NewMockCreatorApplicationService(t)
+		var capturedAppID, capturedActor string
+		creator.EXPECT().ApproveApplication(mock.Anything, mock.Anything, mock.Anything).
+			Run(func(_ context.Context, applicationID, actorUserID string) {
+				capturedAppID = applicationID
+				capturedActor = actorUserID
+			}).
+			Return(creatorUUID, nil)
+
+		router := newTestRouter(t, serverWithAuthzAndCreatorAndDict(t, authz, creator, nil, logmocks.NewMockLogger(t)))
+		w, resp := doJSON[api.CreatorApprovalResult](t, router, http.MethodPost, path, nil, withRole(adminUUID, api.Admin))
+		require.Equal(t, http.StatusOK, w.Code)
+		require.Equal(t, creatorUUID, resp.Data.CreatorId.String())
+
+		require.Equal(t, appUUID, capturedAppID)
+		require.Equal(t, adminUUID, capturedActor)
+	})
+}
+
 func TestServer_GetCreatorApplicationsCounts(t *testing.T) {
 	t.Parallel()
 

@@ -214,7 +214,7 @@ components:
       properties:
         type:
           type: string
-          enum: [user, brand, creator_application]
+          enum: [user, brand, creator_application, creator]
         id:
           type: string
 

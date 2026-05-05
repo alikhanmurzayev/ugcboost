@@ -16,6 +16,7 @@ const (
 	AuditActionCreatorApplicationVerificationAuto   = "creator_application_verification_auto"
 	AuditActionCreatorApplicationVerificationManual = "creator_application_verification_manual"
 	AuditActionCreatorApplicationReject             = "creator_application_reject"
+	AuditActionCreatorApplicationApprove            = "creator_application_approve"
 )
 
 // Audit entity types used alongside AuditAction* values.

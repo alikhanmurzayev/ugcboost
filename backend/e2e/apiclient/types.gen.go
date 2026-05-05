@@ -573,6 +573,18 @@ type CreatorApplicationsListResult struct {
 	Data CreatorApplicationsListData `json:"data"`
 }
 
+// CreatorApprovalData Payload returned by POST /creators/applications/{id}/approve.
+type CreatorApprovalData struct {
+	// CreatorId ID of the creator row created by the approve action.
+	CreatorId openapi_types.UUID `json:"creatorId"`
+}
+
+// CreatorApprovalResult defines model for CreatorApprovalResult.
+type CreatorApprovalResult struct {
+	// Data Payload returned by POST /creators/applications/{id}/approve.
+	Data CreatorApprovalData `json:"data"`
+}
+
 // DictionaryItem Single entry from a public dictionary (categories, cities, etc.).
 // Reused for the dictionary-listing endpoint and for hydrated dictionary
 // references on creator-application reads, where the backend falls back

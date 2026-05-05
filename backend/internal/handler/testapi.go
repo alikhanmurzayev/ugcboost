@@ -36,6 +36,7 @@ type TestAPICleanupRepoFactory interface {
 	NewUserRepo(db dbutil.DB) repository.UserRepo
 	NewBrandRepo(db dbutil.DB) repository.BrandRepo
 	NewCreatorApplicationRepo(db dbutil.DB) repository.CreatorApplicationRepo
+	NewCreatorRepo(db dbutil.DB) repository.CreatorRepo
 }
 
 // TestAPIHandler provides test-only endpoints that back openapi-test.yaml.
@@ -178,6 +179,8 @@ func (h *TestAPIHandler) CleanupEntity(ctx context.Context, request testapi.Clea
 		deleteErr = h.repos.NewBrandRepo(h.pool).Delete(ctx, req.Id)
 	case testapi.CreatorApplication:
 		deleteErr = h.repos.NewCreatorApplicationRepo(h.pool).DeleteForTests(ctx, req.Id)
+	case testapi.Creator:
+		deleteErr = h.repos.NewCreatorRepo(h.pool).DeleteForTests(ctx, req.Id)
 	default:
 		if !req.Type.Valid() {
 			return nil, domain.NewValidationError(domain.CodeValidation,

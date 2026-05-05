@@ -782,6 +782,79 @@ paths:
         default:
           $ref: "#/components/responses/UnexpectedError"
 
+  /creators/applications/{id}/approve:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      operationId: approveCreatorApplication
+      summary: Approve a creator application (admin only)
+      description: |
+        Admin-only action that promotes an application from `moderation` to the
+        terminal `approved` status. The transition is guarded server-side: any
+        other source status returns 422 `CREATOR_APPLICATION_NOT_APPROVABLE`.
+        The approve also snapshots the application into the new `creators`
+        entity (plus its socials and categories) inside the same transaction,
+        so a creator row is guaranteed to exist if and only if the application
+        moved to `approved`. The approval is persisted as a
+        `creator_application_status_transitions` row plus an audit entry.
+
+        The application's Telegram link is required: an application without a
+        link is refused with 422 `CREATOR_APPLICATION_TELEGRAM_NOT_LINKED`,
+        because the only channel for the bot to notify the approved creator
+        is the bound chat. After commit, the bot sends a static congratulation
+        message — updates to that copy ship via separate PRs.
+
+        No body is accepted; the response carries the freshly-created
+        `creatorId` so callers can immediately navigate to the creator
+        aggregate (read endpoint ships in a follow-up chunk).
+
+        Repeated approve of an already-approved application returns 422
+        `CREATOR_APPLICATION_NOT_APPROVABLE`. Concurrent approves on the same
+        application produce exactly one 200 (winner) and exactly one 422; the
+        UNIQUE constraint on `creators.source_application_id` aborts the loser
+        atomically along with the entire transaction it tried to run.
+      tags: [creators]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Application moved to `approved`; `creatorId` returned.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreatorApprovalResult"
+        "401":
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: Application not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: |
+            Application is not in a status from which `approved` is reachable
+            (only `moderation`), the application has no Telegram link, the
+            corresponding creator row already exists or the Telegram account
+            is already taken by another creator.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: "#/components/responses/UnexpectedError"
+
   /webhooks/sendpulse/instagram:
     post:
       operationId: sendPulseInstagramWebhook
@@ -1767,6 +1840,23 @@ components:
         Generic empty success envelope for endpoints that do not carry a
         payload back. Clients should refetch the relevant resource to
         observe state changes.
+
+    CreatorApprovalData:
+      type: object
+      description: Payload returned by POST /creators/applications/{id}/approve.
+      required: [creatorId]
+      properties:
+        creatorId:
+          type: string
+          format: uuid
+          description: ID of the creator row created by the approve action.
+
+    CreatorApprovalResult:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: "#/components/schemas/CreatorApprovalData"
 
   securitySchemes:
     bearerAuth:

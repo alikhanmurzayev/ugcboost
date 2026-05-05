@@ -71,6 +71,9 @@ type creatorServiceRig struct {
 	appTelegramLinkRepo *repomocks.MockCreatorApplicationTelegramLinkRepo
 	transitionRepo      *repomocks.MockCreatorApplicationStatusTransitionRepo
 	auditRepo           *repomocks.MockAuditRepo
+	creatorRepo         *repomocks.MockCreatorRepo
+	creatorSocialRepo   *repomocks.MockCreatorSocialRepo
+	creatorCategoryRepo *repomocks.MockCreatorCategoryRepo
 	notifier            *svcmocks.MockcreatorAppNotifier
 	logger              *logmocks.MockLogger
 }
@@ -88,6 +91,9 @@ func newCreatorServiceRig(t *testing.T) creatorServiceRig {
 		appTelegramLinkRepo: repomocks.NewMockCreatorApplicationTelegramLinkRepo(t),
 		transitionRepo:      repomocks.NewMockCreatorApplicationStatusTransitionRepo(t),
 		auditRepo:           repomocks.NewMockAuditRepo(t),
+		creatorRepo:         repomocks.NewMockCreatorRepo(t),
+		creatorSocialRepo:   repomocks.NewMockCreatorSocialRepo(t),
+		creatorCategoryRepo: repomocks.NewMockCreatorCategoryRepo(t),
 		notifier:            svcmocks.NewMockcreatorAppNotifier(t),
 		logger:              logmocks.NewMockLogger(t),
 	}
@@ -2166,6 +2172,543 @@ func TestCreatorApplicationService_RejectApplication(t *testing.T) {
 		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.notifier, rig.logger)
 		err := svc.RejectApplication(context.Background(), rejectAppID, rejectAdminID)
 		require.NoError(t, err)
+	})
+}
+
+// expectApproveTxBegin wires the mock pool for the single WithTx call inside
+// ApproveApplication.
+func expectApproveTxBegin(rig creatorServiceRig) {
+	rig.pool.EXPECT().Begin(mock.Anything).Return(testTx{}, nil)
+}
+
+// expectApproveFactoryWiring registers the repo constructors the approve TX
+// always issues at the top. Tests that exit early skip the ones their path
+// does not reach (mockery only fails on unmet expectations).
+func expectApproveFactoryWiring(rig creatorServiceRig) {
+	rig.factory.EXPECT().NewCreatorApplicationRepo(mock.Anything).Return(rig.appRepo)
+	rig.factory.EXPECT().NewCreatorApplicationTelegramLinkRepo(mock.Anything).Return(rig.appTelegramLinkRepo)
+	rig.factory.EXPECT().NewCreatorApplicationSocialRepo(mock.Anything).Return(rig.appSocialRepo)
+	rig.factory.EXPECT().NewCreatorApplicationCategoryRepo(mock.Anything).Return(rig.appCategoryRepo)
+	rig.factory.EXPECT().NewCreatorRepo(mock.Anything).Return(rig.creatorRepo)
+	rig.factory.EXPECT().NewCreatorSocialRepo(mock.Anything).Return(rig.creatorSocialRepo)
+	rig.factory.EXPECT().NewCreatorCategoryRepo(mock.Anything).Return(rig.creatorCategoryRepo)
+	rig.factory.EXPECT().NewAuditRepo(mock.Anything).Return(rig.auditRepo)
+}
+
+const (
+	approveAdminID   = "cccc3333-3333-3333-3333-333333333333"
+	approveAppID     = "dddd4444-4444-4444-4444-444444444444"
+	approveCreatorID = "eeee5555-5555-5555-5555-555555555555"
+	approveChatID    = int64(424242)
+)
+
+func approveApplicationRow() *repository.CreatorApplicationRow {
+	return &repository.CreatorApplicationRow{
+		ID:                approveAppID,
+		Status:            domain.CreatorApplicationStatusModeration,
+		IIN:               "950515312348",
+		LastName:          "Муратова",
+		FirstName:         "Айдана",
+		MiddleName:        pointer.ToString("Ивановна"),
+		BirthDate:         time.Date(1995, 5, 15, 0, 0, 0, 0, time.UTC),
+		Phone:             "+77001234567",
+		CityCode:          "almaty",
+		Address:           pointer.ToString("ул. Абая 10"),
+		CategoryOtherText: pointer.ToString("стримы"),
+		VerificationCode:  "UGC-123456",
+	}
+}
+
+func approveLinkRow() *repository.CreatorApplicationTelegramLinkRow {
+	return &repository.CreatorApplicationTelegramLinkRow{
+		ApplicationID:     approveAppID,
+		TelegramUserID:    approveChatID,
+		TelegramUsername:  pointer.ToString("aidana_tg"),
+		TelegramFirstName: pointer.ToString("Айдана"),
+		TelegramLastName:  pointer.ToString("Муратова"),
+	}
+}
+
+func approveSocialRows() []*repository.CreatorApplicationSocialRow {
+	verifiedAt := time.Date(2026, 5, 5, 12, 0, 0, 0, time.UTC)
+	return []*repository.CreatorApplicationSocialRow{
+		{
+			ID:               "social-ig",
+			ApplicationID:    approveAppID,
+			Platform:         domain.SocialPlatformInstagram,
+			Handle:           "aidana",
+			Verified:         true,
+			Method:           pointer.ToString(domain.SocialVerificationMethodAuto),
+			VerifiedByUserID: nil,
+			VerifiedAt:       &verifiedAt,
+		},
+		{
+			ID:               "social-tt",
+			ApplicationID:    approveAppID,
+			Platform:         domain.SocialPlatformTikTok,
+			Handle:           "aidana_tt",
+			Verified:         true,
+			Method:           pointer.ToString(domain.SocialVerificationMethodManual),
+			VerifiedByUserID: pointer.ToString(approveAdminID),
+			VerifiedAt:       &verifiedAt,
+		},
+		{
+			ID:            "social-th",
+			ApplicationID: approveAppID,
+			Platform:      domain.SocialPlatformThreads,
+			Handle:        "aidana_th",
+			Verified:      false,
+		},
+	}
+}
+
+func approveCategories() []string {
+	return []string{"beauty", "fashion", "lifestyle"}
+}
+
+func TestCreatorApplicationService_ApproveApplication(t *testing.T) {
+	t.Parallel()
+
+	t.Run("application not found returns ErrCreatorApplicationNotFound", func(t *testing.T) {
+		t.Parallel()
+		rig := newCreatorServiceRig(t)
+		expectApproveTxBegin(rig)
+		expectApproveFactoryWiring(rig)
+
+		rig.appRepo.EXPECT().GetByIDForUpdate(mock.Anything, approveAppID).Return(nil, sql.ErrNoRows)
+
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.notifier, rig.logger)
+		_, err := svc.ApproveApplication(context.Background(), approveAppID, approveAdminID)
+		require.ErrorIs(t, err, domain.ErrCreatorApplicationNotFound)
+	})
+
+	t.Run("get application repo error wrapped", func(t *testing.T) {
+		t.Parallel()
+		rig := newCreatorServiceRig(t)
+		expectApproveTxBegin(rig)
+		expectApproveFactoryWiring(rig)
+
+		rig.appRepo.EXPECT().GetByIDForUpdate(mock.Anything, approveAppID).Return(nil, errors.New("db down"))
+
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.notifier, rig.logger)
+		_, err := svc.ApproveApplication(context.Background(), approveAppID, approveAdminID)
+		require.ErrorContains(t, err, "approve application: lookup application")
+		require.ErrorContains(t, err, "db down")
+	})
+
+	notApprovable := []string{
+		domain.CreatorApplicationStatusVerification,
+		domain.CreatorApplicationStatusRejected,
+		domain.CreatorApplicationStatusApproved,
+		domain.CreatorApplicationStatusWithdrawn,
+	}
+	for _, status := range notApprovable {
+		status := status
+		t.Run("not approvable from "+status+" returns ErrCreatorApplicationNotApprovable", func(t *testing.T) {
+			t.Parallel()
+			rig := newCreatorServiceRig(t)
+			expectApproveTxBegin(rig)
+			expectApproveFactoryWiring(rig)
+
+			row := approveApplicationRow()
+			row.Status = status
+			rig.appRepo.EXPECT().GetByIDForUpdate(mock.Anything, approveAppID).Return(row, nil)
+
+			svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.notifier, rig.logger)
+			_, err := svc.ApproveApplication(context.Background(), approveAppID, approveAdminID)
+			require.ErrorIs(t, err, domain.ErrCreatorApplicationNotApprovable)
+		})
+	}
+
+	t.Run("telegram link missing returns ErrCreatorApplicationTelegramNotLinked", func(t *testing.T) {
+		t.Parallel()
+		rig := newCreatorServiceRig(t)
+		expectApproveTxBegin(rig)
+		expectApproveFactoryWiring(rig)
+
+		rig.appRepo.EXPECT().GetByIDForUpdate(mock.Anything, approveAppID).Return(approveApplicationRow(), nil)
+		rig.appTelegramLinkRepo.EXPECT().GetByApplicationID(mock.Anything, approveAppID).
+			Return(nil, sql.ErrNoRows)
+
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.notifier, rig.logger)
+		_, err := svc.ApproveApplication(context.Background(), approveAppID, approveAdminID)
+		require.ErrorIs(t, err, domain.ErrCreatorApplicationTelegramNotLinked)
+	})
+
+	t.Run("telegram link lookup db error wrapped", func(t *testing.T) {
+		t.Parallel()
+		rig := newCreatorServiceRig(t)
+		expectApproveTxBegin(rig)
+		expectApproveFactoryWiring(rig)
+
+		rig.appRepo.EXPECT().GetByIDForUpdate(mock.Anything, approveAppID).Return(approveApplicationRow(), nil)
+		rig.appTelegramLinkRepo.EXPECT().GetByApplicationID(mock.Anything, approveAppID).
+			Return(nil, errors.New("link lookup boom"))
+
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.notifier, rig.logger)
+		_, err := svc.ApproveApplication(context.Background(), approveAppID, approveAdminID)
+		require.ErrorContains(t, err, "approve application: lookup telegram link")
+		require.ErrorContains(t, err, "link lookup boom")
+	})
+
+	t.Run("socials list error wrapped", func(t *testing.T) {
+		t.Parallel()
+		rig := newCreatorServiceRig(t)
+		expectApproveTxBegin(rig)
+		expectApproveFactoryWiring(rig)
+
+		rig.appRepo.EXPECT().GetByIDForUpdate(mock.Anything, approveAppID).Return(approveApplicationRow(), nil)
+		rig.appTelegramLinkRepo.EXPECT().GetByApplicationID(mock.Anything, approveAppID).Return(approveLinkRow(), nil)
+		rig.appSocialRepo.EXPECT().ListByApplicationID(mock.Anything, approveAppID).
+			Return(nil, errors.New("socials boom"))
+
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.notifier, rig.logger)
+		_, err := svc.ApproveApplication(context.Background(), approveAppID, approveAdminID)
+		require.ErrorContains(t, err, "approve application: list socials")
+		require.ErrorContains(t, err, "socials boom")
+	})
+
+	t.Run("categories list error wrapped", func(t *testing.T) {
+		t.Parallel()
+		rig := newCreatorServiceRig(t)
+		expectApproveTxBegin(rig)
+		expectApproveFactoryWiring(rig)
+
+		rig.appRepo.EXPECT().GetByIDForUpdate(mock.Anything, approveAppID).Return(approveApplicationRow(), nil)
+		rig.appTelegramLinkRepo.EXPECT().GetByApplicationID(mock.Anything, approveAppID).Return(approveLinkRow(), nil)
+		rig.appSocialRepo.EXPECT().ListByApplicationID(mock.Anything, approveAppID).Return(approveSocialRows(), nil)
+		rig.appCategoryRepo.EXPECT().ListByApplicationID(mock.Anything, approveAppID).
+			Return(nil, errors.New("cats boom"))
+
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.notifier, rig.logger)
+		_, err := svc.ApproveApplication(context.Background(), approveAppID, approveAdminID)
+		require.ErrorContains(t, err, "approve application: list categories")
+		require.ErrorContains(t, err, "cats boom")
+	})
+
+	t.Run("apply transition error rolls back tx and bubbles", func(t *testing.T) {
+		t.Parallel()
+		rig := newCreatorServiceRig(t)
+		expectApproveTxBegin(rig)
+		expectApproveFactoryWiring(rig)
+		rig.factory.EXPECT().NewCreatorApplicationStatusTransitionRepo(mock.Anything).Return(rig.transitionRepo)
+
+		rig.appRepo.EXPECT().GetByIDForUpdate(mock.Anything, approveAppID).Return(approveApplicationRow(), nil)
+		rig.appTelegramLinkRepo.EXPECT().GetByApplicationID(mock.Anything, approveAppID).Return(approveLinkRow(), nil)
+		rig.appSocialRepo.EXPECT().ListByApplicationID(mock.Anything, approveAppID).Return(approveSocialRows(), nil)
+		rig.appCategoryRepo.EXPECT().ListByApplicationID(mock.Anything, approveAppID).Return(approveCategories(), nil)
+		rig.appRepo.EXPECT().UpdateStatus(mock.Anything, approveAppID, domain.CreatorApplicationStatusApproved).
+			Return(errors.New("update boom"))
+
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.notifier, rig.logger)
+		_, err := svc.ApproveApplication(context.Background(), approveAppID, approveAdminID)
+		require.ErrorContains(t, err, "apply transition")
+		require.ErrorContains(t, err, "update boom")
+	})
+
+	creatorRepoSentinels := []struct {
+		name string
+		err  error
+	}{
+		{"creator already exists", domain.ErrCreatorAlreadyExists},
+		{"telegram already taken", domain.ErrCreatorTelegramAlreadyTaken},
+		{"concurrent race on source application", domain.ErrCreatorApplicationNotApprovable},
+	}
+	for _, tc := range creatorRepoSentinels {
+		tc := tc
+		t.Run("creator create returns "+tc.name+" — sentinel propagated", func(t *testing.T) {
+			t.Parallel()
+			rig := newCreatorServiceRig(t)
+			expectApproveTxBegin(rig)
+			expectApproveFactoryWiring(rig)
+			rig.factory.EXPECT().NewCreatorApplicationStatusTransitionRepo(mock.Anything).Return(rig.transitionRepo)
+
+			rig.appRepo.EXPECT().GetByIDForUpdate(mock.Anything, approveAppID).Return(approveApplicationRow(), nil)
+			rig.appTelegramLinkRepo.EXPECT().GetByApplicationID(mock.Anything, approveAppID).Return(approveLinkRow(), nil)
+			rig.appSocialRepo.EXPECT().ListByApplicationID(mock.Anything, approveAppID).Return(approveSocialRows(), nil)
+			rig.appCategoryRepo.EXPECT().ListByApplicationID(mock.Anything, approveAppID).Return(approveCategories(), nil)
+			rig.appRepo.EXPECT().UpdateStatus(mock.Anything, approveAppID, domain.CreatorApplicationStatusApproved).Return(nil)
+			rig.transitionRepo.EXPECT().Insert(mock.Anything, mock.Anything).Return(nil)
+			rig.creatorRepo.EXPECT().Create(mock.Anything, mock.Anything).Return(nil, tc.err)
+
+			svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.notifier, rig.logger)
+			_, err := svc.ApproveApplication(context.Background(), approveAppID, approveAdminID)
+			require.ErrorIs(t, err, tc.err)
+		})
+	}
+
+	t.Run("creator socials insert error wrapped — audit not called", func(t *testing.T) {
+		t.Parallel()
+		rig := newCreatorServiceRig(t)
+		expectApproveTxBegin(rig)
+		expectApproveFactoryWiring(rig)
+		rig.factory.EXPECT().NewCreatorApplicationStatusTransitionRepo(mock.Anything).Return(rig.transitionRepo)
+
+		rig.appRepo.EXPECT().GetByIDForUpdate(mock.Anything, approveAppID).Return(approveApplicationRow(), nil)
+		rig.appTelegramLinkRepo.EXPECT().GetByApplicationID(mock.Anything, approveAppID).Return(approveLinkRow(), nil)
+		rig.appSocialRepo.EXPECT().ListByApplicationID(mock.Anything, approveAppID).Return(approveSocialRows(), nil)
+		rig.appCategoryRepo.EXPECT().ListByApplicationID(mock.Anything, approveAppID).Return(approveCategories(), nil)
+		rig.appRepo.EXPECT().UpdateStatus(mock.Anything, approveAppID, domain.CreatorApplicationStatusApproved).Return(nil)
+		rig.transitionRepo.EXPECT().Insert(mock.Anything, mock.Anything).Return(nil)
+		rig.creatorRepo.EXPECT().Create(mock.Anything, mock.Anything).
+			Return(&repository.CreatorRow{ID: approveCreatorID}, nil)
+		rig.creatorSocialRepo.EXPECT().InsertMany(mock.Anything, mock.Anything).Return(errors.New("socials write boom"))
+
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.notifier, rig.logger)
+		_, err := svc.ApproveApplication(context.Background(), approveAppID, approveAdminID)
+		require.ErrorContains(t, err, "approve application: insert creator socials")
+		require.ErrorContains(t, err, "socials write boom")
+	})
+
+	t.Run("creator categories insert error wrapped — audit not called", func(t *testing.T) {
+		t.Parallel()
+		rig := newCreatorServiceRig(t)
+		expectApproveTxBegin(rig)
+		expectApproveFactoryWiring(rig)
+		rig.factory.EXPECT().NewCreatorApplicationStatusTransitionRepo(mock.Anything).Return(rig.transitionRepo)
+
+		rig.appRepo.EXPECT().GetByIDForUpdate(mock.Anything, approveAppID).Return(approveApplicationRow(), nil)
+		rig.appTelegramLinkRepo.EXPECT().GetByApplicationID(mock.Anything, approveAppID).Return(approveLinkRow(), nil)
+		rig.appSocialRepo.EXPECT().ListByApplicationID(mock.Anything, approveAppID).Return(approveSocialRows(), nil)
+		rig.appCategoryRepo.EXPECT().ListByApplicationID(mock.Anything, approveAppID).Return(approveCategories(), nil)
+		rig.appRepo.EXPECT().UpdateStatus(mock.Anything, approveAppID, domain.CreatorApplicationStatusApproved).Return(nil)
+		rig.transitionRepo.EXPECT().Insert(mock.Anything, mock.Anything).Return(nil)
+		rig.creatorRepo.EXPECT().Create(mock.Anything, mock.Anything).
+			Return(&repository.CreatorRow{ID: approveCreatorID}, nil)
+		rig.creatorSocialRepo.EXPECT().InsertMany(mock.Anything, mock.Anything).Return(nil)
+		rig.creatorCategoryRepo.EXPECT().InsertMany(mock.Anything, mock.Anything).Return(errors.New("cats write boom"))
+
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.notifier, rig.logger)
+		_, err := svc.ApproveApplication(context.Background(), approveAppID, approveAdminID)
+		require.ErrorContains(t, err, "approve application: insert creator categories")
+		require.ErrorContains(t, err, "cats write boom")
+	})
+
+	t.Run("audit write error wrapped", func(t *testing.T) {
+		t.Parallel()
+		rig := newCreatorServiceRig(t)
+		expectApproveTxBegin(rig)
+		expectApproveFactoryWiring(rig)
+		rig.factory.EXPECT().NewCreatorApplicationStatusTransitionRepo(mock.Anything).Return(rig.transitionRepo)
+
+		rig.appRepo.EXPECT().GetByIDForUpdate(mock.Anything, approveAppID).Return(approveApplicationRow(), nil)
+		rig.appTelegramLinkRepo.EXPECT().GetByApplicationID(mock.Anything, approveAppID).Return(approveLinkRow(), nil)
+		rig.appSocialRepo.EXPECT().ListByApplicationID(mock.Anything, approveAppID).Return(approveSocialRows(), nil)
+		rig.appCategoryRepo.EXPECT().ListByApplicationID(mock.Anything, approveAppID).Return(approveCategories(), nil)
+		rig.appRepo.EXPECT().UpdateStatus(mock.Anything, approveAppID, domain.CreatorApplicationStatusApproved).Return(nil)
+		rig.transitionRepo.EXPECT().Insert(mock.Anything, mock.Anything).Return(nil)
+		rig.creatorRepo.EXPECT().Create(mock.Anything, mock.Anything).
+			Return(&repository.CreatorRow{ID: approveCreatorID}, nil)
+		rig.creatorSocialRepo.EXPECT().InsertMany(mock.Anything, mock.Anything).Return(nil)
+		rig.creatorCategoryRepo.EXPECT().InsertMany(mock.Anything, mock.Anything).Return(nil)
+		rig.auditRepo.EXPECT().Create(mock.Anything, mock.Anything).Return(errors.New("audit boom"))
+
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.notifier, rig.logger)
+		_, err := svc.ApproveApplication(context.Background(), approveAppID, approveAdminID)
+		require.ErrorContains(t, err, "approve application: write audit")
+		require.ErrorContains(t, err, "audit boom")
+	})
+
+	t.Run("happy path snapshots socials/categories, transitions, audits and notifies linked telegram", func(t *testing.T) {
+		t.Parallel()
+		rig := newCreatorServiceRig(t)
+		expectApproveTxBegin(rig)
+		expectApproveFactoryWiring(rig)
+		rig.factory.EXPECT().NewCreatorApplicationStatusTransitionRepo(mock.Anything).Return(rig.transitionRepo)
+
+		appRow := approveApplicationRow()
+		linkRow := approveLinkRow()
+		socials := approveSocialRows()
+		categories := approveCategories()
+
+		rig.appRepo.EXPECT().GetByIDForUpdate(mock.Anything, approveAppID).Return(appRow, nil)
+		rig.appTelegramLinkRepo.EXPECT().GetByApplicationID(mock.Anything, approveAppID).Return(linkRow, nil).Times(2)
+		rig.appSocialRepo.EXPECT().ListByApplicationID(mock.Anything, approveAppID).Return(socials, nil)
+		rig.appCategoryRepo.EXPECT().ListByApplicationID(mock.Anything, approveAppID).Return(categories, nil)
+		rig.appRepo.EXPECT().UpdateStatus(mock.Anything, approveAppID, domain.CreatorApplicationStatusApproved).Return(nil)
+
+		var capturedTransition repository.CreatorApplicationStatusTransitionRow
+		rig.transitionRepo.EXPECT().Insert(mock.Anything, mock.AnythingOfType("repository.CreatorApplicationStatusTransitionRow")).
+			Run(func(_ context.Context, row repository.CreatorApplicationStatusTransitionRow) {
+				capturedTransition = row
+			}).
+			Return(nil)
+
+		var capturedCreator repository.CreatorRow
+		rig.creatorRepo.EXPECT().Create(mock.Anything, mock.AnythingOfType("repository.CreatorRow")).
+			Run(func(_ context.Context, row repository.CreatorRow) {
+				capturedCreator = row
+			}).
+			Return(&repository.CreatorRow{ID: approveCreatorID}, nil)
+
+		var capturedSocialRows []repository.CreatorSocialRow
+		rig.creatorSocialRepo.EXPECT().InsertMany(mock.Anything, mock.AnythingOfType("[]repository.CreatorSocialRow")).
+			Run(func(_ context.Context, rows []repository.CreatorSocialRow) {
+				capturedSocialRows = rows
+			}).
+			Return(nil)
+
+		var capturedCategoryRows []repository.CreatorCategoryRow
+		rig.creatorCategoryRepo.EXPECT().InsertMany(mock.Anything, mock.AnythingOfType("[]repository.CreatorCategoryRow")).
+			Run(func(_ context.Context, rows []repository.CreatorCategoryRow) {
+				capturedCategoryRows = rows
+			}).
+			Return(nil)
+
+		var capturedAudit repository.AuditLogRow
+		rig.auditRepo.EXPECT().Create(mock.Anything, mock.AnythingOfType("repository.AuditLogRow")).
+			Run(func(_ context.Context, row repository.AuditLogRow) {
+				capturedAudit = row
+			}).
+			Return(nil)
+
+		var capturedChat int64
+		rig.notifier.EXPECT().NotifyApplicationApproved(mock.Anything, approveChatID).
+			Run(func(_ context.Context, chatID int64) {
+				capturedChat = chatID
+			}).
+			Once()
+
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.notifier, rig.logger)
+		creatorID, err := svc.ApproveApplication(context.Background(), approveAppID, approveAdminID)
+		require.NoError(t, err)
+		require.Equal(t, approveCreatorID, creatorID)
+
+		require.Equal(t, approveChatID, capturedChat)
+
+		require.Equal(t, approveAppID, capturedTransition.ApplicationID)
+		require.NotNil(t, capturedTransition.FromStatus)
+		require.Equal(t, domain.CreatorApplicationStatusModeration, *capturedTransition.FromStatus)
+		require.Equal(t, domain.CreatorApplicationStatusApproved, capturedTransition.ToStatus)
+		require.NotNil(t, capturedTransition.ActorID)
+		require.Equal(t, approveAdminID, *capturedTransition.ActorID)
+		require.NotNil(t, capturedTransition.Reason)
+		require.Equal(t, domain.TransitionReasonApprove, *capturedTransition.Reason)
+
+		require.Equal(t, appRow.IIN, capturedCreator.IIN)
+		require.Equal(t, appRow.LastName, capturedCreator.LastName)
+		require.Equal(t, appRow.FirstName, capturedCreator.FirstName)
+		require.Equal(t, appRow.MiddleName, capturedCreator.MiddleName)
+		require.True(t, capturedCreator.BirthDate.Equal(appRow.BirthDate))
+		require.Equal(t, appRow.Phone, capturedCreator.Phone)
+		require.Equal(t, appRow.CityCode, capturedCreator.CityCode)
+		require.Equal(t, appRow.Address, capturedCreator.Address)
+		require.Equal(t, appRow.CategoryOtherText, capturedCreator.CategoryOtherText)
+		require.Equal(t, linkRow.TelegramUserID, capturedCreator.TelegramUserID)
+		require.Equal(t, linkRow.TelegramUsername, capturedCreator.TelegramUsername)
+		require.Equal(t, linkRow.TelegramFirstName, capturedCreator.TelegramFirstName)
+		require.Equal(t, linkRow.TelegramLastName, capturedCreator.TelegramLastName)
+		require.Equal(t, approveAppID, capturedCreator.SourceApplicationID)
+
+		require.Len(t, capturedSocialRows, len(socials))
+		for i, sc := range socials {
+			require.Equal(t, approveCreatorID, capturedSocialRows[i].CreatorID)
+			require.Equal(t, sc.Platform, capturedSocialRows[i].Platform)
+			require.Equal(t, sc.Handle, capturedSocialRows[i].Handle)
+			require.Equal(t, sc.Verified, capturedSocialRows[i].Verified)
+			require.Equal(t, sc.Method, capturedSocialRows[i].Method)
+			require.Equal(t, sc.VerifiedByUserID, capturedSocialRows[i].VerifiedByUserID)
+			require.Equal(t, sc.VerifiedAt, capturedSocialRows[i].VerifiedAt)
+		}
+
+		require.Len(t, capturedCategoryRows, len(categories))
+		for i, code := range categories {
+			require.Equal(t, approveCreatorID, capturedCategoryRows[i].CreatorID)
+			require.Equal(t, code, capturedCategoryRows[i].CategoryCode)
+		}
+
+		require.Equal(t, AuditActionCreatorApplicationApprove, capturedAudit.Action)
+		require.Equal(t, AuditEntityTypeCreatorApplication, capturedAudit.EntityType)
+		require.NotNil(t, capturedAudit.EntityID)
+		require.Equal(t, approveAppID, *capturedAudit.EntityID)
+		require.NotNil(t, capturedAudit.ActorID)
+		require.Equal(t, approveAdminID, *capturedAudit.ActorID)
+
+		expected := map[string]any{
+			"application_id": approveAppID,
+			"creator_id":     approveCreatorID,
+			"from_status":    domain.CreatorApplicationStatusModeration,
+			"to_status":      domain.CreatorApplicationStatusApproved,
+		}
+		expectedJSON, err := json.Marshal(expected)
+		require.NoError(t, err)
+		require.JSONEq(t, string(expectedJSON), string(capturedAudit.NewValue))
+	})
+
+	t.Run("notify lookup after commit warns when link is gone — approve still succeeds", func(t *testing.T) {
+		t.Parallel()
+		rig := newCreatorServiceRig(t)
+		expectApproveTxBegin(rig)
+		expectApproveFactoryWiring(rig)
+		rig.factory.EXPECT().NewCreatorApplicationStatusTransitionRepo(mock.Anything).Return(rig.transitionRepo)
+
+		rig.appRepo.EXPECT().GetByIDForUpdate(mock.Anything, approveAppID).Return(approveApplicationRow(), nil)
+		// First lookup (inside tx) succeeds; second (after commit) returns
+		// sql.ErrNoRows — simulates a delete-after-commit race.
+		rig.appTelegramLinkRepo.EXPECT().GetByApplicationID(mock.Anything, approveAppID).
+			Return(approveLinkRow(), nil).Once()
+		rig.appTelegramLinkRepo.EXPECT().GetByApplicationID(mock.Anything, approveAppID).
+			Return(nil, sql.ErrNoRows).Once()
+		rig.appSocialRepo.EXPECT().ListByApplicationID(mock.Anything, approveAppID).Return(approveSocialRows(), nil)
+		rig.appCategoryRepo.EXPECT().ListByApplicationID(mock.Anything, approveAppID).Return(approveCategories(), nil)
+		rig.appRepo.EXPECT().UpdateStatus(mock.Anything, approveAppID, domain.CreatorApplicationStatusApproved).Return(nil)
+		rig.transitionRepo.EXPECT().Insert(mock.Anything, mock.Anything).Return(nil)
+		rig.creatorRepo.EXPECT().Create(mock.Anything, mock.Anything).Return(&repository.CreatorRow{ID: approveCreatorID}, nil)
+		rig.creatorSocialRepo.EXPECT().InsertMany(mock.Anything, mock.Anything).Return(nil)
+		rig.creatorCategoryRepo.EXPECT().InsertMany(mock.Anything, mock.Anything).Return(nil)
+		rig.auditRepo.EXPECT().Create(mock.Anything, mock.Anything).Return(nil)
+
+		rig.logger.EXPECT().Warn(mock.Anything,
+			"creator application approved without telegram link",
+			mock.MatchedBy(func(args []any) bool {
+				return len(args) == 2 && args[0] == "application_id" && args[1] == approveAppID
+			})).Once()
+
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.notifier, rig.logger)
+		creatorID, err := svc.ApproveApplication(context.Background(), approveAppID, approveAdminID)
+		require.NoError(t, err)
+		require.Equal(t, approveCreatorID, creatorID)
+	})
+
+	t.Run("notify lookup db error after commit logged, approve still succeeds", func(t *testing.T) {
+		t.Parallel()
+		rig := newCreatorServiceRig(t)
+		expectApproveTxBegin(rig)
+		expectApproveFactoryWiring(rig)
+		rig.factory.EXPECT().NewCreatorApplicationStatusTransitionRepo(mock.Anything).Return(rig.transitionRepo)
+
+		rig.appRepo.EXPECT().GetByIDForUpdate(mock.Anything, approveAppID).Return(approveApplicationRow(), nil)
+		rig.appTelegramLinkRepo.EXPECT().GetByApplicationID(mock.Anything, approveAppID).
+			Return(approveLinkRow(), nil).Once()
+		lookupErr := errors.New("post-commit db down")
+		rig.appTelegramLinkRepo.EXPECT().GetByApplicationID(mock.Anything, approveAppID).
+			Return(nil, lookupErr).Once()
+		rig.appSocialRepo.EXPECT().ListByApplicationID(mock.Anything, approveAppID).Return(approveSocialRows(), nil)
+		rig.appCategoryRepo.EXPECT().ListByApplicationID(mock.Anything, approveAppID).Return(approveCategories(), nil)
+		rig.appRepo.EXPECT().UpdateStatus(mock.Anything, approveAppID, domain.CreatorApplicationStatusApproved).Return(nil)
+		rig.transitionRepo.EXPECT().Insert(mock.Anything, mock.Anything).Return(nil)
+		rig.creatorRepo.EXPECT().Create(mock.Anything, mock.Anything).Return(&repository.CreatorRow{ID: approveCreatorID}, nil)
+		rig.creatorSocialRepo.EXPECT().InsertMany(mock.Anything, mock.Anything).Return(nil)
+		rig.creatorCategoryRepo.EXPECT().InsertMany(mock.Anything, mock.Anything).Return(nil)
+		rig.auditRepo.EXPECT().Create(mock.Anything, mock.Anything).Return(nil)
+
+		rig.logger.EXPECT().Error(mock.Anything,
+			"creator application approve notify lookup failed",
+			mock.MatchedBy(func(args []any) bool {
+				if len(args) != 4 {
+					return false
+				}
+				if args[0] != "application_id" || args[1] != approveAppID || args[2] != "error" {
+					return false
+				}
+				gotErr, ok := args[3].(error)
+				return ok && errors.Is(gotErr, lookupErr)
+			})).Once()
+
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.notifier, rig.logger)
+		creatorID, err := svc.ApproveApplication(context.Background(), approveAppID, approveAdminID)
+		require.NoError(t, err)
+		require.Equal(t, approveCreatorID, creatorID)
 	})
 }
 

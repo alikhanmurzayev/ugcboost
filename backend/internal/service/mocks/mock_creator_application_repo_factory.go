@@ -408,6 +408,165 @@ func (_c *MockCreatorApplicationRepoFactory_NewCreatorApplicationTelegramLinkRep
 	return _c
 }
 
+// NewCreatorCategoryRepo provides a mock function for the type MockCreatorApplicationRepoFactory
+func (_mock *MockCreatorApplicationRepoFactory) NewCreatorCategoryRepo(db dbutil.DB) repository.CreatorCategoryRepo {
+	ret := _mock.Called(db)
+
+	if len(ret) == 0 {
+		panic("no return value specified for NewCreatorCategoryRepo")
+	}
+
+	var r0 repository.CreatorCategoryRepo
+	if returnFunc, ok := ret.Get(0).(func(dbutil.DB) repository.CreatorCategoryRepo); ok {
+		r0 = returnFunc(db)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(repository.CreatorCategoryRepo)
+		}
+	}
+	return r0
+}
+
+// MockCreatorApplicationRepoFactory_NewCreatorCategoryRepo_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'NewCreatorCategoryRepo'
+type MockCreatorApplicationRepoFactory_NewCreatorCategoryRepo_Call struct {
+	*mock.Call
+}
+
+// NewCreatorCategoryRepo is a helper method to define mock.On call
+//   - db dbutil.DB
+func (_e *MockCreatorApplicationRepoFactory_Expecter) NewCreatorCategoryRepo(db interface{}) *MockCreatorApplicationRepoFactory_NewCreatorCategoryRepo_Call {
+	return &MockCreatorApplicationRepoFactory_NewCreatorCategoryRepo_Call{Call: _e.mock.On("NewCreatorCategoryRepo", db)}
+}
+
+func (_c *MockCreatorApplicationRepoFactory_NewCreatorCategoryRepo_Call) Run(run func(db dbutil.DB)) *MockCreatorApplicationRepoFactory_NewCreatorCategoryRepo_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 dbutil.DB
+		if args[0] != nil {
+			arg0 = args[0].(dbutil.DB)
+		}
+		run(
+			arg0,
+		)
+	})
+	return _c
+}
+
+func (_c *MockCreatorApplicationRepoFactory_NewCreatorCategoryRepo_Call) Return(creatorCategoryRepo repository.CreatorCategoryRepo) *MockCreatorApplicationRepoFactory_NewCreatorCategoryRepo_Call {
+	_c.Call.Return(creatorCategoryRepo)
+	return _c
+}
+
+func (_c *MockCreatorApplicationRepoFactory_NewCreatorCategoryRepo_Call) RunAndReturn(run func(db dbutil.DB) repository.CreatorCategoryRepo) *MockCreatorApplicationRepoFactory_NewCreatorCategoryRepo_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// NewCreatorRepo provides a mock function for the type MockCreatorApplicationRepoFactory
+func (_mock *MockCreatorApplicationRepoFactory) NewCreatorRepo(db dbutil.DB) repository.CreatorRepo {
+	ret := _mock.Called(db)
+
+	if len(ret) == 0 {
+		panic("no return value specified for NewCreatorRepo")
+	}
+
+	var r0 repository.CreatorRepo
+	if returnFunc, ok := ret.Get(0).(func(dbutil.DB) repository.CreatorRepo); ok {
+		r0 = returnFunc(db)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(repository.CreatorRepo)
+		}
+	}
+	return r0
+}
+
+// MockCreatorApplicationRepoFactory_NewCreatorRepo_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'NewCreatorRepo'
+type MockCreatorApplicationRepoFactory_NewCreatorRepo_Call struct {
+	*mock.Call
+}
+
+// NewCreatorRepo is a helper method to define mock.On call
+//   - db dbutil.DB
+func (_e *MockCreatorApplicationRepoFactory_Expecter) NewCreatorRepo(db interface{}) *MockCreatorApplicationRepoFactory_NewCreatorRepo_Call {
+	return &MockCreatorApplicationRepoFactory_NewCreatorRepo_Call{Call: _e.mock.On("NewCreatorRepo", db)}
+}
+
+func (_c *MockCreatorApplicationRepoFactory_NewCreatorRepo_Call) Run(run func(db dbutil.DB)) *MockCreatorApplicationRepoFactory_NewCreatorRepo_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 dbutil.DB
+		if args[0] != nil {
+			arg0 = args[0].(dbutil.DB)
+		}
+		run(
+			arg0,
+		)
+	})
+	return _c
+}
+
+func (_c *MockCreatorApplicationRepoFactory_NewCreatorRepo_Call) Return(creatorRepo repository.CreatorRepo) *MockCreatorApplicationRepoFactory_NewCreatorRepo_Call {
+	_c.Call.Return(creatorRepo)
+	return _c
+}
+
+func (_c *MockCreatorApplicationRepoFactory_NewCreatorRepo_Call) RunAndReturn(run func(db dbutil.DB) repository.CreatorRepo) *MockCreatorApplicationRepoFactory_NewCreatorRepo_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// NewCreatorSocialRepo provides a mock function for the type MockCreatorApplicationRepoFactory
+func (_mock *MockCreatorApplicationRepoFactory) NewCreatorSocialRepo(db dbutil.DB) repository.CreatorSocialRepo {
+	ret := _mock.Called(db)
+
+	if len(ret) == 0 {
+		panic("no return value specified for NewCreatorSocialRepo")
+	}
+
+	var r0 repository.CreatorSocialRepo
+	if returnFunc, ok := ret.Get(0).(func(dbutil.DB) repository.CreatorSocialRepo); ok {
+		r0 = returnFunc(db)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(repository.CreatorSocialRepo)
+		}
+	}
+	return r0
+}
+
+// MockCreatorApplicationRepoFactory_NewCreatorSocialRepo_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'NewCreatorSocialRepo'
+type MockCreatorApplicationRepoFactory_NewCreatorSocialRepo_Call struct {
+	*mock.Call
+}
+
+// NewCreatorSocialRepo is a helper method to define mock.On call
+//   - db dbutil.DB
+func (_e *MockCreatorApplicationRepoFactory_Expecter) NewCreatorSocialRepo(db interface{}) *MockCreatorApplicationRepoFactory_NewCreatorSocialRepo_Call {
+	return &MockCreatorApplicationRepoFactory_NewCreatorSocialRepo_Call{Call: _e.mock.On("NewCreatorSocialRepo", db)}
+}
+
+func (_c *MockCreatorApplicationRepoFactory_NewCreatorSocialRepo_Call) Run(run func(db dbutil.DB)) *MockCreatorApplicationRepoFactory_NewCreatorSocialRepo_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 dbutil.DB
+		if args[0] != nil {
+			arg0 = args[0].(dbutil.DB)
+		}
+		run(
+			arg0,
+		)
+	})
+	return _c
+}
+
+func (_c *MockCreatorApplicationRepoFactory_NewCreatorSocialRepo_Call) Return(creatorSocialRepo repository.CreatorSocialRepo) *MockCreatorApplicationRepoFactory_NewCreatorSocialRepo_Call {
+	_c.Call.Return(creatorSocialRepo)
+	return _c
+}
+
+func (_c *MockCreatorApplicationRepoFactory_NewCreatorSocialRepo_Call) RunAndReturn(run func(db dbutil.DB) repository.CreatorSocialRepo) *MockCreatorApplicationRepoFactory_NewCreatorSocialRepo_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // NewDictionaryRepo provides a mock function for the type MockCreatorApplicationRepoFactory
 func (_mock *MockCreatorApplicationRepoFactory) NewDictionaryRepo(db dbutil.DB) repository.DictionaryRepo {
 	ret := _mock.Called(db)

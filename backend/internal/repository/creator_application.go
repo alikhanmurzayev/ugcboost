@@ -97,6 +97,7 @@ type CreatorApplicationRepo interface {
 	HasActiveByIIN(ctx context.Context, iin string) (bool, error)
 	Create(ctx context.Context, row CreatorApplicationRow) (*CreatorApplicationRow, error)
 	GetByID(ctx context.Context, id string) (*CreatorApplicationRow, error)
+	GetByIDForUpdate(ctx context.Context, id string) (*CreatorApplicationRow, error)
 	GetByVerificationCodeAndStatus(ctx context.Context, code, status string) (*CreatorApplicationRow, error)
 	UpdateStatus(ctx context.Context, id, status string) error
 	List(ctx context.Context, params CreatorApplicationListParams) ([]*CreatorApplicationListRow, int64, error)
@@ -221,6 +222,22 @@ func (r *creatorApplicationRepository) GetByID(ctx context.Context, id string) (
 	q := sq.Select(creatorApplicationSelectColumns...).
 		From(TableCreatorApplications).
 		Where(sq.Eq{CreatorApplicationColumnID: id})
+	return dbutil.One[CreatorApplicationRow](ctx, r.db, q)
+}
+
+// GetByIDForUpdate fetches the application row taking a row-level lock for
+// the duration of the surrounding transaction. Concurrent transactions that
+// hit the same row block here until the holder commits or rolls back. The
+// approve flow calls this so two parallel approves of the same application
+// serialise on the row: the second transaction wakes up after the first
+// commits, sees status='approved', and returns NotApprovable instead of
+// racing on a creator INSERT and surfacing an unrelated unique-constraint
+// name (Postgres reports indexes in oid order, not by relevance).
+func (r *creatorApplicationRepository) GetByIDForUpdate(ctx context.Context, id string) (*CreatorApplicationRow, error) {
+	q := sq.Select(creatorApplicationSelectColumns...).
+		From(TableCreatorApplications).
+		Where(sq.Eq{CreatorApplicationColumnID: id}).
+		Suffix("FOR UPDATE")
 	return dbutil.One[CreatorApplicationRow](ctx, r.db, q)
 }
 

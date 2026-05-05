@@ -92,7 +92,12 @@ type creatorRepository struct {
 // Three unique constraints can fire SQLSTATE 23505 here, each surfaced as a
 // distinct domain sentinel so the service layer (18b) can map them into
 // precise user-facing codes. Unrelated constraint violations are propagated
-// as wrapped errors.
+// as wrapped errors. Postgres reports whichever unique index it checked
+// first (oid order in the system catalog), not necessarily the one most
+// relevant to the caller; the service layer takes a row-level lock on the
+// source application *before* this INSERT to keep the concurrent-approve
+// race deterministic ("two approves on the same application → exactly one
+// NotApprovable") rather than relying on which index Postgres surfaces.
 func (r *creatorRepository) Create(ctx context.Context, row CreatorRow) (*CreatorRow, error) {
 	q := sq.Insert(TableCreators).
 		SetMap(toMap(row, creatorInsertMapper)).
