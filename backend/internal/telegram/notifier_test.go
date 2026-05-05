@@ -94,7 +94,7 @@ func expectedWelcomeWithIG(verificationCode string) string {
 		"Подтвердите, пожалуйста, что вы действительно владеете указанным аккаунтом Instagram:\n\n" +
 		"1. Скопируйте код:\n" +
 		"   <pre>" + verificationCode + "</pre>\n\n" +
-		"2. Откройте Direct и отправьте его нам:\n\n" +
+		"2. Отправьте код в Direct аккаунта ugc_boost (ссылка ниже):\n\n" +
 		"   https://ig.me/m/ugc_boost"
 }
 

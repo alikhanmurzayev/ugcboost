@@ -42,7 +42,7 @@ const welcomeWithIGTemplate = "Здравствуйте! 👋\n\n" +
 	"Подтвердите, пожалуйста, что вы действительно владеете указанным аккаунтом Instagram:\n\n" +
 	"1. Скопируйте код:\n" +
 	"   <pre>%s</pre>\n\n" +
-	"2. Откройте Direct и отправьте его нам:\n\n" +
+	"2. Отправьте код в Direct аккаунта ugc_boost (ссылка ниже):\n\n" +
 	"   https://ig.me/m/ugc_boost"
 
 // sendDelay paces the broadcast at ~10 msg/sec — well under Telegram's
