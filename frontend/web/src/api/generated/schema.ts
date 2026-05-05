@@ -478,6 +478,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/creators/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * Get full creator aggregate (admin only)
+         * @description Returns the full creator profile aggregate: identity, plain PII, the
+         *     flat Telegram block, the snapshot of social accounts (with their
+         *     verification metadata copied from the originating application) and the
+         *     category codes resolved against the active dictionary. Admin role is
+         *     required — non-admin callers receive 403 regardless of whether the
+         *     creator exists, so the endpoint never leaks creator IDs.
+         *
+         *     Deactivated dictionary codes (a city or category whose row was hidden
+         *     after the creator was approved) degrade gracefully: the code stays
+         *     intact and the localised name falls back to the code itself, so the
+         *     admin still sees the historical reference instead of getting a 500.
+         */
+        get: operations["getCreator"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/webhooks/sendpulse/instagram": {
         parameters: {
             query?: never;
@@ -1041,6 +1073,99 @@ export interface components {
         };
         CreatorApprovalResult: {
             data: components["schemas"]["CreatorApprovalData"];
+        };
+        /**
+         * @description Snapshot of one social account attached to a creator at the moment of
+         *     approve. The verification fields are copied from the application's
+         *     social row 1:1 — they reflect the verification state at approval time
+         *     even if the dictionary or the originating application later changes.
+         */
+        CreatorAggregateSocial: {
+            /** Format: uuid */
+            id: string;
+            platform: components["schemas"]["SocialPlatform"];
+            handle: string;
+            /** @description Whether ownership of this social account was confirmed at approval time. */
+            verified: boolean;
+            /** @description Verification path; null on rows whose original verification was unverified. */
+            method?: components["schemas"]["SocialVerificationMethod"];
+            /**
+             * Format: uuid
+             * @description Admin who pressed manual-verify; null on auto-verified and unverified rows.
+             */
+            verifiedByUserId?: string | null;
+            /**
+             * Format: date-time
+             * @description When verification succeeded; null when the row stays unverified.
+             */
+            verifiedAt?: string | null;
+            /**
+             * Format: date-time
+             * @description When the snapshot row was inserted into creator_socials.
+             */
+            createdAt: string;
+        };
+        /**
+         * @description One category linked to a creator. `code` is the stable machine
+         *     identifier copied from the application; `name` is hydrated from the
+         *     active categories dictionary at read time, with a fallback to `code`
+         *     when the dictionary entry has been deactivated.
+         */
+        CreatorAggregateCategory: {
+            code: string;
+            name: string;
+        };
+        /**
+         * @description Full creator profile assembled from `creators` plus the snapshot tables
+         *     `creator_socials` and `creator_categories`. The Telegram block is
+         *     flattened (no separate object) because the only path to materialise a
+         *     creator is via approve, which guarantees a Telegram link existed at
+         *     that moment. City and category codes are returned alongside their
+         *     localised names hydrated from the active public dictionaries; missing
+         *     dictionary entries degrade to a `name == code` fallback.
+         */
+        CreatorAggregate: {
+            /** Format: uuid */
+            id: string;
+            /** @description Kazakhstani individual identification number (12 digits). */
+            iin: string;
+            /**
+             * Format: uuid
+             * @description ID of the originating creator application; allows admin and analytics joins.
+             */
+            sourceApplicationId: string;
+            lastName: string;
+            firstName: string;
+            middleName?: string | null;
+            /** Format: date */
+            birthDate: string;
+            phone: string;
+            /** @description Stable city code copied from the originating application. */
+            cityCode: string;
+            /** @description Localised city label hydrated from the active cities dictionary; falls back to `cityCode` when the entry has been deactivated. */
+            cityName: string;
+            address?: string | null;
+            /** @description Free-text niche description; non-null only when categories include "other". */
+            categoryOtherText?: string | null;
+            /**
+             * Format: int64
+             * @description Telegram numeric user id (BIGINT) — stable identifier of the linked account.
+             */
+            telegramUserId: number;
+            telegramUsername?: string | null;
+            telegramFirstName?: string | null;
+            telegramLastName?: string | null;
+            /** @description Social accounts sorted by (platform, handle). */
+            socials: components["schemas"]["CreatorAggregateSocial"][];
+            /** @description Categories sorted by code. */
+            categories: components["schemas"]["CreatorAggregateCategory"][];
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        GetCreatorResult: {
+            data: components["schemas"]["CreatorAggregate"];
         };
     };
     responses: {
@@ -1901,6 +2026,48 @@ export interface operations {
              *     is already taken by another creator.
              */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            default: components["responses"]["UnexpectedError"];
+        };
+    };
+    getCreator: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Creator aggregate */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GetCreatorResult"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            /** @description Creator not found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

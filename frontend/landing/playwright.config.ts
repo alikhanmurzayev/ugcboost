@@ -6,6 +6,10 @@ export default defineConfig({
   testDir: "../e2e/landing",
   timeout: 30_000,
   retries: 0,
+  // Two workers everywhere (local docker-compose flow и staging CI). Landing
+  // submissions write unique applications via generated IIN/phone, so two
+  // parallel workers stay isolated on the same backend.
+  workers: 2,
   reporter: [["html", { open: "never" }]],
   use: {
     baseURL: BASE_URL,

@@ -50,6 +50,7 @@ type AuthzService interface {
 	CanVerifyCreatorApplicationSocialManually(ctx context.Context) error
 	CanRejectCreatorApplication(ctx context.Context) error
 	CanApproveCreatorApplication(ctx context.Context) error
+	CanViewCreator(ctx context.Context) error
 }
 
 // AuditLogService is the interface Server needs from the audit service.
@@ -78,6 +79,12 @@ type DictionaryService interface {
 	List(ctx context.Context, t domain.DictionaryType) ([]domain.DictionaryEntry, error)
 }
 
+// CreatorService is the interface Server needs from the creator-side service:
+// the GET /creators/{id} aggregate read used by the admin moderation UI.
+type CreatorService interface {
+	GetByID(ctx context.Context, creatorID string) (*domain.CreatorAggregate, error)
+}
+
 // ServerConfig bundles configuration values the handler layer needs. Keeping
 // them in a struct lets NewServer grow without a long positional signature.
 type ServerConfig struct {
@@ -95,6 +102,7 @@ type Server struct {
 	authzService              AuthzService
 	auditService              AuditLogService
 	creatorApplicationService CreatorApplicationService
+	creatorService            CreatorService
 	dictionaryService         DictionaryService
 	version                   string
 	cookieSecure              bool
@@ -113,6 +121,7 @@ func NewServer(
 	authz AuthzService,
 	audit AuditLogService,
 	creatorApps CreatorApplicationService,
+	creators CreatorService,
 	dict DictionaryService,
 	cfg ServerConfig,
 	log logger.Logger,
@@ -123,6 +132,7 @@ func NewServer(
 		authzService:              authz,
 		auditService:              audit,
 		creatorApplicationService: creatorApps,
+		creatorService:            creators,
 		dictionaryService:         dict,
 		version:                   cfg.Version,
 		cookieSecure:              cfg.CookieSecure,

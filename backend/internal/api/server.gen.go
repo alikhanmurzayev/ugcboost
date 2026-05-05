@@ -284,6 +284,89 @@ type BrandResult struct {
 // ConsentType Canonical consent type captured at creator application submission.
 type ConsentType string
 
+// CreatorAggregate Full creator profile assembled from `creators` plus the snapshot tables
+// `creator_socials` and `creator_categories`. The Telegram block is
+// flattened (no separate object) because the only path to materialise a
+// creator is via approve, which guarantees a Telegram link existed at
+// that moment. City and category codes are returned alongside their
+// localised names hydrated from the active public dictionaries; missing
+// dictionary entries degrade to a `name == code` fallback.
+type CreatorAggregate struct {
+	Address   *string            `json:"address,omitempty"`
+	BirthDate openapi_types.Date `json:"birthDate"`
+
+	// Categories Categories sorted by code.
+	Categories []CreatorAggregateCategory `json:"categories"`
+
+	// CategoryOtherText Free-text niche description; non-null only when categories include "other".
+	CategoryOtherText *string `json:"categoryOtherText,omitempty"`
+
+	// CityCode Stable city code copied from the originating application.
+	CityCode string `json:"cityCode"`
+
+	// CityName Localised city label hydrated from the active cities dictionary; falls back to `cityCode` when the entry has been deactivated.
+	CityName  string             `json:"cityName"`
+	CreatedAt time.Time          `json:"createdAt"`
+	FirstName string             `json:"firstName"`
+	Id        openapi_types.UUID `json:"id"`
+
+	// Iin Kazakhstani individual identification number (12 digits).
+	Iin        string  `json:"iin"`
+	LastName   string  `json:"lastName"`
+	MiddleName *string `json:"middleName,omitempty"`
+	Phone      string  `json:"phone"`
+
+	// Socials Social accounts sorted by (platform, handle).
+	Socials []CreatorAggregateSocial `json:"socials"`
+
+	// SourceApplicationId ID of the originating creator application; allows admin and analytics joins.
+	SourceApplicationId openapi_types.UUID `json:"sourceApplicationId"`
+	TelegramFirstName   *string            `json:"telegramFirstName,omitempty"`
+	TelegramLastName    *string            `json:"telegramLastName,omitempty"`
+
+	// TelegramUserId Telegram numeric user id (BIGINT) — stable identifier of the linked account.
+	TelegramUserId   int64     `json:"telegramUserId"`
+	TelegramUsername *string   `json:"telegramUsername,omitempty"`
+	UpdatedAt        time.Time `json:"updatedAt"`
+}
+
+// CreatorAggregateCategory One category linked to a creator. `code` is the stable machine
+// identifier copied from the application; `name` is hydrated from the
+// active categories dictionary at read time, with a fallback to `code`
+// when the dictionary entry has been deactivated.
+type CreatorAggregateCategory struct {
+	Code string `json:"code"`
+	Name string `json:"name"`
+}
+
+// CreatorAggregateSocial Snapshot of one social account attached to a creator at the moment of
+// approve. The verification fields are copied from the application's
+// social row 1:1 — they reflect the verification state at approval time
+// even if the dictionary or the originating application later changes.
+type CreatorAggregateSocial struct {
+	// CreatedAt When the snapshot row was inserted into creator_socials.
+	CreatedAt time.Time          `json:"createdAt"`
+	Handle    string             `json:"handle"`
+	Id        openapi_types.UUID `json:"id"`
+
+	// Method How a social account was verified. `auto` — webhook from SendPulse caught
+	// the verification code in an Instagram DM. `manual` — admin marked the
+	// social as verified from the application drawer.
+	Method *SocialVerificationMethod `json:"method,omitempty"`
+
+	// Platform Supported social network for creator accounts (MVP scope).
+	Platform SocialPlatform `json:"platform"`
+
+	// Verified Whether ownership of this social account was confirmed at approval time.
+	Verified bool `json:"verified"`
+
+	// VerifiedAt When verification succeeded; null when the row stays unverified.
+	VerifiedAt *time.Time `json:"verifiedAt,omitempty"`
+
+	// VerifiedByUserId Admin who pressed manual-verify; null on auto-verified and unverified rows.
+	VerifiedByUserId *openapi_types.UUID `json:"verifiedByUserId,omitempty"`
+}
+
 // CreatorApplicationDetailConsent defines model for CreatorApplicationDetailConsent.
 type CreatorApplicationDetailConsent struct {
 	AcceptedAt time.Time `json:"acceptedAt"`
@@ -635,6 +718,18 @@ type GetCreatorApplicationResult struct {
 	Data CreatorApplicationDetailData `json:"data"`
 }
 
+// GetCreatorResult defines model for GetCreatorResult.
+type GetCreatorResult struct {
+	// Data Full creator profile assembled from `creators` plus the snapshot tables
+	// `creator_socials` and `creator_categories`. The Telegram block is
+	// flattened (no separate object) because the only path to materialise a
+	// creator is via approve, which guarantees a Telegram link existed at
+	// that moment. City and category codes are returned alongside their
+	// localised names hydrated from the active public dictionaries; missing
+	// dictionary entries degrade to a `name == code` fallback.
+	Data CreatorAggregate `json:"data"`
+}
+
 // HealthResponse defines model for HealthResponse.
 type HealthResponse struct {
 	Status  string `json:"status"`
@@ -925,6 +1020,9 @@ type ServerInterface interface {
 	// Mark a creator application's social account as manually verified (admin only)
 	// (POST /creators/applications/{id}/socials/{socialId}/verify)
 	VerifyCreatorApplicationSocial(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, socialId openapi_types.UUID)
+	// Get full creator aggregate (admin only)
+	// (GET /creators/{id})
+	GetCreator(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
 	// List entries for a public dictionary (categories, cities)
 	// (GET /dictionaries/{type})
 	ListDictionary(w http.ResponseWriter, r *http.Request, pType ListDictionaryParamsType)
@@ -1063,6 +1161,12 @@ func (_ Unimplemented) RejectCreatorApplication(w http.ResponseWriter, r *http.R
 // Mark a creator application's social account as manually verified (admin only)
 // (POST /creators/applications/{id}/socials/{socialId}/verify)
 func (_ Unimplemented) VerifyCreatorApplicationSocial(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, socialId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Get full creator aggregate (admin only)
+// (GET /creators/{id})
+func (_ Unimplemented) GetCreator(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -1663,6 +1767,37 @@ func (siw *ServerInterfaceWrapper) VerifyCreatorApplicationSocial(w http.Respons
 	handler.ServeHTTP(w, r)
 }
 
+// GetCreator operation middleware
+func (siw *ServerInterfaceWrapper) GetCreator(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetCreator(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListDictionary operation middleware
 func (siw *ServerInterfaceWrapper) ListDictionary(w http.ResponseWriter, r *http.Request) {
 
@@ -1891,6 +2026,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/creators/applications/{id}/socials/{socialId}/verify", wrapper.VerifyCreatorApplicationSocial)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/creators/{id}", wrapper.GetCreator)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/dictionaries/{type}", wrapper.ListDictionary)
@@ -2902,6 +3040,62 @@ func (response VerifyCreatorApplicationSocialdefaultJSONResponse) VisitVerifyCre
 	return json.NewEncoder(w).Encode(response.Body)
 }
 
+type GetCreatorRequestObject struct {
+	Id openapi_types.UUID `json:"id"`
+}
+
+type GetCreatorResponseObject interface {
+	VisitGetCreatorResponse(w http.ResponseWriter) error
+}
+
+type GetCreator200JSONResponse GetCreatorResult
+
+func (response GetCreator200JSONResponse) VisitGetCreatorResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetCreator401JSONResponse ErrorResponse
+
+func (response GetCreator401JSONResponse) VisitGetCreatorResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetCreator403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response GetCreator403JSONResponse) VisitGetCreatorResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetCreator404JSONResponse ErrorResponse
+
+func (response GetCreator404JSONResponse) VisitGetCreatorResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetCreatordefaultJSONResponse struct {
+	Body       ErrorResponse
+	StatusCode int
+}
+
+func (response GetCreatordefaultJSONResponse) VisitGetCreatorResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+
+	return json.NewEncoder(w).Encode(response.Body)
+}
+
 type ListDictionaryRequestObject struct {
 	Type ListDictionaryParamsType `json:"type"`
 }
@@ -3071,6 +3265,9 @@ type StrictServerInterface interface {
 	// Mark a creator application's social account as manually verified (admin only)
 	// (POST /creators/applications/{id}/socials/{socialId}/verify)
 	VerifyCreatorApplicationSocial(ctx context.Context, request VerifyCreatorApplicationSocialRequestObject) (VerifyCreatorApplicationSocialResponseObject, error)
+	// Get full creator aggregate (admin only)
+	// (GET /creators/{id})
+	GetCreator(ctx context.Context, request GetCreatorRequestObject) (GetCreatorResponseObject, error)
 	// List entries for a public dictionary (categories, cities)
 	// (GET /dictionaries/{type})
 	ListDictionary(ctx context.Context, request ListDictionaryRequestObject) (ListDictionaryResponseObject, error)
@@ -3696,6 +3893,32 @@ func (sh *strictHandler) VerifyCreatorApplicationSocial(w http.ResponseWriter, r
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(VerifyCreatorApplicationSocialResponseObject); ok {
 		if err := validResponse.VisitVerifyCreatorApplicationSocialResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetCreator operation middleware
+func (sh *strictHandler) GetCreator(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request GetCreatorRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetCreator(ctx, request.(GetCreatorRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetCreator")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetCreatorResponseObject); ok {
+		if err := validResponse.VisitGetCreatorResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

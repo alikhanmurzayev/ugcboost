@@ -855,6 +855,56 @@ paths:
         default:
           $ref: "#/components/responses/UnexpectedError"
 
+  /creators/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      operationId: getCreator
+      summary: Get full creator aggregate (admin only)
+      description: |
+        Returns the full creator profile aggregate: identity, plain PII, the
+        flat Telegram block, the snapshot of social accounts (with their
+        verification metadata copied from the originating application) and the
+        category codes resolved against the active dictionary. Admin role is
+        required — non-admin callers receive 403 regardless of whether the
+        creator exists, so the endpoint never leaks creator IDs.
+
+        Deactivated dictionary codes (a city or category whose row was hidden
+        after the creator was approved) degrade gracefully: the code stays
+        intact and the localised name falls back to the code itself, so the
+        admin still sees the historical reference instead of getting a 500.
+      tags: [creators]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Creator aggregate
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GetCreatorResult"
+        "401":
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: Creator not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: "#/components/responses/UnexpectedError"
+
   /webhooks/sendpulse/instagram:
     post:
       operationId: sendPulseInstagramWebhook
@@ -1857,6 +1907,156 @@ components:
       properties:
         data:
           $ref: "#/components/schemas/CreatorApprovalData"
+
+    CreatorAggregateSocial:
+      type: object
+      description: |
+        Snapshot of one social account attached to a creator at the moment of
+        approve. The verification fields are copied from the application's
+        social row 1:1 — they reflect the verification state at approval time
+        even if the dictionary or the originating application later changes.
+      required: [id, platform, handle, verified, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        platform:
+          $ref: "#/components/schemas/SocialPlatform"
+        handle:
+          type: string
+        verified:
+          type: boolean
+          description: Whether ownership of this social account was confirmed at approval time.
+        method:
+          $ref: "#/components/schemas/SocialVerificationMethod"
+          nullable: true
+          description: Verification path; null on rows whose original verification was unverified.
+        verifiedByUserId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Admin who pressed manual-verify; null on auto-verified and unverified rows.
+        verifiedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: When verification succeeded; null when the row stays unverified.
+        createdAt:
+          type: string
+          format: date-time
+          description: When the snapshot row was inserted into creator_socials.
+
+    CreatorAggregateCategory:
+      type: object
+      description: |
+        One category linked to a creator. `code` is the stable machine
+        identifier copied from the application; `name` is hydrated from the
+        active categories dictionary at read time, with a fallback to `code`
+        when the dictionary entry has been deactivated.
+      required: [code, name]
+      properties:
+        code:
+          type: string
+        name:
+          type: string
+
+    CreatorAggregate:
+      type: object
+      description: |
+        Full creator profile assembled from `creators` plus the snapshot tables
+        `creator_socials` and `creator_categories`. The Telegram block is
+        flattened (no separate object) because the only path to materialise a
+        creator is via approve, which guarantees a Telegram link existed at
+        that moment. City and category codes are returned alongside their
+        localised names hydrated from the active public dictionaries; missing
+        dictionary entries degrade to a `name == code` fallback.
+      required:
+        - id
+        - iin
+        - sourceApplicationId
+        - lastName
+        - firstName
+        - birthDate
+        - phone
+        - cityCode
+        - cityName
+        - telegramUserId
+        - socials
+        - categories
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        iin:
+          type: string
+          description: Kazakhstani individual identification number (12 digits).
+        sourceApplicationId:
+          type: string
+          format: uuid
+          description: ID of the originating creator application; allows admin and analytics joins.
+        lastName:
+          type: string
+        firstName:
+          type: string
+        middleName:
+          type: string
+          nullable: true
+        birthDate:
+          type: string
+          format: date
+        phone:
+          type: string
+        cityCode:
+          type: string
+          description: Stable city code copied from the originating application.
+        cityName:
+          type: string
+          description: Localised city label hydrated from the active cities dictionary; falls back to `cityCode` when the entry has been deactivated.
+        address:
+          type: string
+          nullable: true
+        categoryOtherText:
+          type: string
+          nullable: true
+          description: Free-text niche description; non-null only when categories include "other".
+        telegramUserId:
+          type: integer
+          format: int64
+          description: Telegram numeric user id (BIGINT) — stable identifier of the linked account.
+        telegramUsername:
+          type: string
+          nullable: true
+        telegramFirstName:
+          type: string
+          nullable: true
+        telegramLastName:
+          type: string
+          nullable: true
+        socials:
+          type: array
+          description: Social accounts sorted by (platform, handle).
+          items:
+            $ref: "#/components/schemas/CreatorAggregateSocial"
+        categories:
+          type: array
+          description: Categories sorted by code.
+          items:
+            $ref: "#/components/schemas/CreatorAggregateCategory"
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    GetCreatorResult:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: "#/components/schemas/CreatorAggregate"
 
   securitySchemes:
     bearerAuth:

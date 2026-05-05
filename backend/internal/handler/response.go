@@ -67,6 +67,9 @@ func respondError(w http.ResponseWriter, r *http.Request, err error, log logger.
 	case errors.Is(err, domain.ErrCreatorTelegramAlreadyTaken):
 		writeError(w, r, http.StatusUnprocessableEntity, domain.CodeCreatorTelegramAlreadyTaken,
 			"Этот Telegram-аккаунт уже привязан к другому креатору. Освободите его или попросите креатора сменить аккаунт.", log)
+	case errors.Is(err, domain.ErrCreatorNotFound):
+		writeError(w, r, http.StatusNotFound, domain.CodeCreatorNotFound,
+			"Креатор не найден. Возможно, ID устарел — обновите список креаторов.", log)
 	case errors.Is(err, domain.ErrNotFound), errors.Is(err, sql.ErrNoRows):
 		writeError(w, r, http.StatusNotFound, domain.CodeNotFound, "Resource not found", log)
 	case errors.Is(err, domain.ErrForbidden):

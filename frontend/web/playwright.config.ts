@@ -6,6 +6,11 @@ export default defineConfig({
   testDir: "../e2e/web",
   timeout: 30_000,
   retries: process.env.CI ? 1 : 0,
+  // Two workers everywhere (local docker-compose flow и staging CI). Tests
+  // own their data via generated unique IIN/email/telegram_user_id, so two
+  // parallel workers stay isolated on the same DB. Bump only when the bound
+  // backend can absorb more concurrent admin sessions.
+  workers: 2,
   reporter: [["html", { open: "never" }]],
   use: {
     baseURL: BASE_URL,

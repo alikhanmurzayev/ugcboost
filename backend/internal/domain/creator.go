@@ -21,6 +21,13 @@ var ErrCreatorTelegramAlreadyTaken = errors.New("creator with this telegram_user
 // Maps to CodeCreatorApplicationNotApprovable / 422.
 var ErrCreatorApplicationNotApprovable = errors.New("creator application is not in an approvable status")
 
+// ErrCreatorNotFound is the sentinel raised by CreatorService.GetByID when
+// the creator row does not exist. The handler maps it to 404
+// CREATOR_NOT_FOUND. We translate sql.ErrNoRows in the service layer instead
+// of relying on errors.Is(sql.ErrNoRows) directly so the response carries the
+// creator-specific code rather than the generic NOT_FOUND fallback.
+var ErrCreatorNotFound = errors.New("creator not found")
+
 // Creator-flow user-facing codes carried in 4xx responses by approve action.
 const (
 	// 422 — application is not in `moderation` (e.g. verification, rejected,
@@ -35,6 +42,8 @@ const (
 	// account is already tied to another creator. Operator must pick whether
 	// to reject the duplicate application or unlink the prior creator.
 	CodeCreatorTelegramAlreadyTaken = "CREATOR_TELEGRAM_ALREADY_TAKEN"
+	// 404 — creator with the requested id does not exist.
+	CodeCreatorNotFound = "CREATOR_NOT_FOUND"
 )
 
 // Creator is the flat domain projection the service hands to CreatorRepo.Create.
@@ -123,4 +132,57 @@ func NewCreatorFromApplication(in CreatorSnapshotInput) *Creator {
 		TelegramLastName:    in.TelegramLastName,
 		SourceApplicationID: in.ApplicationID,
 	}
+}
+
+// CreatorAggregateSocial is one social row of a CreatorAggregate. It mirrors
+// the persisted creator_socials snapshot — verification fields stay nilable
+// because Threads / unverified accounts can ride alongside verified ones in
+// the same aggregate.
+type CreatorAggregateSocial struct {
+	ID               string
+	Platform         string
+	Handle           string
+	Verified         bool
+	Method           *string
+	VerifiedByUserID *string
+	VerifiedAt       *time.Time
+	CreatedAt        time.Time
+}
+
+// CreatorAggregateCategory is one (code, name) pair attached to a creator.
+// Name is hydrated by the service against the active categories dictionary;
+// when the dictionary entry has been deactivated since approval, Name falls
+// back to Code so admins still see a meaningful reference.
+type CreatorAggregateCategory struct {
+	Code string
+	Name string
+}
+
+// CreatorAggregate is the full creator profile served by GET /creators/{id}.
+// It collapses the relational creators / creator_socials / creator_categories
+// trio into one flat document because every consumer (admin UI, future read
+// flows) wants the whole snapshot in one round-trip; the Telegram block is
+// inlined for the same reason — there is no concept of a creator without a
+// Telegram link, so a separate optional object would only invite null checks.
+type CreatorAggregate struct {
+	ID                  string
+	IIN                 string
+	SourceApplicationID string
+	LastName            string
+	FirstName           string
+	MiddleName          *string
+	BirthDate           time.Time
+	Phone               string
+	CityCode            string
+	CityName            string
+	Address             *string
+	CategoryOtherText   *string
+	TelegramUserID      int64
+	TelegramUsername    *string
+	TelegramFirstName   *string
+	TelegramLastName    *string
+	Socials             []CreatorAggregateSocial
+	Categories          []CreatorAggregateCategory
+	CreatedAt           time.Time
+	UpdatedAt           time.Time
 }
