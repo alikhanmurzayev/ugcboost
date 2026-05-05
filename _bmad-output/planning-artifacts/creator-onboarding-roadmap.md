@@ -88,7 +88,7 @@ Living document. Покрывает путь от подачи заявки на
 - [ ] **18.5. Бэк: approve заявки админом (18b).** Admin-endpoint, переход `moderation → approved`. В одной `WithTx` — UPDATE статуса + INSERT в `creators` (с зеркалом IIN/Telegram/категорий/соцсетей из заявки) + audit + state-history. `approved` — окончательный, обратного перехода нет. Поднимает user-facing коды для трёх sentinel'ов из 18. Зависит от 18
 - [~] **18.6. Бэк: GET /creators/{id} — aggregate read (18c).** Read-only endpoint для админки и будущих экранов креатора. Возвращает `Creator` + `[]Social` + `[]Category` (с резолвом codes против активных словарей в handler). Зависит от 18.5
 - [ ] **19. Фронт-админка: action approve в drawer на moderation-экране.** Кнопка «Одобрить заявку» с подтверждением. Зависит от 16 и 18.5. E2E — расширение spec'а из 16.5 или новый рядом
-- [ ] **20. Бот: уведомление об approved.** Расширение notify-сервиса. Креатор получает сообщение, что одобрен и ждёт деталей сотрудничества. Дёргается после commit на approve-переходе. Зависит от 9 и 18.5
+- [x] **20. Бот: уведомление об approved.** Выполнен внутри chunk 18.5 (PR #66, commit `c180176`): `Notifier.NotifyApplicationApproved(ctx, chatID)` + статический `applicationApprovedText` в `internal/telegram/notifier.go` + post-commit fire-and-forget из `CreatorApplicationService.ApproveApplication`. Отдельный чанк не нужен.
 
 ### Группа 6. Автомодерация (в самом конце — подход не определён)
 
