@@ -852,3 +852,54 @@ func (_c *MockAuthzService_CanViewCreatorApplication_Call) RunAndReturn(run func
 	_c.Call.Return(run)
 	return _c
 }
+
+// CanViewCreators provides a mock function for the type MockAuthzService
+func (_mock *MockAuthzService) CanViewCreators(ctx context.Context) error {
+	ret := _mock.Called(ctx)
+
+	if len(ret) == 0 {
+		panic("no return value specified for CanViewCreators")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context) error); ok {
+		r0 = returnFunc(ctx)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockAuthzService_CanViewCreators_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'CanViewCreators'
+type MockAuthzService_CanViewCreators_Call struct {
+	*mock.Call
+}
+
+// CanViewCreators is a helper method to define mock.On call
+//   - ctx context.Context
+func (_e *MockAuthzService_Expecter) CanViewCreators(ctx interface{}) *MockAuthzService_CanViewCreators_Call {
+	return &MockAuthzService_CanViewCreators_Call{Call: _e.mock.On("CanViewCreators", ctx)}
+}
+
+func (_c *MockAuthzService_CanViewCreators_Call) Run(run func(ctx context.Context)) *MockAuthzService_CanViewCreators_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		run(
+			arg0,
+		)
+	})
+	return _c
+}
+
+func (_c *MockAuthzService_CanViewCreators_Call) Return(err error) *MockAuthzService_CanViewCreators_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockAuthzService_CanViewCreators_Call) RunAndReturn(run func(ctx context.Context) error) *MockAuthzService_CanViewCreators_Call {
+	_c.Call.Return(run)
+	return _c
+}

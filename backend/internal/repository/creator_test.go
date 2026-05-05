@@ -16,6 +16,317 @@ import (
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/domain"
 )
 
+func TestCreatorRepository_List(t *testing.T) {
+	t.Parallel()
+
+	const countSQLNoFilters = "SELECT COUNT(*) FROM creators cr"
+	const pageSelectCols = "SELECT cr.birth_date AS birth_date, cr.city_code AS city_code, cr.created_at AS created_at, cr.first_name AS first_name, cr.id AS id, cr.iin AS iin, cr.last_name AS last_name, cr.middle_name AS middle_name, cr.phone AS phone, cr.telegram_username AS telegram_username, cr.updated_at AS updated_at"
+	const pageFrom = " FROM creators cr"
+	const pageFromWithCity = pageFrom + " LEFT JOIN cities ct ON ct.code = cr.city_code"
+
+	t.Run("empty result returns nil 0 nil without page query", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &creatorRepository{db: mock}
+
+		mock.ExpectQuery(countSQLNoFilters).
+			WillReturnRows(pgxmock.NewRows([]string{"count"}).AddRow(int64(0)))
+
+		params := CreatorListParams{
+			Sort:    domain.CreatorSortCreatedAt,
+			Order:   domain.SortOrderAsc,
+			Page:    1,
+			PerPage: 10,
+		}
+		rows, total, err := repo.List(context.Background(), params)
+		require.NoError(t, err)
+		require.Nil(t, rows)
+		require.Zero(t, total)
+	})
+
+	t.Run("invalid Page returns error before any SQL", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &creatorRepository{db: mock}
+		_, _, err := repo.List(context.Background(), CreatorListParams{
+			Sort: domain.CreatorSortCreatedAt, Order: domain.SortOrderAsc, Page: 0, PerPage: 10,
+		})
+		require.ErrorContains(t, err, "invalid pagination")
+	})
+
+	t.Run("invalid PerPage returns error before any SQL", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &creatorRepository{db: mock}
+		_, _, err := repo.List(context.Background(), CreatorListParams{
+			Sort: domain.CreatorSortCreatedAt, Order: domain.SortOrderAsc, Page: 1, PerPage: 0,
+		})
+		require.ErrorContains(t, err, "invalid pagination")
+	})
+
+	t.Run("count query error propagates", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &creatorRepository{db: mock}
+
+		mock.ExpectQuery(countSQLNoFilters).
+			WillReturnError(errors.New("count failed"))
+
+		_, _, err := repo.List(context.Background(), CreatorListParams{
+			Sort: domain.CreatorSortCreatedAt, Order: domain.SortOrderAsc, Page: 1, PerPage: 10,
+		})
+		require.ErrorContains(t, err, "count failed")
+	})
+
+	t.Run("page query error propagates", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &creatorRepository{db: mock}
+
+		mock.ExpectQuery(countSQLNoFilters).
+			WillReturnRows(pgxmock.NewRows([]string{"count"}).AddRow(int64(5)))
+		mock.ExpectQuery(pageSelectCols + pageFrom + " ORDER BY cr.created_at ASC, cr.id ASC LIMIT 10 OFFSET 0").
+			WillReturnError(errors.New("page failed"))
+
+		_, _, err := repo.List(context.Background(), CreatorListParams{
+			Sort: domain.CreatorSortCreatedAt, Order: domain.SortOrderAsc, Page: 1, PerPage: 10,
+		})
+		require.ErrorContains(t, err, "page failed")
+	})
+
+	t.Run("happy: no filters, sort created_at desc, page 2", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &creatorRepository{db: mock}
+		birth := time.Date(1995, 5, 15, 0, 0, 0, 0, time.UTC)
+		created := time.Date(2026, 4, 20, 18, 0, 0, 0, time.UTC)
+		updated := time.Date(2026, 4, 21, 9, 0, 0, 0, time.UTC)
+
+		mock.ExpectQuery(countSQLNoFilters).
+			WillReturnRows(pgxmock.NewRows([]string{"count"}).AddRow(int64(25)))
+		mock.ExpectQuery(pageSelectCols + pageFrom + " ORDER BY cr.created_at DESC, cr.id ASC LIMIT 10 OFFSET 10").
+			WillReturnRows(pgxmock.NewRows([]string{"id", "last_name", "first_name", "middle_name", "iin", "birth_date", "phone", "city_code", "telegram_username", "created_at", "updated_at"}).
+				AddRow("creator-1", "Муратова", "Айдана", pointer.ToString("Ивановна"), "950515312348", birth, "+77001234567", "almaty", pointer.ToString("aidana_tg"), created, updated))
+
+		rows, total, err := repo.List(context.Background(), CreatorListParams{
+			Sort: domain.CreatorSortCreatedAt, Order: domain.SortOrderDesc, Page: 2, PerPage: 10,
+		})
+		require.NoError(t, err)
+		require.Equal(t, int64(25), total)
+		require.Equal(t, []*CreatorListRow{{
+			ID:               "creator-1",
+			LastName:         "Муратова",
+			FirstName:        "Айдана",
+			MiddleName:       pointer.ToString("Ивановна"),
+			IIN:              "950515312348",
+			BirthDate:        birth,
+			Phone:            "+77001234567",
+			CityCode:         "almaty",
+			TelegramUsername: pointer.ToString("aidana_tg"),
+			CreatedAt:        created,
+			UpdatedAt:        updated,
+		}}, rows)
+	})
+
+	t.Run("filter: cities array adds IN clause", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &creatorRepository{db: mock}
+
+		mock.ExpectQuery(countSQLNoFilters+" WHERE cr.city_code IN ($1,$2)").
+			WithArgs("almaty", "astana").
+			WillReturnRows(pgxmock.NewRows([]string{"count"}).AddRow(int64(0)))
+
+		_, _, err := repo.List(context.Background(), CreatorListParams{
+			Cities: []string{"almaty", "astana"},
+			Sort:   domain.CreatorSortCreatedAt, Order: domain.SortOrderAsc, Page: 1, PerPage: 10,
+		})
+		require.NoError(t, err)
+	})
+
+	t.Run("filter: categories adds EXISTS subquery", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &creatorRepository{db: mock}
+
+		mock.ExpectQuery(countSQLNoFilters+" WHERE EXISTS (SELECT 1 FROM creator_categories ccat WHERE ccat.creator_id = cr.id AND ccat.category_code IN ($1,$2))").
+			WithArgs("beauty", "fashion").
+			WillReturnRows(pgxmock.NewRows([]string{"count"}).AddRow(int64(0)))
+
+		_, _, err := repo.List(context.Background(), CreatorListParams{
+			Categories: []string{"beauty", "fashion"},
+			Sort:       domain.CreatorSortCreatedAt, Order: domain.SortOrderAsc, Page: 1, PerPage: 10,
+		})
+		require.NoError(t, err)
+	})
+
+	t.Run("filter: dateFrom and dateTo add created_at range", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &creatorRepository{db: mock}
+		from := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+		to := time.Date(2026, 12, 31, 0, 0, 0, 0, time.UTC)
+
+		mock.ExpectQuery(countSQLNoFilters+" WHERE cr.created_at >= $1 AND cr.created_at <= $2").
+			WithArgs(from, to).
+			WillReturnRows(pgxmock.NewRows([]string{"count"}).AddRow(int64(0)))
+
+		_, _, err := repo.List(context.Background(), CreatorListParams{
+			DateFrom: &from, DateTo: &to,
+			Sort: domain.CreatorSortCreatedAt, Order: domain.SortOrderAsc, Page: 1, PerPage: 10,
+		})
+		require.NoError(t, err)
+	})
+
+	t.Run("filter: ageFrom adds birth_date math", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &creatorRepository{db: mock}
+
+		mock.ExpectQuery(countSQLNoFilters + " WHERE cr.birth_date <= NOW()::date - make_interval(years => $1)").
+			WithArgs(18).
+			WillReturnRows(pgxmock.NewRows([]string{"count"}).AddRow(int64(0)))
+
+		ageFrom := 18
+		_, _, err := repo.List(context.Background(), CreatorListParams{
+			AgeFrom: &ageFrom,
+			Sort:    domain.CreatorSortCreatedAt, Order: domain.SortOrderAsc, Page: 1, PerPage: 10,
+		})
+		require.NoError(t, err)
+	})
+
+	t.Run("filter: ageTo bumps interval by one year", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &creatorRepository{db: mock}
+
+		mock.ExpectQuery(countSQLNoFilters + " WHERE cr.birth_date > NOW()::date - make_interval(years => $1)").
+			WithArgs(36).
+			WillReturnRows(pgxmock.NewRows([]string{"count"}).AddRow(int64(0)))
+
+		ageTo := 35
+		_, _, err := repo.List(context.Background(), CreatorListParams{
+			AgeTo: &ageTo,
+			Sort:  domain.CreatorSortCreatedAt, Order: domain.SortOrderAsc, Page: 1, PerPage: 10,
+		})
+		require.NoError(t, err)
+	})
+
+	t.Run("filter: search adds ESCAPE'd ILIKE chain plus EXISTS over socials", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &creatorRepository{db: mock}
+
+		// Seven $-placeholders feeding the same %pattern% — six creator
+		// columns (last/first/middle name, IIN, phone, telegram_username) plus
+		// the EXISTS handle subquery. Each ILIKE pairs with ESCAPE so LIKE
+		// wildcards in user input are treated as literals.
+		mock.ExpectQuery(countSQLNoFilters+` WHERE (cr.last_name ILIKE $1 ESCAPE '\' OR cr.first_name ILIKE $2 ESCAPE '\' OR cr.middle_name ILIKE $3 ESCAPE '\' OR cr.iin ILIKE $4 ESCAPE '\' OR cr.phone ILIKE $5 ESCAPE '\' OR cr.telegram_username ILIKE $6 ESCAPE '\' OR EXISTS (SELECT 1 FROM creator_socials csoc WHERE csoc.creator_id = cr.id AND csoc.handle ILIKE $7 ESCAPE '\'))`).
+			WithArgs("%aidana%", "%aidana%", "%aidana%", "%aidana%", "%aidana%", "%aidana%", "%aidana%").
+			WillReturnRows(pgxmock.NewRows([]string{"count"}).AddRow(int64(0)))
+
+		_, _, err := repo.List(context.Background(), CreatorListParams{
+			Search: "aidana",
+			Sort:   domain.CreatorSortCreatedAt, Order: domain.SortOrderAsc, Page: 1, PerPage: 10,
+		})
+		require.NoError(t, err)
+	})
+
+	t.Run("filter: search escapes LIKE wildcards in user input", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &creatorRepository{db: mock}
+
+		mock.ExpectQuery(countSQLNoFilters+` WHERE (cr.last_name ILIKE $1 ESCAPE '\' OR cr.first_name ILIKE $2 ESCAPE '\' OR cr.middle_name ILIKE $3 ESCAPE '\' OR cr.iin ILIKE $4 ESCAPE '\' OR cr.phone ILIKE $5 ESCAPE '\' OR cr.telegram_username ILIKE $6 ESCAPE '\' OR EXISTS (SELECT 1 FROM creator_socials csoc WHERE csoc.creator_id = cr.id AND csoc.handle ILIKE $7 ESCAPE '\'))`).
+			WithArgs(`%100\%\_user\\admin%`, `%100\%\_user\\admin%`, `%100\%\_user\\admin%`, `%100\%\_user\\admin%`, `%100\%\_user\\admin%`, `%100\%\_user\\admin%`, `%100\%\_user\\admin%`).
+			WillReturnRows(pgxmock.NewRows([]string{"count"}).AddRow(int64(0)))
+
+		_, _, err := repo.List(context.Background(), CreatorListParams{
+			Search: `100%_user\admin`,
+			Sort:   domain.CreatorSortCreatedAt, Order: domain.SortOrderAsc, Page: 1, PerPage: 10,
+		})
+		require.NoError(t, err)
+	})
+
+	t.Run("sort: city_name asc orders by ct.name", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &creatorRepository{db: mock}
+
+		mock.ExpectQuery(countSQLNoFilters).
+			WillReturnRows(pgxmock.NewRows([]string{"count"}).AddRow(int64(1)))
+		mock.ExpectQuery(pageSelectCols + pageFromWithCity + " ORDER BY ct.name ASC, cr.id ASC LIMIT 10 OFFSET 0").
+			WillReturnRows(pgxmock.NewRows([]string{"id", "last_name", "first_name", "middle_name", "iin", "birth_date", "phone", "city_code", "telegram_username", "created_at", "updated_at"}))
+
+		_, _, err := repo.List(context.Background(), CreatorListParams{
+			Sort: domain.CreatorSortCityName, Order: domain.SortOrderAsc, Page: 1, PerPage: 10,
+		})
+		require.NoError(t, err)
+	})
+
+	t.Run("sort: full_name asc orders by last/first/middle/id", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &creatorRepository{db: mock}
+
+		mock.ExpectQuery(countSQLNoFilters).
+			WillReturnRows(pgxmock.NewRows([]string{"count"}).AddRow(int64(1)))
+		mock.ExpectQuery(pageSelectCols + pageFrom + " ORDER BY cr.last_name ASC, cr.first_name ASC, cr.middle_name ASC, cr.id ASC LIMIT 10 OFFSET 0").
+			WillReturnRows(pgxmock.NewRows([]string{"id", "last_name", "first_name", "middle_name", "iin", "birth_date", "phone", "city_code", "telegram_username", "created_at", "updated_at"}))
+
+		_, _, err := repo.List(context.Background(), CreatorListParams{
+			Sort: domain.CreatorSortFullName, Order: domain.SortOrderAsc, Page: 1, PerPage: 10,
+		})
+		require.NoError(t, err)
+	})
+
+	t.Run("sort: birth_date desc orders by cr.birth_date DESC then id", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &creatorRepository{db: mock}
+
+		mock.ExpectQuery(countSQLNoFilters).
+			WillReturnRows(pgxmock.NewRows([]string{"count"}).AddRow(int64(1)))
+		mock.ExpectQuery(pageSelectCols + pageFrom + " ORDER BY cr.birth_date DESC, cr.id ASC LIMIT 10 OFFSET 0").
+			WillReturnRows(pgxmock.NewRows([]string{"id", "last_name", "first_name", "middle_name", "iin", "birth_date", "phone", "city_code", "telegram_username", "created_at", "updated_at"}))
+
+		_, _, err := repo.List(context.Background(), CreatorListParams{
+			Sort: domain.CreatorSortBirthDate, Order: domain.SortOrderDesc, Page: 1, PerPage: 10,
+		})
+		require.NoError(t, err)
+	})
+
+	t.Run("sort: updated_at asc", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &creatorRepository{db: mock}
+
+		mock.ExpectQuery(countSQLNoFilters).
+			WillReturnRows(pgxmock.NewRows([]string{"count"}).AddRow(int64(1)))
+		mock.ExpectQuery(pageSelectCols + pageFrom + " ORDER BY cr.updated_at ASC, cr.id ASC LIMIT 10 OFFSET 0").
+			WillReturnRows(pgxmock.NewRows([]string{"id", "last_name", "first_name", "middle_name", "iin", "birth_date", "phone", "city_code", "telegram_username", "created_at", "updated_at"}))
+
+		_, _, err := repo.List(context.Background(), CreatorListParams{
+			Sort: domain.CreatorSortUpdatedAt, Order: domain.SortOrderAsc, Page: 1, PerPage: 10,
+		})
+		require.NoError(t, err)
+	})
+
+	t.Run("sort: unknown value returns error after count succeeds", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &creatorRepository{db: mock}
+
+		mock.ExpectQuery(countSQLNoFilters).
+			WillReturnRows(pgxmock.NewRows([]string{"count"}).AddRow(int64(1)))
+
+		_, _, err := repo.List(context.Background(), CreatorListParams{
+			Sort: "rating", Order: domain.SortOrderAsc, Page: 1, PerPage: 10,
+		})
+		require.ErrorContains(t, err, `unsupported sort "rating"`)
+	})
+}
+
 func TestCreatorRepository_Create(t *testing.T) {
 	t.Parallel()
 

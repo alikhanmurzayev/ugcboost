@@ -186,3 +186,102 @@ type CreatorAggregate struct {
 	CreatedAt           time.Time
 	UpdatedAt           time.Time
 }
+
+// Sort fields supported by the admin creator list endpoint
+// (POST /creators/list). Mirrors CreatorApplicationSort* values but stays in a
+// dedicated namespace so the two endpoints' contracts can diverge without one
+// silently dragging the other along.
+const (
+	CreatorSortCreatedAt = "created_at"
+	CreatorSortUpdatedAt = "updated_at"
+	CreatorSortFullName  = "full_name"
+	CreatorSortBirthDate = "birth_date"
+	CreatorSortCityName  = "city_name"
+)
+
+// CreatorListSortFieldValues is the canonical, ordered list of supported sort
+// fields. Iterating it gives the validator a single source of truth instead
+// of a switch with hard-coded literals.
+var CreatorListSortFieldValues = []string{
+	CreatorSortCreatedAt,
+	CreatorSortUpdatedAt,
+	CreatorSortFullName,
+	CreatorSortBirthDate,
+	CreatorSortCityName,
+}
+
+// Pagination + filter bounds for the creator list endpoint. oapi-codegen does
+// NOT enforce OpenAPI's minimum/maximum/maxLength at runtime, so the handler
+// validates each constraint explicitly. The hard caps here protect both the
+// instance (huge OFFSETs / megabyte ILIKE patterns / billion-element arrays
+// = DoS vector) and the user (silent no-op filters when boundaries are
+// quietly ignored). Values mirror the application list — same UX, same
+// pressure on the same Postgres tables.
+const (
+	CreatorListPageMin            = 1
+	CreatorListPageMax            = 100_000
+	CreatorListPerPageMin         = 1
+	CreatorListPerPageMax         = 200
+	CreatorListSearchMaxLen       = 128
+	CreatorListAgeMin             = 0
+	CreatorListAgeMax             = 120
+	CreatorListCityCodeMaxLen     = 64
+	CreatorListCategoryCodeMaxLen = 64
+	CreatorListFilterArrayMax     = 50
+)
+
+// CreatorListInput is the validated read aggregate the service receives from
+// the handler. Pointers / nullable types denote optional filters — nil/empty
+// means "do not apply this filter". Cities/Categories are any-of arrays.
+type CreatorListInput struct {
+	Cities     []string
+	Categories []string
+	DateFrom   *time.Time
+	DateTo     *time.Time
+	AgeFrom    *int
+	AgeTo      *int
+	Search     string
+	Sort       string
+	Order      string
+	Page       int
+	PerPage    int
+}
+
+// CreatorListSocial is the lean social-account projection used by the list
+// item — only platform/handle. Verification metadata, ids and timestamps stay
+// in the full GET aggregate.
+type CreatorListSocial struct {
+	Platform string
+	Handle   string
+}
+
+// CreatorListItem is one row in the admin creator list. The shape carries
+// PII (IIN, names, phone, telegram_username) that admins routinely copy from
+// the table; address, category_other_text and the full Telegram block are
+// reserved for GET /creators/{id}. Categories and CityCode hold raw codes;
+// the handler resolves dictionary names at presentation time so service/repo
+// stay presentation-free.
+type CreatorListItem struct {
+	ID               string
+	LastName         string
+	FirstName        string
+	MiddleName       *string
+	IIN              string
+	BirthDate        time.Time
+	Phone            string
+	CityCode         string
+	Categories       []string
+	Socials          []CreatorListSocial
+	TelegramUsername *string
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
+}
+
+// CreatorListPage is what the service returns: the page slice plus pagination
+// echo (page/perPage) and the total count over the unpaginated filter set.
+type CreatorListPage struct {
+	Items   []*CreatorListItem
+	Total   int64
+	Page    int
+	PerPage int
+}

@@ -171,6 +171,11 @@ type ClientInterface interface {
 
 	VerifyCreatorApplicationSocial(ctx context.Context, id openapi_types.UUID, socialId openapi_types.UUID, body VerifyCreatorApplicationSocialJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// ListCreatorsWithBody request with any body
+	ListCreatorsWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	ListCreators(ctx context.Context, body ListCreatorsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// GetCreator request
 	GetCreator(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -536,6 +541,30 @@ func (c *Client) VerifyCreatorApplicationSocialWithBody(ctx context.Context, id 
 
 func (c *Client) VerifyCreatorApplicationSocial(ctx context.Context, id openapi_types.UUID, socialId openapi_types.UUID, body VerifyCreatorApplicationSocialJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewVerifyCreatorApplicationSocialRequest(c.Server, id, socialId, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ListCreatorsWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListCreatorsRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ListCreators(ctx context.Context, body ListCreatorsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListCreatorsRequest(c.Server, body)
 	if err != nil {
 		return nil, err
 	}
@@ -1501,6 +1530,46 @@ func NewVerifyCreatorApplicationSocialRequestWithBody(server string, id openapi_
 	return req, nil
 }
 
+// NewListCreatorsRequest calls the generic ListCreators builder with application/json body
+func NewListCreatorsRequest(server string, body ListCreatorsJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewListCreatorsRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewListCreatorsRequestWithBody generates requests for ListCreators with any type of body
+func NewListCreatorsRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/creators/list")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 // NewGetCreatorRequest generates requests for GetCreator
 func NewGetCreatorRequest(server string, id openapi_types.UUID) (*http.Request, error) {
 	var err error
@@ -1759,6 +1828,11 @@ type ClientWithResponsesInterface interface {
 	VerifyCreatorApplicationSocialWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, socialId openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*VerifyCreatorApplicationSocialResponse, error)
 
 	VerifyCreatorApplicationSocialWithResponse(ctx context.Context, id openapi_types.UUID, socialId openapi_types.UUID, body VerifyCreatorApplicationSocialJSONRequestBody, reqEditors ...RequestEditorFn) (*VerifyCreatorApplicationSocialResponse, error)
+
+	// ListCreatorsWithBodyWithResponse request with any body
+	ListCreatorsWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ListCreatorsResponse, error)
+
+	ListCreatorsWithResponse(ctx context.Context, body ListCreatorsJSONRequestBody, reqEditors ...RequestEditorFn) (*ListCreatorsResponse, error)
 
 	// GetCreatorWithResponse request
 	GetCreatorWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetCreatorResponse, error)
@@ -2298,6 +2372,32 @@ func (r VerifyCreatorApplicationSocialResponse) StatusCode() int {
 	return 0
 }
 
+type ListCreatorsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *CreatorsListResult
+	JSON401      *ErrorResponse
+	JSON403      *Forbidden
+	JSON422      *ErrorResponse
+	JSONDefault  *UnexpectedError
+}
+
+// Status returns HTTPResponse.Status
+func (r ListCreatorsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListCreatorsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type GetCreatorResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -2654,6 +2754,23 @@ func (c *ClientWithResponses) VerifyCreatorApplicationSocialWithResponse(ctx con
 		return nil, err
 	}
 	return ParseVerifyCreatorApplicationSocialResponse(rsp)
+}
+
+// ListCreatorsWithBodyWithResponse request with arbitrary body returning *ListCreatorsResponse
+func (c *ClientWithResponses) ListCreatorsWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ListCreatorsResponse, error) {
+	rsp, err := c.ListCreatorsWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListCreatorsResponse(rsp)
+}
+
+func (c *ClientWithResponses) ListCreatorsWithResponse(ctx context.Context, body ListCreatorsJSONRequestBody, reqEditors ...RequestEditorFn) (*ListCreatorsResponse, error) {
+	rsp, err := c.ListCreators(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListCreatorsResponse(rsp)
 }
 
 // GetCreatorWithResponse request returning *GetCreatorResponse
@@ -3653,6 +3770,60 @@ func ParseVerifyCreatorApplicationSocialResponse(rsp *http.Response) (*VerifyCre
 			return nil, err
 		}
 		response.JSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON422 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest UnexpectedError
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseListCreatorsResponse parses an HTTP response from a ListCreatorsWithResponse call
+func ParseListCreatorsResponse(rsp *http.Response) (*ListCreatorsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListCreatorsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest CreatorsListResult
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
 		var dest ErrorResponse

@@ -78,74 +78,118 @@ func TestCreatorSocialRepository_InsertMany(t *testing.T) {
 	})
 }
 
-func TestCreatorSocialRepository_ListByCreatorID(t *testing.T) {
+func TestCreatorSocialRepository_ListByCreatorIDs(t *testing.T) {
 	t.Parallel()
 
-	const sqlStmt = "SELECT created_at, creator_id, handle, id, method, platform, verified, verified_at, verified_by_user_id FROM creator_socials WHERE creator_id = $1 ORDER BY platform ASC, handle ASC"
+	const sqlStmtSingle = "SELECT created_at, creator_id, handle, id, method, platform, verified, verified_at, verified_by_user_id FROM creator_socials WHERE creator_id IN ($1) ORDER BY creator_id ASC, platform ASC, handle ASC"
+	const sqlStmtPair = "SELECT created_at, creator_id, handle, id, method, platform, verified, verified_at, verified_by_user_id FROM creator_socials WHERE creator_id IN ($1,$2) ORDER BY creator_id ASC, platform ASC, handle ASC"
 
 	created := time.Date(2026, 5, 5, 12, 0, 0, 0, time.UTC)
 	verifiedAt := time.Date(2026, 5, 5, 13, 0, 0, 0, time.UTC)
 
-	t.Run("happy: maps rows ordered by platform/handle", func(t *testing.T) {
+	t.Run("empty input short-circuits without query", func(t *testing.T) {
 		t.Parallel()
 		mock := newPgxmock(t)
 		repo := &creatorSocialRepository{db: mock}
 
-		mock.ExpectQuery(sqlStmt).
+		got, err := repo.ListByCreatorIDs(context.Background(), nil)
+		require.NoError(t, err)
+		require.Empty(t, got)
+	})
+
+	t.Run("happy single creator: maps rows ordered by platform/handle", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &creatorSocialRepository{db: mock}
+
+		mock.ExpectQuery(sqlStmtSingle).
 			WithArgs("creator-1").
 			WillReturnRows(pgxmock.NewRows([]string{"created_at", "creator_id", "handle", "id", "method", "platform", "verified", "verified_at", "verified_by_user_id"}).
 				AddRow(created, "creator-1", "aidana", "social-1", pointer.ToString("auto"), "instagram", true, pointer.To(verifiedAt), pointer.ToString("admin-1")).
 				AddRow(created, "creator-1", "aidana_tt", "social-2", nil, "tiktok", false, nil, nil))
 
-		got, err := repo.ListByCreatorID(context.Background(), "creator-1")
+		got, err := repo.ListByCreatorIDs(context.Background(), []string{"creator-1"})
 		require.NoError(t, err)
-		require.Equal(t, []*CreatorSocialRow{
-			{
-				ID:               "social-1",
-				CreatorID:        "creator-1",
-				Platform:         "instagram",
-				Handle:           "aidana",
-				Verified:         true,
-				Method:           pointer.ToString("auto"),
-				VerifiedByUserID: pointer.ToString("admin-1"),
-				VerifiedAt:       pointer.To(verifiedAt),
-				CreatedAt:        created,
-			},
-			{
-				ID:        "social-2",
-				CreatorID: "creator-1",
-				Platform:  "tiktok",
-				Handle:    "aidana_tt",
-				Verified:  false,
-				CreatedAt: created,
+		require.Equal(t, map[string][]*CreatorSocialRow{
+			"creator-1": {
+				{
+					ID:               "social-1",
+					CreatorID:        "creator-1",
+					Platform:         "instagram",
+					Handle:           "aidana",
+					Verified:         true,
+					Method:           pointer.ToString("auto"),
+					VerifiedByUserID: pointer.ToString("admin-1"),
+					VerifiedAt:       pointer.To(verifiedAt),
+					CreatedAt:        created,
+				},
+				{
+					ID:        "social-2",
+					CreatorID: "creator-1",
+					Platform:  "tiktok",
+					Handle:    "aidana_tt",
+					Verified:  false,
+					CreatedAt: created,
+				},
 			},
 		}, got)
 	})
 
-	t.Run("empty result returns nil slice", func(t *testing.T) {
+	t.Run("happy pair: groups handles by creator id", func(t *testing.T) {
 		t.Parallel()
 		mock := newPgxmock(t)
 		repo := &creatorSocialRepository{db: mock}
 
-		mock.ExpectQuery(sqlStmt).
-			WithArgs("creator-1").
-			WillReturnRows(pgxmock.NewRows([]string{"created_at", "creator_id", "handle", "id", "method", "platform", "verified", "verified_at", "verified_by_user_id"}))
+		mock.ExpectQuery(sqlStmtPair).
+			WithArgs("creator-1", "creator-2").
+			WillReturnRows(pgxmock.NewRows([]string{"created_at", "creator_id", "handle", "id", "method", "platform", "verified", "verified_at", "verified_by_user_id"}).
+				AddRow(created, "creator-1", "aidana", "s-1", nil, "instagram", false, nil, nil).
+				AddRow(created, "creator-1", "aidana_tt", "s-2", nil, "tiktok", false, nil, nil).
+				AddRow(created, "creator-2", "anotheruser", "s-3", nil, "instagram", false, nil, nil))
 
-		got, err := repo.ListByCreatorID(context.Background(), "creator-1")
+		got, err := repo.ListByCreatorIDs(context.Background(), []string{"creator-1", "creator-2"})
 		require.NoError(t, err)
-		require.Empty(t, got)
+		require.Equal(t, map[string][]*CreatorSocialRow{
+			"creator-1": {
+				{ID: "s-1", CreatorID: "creator-1", Platform: "instagram", Handle: "aidana", CreatedAt: created},
+				{ID: "s-2", CreatorID: "creator-1", Platform: "tiktok", Handle: "aidana_tt", CreatedAt: created},
+			},
+			"creator-2": {
+				{ID: "s-3", CreatorID: "creator-2", Platform: "instagram", Handle: "anotheruser", CreatedAt: created},
+			},
+		}, got)
 	})
 
-	t.Run("propagates db error", func(t *testing.T) {
+	t.Run("missing creator id surfaces as no-key in map", func(t *testing.T) {
 		t.Parallel()
 		mock := newPgxmock(t)
 		repo := &creatorSocialRepository{db: mock}
 
-		mock.ExpectQuery(sqlStmt).
-			WithArgs("creator-1").
+		mock.ExpectQuery(sqlStmtPair).
+			WithArgs("creator-1", "creator-empty").
+			WillReturnRows(pgxmock.NewRows([]string{"created_at", "creator_id", "handle", "id", "method", "platform", "verified", "verified_at", "verified_by_user_id"}).
+				AddRow(created, "creator-1", "aidana", "s-1", nil, "instagram", false, nil, nil))
+
+		got, err := repo.ListByCreatorIDs(context.Background(), []string{"creator-1", "creator-empty"})
+		require.NoError(t, err)
+		require.Equal(t, map[string][]*CreatorSocialRow{
+			"creator-1": {
+				{ID: "s-1", CreatorID: "creator-1", Platform: "instagram", Handle: "aidana", CreatedAt: created},
+			},
+		}, got)
+		require.NotContains(t, got, "creator-empty")
+	})
+
+	t.Run("propagates query error", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &creatorSocialRepository{db: mock}
+
+		mock.ExpectQuery(sqlStmtPair).
+			WithArgs("creator-1", "creator-2").
 			WillReturnError(errors.New("db down"))
 
-		_, err := repo.ListByCreatorID(context.Background(), "creator-1")
+		_, err := repo.ListByCreatorIDs(context.Background(), []string{"creator-1", "creator-2"})
 		require.ErrorContains(t, err, "db down")
 	})
 }

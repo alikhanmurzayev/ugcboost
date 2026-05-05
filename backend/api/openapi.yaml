@@ -855,6 +855,59 @@ paths:
         default:
           $ref: "#/components/responses/UnexpectedError"
 
+  /creators/list:
+    post:
+      operationId: listCreators
+      summary: List approved creators with filters, search, sorting and pagination (admin only)
+      description: |
+        Admin-only paginated list endpoint backing the campaign-side catalog.
+        POST is used (not GET) because the search field carries PII (IIN,
+        names, social handles, phone, telegram_username) which `security.md`
+        forbids in URL params. Authorisation is evaluated before any business
+        logic so non-admin callers get 403 regardless of whether matching
+        creators exist. Pagination, sort field and sort order are required —
+        there are no server-side defaults, the client must explicitly choose.
+
+        The item shape is intentionally lean: list-views surface identity,
+        contact details that admins copy from the table (phone,
+        telegram_username) and the dictionary-hydrated city/categories. Full
+        PII (address, category_other_text, the source application id, the
+        full Telegram block) is reserved for `GET /creators/{id}`. LiveDune
+        analytics, completed-orders metrics and TrustMe sign-state are
+        deliberately out of scope for this chunk and ship in follow-ups.
+      tags: [creators]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatorsListRequest"
+      responses:
+        "200":
+          description: Page of approved creators matching the filter
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CreatorsListResult"
+        "401":
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          description: Validation error (unknown sort/order, page/perPage out of range, malformed filters)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: "#/components/responses/UnexpectedError"
+
   /creators/{id}:
     parameters:
       - name: id
@@ -2057,6 +2110,167 @@ components:
       properties:
         data:
           $ref: "#/components/schemas/CreatorAggregate"
+
+    CreatorListSortField:
+      type: string
+      description: |
+        Sort field for the admin creator list. Mapped to a SQL column /
+        expression on the backend. Unknown values are rejected with 422.
+      enum: [created_at, updated_at, full_name, birth_date, city_name]
+
+    CreatorsListRequest:
+      description: |
+        Filter, search, sort and pagination payload for the admin creator
+        list. All filter fields are optional and combined with AND between
+        fields, OR (any-of) within a single array. Empty/whitespace `search`
+        is ignored.
+      allOf:
+        - $ref: "#/components/schemas/PaginationInput"
+        - type: object
+          required: [sort, order]
+          properties:
+            cities:
+              type: array
+              description: Match any of these city codes (from the cities dictionary).
+              items:
+                type: string
+                minLength: 1
+                maxLength: 64
+            categories:
+              type: array
+              description: Match creators that include any of these category codes.
+              items:
+                type: string
+                minLength: 1
+                maxLength: 64
+            dateFrom:
+              type: string
+              format: date-time
+              description: Inclusive lower bound for `created_at` (creator's approve moment).
+            dateTo:
+              type: string
+              format: date-time
+              description: Inclusive upper bound for `created_at`.
+            ageFrom:
+              type: integer
+              minimum: 0
+              maximum: 120
+              description: Inclusive lower bound for the creator's age in full years (computed from birth_date).
+            ageTo:
+              type: integer
+              minimum: 0
+              maximum: 120
+              description: Inclusive upper bound for the creator's age in full years.
+            search:
+              type: string
+              maxLength: 128
+              description: |
+                Free-text search across last_name, first_name, middle_name, IIN,
+                phone, telegram_username (case-insensitive) and social-account
+                handles. Trimmed; empty/blank after trim disables the filter.
+                Carries PII — the endpoint is POST so this never lands in URL
+                params.
+            sort:
+              $ref: "#/components/schemas/CreatorListSortField"
+            order:
+              $ref: "#/components/schemas/SortOrder"
+
+    CreatorListSocial:
+      type: object
+      description: |
+        Lean social-account row returned in the creator list. Only the
+        platform/handle pair is surfaced — verification metadata, ids and
+        timestamps stay in the full GET aggregate.
+      required: [platform, handle]
+      properties:
+        platform:
+          $ref: "#/components/schemas/SocialPlatform"
+        handle:
+          type: string
+
+    CreatorListItem:
+      type: object
+      description: |
+        One row in the admin creator list. Includes identity, contact details
+        searchable from the admin UI (phone, telegram_username) and the
+        dictionary-hydrated city/categories. Address, category_other_text and
+        the full Telegram metadata are reserved for `GET /creators/{id}`.
+      required:
+        - id
+        - lastName
+        - firstName
+        - iin
+        - birthDate
+        - phone
+        - city
+        - categories
+        - socials
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        lastName:
+          type: string
+        firstName:
+          type: string
+        middleName:
+          type: string
+          nullable: true
+        iin:
+          type: string
+          description: Kazakhstani individual identification number (12 digits).
+        birthDate:
+          type: string
+          format: date
+        phone:
+          type: string
+        city:
+          $ref: "#/components/schemas/DictionaryItem"
+        categories:
+          type: array
+          description: Categories selected by the creator, sorted by sort_order then code.
+          items:
+            $ref: "#/components/schemas/DictionaryItem"
+        socials:
+          type: array
+          description: Social accounts attached to the creator, sorted by platform then handle.
+          items:
+            $ref: "#/components/schemas/CreatorListSocial"
+        telegramUsername:
+          type: string
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CreatorsListData:
+      type: object
+      required: [items, total, page, perPage]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/CreatorListItem"
+        total:
+          type: integer
+          format: int64
+          description: Total number of matching creators across all pages.
+        page:
+          type: integer
+        perPage:
+          type: integer
+
+    CreatorsListResult:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: "#/components/schemas/CreatorsListData"
 
   securitySchemes:
     bearerAuth:

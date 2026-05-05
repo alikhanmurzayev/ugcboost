@@ -36,7 +36,7 @@ var (
 // categories they were approved under.
 type CreatorCategoryRepo interface {
 	InsertMany(ctx context.Context, rows []CreatorCategoryRow) error
-	ListByCreatorID(ctx context.Context, creatorID string) ([]string, error)
+	ListByCreatorIDs(ctx context.Context, creatorIDs []string) (map[string][]string, error)
 }
 
 type creatorCategoryRepository struct {
@@ -57,13 +57,40 @@ func (r *creatorCategoryRepository) InsertMany(ctx context.Context, rows []Creat
 	return err
 }
 
-// ListByCreatorID returns the category codes linked to the given creator
-// in deterministic ascending order. The handler layer (18c) resolves the
-// codes against the active dictionary at read time.
-func (r *creatorCategoryRepository) ListByCreatorID(ctx context.Context, creatorID string) ([]string, error) {
-	q := sq.Select(CreatorCategoryColumnCategoryCode).
+// creatorCategoryHydrationRow is a private projection used only by
+// ListByCreatorIDs. It is kept off the public surface so the row shape can
+// evolve with the batch use-case without breaking callers.
+type creatorCategoryHydrationRow struct {
+	CreatorID    string `db:"creator_id"`
+	CategoryCode string `db:"category_code"`
+}
+
+// ListByCreatorIDs hydrates the categories of every supplied creator id in a
+// single query. It returns a map keyed by creatorID, with each slice already
+// sorted by category code so the handler hydration step can merge with the
+// dictionary lookup deterministically. An empty input set is a no-op and
+// returns an empty map without hitting the database.
+func (r *creatorCategoryRepository) ListByCreatorIDs(ctx context.Context, creatorIDs []string) (map[string][]string, error) {
+	if len(creatorIDs) == 0 {
+		return map[string][]string{}, nil
+	}
+	q := sq.Select(
+		CreatorCategoryColumnCreatorID,
+		CreatorCategoryColumnCategoryCode,
+	).
 		From(TableCreatorCategories).
-		Where(sq.Eq{CreatorCategoryColumnCreatorID: creatorID}).
-		OrderBy(CreatorCategoryColumnCategoryCode + " ASC")
-	return dbutil.Vals[string](ctx, r.db, q)
+		Where(sq.Eq{CreatorCategoryColumnCreatorID: creatorIDs}).
+		OrderBy(
+			CreatorCategoryColumnCreatorID+" ASC",
+			CreatorCategoryColumnCategoryCode+" ASC",
+		)
+	rows, err := dbutil.Many[creatorCategoryHydrationRow](ctx, r.db, q)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string][]string, len(creatorIDs))
+	for _, row := range rows {
+		out[row.CreatorID] = append(out[row.CreatorID], row.CategoryCode)
+	}
+	return out, nil
 }

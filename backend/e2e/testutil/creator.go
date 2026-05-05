@@ -16,6 +16,85 @@ import (
 	"github.com/alikhanmurzayev/ugcboost/backend/e2e/testclient"
 )
 
+// ApprovedCreatorFixture bundles the persisted state of an approved creator —
+// the creator id materialised in `creators` after admin-approve, plus the
+// originating application snapshot (PII, Telegram block, social handles)
+// SetupApprovedCreator copied into it. List-tests assert against this
+// fixture's fields directly (search hits by IIN/handle/phone, sort across
+// last_name, filter by city/category) without re-deriving them through the
+// admin GET aggregate.
+type ApprovedCreatorFixture struct {
+	CreatorID  string
+	AdminToken string
+
+	IIN              string
+	LastName         string
+	FirstName        string
+	MiddleName       *string
+	BirthDate        time.Time
+	Phone            string
+	CityCode         string
+	CategoryCodes    []string
+	Socials          []SocialFixture
+	TelegramUsername *string
+
+	CreatedAt time.Time
+}
+
+// SetupApprovedCreator drives an application from submit through to the
+// approved-creator state and registers the LIFO cleanup for both rows. The
+// flow reuses SetupCreatorApplicationInModeration (which submits, links
+// Telegram and runs the configured verification to lift the application into
+// `moderation`), then admin-approves through the public POST endpoint so the
+// snapshot lands in `creators` exactly the way a production admin click
+// would.
+//
+// Cleanup order matters: the application cleanup is registered first by the
+// inner SetupCreatorApplicationViaLanding, the creator cleanup is registered
+// here AFTER. t.Cleanup fires LIFO, so the creator goes away first — the FK
+// creators.source_application_id has no ON DELETE clause, and the parent
+// application cannot be removed while the child still references it.
+//
+// Pass an opts.Socials slice where exactly one entry carries Verification !=
+// VerificationNone (helper-internal constraint, see SetupCreatorApplicationInModeration).
+// Caller-controlled IIN/category/city are wired through unchanged so list
+// tests can drive the dataset deterministically.
+func SetupApprovedCreator(t *testing.T, opts CreatorApplicationFixture) ApprovedCreatorFixture {
+	t.Helper()
+
+	app := SetupCreatorApplicationInModeration(t, opts)
+
+	c := NewAPIClient(t)
+	appUUID, err := uuid.Parse(app.ApplicationID)
+	require.NoError(t, err)
+	approveResp, err := c.ApproveCreatorApplicationWithResponse(context.Background(), appUUID,
+		WithAuth(app.AdminToken))
+	require.NoError(t, err)
+	require.Equalf(t, http.StatusOK, approveResp.StatusCode(),
+		"SetupApprovedCreator: approve must return 200, got %d", approveResp.StatusCode())
+	require.NotNil(t, approveResp.JSON200)
+	creatorID := approveResp.JSON200.Data.CreatorId
+	require.NotEqual(t, uuid.Nil, creatorID, "SetupApprovedCreator: approve must yield a fresh creator id")
+	RegisterCreatorCleanup(t, creatorID.String())
+
+	return ApprovedCreatorFixture{
+		CreatorID:        creatorID.String(),
+		AdminToken:       app.AdminToken,
+		IIN:              app.IIN,
+		LastName:         app.LastName,
+		FirstName:        app.FirstName,
+		MiddleName:       app.MiddleName,
+		BirthDate:        app.BirthDate,
+		Phone:            app.Phone,
+		CityCode:         app.CityCode,
+		CategoryCodes:    append([]string(nil), app.CategoryCodes...),
+		Socials:          append([]SocialFixture(nil), app.Socials...),
+		TelegramUsername: app.TelegramUsername,
+		CreatedAt:        time.Now().UTC(),
+	}
+}
+
+
 // RegisterCreatorCleanup schedules a POST /test/cleanup-entity for a creator
 // row after the test. The testapi handler delegates to CreatorRepo.DeleteForTests
 // which cascades through creator_socials and creator_categories. 404 is treated
@@ -72,7 +151,7 @@ func DeleteCreatorForTests(t *testing.T, creatorID string) {
 // rather than being hidden behind per-field checks.
 //
 // Sorted invariants mirror the repo guarantee from chunk 18a: socials
-// returned by ListByCreatorID are already (platform, handle)-ascending and
+// returned by ListByCreatorIDs are already (platform, handle)-ascending and
 // categories are category_code-ascending. The helper builds the expected
 // slices in the same order so the structural compare stays meaningful.
 func AssertCreatorAggregateMatchesSetup(t *testing.T, fx CreatorApplicationFixture, creatorID string, aggregate apiclient.CreatorAggregate) {

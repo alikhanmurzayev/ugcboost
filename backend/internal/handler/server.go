@@ -51,6 +51,7 @@ type AuthzService interface {
 	CanRejectCreatorApplication(ctx context.Context) error
 	CanApproveCreatorApplication(ctx context.Context) error
 	CanViewCreator(ctx context.Context) error
+	CanViewCreators(ctx context.Context) error
 }
 
 // AuditLogService is the interface Server needs from the audit service.
@@ -80,9 +81,11 @@ type DictionaryService interface {
 }
 
 // CreatorService is the interface Server needs from the creator-side service:
-// the GET /creators/{id} aggregate read used by the admin moderation UI.
+// the GET /creators/{id} aggregate read used by the admin moderation UI plus
+// the POST /creators/list paginated list backing the campaign-side catalog.
 type CreatorService interface {
 	GetByID(ctx context.Context, creatorID string) (*domain.CreatorAggregate, error)
+	List(ctx context.Context, in domain.CreatorListInput) (*domain.CreatorListPage, error)
 }
 
 // ServerConfig bundles configuration values the handler layer needs. Keeping

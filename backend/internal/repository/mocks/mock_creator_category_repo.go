@@ -95,55 +95,55 @@ func (_c *MockCreatorCategoryRepo_InsertMany_Call) RunAndReturn(run func(ctx con
 	return _c
 }
 
-// ListByCreatorID provides a mock function for the type MockCreatorCategoryRepo
-func (_mock *MockCreatorCategoryRepo) ListByCreatorID(ctx context.Context, creatorID string) ([]string, error) {
-	ret := _mock.Called(ctx, creatorID)
+// ListByCreatorIDs provides a mock function for the type MockCreatorCategoryRepo
+func (_mock *MockCreatorCategoryRepo) ListByCreatorIDs(ctx context.Context, creatorIDs []string) (map[string][]string, error) {
+	ret := _mock.Called(ctx, creatorIDs)
 
 	if len(ret) == 0 {
-		panic("no return value specified for ListByCreatorID")
+		panic("no return value specified for ListByCreatorIDs")
 	}
 
-	var r0 []string
+	var r0 map[string][]string
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string) ([]string, error)); ok {
-		return returnFunc(ctx, creatorID)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, []string) (map[string][]string, error)); ok {
+		return returnFunc(ctx, creatorIDs)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string) []string); ok {
-		r0 = returnFunc(ctx, creatorID)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, []string) map[string][]string); ok {
+		r0 = returnFunc(ctx, creatorIDs)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).([]string)
+			r0 = ret.Get(0).(map[string][]string)
 		}
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, string) error); ok {
-		r1 = returnFunc(ctx, creatorID)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, []string) error); ok {
+		r1 = returnFunc(ctx, creatorIDs)
 	} else {
 		r1 = ret.Error(1)
 	}
 	return r0, r1
 }
 
-// MockCreatorCategoryRepo_ListByCreatorID_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ListByCreatorID'
-type MockCreatorCategoryRepo_ListByCreatorID_Call struct {
+// MockCreatorCategoryRepo_ListByCreatorIDs_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ListByCreatorIDs'
+type MockCreatorCategoryRepo_ListByCreatorIDs_Call struct {
 	*mock.Call
 }
 
-// ListByCreatorID is a helper method to define mock.On call
+// ListByCreatorIDs is a helper method to define mock.On call
 //   - ctx context.Context
-//   - creatorID string
-func (_e *MockCreatorCategoryRepo_Expecter) ListByCreatorID(ctx interface{}, creatorID interface{}) *MockCreatorCategoryRepo_ListByCreatorID_Call {
-	return &MockCreatorCategoryRepo_ListByCreatorID_Call{Call: _e.mock.On("ListByCreatorID", ctx, creatorID)}
+//   - creatorIDs []string
+func (_e *MockCreatorCategoryRepo_Expecter) ListByCreatorIDs(ctx interface{}, creatorIDs interface{}) *MockCreatorCategoryRepo_ListByCreatorIDs_Call {
+	return &MockCreatorCategoryRepo_ListByCreatorIDs_Call{Call: _e.mock.On("ListByCreatorIDs", ctx, creatorIDs)}
 }
 
-func (_c *MockCreatorCategoryRepo_ListByCreatorID_Call) Run(run func(ctx context.Context, creatorID string)) *MockCreatorCategoryRepo_ListByCreatorID_Call {
+func (_c *MockCreatorCategoryRepo_ListByCreatorIDs_Call) Run(run func(ctx context.Context, creatorIDs []string)) *MockCreatorCategoryRepo_ListByCreatorIDs_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
 			arg0 = args[0].(context.Context)
 		}
-		var arg1 string
+		var arg1 []string
 		if args[1] != nil {
-			arg1 = args[1].(string)
+			arg1 = args[1].([]string)
 		}
 		run(
 			arg0,
@@ -153,12 +153,12 @@ func (_c *MockCreatorCategoryRepo_ListByCreatorID_Call) Run(run func(ctx context
 	return _c
 }
 
-func (_c *MockCreatorCategoryRepo_ListByCreatorID_Call) Return(strings []string, err error) *MockCreatorCategoryRepo_ListByCreatorID_Call {
-	_c.Call.Return(strings, err)
+func (_c *MockCreatorCategoryRepo_ListByCreatorIDs_Call) Return(stringToStrings map[string][]string, err error) *MockCreatorCategoryRepo_ListByCreatorIDs_Call {
+	_c.Call.Return(stringToStrings, err)
 	return _c
 }
 
-func (_c *MockCreatorCategoryRepo_ListByCreatorID_Call) RunAndReturn(run func(ctx context.Context, creatorID string) ([]string, error)) *MockCreatorCategoryRepo_ListByCreatorID_Call {
+func (_c *MockCreatorCategoryRepo_ListByCreatorIDs_Call) RunAndReturn(run func(ctx context.Context, creatorIDs []string) (map[string][]string, error)) *MockCreatorCategoryRepo_ListByCreatorIDs_Call {
 	_c.Call.Return(run)
 	return _c
 }

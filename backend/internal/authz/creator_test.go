@@ -32,3 +32,25 @@ func TestAuthzService_CanViewCreator(t *testing.T) {
 		require.NoError(t, svc.CanViewCreator(ctxWithRole(api.Admin)))
 	})
 }
+
+func TestAuthzService_CanViewCreators(t *testing.T) {
+	t.Parallel()
+
+	t.Run("manager forbidden", func(t *testing.T) {
+		t.Parallel()
+		svc := NewAuthzService(mocks.NewMockBrandService(t))
+		require.ErrorIs(t, svc.CanViewCreators(ctxWithRole(api.BrandManager)), domain.ErrForbidden)
+	})
+
+	t.Run("missing role forbidden", func(t *testing.T) {
+		t.Parallel()
+		svc := NewAuthzService(mocks.NewMockBrandService(t))
+		require.ErrorIs(t, svc.CanViewCreators(context.Background()), domain.ErrForbidden)
+	})
+
+	t.Run("admin allowed", func(t *testing.T) {
+		t.Parallel()
+		svc := NewAuthzService(mocks.NewMockBrandService(t))
+		require.NoError(t, svc.CanViewCreators(ctxWithRole(api.Admin)))
+	})
+}

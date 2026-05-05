@@ -159,7 +159,7 @@ func TestCreatorService_GetByID(t *testing.T) {
 		rig := newCreatorReadRig(t)
 		expectCreatorReadFactoryWiring(rig, true, false, false)
 		rig.creatorRepo.EXPECT().GetByID(mock.Anything, getCreatorID).Return(fullCreatorRow(), nil)
-		rig.creatorSocialRepo.EXPECT().ListByCreatorID(mock.Anything, getCreatorID).Return(nil, errors.New("socials boom"))
+		rig.creatorSocialRepo.EXPECT().ListByCreatorIDs(mock.Anything, []string{getCreatorID}).Return(nil, errors.New("socials boom"))
 
 		svc := NewCreatorService(rig.pool, rig.factory, rig.logger)
 		_, err := svc.GetByID(context.Background(), getCreatorID)
@@ -172,8 +172,9 @@ func TestCreatorService_GetByID(t *testing.T) {
 		rig := newCreatorReadRig(t)
 		expectCreatorReadFactoryWiring(rig, true, true, false)
 		rig.creatorRepo.EXPECT().GetByID(mock.Anything, getCreatorID).Return(fullCreatorRow(), nil)
-		rig.creatorSocialRepo.EXPECT().ListByCreatorID(mock.Anything, getCreatorID).Return(fullCreatorSocialRows(), nil)
-		rig.creatorCategoryRepo.EXPECT().ListByCreatorID(mock.Anything, getCreatorID).Return(nil, errors.New("categories boom"))
+		rig.creatorSocialRepo.EXPECT().ListByCreatorIDs(mock.Anything, []string{getCreatorID}).
+			Return(map[string][]*repository.CreatorSocialRow{getCreatorID: fullCreatorSocialRows()}, nil)
+		rig.creatorCategoryRepo.EXPECT().ListByCreatorIDs(mock.Anything, []string{getCreatorID}).Return(nil, errors.New("categories boom"))
 
 		svc := NewCreatorService(rig.pool, rig.factory, rig.logger)
 		_, err := svc.GetByID(context.Background(), getCreatorID)
@@ -186,8 +187,10 @@ func TestCreatorService_GetByID(t *testing.T) {
 		rig := newCreatorReadRig(t)
 		expectCreatorReadFactoryWiring(rig, true, true, true)
 		rig.creatorRepo.EXPECT().GetByID(mock.Anything, getCreatorID).Return(fullCreatorRow(), nil)
-		rig.creatorSocialRepo.EXPECT().ListByCreatorID(mock.Anything, getCreatorID).Return(fullCreatorSocialRows(), nil)
-		rig.creatorCategoryRepo.EXPECT().ListByCreatorID(mock.Anything, getCreatorID).Return([]string{"beauty", "fashion"}, nil)
+		rig.creatorSocialRepo.EXPECT().ListByCreatorIDs(mock.Anything, []string{getCreatorID}).
+			Return(map[string][]*repository.CreatorSocialRow{getCreatorID: fullCreatorSocialRows()}, nil)
+		rig.creatorCategoryRepo.EXPECT().ListByCreatorIDs(mock.Anything, []string{getCreatorID}).
+			Return(map[string][]string{getCreatorID: {"beauty", "fashion"}}, nil)
 		rig.dictRepo.EXPECT().GetActiveByCodes(mock.Anything, repository.TableCities, []string{"almaty"}).
 			Return(nil, errors.New("city lookup down"))
 
@@ -202,8 +205,10 @@ func TestCreatorService_GetByID(t *testing.T) {
 		rig := newCreatorReadRig(t)
 		expectCreatorReadFactoryWiring(rig, true, true, true)
 		rig.creatorRepo.EXPECT().GetByID(mock.Anything, getCreatorID).Return(fullCreatorRow(), nil)
-		rig.creatorSocialRepo.EXPECT().ListByCreatorID(mock.Anything, getCreatorID).Return(fullCreatorSocialRows(), nil)
-		rig.creatorCategoryRepo.EXPECT().ListByCreatorID(mock.Anything, getCreatorID).Return([]string{"beauty", "fashion"}, nil)
+		rig.creatorSocialRepo.EXPECT().ListByCreatorIDs(mock.Anything, []string{getCreatorID}).
+			Return(map[string][]*repository.CreatorSocialRow{getCreatorID: fullCreatorSocialRows()}, nil)
+		rig.creatorCategoryRepo.EXPECT().ListByCreatorIDs(mock.Anything, []string{getCreatorID}).
+			Return(map[string][]string{getCreatorID: {"beauty", "fashion"}}, nil)
 		rig.dictRepo.EXPECT().GetActiveByCodes(mock.Anything, repository.TableCities, []string{"almaty"}).
 			Return([]*repository.DictionaryEntryRow{{Code: "almaty", Name: "Алматы", Active: true}}, nil)
 		rig.dictRepo.EXPECT().GetActiveByCodes(mock.Anything, repository.TableCategories, []string{"beauty", "fashion"}).
@@ -223,8 +228,10 @@ func TestCreatorService_GetByID(t *testing.T) {
 		creatorRow := fullCreatorRow()
 		socialRows := fullCreatorSocialRows()
 		rig.creatorRepo.EXPECT().GetByID(mock.Anything, getCreatorID).Return(creatorRow, nil)
-		rig.creatorSocialRepo.EXPECT().ListByCreatorID(mock.Anything, getCreatorID).Return(socialRows, nil)
-		rig.creatorCategoryRepo.EXPECT().ListByCreatorID(mock.Anything, getCreatorID).Return([]string{"beauty", "fashion", "lifestyle"}, nil)
+		rig.creatorSocialRepo.EXPECT().ListByCreatorIDs(mock.Anything, []string{getCreatorID}).
+			Return(map[string][]*repository.CreatorSocialRow{getCreatorID: socialRows}, nil)
+		rig.creatorCategoryRepo.EXPECT().ListByCreatorIDs(mock.Anything, []string{getCreatorID}).
+			Return(map[string][]string{getCreatorID: {"beauty", "fashion", "lifestyle"}}, nil)
 		rig.dictRepo.EXPECT().GetActiveByCodes(mock.Anything, repository.TableCities, []string{"almaty"}).
 			Return([]*repository.DictionaryEntryRow{{Code: "almaty", Name: "Алматы", Active: true}}, nil)
 		rig.dictRepo.EXPECT().GetActiveByCodes(mock.Anything, repository.TableCategories, []string{"beauty", "fashion", "lifestyle"}).
@@ -320,8 +327,10 @@ func TestCreatorService_GetByID(t *testing.T) {
 			UpdatedAt:           time.Date(2026, 5, 5, 12, 0, 0, 0, time.UTC),
 		}
 		rig.creatorRepo.EXPECT().GetByID(mock.Anything, getCreatorID).Return(creatorRow, nil)
-		rig.creatorSocialRepo.EXPECT().ListByCreatorID(mock.Anything, getCreatorID).Return(nil, nil)
-		rig.creatorCategoryRepo.EXPECT().ListByCreatorID(mock.Anything, getCreatorID).Return([]string{"beauty"}, nil)
+		rig.creatorSocialRepo.EXPECT().ListByCreatorIDs(mock.Anything, []string{getCreatorID}).
+			Return(map[string][]*repository.CreatorSocialRow{}, nil)
+		rig.creatorCategoryRepo.EXPECT().ListByCreatorIDs(mock.Anything, []string{getCreatorID}).
+			Return(map[string][]string{getCreatorID: {"beauty"}}, nil)
 		rig.dictRepo.EXPECT().GetActiveByCodes(mock.Anything, repository.TableCities, []string{"astana"}).
 			Return([]*repository.DictionaryEntryRow{{Code: "astana", Name: "Астана", Active: true}}, nil)
 		rig.dictRepo.EXPECT().GetActiveByCodes(mock.Anything, repository.TableCategories, []string{"beauty"}).
@@ -365,8 +374,10 @@ func TestCreatorService_GetByID(t *testing.T) {
 
 		creatorRow := fullCreatorRow()
 		rig.creatorRepo.EXPECT().GetByID(mock.Anything, getCreatorID).Return(creatorRow, nil)
-		rig.creatorSocialRepo.EXPECT().ListByCreatorID(mock.Anything, getCreatorID).Return(nil, nil)
-		rig.creatorCategoryRepo.EXPECT().ListByCreatorID(mock.Anything, getCreatorID).Return([]string{"beauty"}, nil)
+		rig.creatorSocialRepo.EXPECT().ListByCreatorIDs(mock.Anything, []string{getCreatorID}).
+			Return(map[string][]*repository.CreatorSocialRow{}, nil)
+		rig.creatorCategoryRepo.EXPECT().ListByCreatorIDs(mock.Anything, []string{getCreatorID}).
+			Return(map[string][]string{getCreatorID: {"beauty"}}, nil)
 		// City row deactivated → empty result.
 		rig.dictRepo.EXPECT().GetActiveByCodes(mock.Anything, repository.TableCities, []string{"almaty"}).
 			Return(nil, nil)
@@ -380,6 +391,8 @@ func TestCreatorService_GetByID(t *testing.T) {
 		require.Equal(t, "almaty", got.CityName, "deactivated city must fall back to code")
 	})
 
+	_ = fullCreatorSocialRows // shared with TestCreatorService_List below
+
 	t.Run("deactivated category falls back to code", func(t *testing.T) {
 		t.Parallel()
 		rig := newCreatorReadRig(t)
@@ -387,8 +400,10 @@ func TestCreatorService_GetByID(t *testing.T) {
 
 		creatorRow := fullCreatorRow()
 		rig.creatorRepo.EXPECT().GetByID(mock.Anything, getCreatorID).Return(creatorRow, nil)
-		rig.creatorSocialRepo.EXPECT().ListByCreatorID(mock.Anything, getCreatorID).Return(nil, nil)
-		rig.creatorCategoryRepo.EXPECT().ListByCreatorID(mock.Anything, getCreatorID).Return([]string{"beauty", "retired_niche"}, nil)
+		rig.creatorSocialRepo.EXPECT().ListByCreatorIDs(mock.Anything, []string{getCreatorID}).
+			Return(map[string][]*repository.CreatorSocialRow{}, nil)
+		rig.creatorCategoryRepo.EXPECT().ListByCreatorIDs(mock.Anything, []string{getCreatorID}).
+			Return(map[string][]string{getCreatorID: {"beauty", "retired_niche"}}, nil)
 		rig.dictRepo.EXPECT().GetActiveByCodes(mock.Anything, repository.TableCities, []string{"almaty"}).
 			Return([]*repository.DictionaryEntryRow{{Code: "almaty", Name: "Алматы", Active: true}}, nil)
 		// Only the active category row comes back; "retired_niche" is missing.
@@ -402,5 +417,184 @@ func TestCreatorService_GetByID(t *testing.T) {
 			{Code: "beauty", Name: "Красота"},
 			{Code: "retired_niche", Name: "retired_niche"},
 		}, got.Categories)
+	})
+}
+
+func TestCreatorService_List(t *testing.T) {
+	t.Parallel()
+
+	const creatorA = "aaaa1111-1111-1111-1111-111111111111"
+	const creatorB = "bbbb2222-2222-2222-2222-222222222222"
+
+	birth := time.Date(1995, 5, 15, 0, 0, 0, 0, time.UTC)
+	created := time.Date(2026, 4, 20, 18, 0, 0, 0, time.UTC)
+	updated := time.Date(2026, 4, 21, 9, 0, 0, 0, time.UTC)
+
+	listRows := func() []*repository.CreatorListRow {
+		return []*repository.CreatorListRow{
+			{
+				ID:               creatorA,
+				LastName:         "Муратова",
+				FirstName:        "Айдана",
+				MiddleName:       pointer.ToString("Ивановна"),
+				IIN:              "950515312348",
+				BirthDate:        birth,
+				Phone:            "+77001234567",
+				CityCode:         "almaty",
+				TelegramUsername: pointer.ToString("aidana_tg"),
+				CreatedAt:        created,
+				UpdatedAt:        updated,
+			},
+			{
+				ID:        creatorB,
+				LastName:  "Иванов",
+				FirstName: "Алексей",
+				IIN:       "950515312349",
+				BirthDate: birth,
+				Phone:     "+77001234568",
+				CityCode:  "astana",
+				CreatedAt: created,
+				UpdatedAt: updated,
+			},
+		}
+	}
+
+	t.Run("repo error wrapped", func(t *testing.T) {
+		t.Parallel()
+		rig := newCreatorReadRig(t)
+		rig.factory.EXPECT().NewCreatorRepo(rig.pool).Return(rig.creatorRepo)
+		rig.creatorRepo.EXPECT().List(mock.Anything, mock.Anything).Return(nil, int64(0), errors.New("db down"))
+
+		svc := NewCreatorService(rig.pool, rig.factory, rig.logger)
+		_, err := svc.List(context.Background(), domain.CreatorListInput{Sort: domain.CreatorSortCreatedAt, Order: domain.SortOrderAsc, Page: 1, PerPage: 20})
+		require.ErrorContains(t, err, "list creators")
+		require.ErrorContains(t, err, "db down")
+	})
+
+	t.Run("empty page short-circuits hydration", func(t *testing.T) {
+		t.Parallel()
+		rig := newCreatorReadRig(t)
+		rig.factory.EXPECT().NewCreatorRepo(rig.pool).Return(rig.creatorRepo)
+		rig.creatorRepo.EXPECT().List(mock.Anything, mock.Anything).Return(nil, int64(0), nil)
+
+		svc := NewCreatorService(rig.pool, rig.factory, rig.logger)
+		got, err := svc.List(context.Background(), domain.CreatorListInput{Sort: domain.CreatorSortCreatedAt, Order: domain.SortOrderAsc, Page: 1, PerPage: 20})
+		require.NoError(t, err)
+		require.Equal(t, &domain.CreatorListPage{Items: nil, Total: 0, Page: 1, PerPage: 20}, got)
+	})
+
+	t.Run("socials hydrate error wrapped", func(t *testing.T) {
+		t.Parallel()
+		rig := newCreatorReadRig(t)
+		rig.factory.EXPECT().NewCreatorRepo(rig.pool).Return(rig.creatorRepo)
+		rig.factory.EXPECT().NewCreatorSocialRepo(rig.pool).Return(rig.creatorSocialRepo)
+		rig.creatorRepo.EXPECT().List(mock.Anything, mock.Anything).Return(listRows(), int64(2), nil)
+		rig.creatorSocialRepo.EXPECT().ListByCreatorIDs(mock.Anything, []string{creatorA, creatorB}).
+			Return(nil, errors.New("socials boom"))
+
+		svc := NewCreatorService(rig.pool, rig.factory, rig.logger)
+		_, err := svc.List(context.Background(), domain.CreatorListInput{Sort: domain.CreatorSortCreatedAt, Order: domain.SortOrderAsc, Page: 1, PerPage: 20})
+		require.ErrorContains(t, err, "hydrate socials")
+	})
+
+	t.Run("categories hydrate error wrapped", func(t *testing.T) {
+		t.Parallel()
+		rig := newCreatorReadRig(t)
+		rig.factory.EXPECT().NewCreatorRepo(rig.pool).Return(rig.creatorRepo)
+		rig.factory.EXPECT().NewCreatorSocialRepo(rig.pool).Return(rig.creatorSocialRepo)
+		rig.factory.EXPECT().NewCreatorCategoryRepo(rig.pool).Return(rig.creatorCategoryRepo)
+		rig.creatorRepo.EXPECT().List(mock.Anything, mock.Anything).Return(listRows(), int64(2), nil)
+		rig.creatorSocialRepo.EXPECT().ListByCreatorIDs(mock.Anything, []string{creatorA, creatorB}).
+			Return(map[string][]*repository.CreatorSocialRow{}, nil)
+		rig.creatorCategoryRepo.EXPECT().ListByCreatorIDs(mock.Anything, []string{creatorA, creatorB}).
+			Return(nil, errors.New("cats boom"))
+
+		svc := NewCreatorService(rig.pool, rig.factory, rig.logger)
+		_, err := svc.List(context.Background(), domain.CreatorListInput{Sort: domain.CreatorSortCreatedAt, Order: domain.SortOrderAsc, Page: 1, PerPage: 20})
+		require.ErrorContains(t, err, "hydrate categories")
+	})
+
+	t.Run("happy two creators with hydration", func(t *testing.T) {
+		t.Parallel()
+		rig := newCreatorReadRig(t)
+		rig.factory.EXPECT().NewCreatorRepo(rig.pool).Return(rig.creatorRepo)
+		rig.factory.EXPECT().NewCreatorSocialRepo(rig.pool).Return(rig.creatorSocialRepo)
+		rig.factory.EXPECT().NewCreatorCategoryRepo(rig.pool).Return(rig.creatorCategoryRepo)
+		rig.creatorRepo.EXPECT().List(mock.Anything, mock.Anything).Return(listRows(), int64(2), nil)
+		rig.creatorSocialRepo.EXPECT().ListByCreatorIDs(mock.Anything, []string{creatorA, creatorB}).
+			Return(map[string][]*repository.CreatorSocialRow{
+				creatorA: {
+					{ID: "s-a-1", CreatorID: creatorA, Platform: domain.SocialPlatformInstagram, Handle: "aidana", CreatedAt: created},
+					{ID: "s-a-2", CreatorID: creatorA, Platform: domain.SocialPlatformTikTok, Handle: "aidana_tt", CreatedAt: created},
+				},
+				creatorB: {
+					{ID: "s-b-1", CreatorID: creatorB, Platform: domain.SocialPlatformInstagram, Handle: "ivanov", CreatedAt: created},
+				},
+			}, nil)
+		rig.creatorCategoryRepo.EXPECT().ListByCreatorIDs(mock.Anything, []string{creatorA, creatorB}).
+			Return(map[string][]string{
+				creatorA: {"beauty", "fashion"},
+				creatorB: {"sport"},
+			}, nil)
+
+		svc := NewCreatorService(rig.pool, rig.factory, rig.logger)
+		got, err := svc.List(context.Background(), domain.CreatorListInput{Sort: domain.CreatorSortCreatedAt, Order: domain.SortOrderAsc, Page: 1, PerPage: 20})
+		require.NoError(t, err)
+
+		require.Equal(t, &domain.CreatorListPage{
+			Items: []*domain.CreatorListItem{
+				{
+					ID:               creatorA,
+					LastName:         "Муратова",
+					FirstName:        "Айдана",
+					MiddleName:       pointer.ToString("Ивановна"),
+					IIN:              "950515312348",
+					BirthDate:        birth,
+					Phone:            "+77001234567",
+					CityCode:         "almaty",
+					Categories:       []string{"beauty", "fashion"},
+					Socials:          []domain.CreatorListSocial{{Platform: "instagram", Handle: "aidana"}, {Platform: "tiktok", Handle: "aidana_tt"}},
+					TelegramUsername: pointer.ToString("aidana_tg"),
+					CreatedAt:        created,
+					UpdatedAt:        updated,
+				},
+				{
+					ID:         creatorB,
+					LastName:   "Иванов",
+					FirstName:  "Алексей",
+					IIN:        "950515312349",
+					BirthDate:  birth,
+					Phone:      "+77001234568",
+					CityCode:   "astana",
+					Categories: []string{"sport"},
+					Socials:    []domain.CreatorListSocial{{Platform: "instagram", Handle: "ivanov"}},
+					CreatedAt:  created,
+					UpdatedAt:  updated,
+				},
+			},
+			Total:   2,
+			Page:    1,
+			PerPage: 20,
+		}, got)
+	})
+
+	t.Run("trims search before passing to repo", func(t *testing.T) {
+		t.Parallel()
+		rig := newCreatorReadRig(t)
+		rig.factory.EXPECT().NewCreatorRepo(rig.pool).Return(rig.creatorRepo)
+		var captured repository.CreatorListParams
+		rig.creatorRepo.EXPECT().List(mock.Anything, mock.Anything).
+			Run(func(_ context.Context, p repository.CreatorListParams) {
+				captured = p
+			}).
+			Return(nil, int64(0), nil)
+
+		svc := NewCreatorService(rig.pool, rig.factory, rig.logger)
+		_, err := svc.List(context.Background(), domain.CreatorListInput{
+			Search: "   aidana   ",
+			Sort:   domain.CreatorSortCreatedAt, Order: domain.SortOrderAsc, Page: 1, PerPage: 20,
+		})
+		require.NoError(t, err)
+		require.Equal(t, "aidana", captured.Search)
 	})
 }
