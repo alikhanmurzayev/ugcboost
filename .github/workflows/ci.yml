@@ -272,6 +272,7 @@ jobs:
         env:
           BASE_URL: http://localhost:3001
           API_URL: http://localhost:8082
+          SENDPULSE_WEBHOOK_SECRET: ci-sendpulse-secret-not-real
       - name: Upload report
         if: always()
         uses: actions/upload-artifact@v4
@@ -436,6 +437,7 @@ jobs:
           API_URL: https://staging-api.ugcboost.kz
           CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
           CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+          SENDPULSE_WEBHOOK_SECRET: ${{ secrets.STAGING_SENDPULSE_WEBHOOK_SECRET }}
       - name: Upload report
         if: always()
         uses: actions/upload-artifact@v4
