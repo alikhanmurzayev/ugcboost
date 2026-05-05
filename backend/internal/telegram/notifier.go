@@ -2,23 +2,36 @@ package telegram
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"html"
 	"runtime/debug"
 	"sync"
 	"time"
 
+	"github.com/cenkalti/backoff/v5"
 	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
 
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/logger"
 )
 
-// telegramNotifyTimeout caps a single fire-and-forget notify against the
-// Telegram API. Verification / link side effects have already committed by
-// the time the goroutine runs, so caller-side cancellation must not silently
-// drop the user-facing message; a stalled API call must not pin a goroutine.
+// telegramNotifyTimeout caps a single send attempt against the Telegram API.
+// Each retry attempt gets its own sub-context with this deadline, so a stalled
+// API call cannot pin a goroutine even when retry-loop budget allows further
+// attempts.
 const telegramNotifyTimeout = 10 * time.Second
+
+// Production retry parameters. The retry loop adds at most ~7 seconds of
+// sleep between attempts (1s + 2s + 4s with the randomization factor pinned
+// to 0 for predictability), well under the 30s maxElapsed cap.
+const (
+	defaultBackoffInitial     = 1 * time.Second
+	defaultBackoffMaxInterval = 8 * time.Second
+	defaultBackoffMultiplier  = 2.0
+	defaultBackoffMaxElapsed  = 30 * time.Second
+	defaultBackoffMaxAttempts = 4
+)
 
 // igDirectURL is the Instagram Direct deep-link to the UGCBoost account.
 // Used inside the welcome message when the application carries an IG handle.
@@ -64,21 +77,48 @@ type ApplicationLinkedPayload struct {
 
 // Notifier owns every outbound bot notification that the service layer
 // fires after a successful commit. It encapsulates the fire-and-forget
-// goroutine, the per-call timeout, the WaitGroup the closer drains on
-// shutdown, and the shared Sender — service constructors no longer need
-// to thread these dependencies themselves.
+// goroutine, the retry loop with exponential backoff, the WaitGroup the
+// closer drains on shutdown, and the shared Sender.
 type Notifier struct {
-	sender  Sender
-	wg      *sync.WaitGroup
-	timeout time.Duration
-	log     logger.Logger
+	sender      Sender
+	wg          *sync.WaitGroup
+	log         logger.Logger
+	timeout     time.Duration
+	initial     time.Duration
+	multiplier  float64
+	maxInterval time.Duration
+	maxElapsed  time.Duration
+	maxAttempts int
 }
 
-// NewNotifier wires the notifier. The WaitGroup is owned internally so the
-// closer talks to the Notifier (via Wait) rather than juggling a shared *sync.
-// WaitGroup. log must be non-nil — every fire-and-forget logs Errors and any
-// unexpected panic via the recovered goroutine path.
+// NewNotifier wires the notifier with production retry parameters
+// (1s/2s/4s backoff over up to 4 attempts within 30s). Callers that need
+// to tune retry timings (tests with millisecond budgets) should use
+// NewNotifierWithBackoff.
 func NewNotifier(sender Sender, log logger.Logger) *Notifier {
+	return NewNotifierWithBackoff(
+		sender, log,
+		defaultBackoffInitial,
+		defaultBackoffMaxInterval,
+		defaultBackoffMultiplier,
+		defaultBackoffMaxElapsed,
+		defaultBackoffMaxAttempts,
+	)
+}
+
+// NewNotifierWithBackoff wires the notifier with custom retry parameters.
+// Tests use this constructor to compress the retry budget into milliseconds
+// without affecting production timings. Set-methods are deliberately not
+// exposed (per backend-design § Зависимости через конструктор) — the
+// returned Notifier is immutable.
+func NewNotifierWithBackoff(
+	sender Sender,
+	log logger.Logger,
+	initial, maxInterval time.Duration,
+	multiplier float64,
+	maxElapsed time.Duration,
+	maxAttempts int,
+) *Notifier {
 	if sender == nil {
 		panic("telegram: NewNotifier requires non-nil sender")
 	}
@@ -86,10 +126,15 @@ func NewNotifier(sender Sender, log logger.Logger) *Notifier {
 		panic("telegram: NewNotifier requires non-nil logger")
 	}
 	return &Notifier{
-		sender:  sender,
-		wg:      &sync.WaitGroup{},
-		timeout: telegramNotifyTimeout,
-		log:     log,
+		sender:      sender,
+		wg:          &sync.WaitGroup{},
+		log:         log,
+		timeout:     telegramNotifyTimeout,
+		initial:     initial,
+		multiplier:  multiplier,
+		maxInterval: maxInterval,
+		maxElapsed:  maxElapsed,
+		maxAttempts: maxAttempts,
 	}
 }
 
@@ -139,21 +184,22 @@ func (n *Notifier) NotifyApplicationRejected(ctx context.Context, chatID int64) 
 	})
 }
 
-// fire spawns the goroutine. ctx propagates trace metadata via
-// context.WithoutCancel so request cancellation cannot silently drop
-// the user-facing message; a hard timeout caps stalled API calls. A
-// recover guards the process — Telegram SDK panics or unexpected nil-
-// derefs in payload composition would otherwise kill every other
-// goroutine via process exit.
+// fire spawns the goroutine. The retry loop runs against an outer context
+// derived via context.WithoutCancel — caller cancellation cannot silently
+// drop the user-facing message — and capped by maxElapsed. Each individual
+// SendMessage attempt gets its own sub-context with timeout so a single
+// stalled call cannot eat the whole retry budget. A recover guards the
+// process — Telegram SDK panics or unexpected nil-derefs in payload
+// composition would otherwise kill every other goroutine via process exit.
 func (n *Notifier) fire(ctx context.Context, op string, chatID int64, params *bot.SendMessageParams) {
 	n.wg.Add(1)
 	go func() {
 		defer n.wg.Done()
-		notifyCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), n.timeout)
-		defer cancel()
+		outerCtx, cancelOuter := context.WithTimeout(context.WithoutCancel(ctx), n.maxElapsed)
+		defer cancelOuter()
 		defer func() {
 			if rec := recover(); rec != nil {
-				n.log.Error(notifyCtx, "telegram notify panic",
+				n.log.Error(outerCtx, "telegram notify panic",
 					"op", op,
 					"chat_id", chatID,
 					"panic", rec,
@@ -161,14 +207,75 @@ func (n *Notifier) fire(ctx context.Context, op string, chatID int64, params *bo
 				)
 			}
 		}()
-		if _, err := n.sender.SendMessage(notifyCtx, params); err != nil {
-			n.log.Error(notifyCtx, "telegram notify failed",
+
+		eb := backoff.NewExponentialBackOff()
+		eb.InitialInterval = n.initial
+		eb.Multiplier = n.multiplier
+		eb.MaxInterval = n.maxInterval
+		eb.RandomizationFactor = 0
+
+		var attempts int
+		_, err := backoff.Retry(outerCtx, func() (struct{}, error) {
+			attempts++
+			attemptCtx, cancelAttempt := context.WithTimeout(outerCtx, n.timeout)
+			defer cancelAttempt()
+			if _, sendErr := n.sender.SendMessage(attemptCtx, params); sendErr != nil {
+				if !isRetryable(sendErr) {
+					return struct{}{}, backoff.Permanent(sendErr)
+				}
+				return struct{}{}, sendErr
+			}
+			return struct{}{}, nil
+		},
+			backoff.WithBackOff(eb),
+			backoff.WithMaxTries(uint(n.maxAttempts)),
+			backoff.WithMaxElapsedTime(n.maxElapsed),
+			backoff.WithNotify(func(retryErr error, next time.Duration) {
+				n.log.Warn(outerCtx, "telegram notify retry",
+					"op", op,
+					"chat_id", chatID,
+					"attempt", attempts,
+					"next_backoff", next,
+					"error", retryErr,
+				)
+			}),
+		)
+		if err != nil {
+			n.log.Error(outerCtx, "telegram notify failed",
 				"op", op,
 				"chat_id", chatID,
+				"attempts", attempts,
 				"error", err,
 			)
 		}
 	}()
+}
+
+// isRetryable classifies the Telegram SDK error to decide whether retry has
+// any chance of succeeding. The Telegram-specific 4xx sentinels surface as
+// wrapped errors so errors.Is matches them through fmt.Errorf("%w, ...").
+//
+// Terminal: 4xx (bad request, forbidden / bot blocked, unauthorized,
+// not found, conflict, migrate). Retryable everything else: 429
+// TooManyRequestsError, 5xx (default branch in raw_request.go, no typed
+// surface), network errors (transport / decode failures), context
+// deadline exceeded on a per-attempt sub-context. Outer context
+// cancellation is not classified here — backoff.Retry observes
+// outerCtx.Done() directly and aborts the loop without a Notify.
+func isRetryable(err error) bool {
+	if err == nil {
+		return false
+	}
+	switch {
+	case errors.Is(err, bot.ErrorBadRequest),
+		errors.Is(err, bot.ErrorForbidden),
+		errors.Is(err, bot.ErrorUnauthorized),
+		errors.Is(err, bot.ErrorNotFound),
+		errors.Is(err, bot.ErrorConflict):
+		return false
+	}
+	var migrateErr *bot.MigrateError
+	return !errors.As(err, &migrateErr)
 }
 
 // buildWelcomeText picks the right welcome variant. With-IG substitutes

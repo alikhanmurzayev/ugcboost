@@ -3,6 +3,8 @@ package telegram_test
 import (
 	"context"
 	"errors"
+	"fmt"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -15,6 +17,36 @@ import (
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/telegram"
 	tgmocks "github.com/alikhanmurzayev/ugcboost/backend/internal/telegram/mocks"
 )
+
+// retryTestParams keeps the retry budget tight so the test pack stays well
+// under the unit-test deadline (race detector amplifies sleep waits). The 4
+// attempts × 2× multiplier hit 1ms+2ms+4ms ≈ 7ms of cumulative sleep, so
+// the maxElapsed cap of 200ms is a generous ceiling that never fires under
+// happy/exhausted paths but stops a runaway test on a slow CI box.
+const (
+	retryInitial     = 1 * time.Millisecond
+	retryMaxInterval = 4 * time.Millisecond
+	retryMultiplier  = 2.0
+	retryMaxElapsed  = 200 * time.Millisecond
+	retryMaxAttempts = 4
+)
+
+func newRetryNotifier(sender telegram.Sender, log *logmocks.MockLogger) *telegram.Notifier {
+	return telegram.NewNotifierWithBackoff(
+		sender, log,
+		retryInitial, retryMaxInterval, retryMultiplier, retryMaxElapsed, retryMaxAttempts,
+	)
+}
+
+// newSingleShotNotifier preserves the pre-retry semantics for tests that
+// expect exactly one SendMessage call on a sender error (the original
+// "sender error logged" assertions).
+func newSingleShotNotifier(sender telegram.Sender, log *logmocks.MockLogger) *telegram.Notifier {
+	return telegram.NewNotifierWithBackoff(
+		sender, log,
+		retryInitial, retryMaxInterval, retryMultiplier, retryMaxElapsed, 1,
+	)
+}
 
 // captureSend installs a SendMessage expectation that records the params
 // and closes the returned channel when SendMessage has fired. Use waitFor
@@ -133,7 +165,10 @@ func TestNotifier_NotifyApplicationLinked(t *testing.T) {
 		_, sendDone := captureSend(t, sender, errors.New("upstream 5xx"))
 		log.EXPECT().Error(mock.Anything, "telegram notify failed", mock.Anything).Once()
 
-		n := telegram.NewNotifier(sender, log)
+		// maxAttempts=1 keeps single-shot semantics for the historical
+		// assertion (one sender call → one Error log). The retry-on-error
+		// behaviour is covered by the dedicated retry test pack below.
+		n := newSingleShotNotifier(sender, log)
 		require.NotPanics(t, func() {
 			n.NotifyApplicationLinked(context.Background(), 1, telegram.ApplicationLinkedPayload{HasInstagram: true})
 		})
@@ -182,7 +217,7 @@ func TestNotifier_NotifyVerificationApproved(t *testing.T) {
 				return m["op"] == "verification_approved" && m["chat_id"] == int64(99)
 			})).Once()
 
-		n := telegram.NewNotifier(sender, log)
+		n := newSingleShotNotifier(sender, log)
 		require.NotPanics(t, func() {
 			n.NotifyVerificationApproved(context.Background(), 99)
 		})
@@ -230,7 +265,7 @@ func TestNotifier_NotifyApplicationRejected(t *testing.T) {
 				return m["op"] == "application_rejected" && m["chat_id"] == int64(77)
 			})).Once()
 
-		n := telegram.NewNotifier(sender, log)
+		n := newSingleShotNotifier(sender, log)
 		require.NotPanics(t, func() {
 			n.NotifyApplicationRejected(context.Background(), 77)
 		})
@@ -347,4 +382,174 @@ func TestNewNotifier_Defensive(t *testing.T) {
 			telegram.NewNotifier(sender, nil)
 		})
 	})
+}
+
+// TestNotifier_Retry_TransientThenSuccess covers the recovery path: a 5xx
+// on the first attempt, success on the second. backoff.Retry calls the
+// Notify hook (Warn) between the two attempts, so the test pins exactly
+// one Warn and zero Errors.
+func TestNotifier_Retry_TransientThenSuccess(t *testing.T) {
+	t.Parallel()
+	sender := tgmocks.NewMockSender(t)
+	log := logmocks.NewMockLogger(t)
+
+	calls := atomic.Int32{}
+	sender.EXPECT().SendMessage(mock.Anything, mock.Anything).
+		Run(func(_ context.Context, _ *bot.SendMessageParams) { calls.Add(1) }).
+		Return(nil, errors.New("upstream 503")).Once()
+	sender.EXPECT().SendMessage(mock.Anything, mock.Anything).
+		Run(func(_ context.Context, _ *bot.SendMessageParams) { calls.Add(1) }).
+		Return(&models.Message{ID: 1}, nil).Once()
+	log.EXPECT().Warn(mock.Anything, "telegram notify retry", mock.Anything).Once()
+
+	n := newRetryNotifier(sender, log)
+	n.NotifyVerificationApproved(context.Background(), 1)
+	n.Wait()
+
+	require.Equal(t, int32(2), calls.Load())
+}
+
+// TestNotifier_Retry_TransientThenSuccess_429 mirrors the 5xx recovery
+// path with the 429 surface — a *bot.TooManyRequestsError on attempt #1
+// is treated as transient and retried.
+func TestNotifier_Retry_TransientThenSuccess_429(t *testing.T) {
+	t.Parallel()
+	sender := tgmocks.NewMockSender(t)
+	log := logmocks.NewMockLogger(t)
+
+	calls := atomic.Int32{}
+	sender.EXPECT().SendMessage(mock.Anything, mock.Anything).
+		Run(func(_ context.Context, _ *bot.SendMessageParams) { calls.Add(1) }).
+		Return(nil, &bot.TooManyRequestsError{Message: "too many", RetryAfter: 0}).Once()
+	sender.EXPECT().SendMessage(mock.Anything, mock.Anything).
+		Run(func(_ context.Context, _ *bot.SendMessageParams) { calls.Add(1) }).
+		Return(&models.Message{ID: 1}, nil).Once()
+	log.EXPECT().Warn(mock.Anything, "telegram notify retry", mock.Anything).Once()
+
+	n := newRetryNotifier(sender, log)
+	n.NotifyVerificationApproved(context.Background(), 1)
+	n.Wait()
+
+	require.Equal(t, int32(2), calls.Load())
+}
+
+// TestNotifier_Retry_NetworkError_Success exercises the "transport-layer
+// failure" branch — a generic plumbing error is unmatched by 4xx
+// sentinels and qualifies as retryable.
+func TestNotifier_Retry_NetworkError_Success(t *testing.T) {
+	t.Parallel()
+	sender := tgmocks.NewMockSender(t)
+	log := logmocks.NewMockLogger(t)
+
+	calls := atomic.Int32{}
+	sender.EXPECT().SendMessage(mock.Anything, mock.Anything).
+		Run(func(_ context.Context, _ *bot.SendMessageParams) { calls.Add(1) }).
+		Return(nil, errors.New("dial tcp 1.2.3.4:443: connect: connection refused")).Once()
+	sender.EXPECT().SendMessage(mock.Anything, mock.Anything).
+		Run(func(_ context.Context, _ *bot.SendMessageParams) { calls.Add(1) }).
+		Return(&models.Message{ID: 1}, nil).Once()
+	log.EXPECT().Warn(mock.Anything, "telegram notify retry", mock.Anything).Once()
+
+	n := newRetryNotifier(sender, log)
+	n.NotifyVerificationApproved(context.Background(), 1)
+	n.Wait()
+
+	require.Equal(t, int32(2), calls.Load())
+}
+
+// TestNotifier_Retry_Terminal_400_NoRetry pins the 4xx-non-429 branch:
+// bot.ErrorBadRequest is wrapped permanent and the loop stops immediately.
+func TestNotifier_Retry_Terminal_400_NoRetry(t *testing.T) {
+	t.Parallel()
+	sender := tgmocks.NewMockSender(t)
+	log := logmocks.NewMockLogger(t)
+
+	calls := atomic.Int32{}
+	sender.EXPECT().SendMessage(mock.Anything, mock.Anything).
+		Run(func(_ context.Context, _ *bot.SendMessageParams) { calls.Add(1) }).
+		Return(nil, fmt.Errorf("%w, message text empty", bot.ErrorBadRequest)).Once()
+	log.EXPECT().Error(mock.Anything, "telegram notify failed", mock.Anything).Once()
+
+	n := newRetryNotifier(sender, log)
+	n.NotifyVerificationApproved(context.Background(), 1)
+	n.Wait()
+
+	require.Equal(t, int32(1), calls.Load())
+}
+
+// TestNotifier_Retry_Terminal_403_NoRetry pins the second terminal branch:
+// the bot has been blocked / kicked from the chat (Forbidden). Retrying
+// would still bounce off the same permission error.
+func TestNotifier_Retry_Terminal_403_NoRetry(t *testing.T) {
+	t.Parallel()
+	sender := tgmocks.NewMockSender(t)
+	log := logmocks.NewMockLogger(t)
+
+	calls := atomic.Int32{}
+	sender.EXPECT().SendMessage(mock.Anything, mock.Anything).
+		Run(func(_ context.Context, _ *bot.SendMessageParams) { calls.Add(1) }).
+		Return(nil, fmt.Errorf("%w, bot was blocked by the user", bot.ErrorForbidden)).Once()
+	log.EXPECT().Error(mock.Anything, "telegram notify failed", mock.Anything).Once()
+
+	n := newRetryNotifier(sender, log)
+	n.NotifyVerificationApproved(context.Background(), 1)
+	n.Wait()
+
+	require.Equal(t, int32(1), calls.Load())
+}
+
+// TestNotifier_Retry_Exhausted covers the ceiling: every attempt returns
+// the same retryable error. backoff.Retry caps at maxAttempts=4 so the
+// sender is hit four times, the Notify hook runs three times (before
+// each follow-up attempt), and exactly one final Error is logged.
+func TestNotifier_Retry_Exhausted(t *testing.T) {
+	t.Parallel()
+	sender := tgmocks.NewMockSender(t)
+	log := logmocks.NewMockLogger(t)
+
+	calls := atomic.Int32{}
+	sender.EXPECT().SendMessage(mock.Anything, mock.Anything).
+		Run(func(_ context.Context, _ *bot.SendMessageParams) { calls.Add(1) }).
+		Return(nil, errors.New("upstream 503")).Times(4)
+	log.EXPECT().Warn(mock.Anything, "telegram notify retry", mock.Anything).Times(3)
+	log.EXPECT().Error(mock.Anything, "telegram notify failed", mock.Anything).Once()
+
+	n := newRetryNotifier(sender, log)
+	n.NotifyVerificationApproved(context.Background(), 1)
+	n.Wait()
+
+	require.Equal(t, int32(4), calls.Load())
+}
+
+// TestNotifier_Retry_OuterCtxBudgetExhausted pins the outer-context cap:
+// when maxElapsed is exhausted (or the outer context is otherwise cancelled),
+// backoff.Retry surfaces context.Cause and terminates the loop. The exact
+// number of sender calls is a race-dependent 1–2 because the budget is
+// crossed during the very first attempt; the test only asserts the
+// terminal Error log fires.
+func TestNotifier_Retry_OuterCtxBudgetExhausted(t *testing.T) {
+	t.Parallel()
+	sender := tgmocks.NewMockSender(t)
+	log := logmocks.NewMockLogger(t)
+
+	calls := atomic.Int32{}
+	sender.EXPECT().SendMessage(mock.Anything, mock.Anything).
+		Run(func(ctx context.Context, _ *bot.SendMessageParams) {
+			calls.Add(1)
+			<-ctx.Done()
+		}).
+		Return(nil, context.DeadlineExceeded).
+		Maybe()
+	log.EXPECT().Warn(mock.Anything, "telegram notify retry", mock.Anything).Maybe()
+	log.EXPECT().Error(mock.Anything, "telegram notify failed", mock.Anything).Once()
+
+	// 1ms outer budget — guarantees the loop exits after the first attempt.
+	n := telegram.NewNotifierWithBackoff(
+		sender, log,
+		retryInitial, retryMaxInterval, retryMultiplier, 1*time.Millisecond, retryMaxAttempts,
+	)
+	n.NotifyVerificationApproved(context.Background(), 1)
+	n.Wait()
+
+	require.GreaterOrEqual(t, calls.Load(), int32(1))
 }

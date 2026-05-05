@@ -65,3 +65,18 @@ func (f *RepoFactory) NewCreatorApplicationTelegramLinkRepo(db dbutil.DB) Creato
 func (f *RepoFactory) NewCreatorApplicationStatusTransitionRepo(db dbutil.DB) CreatorApplicationStatusTransitionRepo {
 	return &creatorApplicationStatusTransitionRepository{db: db}
 }
+
+// NewCreatorRepo creates a creator repository bound to the given DB.
+func (f *RepoFactory) NewCreatorRepo(db dbutil.DB) CreatorRepo {
+	return &creatorRepository{db: db}
+}
+
+// NewCreatorSocialRepo creates a repo for the creator_socials table.
+func (f *RepoFactory) NewCreatorSocialRepo(db dbutil.DB) CreatorSocialRepo {
+	return &creatorSocialRepository{db: db}
+}
+
+// NewCreatorCategoryRepo creates a repo for the creator_categories table.
+func (f *RepoFactory) NewCreatorCategoryRepo(db dbutil.DB) CreatorCategoryRepo {
+	return &creatorCategoryRepository{db: db}
+}

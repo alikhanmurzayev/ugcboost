@@ -2,7 +2,7 @@
 title: "Бэк-фундамент сущности креатора + retry в Telegram-нотификаторе (chunk 18a)"
 type: feature
 created: "2026-05-05"
-status: ready-for-dev
+status: in-progress
 baseline_commit: "19da316"
 context:
   - docs/standards/
