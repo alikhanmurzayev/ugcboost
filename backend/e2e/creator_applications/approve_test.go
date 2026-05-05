@@ -69,8 +69,12 @@ const telegramSilenceWindowApprove = 5 * time.Second
 
 // expectedApproveText must be kept in sync with
 // internal/telegram/notifier.go::applicationApprovedText.
-const expectedApproveText = "Поздравляем! Ваша заявка одобрена ✅\n\n" +
-	"Скоро вернёмся с предложениями по сотрудничеству 🖤"
+const expectedApproveText = "Здравствуйте!\n\n" +
+	"Рады сообщить, что ваша заявка прошла модерацию 😍 Ваш профиль, визуальный стиль и контент соответствуют критериям отбора для участия в fashion-кампаниях платформы UGC boost 💫\n\n" +
+	"В ближайшее время мы отправим вам детали участия в EURASIAN FASHION WEEK и договор для подписания.\n\n" +
+	"Добро пожаловать на платформу UGC boost 💫\n\n" +
+	"После Недели моды мы планируем запустить приложение в App Store и добавить новые возможности для UGC-сотрудничества с брендами и партнерами EURASIAN FASHION WEEK.\n\n" +
+	"Оставайтесь с нами — впереди много масштабных проектов!"
 
 func TestApproveCreatorApplication(t *testing.T) {
 	t.Parallel()
