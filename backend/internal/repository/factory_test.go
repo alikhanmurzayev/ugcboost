@@ -104,6 +104,33 @@ func TestRepoFactory(t *testing.T) {
 		require.True(t, ok, "factory returns *creatorApplicationStatusTransitionRepository")
 		require.Same(t, db, concrete.db)
 	})
+
+	t.Run("NewCreatorRepo returns CreatorRepo bound to db", func(t *testing.T) {
+		t.Parallel()
+		repo := factory.NewCreatorRepo(db)
+		require.NotNil(t, repo)
+		concrete, ok := repo.(*creatorRepository)
+		require.True(t, ok, "factory returns *creatorRepository")
+		require.Same(t, db, concrete.db)
+	})
+
+	t.Run("NewCreatorSocialRepo returns repo bound to db", func(t *testing.T) {
+		t.Parallel()
+		repo := factory.NewCreatorSocialRepo(db)
+		require.NotNil(t, repo)
+		concrete, ok := repo.(*creatorSocialRepository)
+		require.True(t, ok, "factory returns *creatorSocialRepository")
+		require.Same(t, db, concrete.db)
+	})
+
+	t.Run("NewCreatorCategoryRepo returns repo bound to db", func(t *testing.T) {
+		t.Parallel()
+		repo := factory.NewCreatorCategoryRepo(db)
+		require.NotNil(t, repo)
+		concrete, ok := repo.(*creatorCategoryRepository)
+		require.True(t, ok, "factory returns *creatorCategoryRepository")
+		require.Same(t, db, concrete.db)
+	})
 }
 
 // pgxmockPool returns a pgxmock pool without any expectation assertions —
