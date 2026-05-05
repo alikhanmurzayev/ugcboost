@@ -69,3 +69,16 @@ export async function rejectApplication(applicationId: string) {
   }
   return data;
 }
+
+export async function approveApplication(applicationId: string) {
+  const { data, error, response } = await client.POST(
+    "/creators/applications/{id}/approve",
+    {
+      params: { path: { id: applicationId } },
+    },
+  );
+  if (error) {
+    throw new ApiError(response.status, extractErrorCode(error));
+  }
+  return data;
+}

@@ -9,6 +9,7 @@ vi.mock("@/api/creatorApplications", () => ({
   listCreatorApplications: vi.fn(),
   getCreatorApplication: vi.fn(),
   rejectApplication: vi.fn(),
+  approveApplication: vi.fn(),
 }));
 
 vi.mock("@/api/dictionaries", () => ({
@@ -192,7 +193,7 @@ describe("ModerationPage — drawer toggle via URL", () => {
     });
   });
 
-  it("renders reject + disabled approve in drawer footer for moderation", async () => {
+  it("renders reject + active approve in drawer footer for moderation", async () => {
     vi.mocked(listCreatorApplications).mockResolvedValue({
       data: { items: [FIXTURE_ITEM], total: 1, page: 1, perPage: 50 },
     });
@@ -204,7 +205,7 @@ describe("ModerationPage — drawer toggle via URL", () => {
 
     expect(await screen.findByTestId("reject-button")).toBeInTheDocument();
     const approve = await screen.findByTestId("approve-button");
-    expect(approve).toBeDisabled();
+    expect(approve).not.toBeDisabled();
   });
 
   it("closes drawer when close button clicked", async () => {
