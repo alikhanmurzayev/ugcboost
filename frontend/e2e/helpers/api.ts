@@ -482,6 +482,34 @@ export async function fetchApplicationDetail(
   return result.data;
 }
 
+// manualVerifyApplicationSocial drives the admin manual-verify endpoint
+// (POST /creators/applications/{id}/socials/{socialId}/verify). Status-only
+// check; response body is not validated (the endpoint returns EmptyResult
+// per OpenAPI). Used to walk a TT-only application from `verification` to
+// `moderation` without going through the SendPulse webhook. Caller is
+// responsible for asserting that the application is in `verification`
+// before invoking — the endpoint returns 422 on `moderation`.
+export async function manualVerifyApplicationSocial(
+  request: APIRequestContext,
+  apiUrl: string,
+  applicationId: string,
+  socialId: string,
+  token: string,
+): Promise<void> {
+  const resp = await request.post(
+    `${apiUrl}/creators/applications/${applicationId}/socials/${socialId}/verify`,
+    {
+      headers: { Authorization: `Bearer ${token}` },
+      data: {},
+    },
+  );
+  if (resp.status() !== 200) {
+    throw new Error(
+      `manualVerifyApplicationSocial ${applicationId}/${socialId}: ${resp.status()} ${await resp.text()}`,
+    );
+  }
+}
+
 // SendPulseWebhookSecret defaults to the local-dev value baked into
 // backend/.env so out-of-the-box `make test-e2e-frontend` works against a
 // hand-spun stack. Override via the SENDPULSE_WEBHOOK_SECRET env var when
