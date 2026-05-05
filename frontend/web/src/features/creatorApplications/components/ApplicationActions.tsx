@@ -49,9 +49,7 @@ export default function ApplicationActions({ application }: ApplicationActionsPr
           </button>
         </div>
       );
-    case "awaiting_contract":
-    case "contract_sent":
-    case "signed":
+    case "approved":
     case "rejected":
     case "withdrawn":
       return null;

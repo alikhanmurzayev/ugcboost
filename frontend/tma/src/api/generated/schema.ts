@@ -312,7 +312,7 @@ export interface paths {
          * @description Admin-only read-only endpoint that returns the number of creator
          *     applications grouped by their current status. Powers the moderation UI
          *     notification badge: clients pick which statuses to sum (default —
-         *     verification + moderation + awaiting_contract).
+         *     verification + moderation).
          *
          *     The response is **sparse**: only statuses that currently have at least
          *     one application are present in `items`. Statuses without any rows are
@@ -502,7 +502,7 @@ export interface components {
          *     machine described in `_bmad-output/planning-artifacts/creator-application-state-machine.md`.
          * @enum {string}
          */
-        CreatorApplicationStatus: "verification" | "moderation" | "awaiting_contract" | "contract_sent" | "signed" | "rejected" | "withdrawn";
+        CreatorApplicationStatus: "verification" | "moderation" | "approved" | "rejected" | "withdrawn";
         /** @description Shared 1-based pagination payload for body-paginated list endpoints. */
         PaginationInput: {
             /** @description 1-based page index. */

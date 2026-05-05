@@ -3,13 +3,14 @@
 //
 // TestCreatorApplicationsCounts покрывает контур ручки в одной функции через
 // t.Run в порядке исполнения: сначала границы доступа (отсутствие Bearer'а
-// отдаёт 401, brand_manager — 403 без leak'а реальных значений), затем smoke
-// happy-path — после реальной подачи заявки через лендинг админ должен
-// увидеть в ответе элемент {status: "verification", count >= 1}. Полный
-// набор статусов (moderation, awaiting_contract, ...) добавляется по мере
-// реализации соответствующих переходов в чанках 7-12; ручка возвращает
-// **sparse** список — статусы без рядов в БД отсутствуют, фронт лукапит
-// `find(c => c.status === STATUS_X)?.count ?? 0`.
+// отдаёт 401, brand_manager — 403 без leak'а реальных значений), затем два
+// smoke happy-path'а. Первый — после подачи заявки через лендинг админ
+// видит элемент {status: "verification", count >= 1}. Второй — после
+// manual-verify первой соцсети заявка автоматически переходит в moderation,
+// и в ответе появляется {status: "moderation", count >= 1}. Остальные
+// статусы (approved, rejected, withdrawn) добавляются по мере появления
+// нового покрытия; ручка возвращает **sparse** список — статусы без рядов
+// в БД отсутствуют, фронт лукапит `find(c => c.status === STATUS_X)?.count ?? 0`.
 //
 // Тесты идемпотентны и параллельны: каждый t.Run создаёт собственную заявку
 // через testutil.SetupCreatorApplicationViaLanding, так что параллельные
@@ -23,6 +24,7 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	"github.com/alikhanmurzayev/ugcboost/backend/e2e/apiclient"
@@ -89,5 +91,41 @@ func TestCreatorApplicationsCounts(t *testing.T) {
 			require.Less(t, string(items[i-1].Status), string(items[i].Status),
 				"items must be sorted alphabetically by status; got %v", items)
 		}
+	})
+
+	t.Run("admin smoke: moderation count >= 1 after manual verify", func(t *testing.T) {
+		t.Parallel()
+		// Submit + manual-verify первой соцсети — applyTransition уводит заявку
+		// в moderation, и counts должны это увидеть. Параллельные тесты могут
+		// тоже создавать moderation-ряды; sparse-контракт + ассерт >= 1 выживает.
+		setup := testutil.SetupCreatorApplicationViaLanding(t)
+		testutil.LinkTelegramToApplication(t, setup.ApplicationID)
+
+		c, adminToken, _ := testutil.SetupAdminClient(t)
+		social := findFirstSocial(t, c, adminToken, setup.ApplicationID)
+
+		appUUID := uuid.MustParse(setup.ApplicationID)
+		verifyResp, err := c.VerifyCreatorApplicationSocialWithResponse(context.Background(),
+			appUUID, social.Id,
+			apiclient.VerifyCreatorApplicationSocialJSONRequestBody{},
+			testutil.WithAuth(adminToken))
+		require.NoError(t, err)
+		require.Equal(t, http.StatusOK, verifyResp.StatusCode())
+
+		countsClient := testutil.NewAPIClient(t)
+		resp, err := countsClient.GetCreatorApplicationsCountsWithResponse(context.Background(), testutil.WithAuth(adminToken))
+		require.NoError(t, err)
+		require.Equal(t, http.StatusOK, resp.StatusCode())
+		require.NotNil(t, resp.JSON200)
+
+		seen := make(map[apiclient.CreatorApplicationStatus]int64, len(resp.JSON200.Data.Items))
+		for _, item := range resp.JSON200.Data.Items {
+			require.Greater(t, item.Count, int64(0),
+				"sparse counts must not include zero entries — status %s came back with count=%d", item.Status, item.Count)
+			seen[item.Status] = item.Count
+		}
+		require.Contains(t, seen, apiclient.Moderation,
+			"moderation must appear in counts after manual-verify moves the application out of verification")
+		require.GreaterOrEqual(t, seen[apiclient.Moderation], int64(1))
 	})
 }

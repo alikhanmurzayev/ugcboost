@@ -11,7 +11,6 @@ import BrandDetailPage from "@/features/brands/BrandDetailPage";
 import AuditLogPage from "@/features/audit/AuditLogPage";
 import VerificationPage from "@/features/creatorApplications/VerificationPage";
 import ModerationPage from "@/features/creatorApplications/ModerationPage";
-import ContractsPage from "@/features/creatorApplications/stubs/ContractsPage";
 import RejectedPage from "@/features/creatorApplications/stubs/RejectedPage";
 import CreatorsPage from "@/features/creatorApplications/stubs/CreatorsPage";
 import CampaignsStubPage from "@/features/campaigns/stubs/CampaignsStubPage";
@@ -71,10 +70,6 @@ function App() {
                   <Route
                     path={ROUTES.CREATOR_APP_MODERATION}
                     element={<ModerationPage />}
-                  />
-                  <Route
-                    path={ROUTES.CREATOR_APP_CONTRACTS}
-                    element={<ContractsPage />}
                   />
                   <Route
                     path={ROUTES.CREATOR_APP_REJECTED}

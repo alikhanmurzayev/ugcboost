@@ -141,12 +141,12 @@ func TestIsCreatorApplicationTransitionAllowed(t *testing.T) {
 
 	t.Run("future transitions not yet declared", func(t *testing.T) {
 		t.Parallel()
-		// Moderation → awaiting_contract belongs to a later chunk; until that
-		// chunk lands the helper must reject it so the service surfaces the
-		// invalid-transition sentinel instead of silently committing.
+		// Moderation → approved belongs to chunk 18; until that chunk lands the
+		// helper must reject it so the service surfaces the invalid-transition
+		// sentinel instead of silently committing.
 		require.False(t, IsCreatorApplicationTransitionAllowed(
 			CreatorApplicationStatusModeration,
-			CreatorApplicationStatusAwaitingContract,
+			CreatorApplicationStatusApproved,
 		))
 	})
 

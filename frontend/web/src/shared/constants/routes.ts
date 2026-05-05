@@ -7,7 +7,6 @@ export const ROUTES = {
   AUDIT: "audit",
   CREATOR_APP_VERIFICATION: "creator-applications/verification",
   CREATOR_APP_MODERATION: "creator-applications/moderation",
-  CREATOR_APP_CONTRACTS: "creator-applications/contracts",
   CREATOR_APP_REJECTED: "creator-applications/rejected",
   CREATORS: "creators",
   CAMPAIGNS_ACTIVE: "campaigns/active",

@@ -75,11 +75,11 @@ describe("DashboardLayout — admin nav", () => {
       screen.getByTestId("nav-link-creator-applications/moderation"),
     ).toBeInTheDocument();
     expect(
-      screen.getByTestId("nav-link-creator-applications/contracts"),
-    ).toBeInTheDocument();
-    expect(
       screen.getByTestId("nav-link-creator-applications/rejected"),
     ).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("nav-link-creator-applications/contracts"),
+    ).not.toBeInTheDocument();
     expect(screen.getByTestId("nav-link-creators")).toBeInTheDocument();
     expect(screen.getByTestId("nav-link-brands")).toBeInTheDocument();
     expect(screen.getByTestId("nav-link-audit")).toBeInTheDocument();

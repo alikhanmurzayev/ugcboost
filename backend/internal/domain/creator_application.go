@@ -11,20 +11,16 @@ import (
 )
 
 const (
-	CreatorApplicationStatusVerification     = "verification"
-	CreatorApplicationStatusModeration       = "moderation"
-	CreatorApplicationStatusAwaitingContract = "awaiting_contract"
-	CreatorApplicationStatusContractSent     = "contract_sent"
-	CreatorApplicationStatusSigned           = "signed"
-	CreatorApplicationStatusRejected         = "rejected"
-	CreatorApplicationStatusWithdrawn        = "withdrawn"
+	CreatorApplicationStatusVerification = "verification"
+	CreatorApplicationStatusModeration   = "moderation"
+	CreatorApplicationStatusApproved     = "approved"
+	CreatorApplicationStatusRejected     = "rejected"
+	CreatorApplicationStatusWithdrawn    = "withdrawn"
 )
 
 var CreatorApplicationActiveStatuses = []string{
 	CreatorApplicationStatusVerification,
 	CreatorApplicationStatusModeration,
-	CreatorApplicationStatusAwaitingContract,
-	CreatorApplicationStatusContractSent,
 }
 
 // SocialPlatform values mirror the enum in openapi.yaml. Adding a new value
@@ -116,8 +112,8 @@ const (
 	// manual). Idempotency-bearing — repeats are user errors, not no-ops.
 	CodeCreatorApplicationSocialAlreadyVerified = "CREATOR_APPLICATION_SOCIAL_ALREADY_VERIFIED"
 	// 422 — manual verify is only legal while the application sits in
-	// `verification`. Once it has moved on (moderation/awaiting_contract/…)
-	// the action is rejected so admins do not silently re-trigger transitions.
+	// `verification`. Once it has moved on (moderation/approved/...) the action
+	// is rejected so admins do not silently re-trigger transitions.
 	CodeCreatorApplicationNotInVerification = "CREATOR_APPLICATION_NOT_IN_VERIFICATION"
 	// 422 — manual verify refuses to run when the creator has not opened the
 	// Telegram bot via /start. Without the link there is no chat to notify
@@ -438,16 +434,14 @@ type CreatorApplicationListPage struct {
 var CreatorApplicationAllStatuses = []string{
 	CreatorApplicationStatusVerification,
 	CreatorApplicationStatusModeration,
-	CreatorApplicationStatusAwaitingContract,
-	CreatorApplicationStatusContractSent,
-	CreatorApplicationStatusSigned,
+	CreatorApplicationStatusApproved,
 	CreatorApplicationStatusRejected,
 	CreatorApplicationStatusWithdrawn,
 }
 
-// IsValidCreatorApplicationStatus reports whether s is one of the seven
-// canonical lifecycle statuses. The check is whitelist-based so a typo or a
-// newly-added status (rolling deploy) is rejected, not silently accepted.
+// IsValidCreatorApplicationStatus reports whether s is one of the canonical
+// lifecycle statuses. The check is whitelist-based so a typo or a newly-added
+// status (rolling deploy) is rejected, not silently accepted.
 func IsValidCreatorApplicationStatus(s string) bool {
 	for _, v := range CreatorApplicationAllStatuses {
 		if s == v {

@@ -75,27 +75,21 @@ func (e CreatorApplicationListSortField) Valid() bool {
 
 // Defines values for CreatorApplicationStatus.
 const (
-	AwaitingContract CreatorApplicationStatus = "awaiting_contract"
-	ContractSent     CreatorApplicationStatus = "contract_sent"
-	Moderation       CreatorApplicationStatus = "moderation"
-	Rejected         CreatorApplicationStatus = "rejected"
-	Signed           CreatorApplicationStatus = "signed"
-	Verification     CreatorApplicationStatus = "verification"
-	Withdrawn        CreatorApplicationStatus = "withdrawn"
+	Approved     CreatorApplicationStatus = "approved"
+	Moderation   CreatorApplicationStatus = "moderation"
+	Rejected     CreatorApplicationStatus = "rejected"
+	Verification CreatorApplicationStatus = "verification"
+	Withdrawn    CreatorApplicationStatus = "withdrawn"
 )
 
 // Valid indicates whether the value is a known member of the CreatorApplicationStatus enum.
 func (e CreatorApplicationStatus) Valid() bool {
 	switch e {
-	case AwaitingContract:
-		return true
-	case ContractSent:
+	case Approved:
 		return true
 	case Moderation:
 		return true
 	case Rejected:
-		return true
-	case Signed:
 		return true
 	case Verification:
 		return true
