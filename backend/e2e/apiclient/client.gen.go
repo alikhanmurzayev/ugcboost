@@ -144,6 +144,11 @@ type ClientInterface interface {
 	// RemoveManager request
 	RemoveManager(ctx context.Context, brandID string, userID string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// CreateCampaignWithBody request with any body
+	CreateCampaignWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	CreateCampaign(ctx context.Context, body CreateCampaignJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// SubmitCreatorApplicationWithBody request with any body
 	SubmitCreatorApplicationWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -421,6 +426,30 @@ func (c *Client) AssignManager(ctx context.Context, brandID string, body AssignM
 
 func (c *Client) RemoveManager(ctx context.Context, brandID string, userID string, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewRemoveManagerRequest(c.Server, brandID, userID)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) CreateCampaignWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreateCampaignRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) CreateCampaign(ctx context.Context, body CreateCampaignJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCreateCampaignRequest(c.Server, body)
 	if err != nil {
 		return nil, err
 	}
@@ -1267,6 +1296,46 @@ func NewRemoveManagerRequest(server string, brandID string, userID string) (*htt
 	return req, nil
 }
 
+// NewCreateCampaignRequest calls the generic CreateCampaign builder with application/json body
+func NewCreateCampaignRequest(server string, body CreateCampaignJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewCreateCampaignRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewCreateCampaignRequestWithBody generates requests for CreateCampaign with any type of body
+func NewCreateCampaignRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/campaigns")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 // NewSubmitCreatorApplicationRequest calls the generic SubmitCreatorApplication builder with application/json body
 func NewSubmitCreatorApplicationRequest(server string, body SubmitCreatorApplicationJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
@@ -1802,6 +1871,11 @@ type ClientWithResponsesInterface interface {
 	// RemoveManagerWithResponse request
 	RemoveManagerWithResponse(ctx context.Context, brandID string, userID string, reqEditors ...RequestEditorFn) (*RemoveManagerResponse, error)
 
+	// CreateCampaignWithBodyWithResponse request with any body
+	CreateCampaignWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateCampaignResponse, error)
+
+	CreateCampaignWithResponse(ctx context.Context, body CreateCampaignJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateCampaignResponse, error)
+
 	// SubmitCreatorApplicationWithBodyWithResponse request with any body
 	SubmitCreatorApplicationWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SubmitCreatorApplicationResponse, error)
 
@@ -2182,6 +2256,33 @@ func (r RemoveManagerResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r RemoveManagerResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type CreateCampaignResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON201      *CampaignResult
+	JSON401      *ErrorResponse
+	JSON403      *Forbidden
+	JSON409      *ErrorResponse
+	JSON422      *ErrorResponse
+	JSONDefault  *UnexpectedError
+}
+
+// Status returns HTTPResponse.Status
+func (r CreateCampaignResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r CreateCampaignResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -2667,6 +2768,23 @@ func (c *ClientWithResponses) RemoveManagerWithResponse(ctx context.Context, bra
 		return nil, err
 	}
 	return ParseRemoveManagerResponse(rsp)
+}
+
+// CreateCampaignWithBodyWithResponse request with arbitrary body returning *CreateCampaignResponse
+func (c *ClientWithResponses) CreateCampaignWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateCampaignResponse, error) {
+	rsp, err := c.CreateCampaignWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreateCampaignResponse(rsp)
+}
+
+func (c *ClientWithResponses) CreateCampaignWithResponse(ctx context.Context, body CreateCampaignJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateCampaignResponse, error) {
+	rsp, err := c.CreateCampaign(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCreateCampaignResponse(rsp)
 }
 
 // SubmitCreatorApplicationWithBodyWithResponse request with arbitrary body returning *SubmitCreatorApplicationResponse
@@ -3385,6 +3503,67 @@ func ParseRemoveManagerResponse(rsp *http.Response) (*RemoveManagerResponse, err
 			return nil, err
 		}
 		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest UnexpectedError
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseCreateCampaignResponse parses an HTTP response from a CreateCampaignWithResponse call
+func ParseCreateCampaignResponse(rsp *http.Response) (*CreateCampaignResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &CreateCampaignResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest CampaignResult
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 409:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON422 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
 		var dest UnexpectedError

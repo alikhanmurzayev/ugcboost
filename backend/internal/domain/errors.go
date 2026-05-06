@@ -15,6 +15,21 @@ const (
 	CodeInternal     = "INTERNAL_ERROR"
 )
 
+// Campaign user-facing codes carried in 4xx responses by POST /campaigns.
+const (
+	// 422 — name is empty after trim.
+	CodeCampaignNameRequired = "CAMPAIGN_NAME_REQUIRED"
+	// 422 — name exceeds the configured upper bound.
+	CodeCampaignNameTooLong = "CAMPAIGN_NAME_TOO_LONG"
+	// 422 — tmaUrl is empty after trim.
+	CodeCampaignTmaURLRequired = "CAMPAIGN_TMA_URL_REQUIRED"
+	// 422 — tmaUrl exceeds the configured upper bound.
+	CodeCampaignTmaURLTooLong = "CAMPAIGN_TMA_URL_TOO_LONG"
+	// 409 — partial unique index `campaigns_name_active_unique` was violated:
+	// another non-deleted campaign already uses this name.
+	CodeCampaignNameTaken = "CAMPAIGN_NAME_TAKEN"
+)
+
 // Sentinel domain errors — handlers map these to HTTP status codes.
 var (
 	ErrNotFound      = errors.New("not found")

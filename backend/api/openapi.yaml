@@ -958,6 +958,54 @@ paths:
         default:
           $ref: "#/components/responses/UnexpectedError"
 
+  /campaigns:
+    post:
+      operationId: createCampaign
+      summary: Create a marketing campaign (admin-only)
+      description: |
+        Creates a new marketing campaign. The TMA-side ТЗ landing page lives
+        at a hardcoded secret URL inside the TMA app; the URL is stored here
+        only to be embedded into outbound creator-invite messages. Name is
+        unique among non-deleted campaigns (partial unique index).
+      tags: [campaigns]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CampaignInput"
+      responses:
+        "201":
+          description: Campaign created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CampaignResult"
+        "401":
+          description: Unauthenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "409":
+          description: Campaign name already taken among non-deleted campaigns.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: "#/components/responses/UnexpectedError"
+
   /webhooks/sendpulse/instagram:
     post:
       operationId: sendPulseInstagramWebhook
@@ -2271,6 +2319,45 @@ components:
       properties:
         data:
           $ref: "#/components/schemas/CreatorsListData"
+
+    CampaignInput:
+      type: object
+      description: Mutable subset of a campaign — used for create.
+      required: [name, tmaUrl]
+      properties:
+        name:
+          type: string
+          description: Display name of the campaign. Unique among non-deleted campaigns.
+        tmaUrl:
+          type: string
+          description: URL of the TMA-side ТЗ landing page embedded into creator invites.
+
+    Campaign:
+      type: object
+      required: [id, name, tmaUrl, isDeleted, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        tmaUrl:
+          type: string
+        isDeleted:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CampaignResult:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: "#/components/schemas/Campaign"
 
   securitySchemes:
     bearerAuth:

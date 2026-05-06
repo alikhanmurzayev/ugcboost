@@ -196,6 +196,57 @@ func (_c *MockAuthzService_CanCreateBrand_Call) RunAndReturn(run func(ctx contex
 	return _c
 }
 
+// CanCreateCampaign provides a mock function for the type MockAuthzService
+func (_mock *MockAuthzService) CanCreateCampaign(ctx context.Context) error {
+	ret := _mock.Called(ctx)
+
+	if len(ret) == 0 {
+		panic("no return value specified for CanCreateCampaign")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context) error); ok {
+		r0 = returnFunc(ctx)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockAuthzService_CanCreateCampaign_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'CanCreateCampaign'
+type MockAuthzService_CanCreateCampaign_Call struct {
+	*mock.Call
+}
+
+// CanCreateCampaign is a helper method to define mock.On call
+//   - ctx context.Context
+func (_e *MockAuthzService_Expecter) CanCreateCampaign(ctx interface{}) *MockAuthzService_CanCreateCampaign_Call {
+	return &MockAuthzService_CanCreateCampaign_Call{Call: _e.mock.On("CanCreateCampaign", ctx)}
+}
+
+func (_c *MockAuthzService_CanCreateCampaign_Call) Run(run func(ctx context.Context)) *MockAuthzService_CanCreateCampaign_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		run(
+			arg0,
+		)
+	})
+	return _c
+}
+
+func (_c *MockAuthzService_CanCreateCampaign_Call) Return(err error) *MockAuthzService_CanCreateCampaign_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockAuthzService_CanCreateCampaign_Call) RunAndReturn(run func(ctx context.Context) error) *MockAuthzService_CanCreateCampaign_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // CanDeleteBrand provides a mock function for the type MockAuthzService
 func (_mock *MockAuthzService) CanDeleteBrand(ctx context.Context, brandID string) error {
 	ret := _mock.Called(ctx, brandID)

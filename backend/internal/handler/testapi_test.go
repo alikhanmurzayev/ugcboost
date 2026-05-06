@@ -168,7 +168,7 @@ func TestTestAPIHandler_CleanupEntity(t *testing.T) {
 		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, log), telegram.NewSentSpyStore(), log))
 
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/test/cleanup-entity",
-			map[string]any{"type": "campaign", "id": "c-1"})
+			map[string]any{"type": "totally_unknown", "id": "c-1"})
 		require.Equal(t, http.StatusUnprocessableEntity, w.Code)
 		require.Equal(t, domain.CodeValidation, resp.Error.Code)
 	})
@@ -278,6 +278,44 @@ func TestTestAPIHandler_CleanupEntity(t *testing.T) {
 
 		w, _ := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/test/cleanup-entity",
 			testapi.CleanupEntityRequest{Type: testapi.Brand, Id: "b-missing"})
+		require.Equal(t, http.StatusNotFound, w.Code)
+	})
+
+	t.Run("campaign success calls campaign repo directly", func(t *testing.T) {
+		t.Parallel()
+		auth := mocks.NewMockTestAPIAuthService(t)
+		repos := mocks.NewMockTestAPICleanupRepoFactory(t)
+		pool := dbutilmocks.NewMockPool(t)
+		campaignRepo := repomocks.NewMockCampaignRepo(t)
+		store := mocks.NewMockTokenStore(t)
+		log := logmocks.NewMockLogger(t)
+
+		repos.EXPECT().NewCampaignRepo(mock.Anything).Return(campaignRepo)
+		campaignRepo.EXPECT().DeleteForTests(mock.Anything, "c-1").Return(nil)
+
+		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, log), telegram.NewSentSpyStore(), log))
+
+		w, _ := doJSON[any](t, router, http.MethodPost, "/test/cleanup-entity",
+			testapi.CleanupEntityRequest{Type: testapi.Campaign, Id: "c-1"})
+		require.Equal(t, http.StatusNoContent, w.Code)
+	})
+
+	t.Run("campaign not found returns 404", func(t *testing.T) {
+		t.Parallel()
+		auth := mocks.NewMockTestAPIAuthService(t)
+		repos := mocks.NewMockTestAPICleanupRepoFactory(t)
+		pool := dbutilmocks.NewMockPool(t)
+		campaignRepo := repomocks.NewMockCampaignRepo(t)
+		store := mocks.NewMockTokenStore(t)
+		log := logmocks.NewMockLogger(t)
+
+		repos.EXPECT().NewCampaignRepo(mock.Anything).Return(campaignRepo)
+		campaignRepo.EXPECT().DeleteForTests(mock.Anything, "c-missing").Return(sql.ErrNoRows)
+
+		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, log), telegram.NewSentSpyStore(), log))
+
+		w, _ := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/test/cleanup-entity",
+			testapi.CleanupEntityRequest{Type: testapi.Campaign, Id: "c-missing"})
 		require.Equal(t, http.StatusNotFound, w.Code)
 	})
 }

@@ -308,6 +308,30 @@ type BrandResult struct {
 	Data Brand `json:"data"`
 }
 
+// Campaign defines model for Campaign.
+type Campaign struct {
+	CreatedAt time.Time          `json:"createdAt"`
+	Id        openapi_types.UUID `json:"id"`
+	IsDeleted bool               `json:"isDeleted"`
+	Name      string             `json:"name"`
+	TmaUrl    string             `json:"tmaUrl"`
+	UpdatedAt time.Time          `json:"updatedAt"`
+}
+
+// CampaignInput Mutable subset of a campaign — used for create.
+type CampaignInput struct {
+	// Name Display name of the campaign. Unique among non-deleted campaigns.
+	Name string `json:"name"`
+
+	// TmaUrl URL of the TMA-side ТЗ landing page embedded into creator invites.
+	TmaUrl string `json:"tmaUrl"`
+}
+
+// CampaignResult defines model for CampaignResult.
+type CampaignResult struct {
+	Data Campaign `json:"data"`
+}
+
 // ConsentType Canonical consent type captured at creator application submission.
 type ConsentType string
 
@@ -1072,6 +1096,9 @@ type UpdateBrandJSONRequestBody = BrandInput
 // AssignManagerJSONRequestBody defines body for AssignManager for application/json ContentType.
 type AssignManagerJSONRequestBody = AssignManagerRequest
 
+// CreateCampaignJSONRequestBody defines body for CreateCampaign for application/json ContentType.
+type CreateCampaignJSONRequestBody = CampaignInput
+
 // SubmitCreatorApplicationJSONRequestBody defines body for SubmitCreatorApplication for application/json ContentType.
 type SubmitCreatorApplicationJSONRequestBody = CreatorApplicationSubmitRequest
 
@@ -1131,6 +1158,9 @@ type ServerInterface interface {
 	// Remove manager from brand
 	// (DELETE /brands/{brandID}/managers/{userID})
 	RemoveManager(w http.ResponseWriter, r *http.Request, brandID string, userID string)
+	// Create a marketing campaign (admin-only)
+	// (POST /campaigns)
+	CreateCampaign(w http.ResponseWriter, r *http.Request)
 	// Submit a creator application from the public landing page
 	// (POST /creators/applications)
 	SubmitCreatorApplication(w http.ResponseWriter, r *http.Request)
@@ -1254,6 +1284,12 @@ func (_ Unimplemented) AssignManager(w http.ResponseWriter, r *http.Request, bra
 // Remove manager from brand
 // (DELETE /brands/{brandID}/managers/{userID})
 func (_ Unimplemented) RemoveManager(w http.ResponseWriter, r *http.Request, brandID string, userID string) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Create a marketing campaign (admin-only)
+// (POST /campaigns)
+func (_ Unimplemented) CreateCampaign(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -1721,6 +1757,26 @@ func (siw *ServerInterfaceWrapper) RemoveManager(w http.ResponseWriter, r *http.
 	handler.ServeHTTP(w, r)
 }
 
+// CreateCampaign operation middleware
+func (siw *ServerInterfaceWrapper) CreateCampaign(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateCampaign(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // SubmitCreatorApplication operation middleware
 func (siw *ServerInterfaceWrapper) SubmitCreatorApplication(w http.ResponseWriter, r *http.Request) {
 
@@ -2166,6 +2222,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Delete(options.BaseURL+"/brands/{brandID}/managers/{userID}", wrapper.RemoveManager)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/campaigns", wrapper.CreateCampaign)
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/creators/applications", wrapper.SubmitCreatorApplication)
@@ -2787,6 +2846,71 @@ type RemoveManagerdefaultJSONResponse struct {
 }
 
 func (response RemoveManagerdefaultJSONResponse) VisitRemoveManagerResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+
+	return json.NewEncoder(w).Encode(response.Body)
+}
+
+type CreateCampaignRequestObject struct {
+	Body *CreateCampaignJSONRequestBody
+}
+
+type CreateCampaignResponseObject interface {
+	VisitCreateCampaignResponse(w http.ResponseWriter) error
+}
+
+type CreateCampaign201JSONResponse CampaignResult
+
+func (response CreateCampaign201JSONResponse) VisitCreateCampaignResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type CreateCampaign401JSONResponse ErrorResponse
+
+func (response CreateCampaign401JSONResponse) VisitCreateCampaignResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type CreateCampaign403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response CreateCampaign403JSONResponse) VisitCreateCampaignResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type CreateCampaign409JSONResponse ErrorResponse
+
+func (response CreateCampaign409JSONResponse) VisitCreateCampaignResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(409)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type CreateCampaign422JSONResponse ErrorResponse
+
+func (response CreateCampaign422JSONResponse) VisitCreateCampaignResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(422)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type CreateCampaigndefaultJSONResponse struct {
+	Body       ErrorResponse
+	StatusCode int
+}
+
+func (response CreateCampaigndefaultJSONResponse) VisitCreateCampaignResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(response.StatusCode)
 
@@ -3464,6 +3588,9 @@ type StrictServerInterface interface {
 	// Remove manager from brand
 	// (DELETE /brands/{brandID}/managers/{userID})
 	RemoveManager(ctx context.Context, request RemoveManagerRequestObject) (RemoveManagerResponseObject, error)
+	// Create a marketing campaign (admin-only)
+	// (POST /campaigns)
+	CreateCampaign(ctx context.Context, request CreateCampaignRequestObject) (CreateCampaignResponseObject, error)
 	// Submit a creator application from the public landing page
 	// (POST /creators/applications)
 	SubmitCreatorApplication(ctx context.Context, request SubmitCreatorApplicationRequestObject) (SubmitCreatorApplicationResponseObject, error)
@@ -3915,6 +4042,37 @@ func (sh *strictHandler) RemoveManager(w http.ResponseWriter, r *http.Request, b
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(RemoveManagerResponseObject); ok {
 		if err := validResponse.VisitRemoveManagerResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CreateCampaign operation middleware
+func (sh *strictHandler) CreateCampaign(w http.ResponseWriter, r *http.Request) {
+	var request CreateCampaignRequestObject
+
+	var body CreateCampaignJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CreateCampaign(ctx, request.(CreateCampaignRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CreateCampaign")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CreateCampaignResponseObject); ok {
+		if err := validResponse.VisitCreateCampaignResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

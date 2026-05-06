@@ -52,6 +52,7 @@ type AuthzService interface {
 	CanApproveCreatorApplication(ctx context.Context) error
 	CanViewCreator(ctx context.Context) error
 	CanViewCreators(ctx context.Context) error
+	CanCreateCampaign(ctx context.Context) error
 }
 
 // AuditLogService is the interface Server needs from the audit service.
@@ -88,6 +89,13 @@ type CreatorService interface {
 	List(ctx context.Context, in domain.CreatorListInput) (*domain.CreatorListPage, error)
 }
 
+// CampaignService is the interface Server needs from the campaign service —
+// admin-only POST /campaigns for the current chunk; subsequent chunks (#4–#7)
+// extend it with read / update / soft-delete.
+type CampaignService interface {
+	CreateCampaign(ctx context.Context, name, tmaURL string) (*domain.Campaign, error)
+}
+
 // ServerConfig bundles configuration values the handler layer needs. Keeping
 // them in a struct lets NewServer grow without a long positional signature.
 type ServerConfig struct {
@@ -106,6 +114,7 @@ type Server struct {
 	auditService              AuditLogService
 	creatorApplicationService CreatorApplicationService
 	creatorService            CreatorService
+	campaignService           CampaignService
 	dictionaryService         DictionaryService
 	version                   string
 	cookieSecure              bool
@@ -125,6 +134,7 @@ func NewServer(
 	audit AuditLogService,
 	creatorApps CreatorApplicationService,
 	creators CreatorService,
+	campaigns CampaignService,
 	dict DictionaryService,
 	cfg ServerConfig,
 	log logger.Logger,
@@ -136,6 +146,7 @@ func NewServer(
 		auditService:              audit,
 		creatorApplicationService: creatorApps,
 		creatorService:            creators,
+		campaignService:           campaigns,
 		dictionaryService:         dict,
 		version:                   cfg.Version,
 		cookieSecure:              cfg.CookieSecure,
