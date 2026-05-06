@@ -551,7 +551,20 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * List marketing campaigns with pagination, search and filter (admin-only)
+         * @description Admin-only paginated list of marketing campaigns. Authorisation is
+         *     evaluated before any business logic so non-admin callers receive 403
+         *     regardless of whether matching campaigns exist. Pagination, sort field
+         *     and order are required — there are no server-side defaults, the client
+         *     must explicitly choose. The item shape is the same `Campaign` schema
+         *     as `GET /campaigns/{id}` so frontends share one mapping.
+         *
+         *     GET (not POST) is used because campaign `name` is admin-curated and
+         *     carries no PII; the security.md prohibition on PII in URL params does
+         *     not apply here.
+         */
+        get: operations["listCampaigns"];
         put?: never;
         /**
          * Create a marketing campaign (admin-only)
@@ -1402,6 +1415,25 @@ export interface components {
         };
         GetCampaignResult: {
             data: components["schemas"]["Campaign"];
+        };
+        /**
+         * @description Sort field for the admin list. Mapped to a SQL column on the backend.
+         *     Unknown values are rejected with 422.
+         * @enum {string}
+         */
+        CampaignListSortField: "created_at" | "updated_at" | "name";
+        CampaignsListData: {
+            items: components["schemas"]["Campaign"][];
+            /**
+             * Format: int64
+             * @description Total number of matching campaigns across all pages.
+             */
+            total: number;
+            page: number;
+            perPage: number;
+        };
+        CampaignsListResult: {
+            data: components["schemas"]["CampaignsListData"];
         };
     };
     responses: {
@@ -2348,6 +2380,65 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             /** @description Creator not found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            default: components["responses"]["UnexpectedError"];
+        };
+    };
+    listCampaigns: {
+        parameters: {
+            query: {
+                /** @description 1-based page number. */
+                page: number;
+                /** @description Page size. */
+                perPage: number;
+                sort: components["schemas"]["CampaignListSortField"];
+                order: components["schemas"]["SortOrder"];
+                /**
+                 * @description Free-text substring search over campaign name (case-insensitive).
+                 *     Trimmed; empty/blank after trim disables the filter. Special
+                 *     ILIKE characters (`%`, `_`, `\`) are escaped server-side so they
+                 *     match literally.
+                 */
+                search?: string;
+                /**
+                 * @description true → only soft-deleted campaigns. false → only live. Missing
+                 *     disables the filter (returns both live and soft-deleted rows).
+                 */
+                isDeleted?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Page of campaigns matching the filter */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CampaignsListResult"];
+                };
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            /** @description Validation error (unknown sort/order, page/perPage out of range, search too long) */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };

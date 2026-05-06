@@ -257,6 +257,266 @@ func TestCampaignRepository_Update(t *testing.T) {
 	})
 }
 
+func TestCampaignRepository_List(t *testing.T) {
+	t.Parallel()
+
+	const countSQLNoFilters = "SELECT COUNT(*) FROM campaigns"
+	const pageSelectCols = "SELECT created_at, id, is_deleted, name, tma_url, updated_at"
+	const pageFrom = " FROM campaigns"
+
+	t.Run("empty result returns nil 0 nil without page query", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &campaignRepository{db: mock}
+
+		mock.ExpectQuery(countSQLNoFilters).
+			WillReturnRows(pgxmock.NewRows([]string{"count"}).AddRow(int64(0)))
+
+		params := CampaignListParams{
+			Sort:    domain.CampaignSortCreatedAt,
+			Order:   domain.SortOrderAsc,
+			Page:    1,
+			PerPage: 10,
+		}
+		rows, total, err := repo.List(context.Background(), params)
+		require.NoError(t, err)
+		require.Nil(t, rows)
+		require.Zero(t, total)
+	})
+
+	t.Run("invalid Page returns error before any SQL is dispatched", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &campaignRepository{db: mock}
+		_, _, err := repo.List(context.Background(), CampaignListParams{
+			Sort:    domain.CampaignSortCreatedAt,
+			Order:   domain.SortOrderAsc,
+			Page:    0,
+			PerPage: 10,
+		})
+		require.ErrorContains(t, err, "invalid pagination")
+	})
+
+	t.Run("invalid PerPage returns error before any SQL is dispatched", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &campaignRepository{db: mock}
+		_, _, err := repo.List(context.Background(), CampaignListParams{
+			Sort:    domain.CampaignSortCreatedAt,
+			Order:   domain.SortOrderAsc,
+			Page:    1,
+			PerPage: 0,
+		})
+		require.ErrorContains(t, err, "invalid pagination")
+	})
+
+	t.Run("count query error propagates", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &campaignRepository{db: mock}
+
+		mock.ExpectQuery(countSQLNoFilters).
+			WillReturnError(errors.New("count failed"))
+
+		_, _, err := repo.List(context.Background(), CampaignListParams{
+			Sort:    domain.CampaignSortCreatedAt,
+			Order:   domain.SortOrderAsc,
+			Page:    1,
+			PerPage: 10,
+		})
+		require.ErrorContains(t, err, "count failed")
+	})
+
+	t.Run("page query error propagates", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &campaignRepository{db: mock}
+
+		mock.ExpectQuery(countSQLNoFilters).
+			WillReturnRows(pgxmock.NewRows([]string{"count"}).AddRow(int64(5)))
+		mock.ExpectQuery(pageSelectCols + pageFrom + " ORDER BY created_at ASC, id ASC LIMIT 10 OFFSET 0").
+			WillReturnError(errors.New("page failed"))
+
+		_, _, err := repo.List(context.Background(), CampaignListParams{
+			Sort:    domain.CampaignSortCreatedAt,
+			Order:   domain.SortOrderAsc,
+			Page:    1,
+			PerPage: 10,
+		})
+		require.ErrorContains(t, err, "page failed")
+	})
+
+	t.Run("unsupported sort errors after count query, no page query", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &campaignRepository{db: mock}
+
+		// Count returns >0 so the page branch is reachable; the order helper
+		// then refuses the unknown sort and the page query never fires.
+		mock.ExpectQuery(countSQLNoFilters).
+			WillReturnRows(pgxmock.NewRows([]string{"count"}).AddRow(int64(3)))
+
+		_, _, err := repo.List(context.Background(), CampaignListParams{
+			Sort:    "bogus",
+			Order:   domain.SortOrderAsc,
+			Page:    1,
+			PerPage: 10,
+		})
+		require.ErrorContains(t, err, "unsupported sort")
+	})
+
+	t.Run("happy: no filters, sort created_at desc, page 2", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &campaignRepository{db: mock}
+		created := time.Date(2026, 5, 6, 12, 0, 0, 0, time.UTC)
+		updated := created.Add(time.Hour)
+
+		mock.ExpectQuery(countSQLNoFilters).
+			WillReturnRows(pgxmock.NewRows([]string{"count"}).AddRow(int64(25)))
+		mock.ExpectQuery(pageSelectCols + pageFrom + " ORDER BY created_at DESC, id ASC LIMIT 10 OFFSET 10").
+			WillReturnRows(pgxmock.NewRows([]string{"created_at", "id", "is_deleted", "name", "tma_url", "updated_at"}).
+				AddRow(created, "c-1", false, "Promo X", "https://tma.ugcboost.kz/tz/x", updated))
+
+		rows, total, err := repo.List(context.Background(), CampaignListParams{
+			Sort:    domain.CampaignSortCreatedAt,
+			Order:   domain.SortOrderDesc,
+			Page:    2,
+			PerPage: 10,
+		})
+		require.NoError(t, err)
+		require.Equal(t, int64(25), total)
+		require.Equal(t, []*CampaignRow{{
+			ID:        "c-1",
+			Name:      "Promo X",
+			TmaURL:    "https://tma.ugcboost.kz/tz/x",
+			IsDeleted: false,
+			CreatedAt: created,
+			UpdatedAt: updated,
+		}}, rows)
+	})
+
+	t.Run("filter: isDeleted=true emits is_deleted = $1 in count", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &campaignRepository{db: mock}
+
+		mock.ExpectQuery(countSQLNoFilters + " WHERE is_deleted = $1").
+			WithArgs(true).
+			WillReturnRows(pgxmock.NewRows([]string{"count"}).AddRow(int64(0)))
+
+		isDeleted := true
+		_, _, err := repo.List(context.Background(), CampaignListParams{
+			IsDeleted: &isDeleted,
+			Sort:      domain.CampaignSortCreatedAt,
+			Order:     domain.SortOrderAsc,
+			Page:      1,
+			PerPage:   10,
+		})
+		require.NoError(t, err)
+	})
+
+	t.Run("filter: isDeleted=false emits is_deleted = $1 in count", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &campaignRepository{db: mock}
+
+		mock.ExpectQuery(countSQLNoFilters + " WHERE is_deleted = $1").
+			WithArgs(false).
+			WillReturnRows(pgxmock.NewRows([]string{"count"}).AddRow(int64(0)))
+
+		isDeleted := false
+		_, _, err := repo.List(context.Background(), CampaignListParams{
+			IsDeleted: &isDeleted,
+			Sort:      domain.CampaignSortCreatedAt,
+			Order:     domain.SortOrderAsc,
+			Page:      1,
+			PerPage:   10,
+		})
+		require.NoError(t, err)
+	})
+
+	t.Run("filter: search escapes wildcards and uses ILIKE ESCAPE", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &campaignRepository{db: mock}
+
+		// Admin types `100%` — `%` must be neutralised so Postgres treats it
+		// as a literal substring rather than the LIKE-any-string wildcard.
+		mock.ExpectQuery(countSQLNoFilters + ` WHERE name ILIKE $1 ESCAPE '\'`).
+			WithArgs(`%100\%%`).
+			WillReturnRows(pgxmock.NewRows([]string{"count"}).AddRow(int64(0)))
+
+		_, _, err := repo.List(context.Background(), CampaignListParams{
+			Search:  "100%",
+			Sort:    domain.CampaignSortCreatedAt,
+			Order:   domain.SortOrderAsc,
+			Page:    1,
+			PerPage: 10,
+		})
+		require.NoError(t, err)
+	})
+
+	t.Run("filter: combined isDeleted + search uses both predicates", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &campaignRepository{db: mock}
+
+		mock.ExpectQuery(countSQLNoFilters+` WHERE is_deleted = $1 AND name ILIKE $2 ESCAPE '\'`).
+			WithArgs(false, "%promo%").
+			WillReturnRows(pgxmock.NewRows([]string{"count"}).AddRow(int64(0)))
+
+		isDeleted := false
+		_, _, err := repo.List(context.Background(), CampaignListParams{
+			Search:    "promo",
+			IsDeleted: &isDeleted,
+			Sort:      domain.CampaignSortCreatedAt,
+			Order:     domain.SortOrderAsc,
+			Page:      1,
+			PerPage:   10,
+		})
+		require.NoError(t, err)
+	})
+
+	t.Run("sort: updated_at asc emits updated_at ASC, id ASC tie-breaker", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &campaignRepository{db: mock}
+
+		mock.ExpectQuery(countSQLNoFilters).
+			WillReturnRows(pgxmock.NewRows([]string{"count"}).AddRow(int64(1)))
+		mock.ExpectQuery(pageSelectCols + pageFrom + " ORDER BY updated_at ASC, id ASC LIMIT 10 OFFSET 0").
+			WillReturnRows(pgxmock.NewRows([]string{"created_at", "id", "is_deleted", "name", "tma_url", "updated_at"}))
+
+		_, _, err := repo.List(context.Background(), CampaignListParams{
+			Sort:    domain.CampaignSortUpdatedAt,
+			Order:   domain.SortOrderAsc,
+			Page:    1,
+			PerPage: 10,
+		})
+		require.NoError(t, err)
+	})
+
+	t.Run("sort: name desc emits name DESC, id ASC tie-breaker", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &campaignRepository{db: mock}
+
+		mock.ExpectQuery(countSQLNoFilters).
+			WillReturnRows(pgxmock.NewRows([]string{"count"}).AddRow(int64(1)))
+		mock.ExpectQuery(pageSelectCols + pageFrom + " ORDER BY name DESC, id ASC LIMIT 10 OFFSET 0").
+			WillReturnRows(pgxmock.NewRows([]string{"created_at", "id", "is_deleted", "name", "tma_url", "updated_at"}))
+
+		_, _, err := repo.List(context.Background(), CampaignListParams{
+			Sort:    domain.CampaignSortName,
+			Order:   domain.SortOrderDesc,
+			Page:    1,
+			PerPage: 10,
+		})
+		require.NoError(t, err)
+	})
+}
+
 func TestCampaignRepository_DeleteForTests(t *testing.T) {
 	t.Parallel()
 

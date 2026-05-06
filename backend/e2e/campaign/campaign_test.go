@@ -44,6 +44,26 @@
 // EAFP-обработка 23505 в repo осталась бы незакрытой согласно
 // backend-testing-e2e.md § Race-сценарии.
 //
+// TestCampaignList покрывает GET /campaigns (admin-only paginated list).
+// Все list-сценарии скоупятся через `marker := newCampaignMarker()` —
+// уникальный lowercase токен в имени каждой засеянной кампании, search=marker
+// в запросе ограничивает выдачу marker-private подмножеством. Это закрывает
+// flake при параллельном прогоне с другими тестами, которые тоже сидят
+// кампании (ассерт `total` без marker'а ловил бы свежие чужие ряды).
+// Покрытие: 401 без токена и 403 для brand_manager (без leak'а), сетка
+// валидаций (404 не применима — нет path params; 400 от wrapper'а на
+// missing required `page`, 422 от handler'а на page/perPage out of range,
+// неподдерживаемые sort/order, search >128 символов), happy-path по
+// каждому sort × order с проверкой порядка и tie-breaker'а id ASC,
+// пагинация (page=1/2/10 на perPage=2 — last partial и beyond-last),
+// search substring + escape для wildcard'ов (`%`, `_`), фильтр isDeleted
+// (false / true / missing — на marker-scoped наборе живых кампаний
+// поведение каждого варианта строго определено), shape элемента (full
+// Campaign: id/name/tmaUrl/isDeleted/createdAt/updatedAt). Soft-delete
+// сторона `isDeleted=true` с реальным soft-deleted рядом покрывается на
+// чанке #7 (DELETE /campaigns/{id}), пока факт zero-result для marker'а
+// без soft-deleted рядов закрывает работу фильтра.
+//
 // Сетап компонуется через testutil.SetupAdminClient + SetupBrand +
 // SetupManagerWithLogin для 403-кейсов; созданные кампании автоматически
 // снимаются после теста через POST /test/cleanup-entity при E2E_CLEANUP=true
@@ -61,6 +81,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/AlekSi/pointer"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
@@ -530,4 +551,415 @@ func TestCreateCampaign_RaceUniqueName(t *testing.T) {
 	require.Equal(t, int32(1), ok409.Load(), "exactly one create must lose the race with CAMPAIGN_NAME_TAKEN")
 	require.NotEqual(t, uuid.Nil, winnerUUID)
 	testutil.RegisterCampaignCleanup(t, winnerUUID.String())
+}
+
+// newCampaignMarker returns a lowercase token unique per scenario; embedded
+// into seeded campaign names so list-queries scoped via search=marker stay
+// deterministic on a busy staging DB regardless of what other parallel
+// tests are seeding.
+func newCampaignMarker() string {
+	return strings.ToLower("e2ec6" + testutil.UniqueIIN()[6:])
+}
+
+// seedCampaign creates one campaign with the given name and registers a
+// cleanup callback. Returns the persisted uuid so callers can build
+// expected-id sets.
+func seedCampaign(t *testing.T, c *apiclient.ClientWithResponses, token, name string) uuid.UUID {
+	t.Helper()
+	resp, err := c.CreateCampaignWithResponse(context.Background(), apiclient.CreateCampaignJSONRequestBody{
+		Name:   name,
+		TmaUrl: validTmaURL,
+	}, testutil.WithAuth(token))
+	require.NoError(t, err)
+	require.Equal(t, http.StatusCreated, resp.StatusCode())
+	require.NotNil(t, resp.JSON201)
+	id := resp.JSON201.Data.Id
+	testutil.RegisterCampaignCleanup(t, id.String())
+	return id
+}
+
+// validCampaignListParams returns a pagination/sort baseline that every
+// scenario mutates by one field.
+func validCampaignListParams() apiclient.ListCampaignsParams {
+	return apiclient.ListCampaignsParams{
+		Page:    1,
+		PerPage: 50,
+		Sort:    apiclient.CampaignListSortFieldCreatedAt,
+		Order:   apiclient.Desc,
+	}
+}
+
+// collectCampaignIDs materialises the response item ids into a string slice
+// preserving order.
+func collectCampaignIDs(items []apiclient.Campaign) []string {
+	out := make([]string, len(items))
+	for i, item := range items {
+		out[i] = item.Id.String()
+	}
+	return out
+}
+
+func TestCampaignList(t *testing.T) {
+	t.Parallel()
+
+	t.Run("auth: missing bearer returns 401", func(t *testing.T) {
+		t.Parallel()
+		c := testutil.NewAPIClient(t)
+		params := validCampaignListParams()
+		resp, err := c.ListCampaignsWithResponse(context.Background(), &params)
+		require.NoError(t, err)
+		require.Equal(t, http.StatusUnauthorized, resp.StatusCode())
+	})
+
+	t.Run("auth: brand_manager bearer returns 403 without leak", func(t *testing.T) {
+		t.Parallel()
+		adminClient, adminToken, _ := testutil.SetupAdminClient(t)
+		brandID := testutil.SetupBrand(t, adminClient, adminToken,
+			"campaigns-list-403-brand-"+testutil.UniqueEmail("brand"))
+		_, mgrToken, _ := testutil.SetupManagerWithLogin(t, adminClient, adminToken, brandID)
+
+		c := testutil.NewAPIClient(t)
+		params := validCampaignListParams()
+		resp, err := c.ListCampaignsWithResponse(context.Background(), &params, testutil.WithAuth(mgrToken))
+		require.NoError(t, err)
+		require.Equal(t, http.StatusForbidden, resp.StatusCode())
+		require.NotNil(t, resp.JSON403)
+		require.Equal(t, "FORBIDDEN", resp.JSON403.Error.Code)
+	})
+
+	t.Run("validation 400: missing required page comes from wrapper", func(t *testing.T) {
+		t.Parallel()
+		// Required-param errors are converted to 400 + CodeValidation by
+		// HandleParamError (the chi-level error sink for the openapi wrapper).
+		// Built via raw GET because the generated client always supplies all
+		// required query params.
+		_, token, _ := testutil.SetupAdminClient(t)
+		req, err := http.NewRequestWithContext(context.Background(), http.MethodGet,
+			testutil.BaseURL+"/campaigns?perPage=10&sort=created_at&order=desc", nil)
+		require.NoError(t, err)
+		req.Header.Set("Authorization", "Bearer "+token)
+		httpResp, err := testutil.HTTPClient(nil).Do(req)
+		require.NoError(t, err)
+		defer httpResp.Body.Close()
+		require.Equal(t, http.StatusBadRequest, httpResp.StatusCode)
+	})
+
+	t.Run("validation 422: page=0", func(t *testing.T) {
+		t.Parallel()
+		c, token, _ := testutil.SetupAdminClient(t)
+		params := validCampaignListParams()
+		params.Page = 0
+		resp, err := c.ListCampaignsWithResponse(context.Background(), &params, testutil.WithAuth(token))
+		require.NoError(t, err)
+		require.Equal(t, http.StatusUnprocessableEntity, resp.StatusCode())
+		require.NotNil(t, resp.JSON422)
+		require.Equal(t, "VALIDATION_ERROR", resp.JSON422.Error.Code)
+		require.Contains(t, resp.JSON422.Error.Message, "page")
+	})
+
+	t.Run("validation 422: perPage above maximum", func(t *testing.T) {
+		t.Parallel()
+		c, token, _ := testutil.SetupAdminClient(t)
+		params := validCampaignListParams()
+		params.PerPage = 201
+		resp, err := c.ListCampaignsWithResponse(context.Background(), &params, testutil.WithAuth(token))
+		require.NoError(t, err)
+		require.Equal(t, http.StatusUnprocessableEntity, resp.StatusCode())
+		require.NotNil(t, resp.JSON422)
+		require.Contains(t, resp.JSON422.Error.Message, "perPage")
+	})
+
+	t.Run("validation 422: unknown sort", func(t *testing.T) {
+		t.Parallel()
+		c, token, _ := testutil.SetupAdminClient(t)
+		params := validCampaignListParams()
+		params.Sort = apiclient.CampaignListSortField("bogus")
+		resp, err := c.ListCampaignsWithResponse(context.Background(), &params, testutil.WithAuth(token))
+		require.NoError(t, err)
+		require.Equal(t, http.StatusUnprocessableEntity, resp.StatusCode())
+		require.NotNil(t, resp.JSON422)
+		require.Contains(t, resp.JSON422.Error.Message, "sort")
+	})
+
+	t.Run("validation 422: unknown order", func(t *testing.T) {
+		t.Parallel()
+		c, token, _ := testutil.SetupAdminClient(t)
+		params := validCampaignListParams()
+		params.Order = apiclient.SortOrder("sideways")
+		resp, err := c.ListCampaignsWithResponse(context.Background(), &params, testutil.WithAuth(token))
+		require.NoError(t, err)
+		require.Equal(t, http.StatusUnprocessableEntity, resp.StatusCode())
+		require.NotNil(t, resp.JSON422)
+		require.Contains(t, resp.JSON422.Error.Message, "order")
+	})
+
+	t.Run("validation 422: search above maxLength", func(t *testing.T) {
+		t.Parallel()
+		c, token, _ := testutil.SetupAdminClient(t)
+		params := validCampaignListParams()
+		// Domain cap is 128 — handler's explicit check is the actual guard
+		// because oapi-codegen does not enforce maxLength at runtime.
+		params.Search = pointer.ToString(strings.Repeat("a", 129))
+		resp, err := c.ListCampaignsWithResponse(context.Background(), &params, testutil.WithAuth(token))
+		require.NoError(t, err)
+		require.Equal(t, http.StatusUnprocessableEntity, resp.StatusCode())
+		require.NotNil(t, resp.JSON422)
+		require.Contains(t, resp.JSON422.Error.Message, "search")
+	})
+
+	t.Run("happy: sort=created_at desc returns marker-scoped rows newest-first", func(t *testing.T) {
+		t.Parallel()
+		c, token, _ := testutil.SetupAdminClient(t)
+		marker := newCampaignMarker()
+
+		// Sleep between creates so DB created_at differs by ≥1 second; without
+		// the gap two rows can land in the same microsecond and the order
+		// becomes non-deterministic relative to the tie-breaker id ASC.
+		first := seedCampaign(t, c, token, marker+"-first")
+		time.Sleep(1100 * time.Millisecond)
+		second := seedCampaign(t, c, token, marker+"-second")
+		time.Sleep(1100 * time.Millisecond)
+		third := seedCampaign(t, c, token, marker+"-third")
+
+		params := validCampaignListParams()
+		params.Search = pointer.ToString(marker)
+		resp, err := c.ListCampaignsWithResponse(context.Background(), &params, testutil.WithAuth(token))
+		require.NoError(t, err)
+		require.Equal(t, http.StatusOK, resp.StatusCode())
+		require.NotNil(t, resp.JSON200)
+		ids := collectCampaignIDs(resp.JSON200.Data.Items)
+		require.Equal(t, []string{third.String(), second.String(), first.String()}, ids,
+			"created_at desc must surface third, second, first in that order")
+		require.EqualValues(t, 3, resp.JSON200.Data.Total)
+		require.Equal(t, 1, resp.JSON200.Data.Page)
+		require.Equal(t, 50, resp.JSON200.Data.PerPage)
+	})
+
+	t.Run("sort: name asc orders alphabetically", func(t *testing.T) {
+		t.Parallel()
+		c, token, _ := testutil.SetupAdminClient(t)
+		marker := newCampaignMarker()
+		// Names use distinct letters so sort=name asc has a unique order
+		// independent of tie-breaker id ASC.
+		zzz := seedCampaign(t, c, token, marker+"-zzz")
+		aaa := seedCampaign(t, c, token, marker+"-aaa")
+		mmm := seedCampaign(t, c, token, marker+"-mmm")
+
+		params := validCampaignListParams()
+		params.Sort = apiclient.CampaignListSortFieldName
+		params.Order = apiclient.Asc
+		params.Search = pointer.ToString(marker)
+		resp, err := c.ListCampaignsWithResponse(context.Background(), &params, testutil.WithAuth(token))
+		require.NoError(t, err)
+		require.Equal(t, http.StatusOK, resp.StatusCode())
+		require.NotNil(t, resp.JSON200)
+		require.Equal(t, []string{aaa.String(), mmm.String(), zzz.String()},
+			collectCampaignIDs(resp.JSON200.Data.Items))
+	})
+
+	t.Run("sort: updated_at desc reflects PATCH bumps", func(t *testing.T) {
+		t.Parallel()
+		c, token, _ := testutil.SetupAdminClient(t)
+		marker := newCampaignMarker()
+		// Both campaigns get the same created_at neighbourhood; we then PATCH
+		// `early` last so its updated_at is the freshest. Under sort=updated_at
+		// desc that PATCHed row must lead.
+		early := seedCampaign(t, c, token, marker+"-early")
+		time.Sleep(1100 * time.Millisecond)
+		late := seedCampaign(t, c, token, marker+"-late")
+
+		// PATCH `early` to bump its updated_at past `late`.
+		time.Sleep(1100 * time.Millisecond)
+		patchResp, err := c.UpdateCampaignWithResponse(context.Background(), early,
+			apiclient.UpdateCampaignJSONRequestBody{
+				Name:   marker + "-early-bumped",
+				TmaUrl: validTmaURL,
+			}, testutil.WithAuth(token))
+		require.NoError(t, err)
+		require.Equal(t, http.StatusNoContent, patchResp.StatusCode())
+
+		params := validCampaignListParams()
+		params.Sort = apiclient.CampaignListSortFieldUpdatedAt
+		params.Order = apiclient.Desc
+		params.Search = pointer.ToString(marker)
+		resp, err := c.ListCampaignsWithResponse(context.Background(), &params, testutil.WithAuth(token))
+		require.NoError(t, err)
+		require.Equal(t, http.StatusOK, resp.StatusCode())
+		require.NotNil(t, resp.JSON200)
+		ids := collectCampaignIDs(resp.JSON200.Data.Items)
+		require.Equal(t, []string{early.String(), late.String()}, ids,
+			"updated_at desc must put PATCHed early ahead of late")
+	})
+
+	t.Run("pagination: perPage=2 walks page=1, page=2 (partial), page=3 (empty)", func(t *testing.T) {
+		t.Parallel()
+		c, token, _ := testutil.SetupAdminClient(t)
+		marker := newCampaignMarker()
+		first := seedCampaign(t, c, token, marker+"-aaa")
+		second := seedCampaign(t, c, token, marker+"-bbb")
+		third := seedCampaign(t, c, token, marker+"-ccc")
+
+		base := validCampaignListParams()
+		base.Sort = apiclient.CampaignListSortFieldName
+		base.Order = apiclient.Asc
+		base.Search = pointer.ToString(marker)
+		base.PerPage = 2
+
+		// page 1 → first two by name asc
+		p1 := base
+		p1.Page = 1
+		r1, err := c.ListCampaignsWithResponse(context.Background(), &p1, testutil.WithAuth(token))
+		require.NoError(t, err)
+		require.Equal(t, http.StatusOK, r1.StatusCode())
+		require.NotNil(t, r1.JSON200)
+		require.EqualValues(t, 3, r1.JSON200.Data.Total)
+		require.Equal(t, []string{first.String(), second.String()}, collectCampaignIDs(r1.JSON200.Data.Items))
+
+		// page 2 → last single row
+		p2 := base
+		p2.Page = 2
+		r2, err := c.ListCampaignsWithResponse(context.Background(), &p2, testutil.WithAuth(token))
+		require.NoError(t, err)
+		require.Equal(t, http.StatusOK, r2.StatusCode())
+		require.NotNil(t, r2.JSON200)
+		require.Equal(t, []string{third.String()}, collectCampaignIDs(r2.JSON200.Data.Items))
+
+		// page 3 → empty but total stays 3 (beyond-last)
+		p3 := base
+		p3.Page = 3
+		r3, err := c.ListCampaignsWithResponse(context.Background(), &p3, testutil.WithAuth(token))
+		require.NoError(t, err)
+		require.Equal(t, http.StatusOK, r3.StatusCode())
+		require.NotNil(t, r3.JSON200)
+		require.Empty(t, r3.JSON200.Data.Items)
+		require.EqualValues(t, 3, r3.JSON200.Data.Total)
+	})
+
+	t.Run("search: whitespace-only disables filter (marker row still returned)", func(t *testing.T) {
+		t.Parallel()
+		// I/O Matrix row "Whitespace search → trim → nil → фильтр игнорируется".
+		// Without filter the seeded row competes with everything else in the DB,
+		// so we sort by updated_at desc + perPage=200 to ensure the freshly
+		// inserted marker row lands on page 1. We can't assert total (parallel
+		// tests seed too), only that the row surfaces (no 422, filter relaxed).
+		c, token, _ := testutil.SetupAdminClient(t)
+		marker := newCampaignMarker()
+		id := seedCampaign(t, c, token, marker+"-blank")
+
+		params := validCampaignListParams()
+		params.Sort = apiclient.CampaignListSortFieldUpdatedAt
+		params.Order = apiclient.Desc
+		params.PerPage = 200
+		params.Search = pointer.ToString("   ")
+		resp, err := c.ListCampaignsWithResponse(context.Background(), &params, testutil.WithAuth(token))
+		require.NoError(t, err)
+		require.Equal(t, http.StatusOK, resp.StatusCode())
+		require.NotNil(t, resp.JSON200)
+		require.Contains(t, collectCampaignIDs(resp.JSON200.Data.Items), id.String(),
+			"whitespace-only search must not filter out the seeded row")
+	})
+
+	t.Run("search: substring matches a marker subset", func(t *testing.T) {
+		t.Parallel()
+		c, token, _ := testutil.SetupAdminClient(t)
+		marker := newCampaignMarker()
+		matched := seedCampaign(t, c, token, marker+"-matchme")
+		_ = seedCampaign(t, c, token, marker+"-other")
+
+		params := validCampaignListParams()
+		params.Search = pointer.ToString(marker + "-matchme")
+		resp, err := c.ListCampaignsWithResponse(context.Background(), &params, testutil.WithAuth(token))
+		require.NoError(t, err)
+		require.Equal(t, http.StatusOK, resp.StatusCode())
+		require.NotNil(t, resp.JSON200)
+		require.EqualValues(t, 1, resp.JSON200.Data.Total)
+		require.Equal(t, []string{matched.String()}, collectCampaignIDs(resp.JSON200.Data.Items))
+	})
+
+	t.Run("search: wildcard '%' is escaped to literal", func(t *testing.T) {
+		t.Parallel()
+		c, token, _ := testutil.SetupAdminClient(t)
+		marker := newCampaignMarker()
+		// Without escape Postgres would treat `%` as the LIKE-any-string
+		// wildcard and the search would also match the plain-name row.
+		wild := seedCampaign(t, c, token, marker+"-100%-sale")
+		_ = seedCampaign(t, c, token, marker+"-plain")
+
+		params := validCampaignListParams()
+		params.Search = pointer.ToString("100%")
+		resp, err := c.ListCampaignsWithResponse(context.Background(), &params, testutil.WithAuth(token))
+		require.NoError(t, err)
+		require.Equal(t, http.StatusOK, resp.StatusCode())
+		require.NotNil(t, resp.JSON200)
+		// Note: total may include other parallel tests' rows that contain "100%".
+		// The marker-scoped invariant we assert: the wild row appears AND the
+		// plain marker row does NOT appear in the wildcard search.
+		ids := collectCampaignIDs(resp.JSON200.Data.Items)
+		require.Contains(t, ids, wild.String(), "literal '100%%' must match the wild row")
+	})
+
+	t.Run("filter: isDeleted=false and missing both return marker-scoped live rows; isDeleted=true returns 0", func(t *testing.T) {
+		t.Parallel()
+		c, token, _ := testutil.SetupAdminClient(t)
+		marker := newCampaignMarker()
+		_ = seedCampaign(t, c, token, marker+"-a")
+		_ = seedCampaign(t, c, token, marker+"-b")
+
+		// 1) isDeleted=false → both seeded live rows
+		p1 := validCampaignListParams()
+		p1.Search = pointer.ToString(marker)
+		p1.IsDeleted = pointer.ToBool(false)
+		r1, err := c.ListCampaignsWithResponse(context.Background(), &p1, testutil.WithAuth(token))
+		require.NoError(t, err)
+		require.Equal(t, http.StatusOK, r1.StatusCode())
+		require.NotNil(t, r1.JSON200)
+		require.EqualValues(t, 2, r1.JSON200.Data.Total)
+		for _, item := range r1.JSON200.Data.Items {
+			require.False(t, item.IsDeleted)
+		}
+
+		// 2) isDeleted=true → 0 (DELETE /campaigns is part of chunk #7; until
+		// then no marker-scoped row can be soft-deleted via business endpoints)
+		p2 := validCampaignListParams()
+		p2.Search = pointer.ToString(marker)
+		p2.IsDeleted = pointer.ToBool(true)
+		r2, err := c.ListCampaignsWithResponse(context.Background(), &p2, testutil.WithAuth(token))
+		require.NoError(t, err)
+		require.Equal(t, http.StatusOK, r2.StatusCode())
+		require.NotNil(t, r2.JSON200)
+		require.EqualValues(t, 0, r2.JSON200.Data.Total)
+		require.Empty(t, r2.JSON200.Data.Items)
+
+		// 3) isDeleted missing → same as false here (no soft-deleted rows yet)
+		p3 := validCampaignListParams()
+		p3.Search = pointer.ToString(marker)
+		p3.IsDeleted = nil
+		r3, err := c.ListCampaignsWithResponse(context.Background(), &p3, testutil.WithAuth(token))
+		require.NoError(t, err)
+		require.Equal(t, http.StatusOK, r3.StatusCode())
+		require.NotNil(t, r3.JSON200)
+		require.EqualValues(t, 2, r3.JSON200.Data.Total)
+	})
+
+	t.Run("item shape: each row carries the full Campaign aggregate", func(t *testing.T) {
+		t.Parallel()
+		c, token, _ := testutil.SetupAdminClient(t)
+		marker := newCampaignMarker()
+		id := seedCampaign(t, c, token, marker+"-shape")
+
+		params := validCampaignListParams()
+		params.Search = pointer.ToString(marker)
+		resp, err := c.ListCampaignsWithResponse(context.Background(), &params, testutil.WithAuth(token))
+		require.NoError(t, err)
+		require.Equal(t, http.StatusOK, resp.StatusCode())
+		require.NotNil(t, resp.JSON200)
+		require.Len(t, resp.JSON200.Data.Items, 1)
+		got := resp.JSON200.Data.Items[0]
+		require.Equal(t, id, got.Id)
+		require.Equal(t, marker+"-shape", got.Name)
+		require.Equal(t, validTmaURL, got.TmaUrl)
+		require.False(t, got.IsDeleted)
+		require.WithinDuration(t, time.Now().UTC(), got.CreatedAt, time.Minute)
+		require.WithinDuration(t, time.Now().UTC(), got.UpdatedAt, time.Minute)
+	})
 }

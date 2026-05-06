@@ -174,6 +174,74 @@ func (_c *MockCampaignService_GetByID_Call) RunAndReturn(run func(ctx context.Co
 	return _c
 }
 
+// List provides a mock function for the type MockCampaignService
+func (_mock *MockCampaignService) List(ctx context.Context, in domain.CampaignListInput) (*domain.CampaignListPage, error) {
+	ret := _mock.Called(ctx, in)
+
+	if len(ret) == 0 {
+		panic("no return value specified for List")
+	}
+
+	var r0 *domain.CampaignListPage
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, domain.CampaignListInput) (*domain.CampaignListPage, error)); ok {
+		return returnFunc(ctx, in)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, domain.CampaignListInput) *domain.CampaignListPage); ok {
+		r0 = returnFunc(ctx, in)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*domain.CampaignListPage)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, domain.CampaignListInput) error); ok {
+		r1 = returnFunc(ctx, in)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockCampaignService_List_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'List'
+type MockCampaignService_List_Call struct {
+	*mock.Call
+}
+
+// List is a helper method to define mock.On call
+//   - ctx context.Context
+//   - in domain.CampaignListInput
+func (_e *MockCampaignService_Expecter) List(ctx interface{}, in interface{}) *MockCampaignService_List_Call {
+	return &MockCampaignService_List_Call{Call: _e.mock.On("List", ctx, in)}
+}
+
+func (_c *MockCampaignService_List_Call) Run(run func(ctx context.Context, in domain.CampaignListInput)) *MockCampaignService_List_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 domain.CampaignListInput
+		if args[1] != nil {
+			arg1 = args[1].(domain.CampaignListInput)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockCampaignService_List_Call) Return(campaignListPage *domain.CampaignListPage, err error) *MockCampaignService_List_Call {
+	_c.Call.Return(campaignListPage, err)
+	return _c
+}
+
+func (_c *MockCampaignService_List_Call) RunAndReturn(run func(ctx context.Context, in domain.CampaignListInput) (*domain.CampaignListPage, error)) *MockCampaignService_List_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // UpdateCampaign provides a mock function for the type MockCampaignService
 func (_mock *MockCampaignService) UpdateCampaign(ctx context.Context, id string, in domain.CampaignInput) error {
 	ret := _mock.Called(ctx, id, in)

@@ -1005,6 +1005,92 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         default:
           $ref: "#/components/responses/UnexpectedError"
+    get:
+      operationId: listCampaigns
+      summary: List marketing campaigns with pagination, search and filter (admin-only)
+      description: |
+        Admin-only paginated list of marketing campaigns. Authorisation is
+        evaluated before any business logic so non-admin callers receive 403
+        regardless of whether matching campaigns exist. Pagination, sort field
+        and order are required — there are no server-side defaults, the client
+        must explicitly choose. The item shape is the same `Campaign` schema
+        as `GET /campaigns/{id}` so frontends share one mapping.
+
+        GET (not POST) is used because campaign `name` is admin-curated and
+        carries no PII; the security.md prohibition on PII in URL params does
+        not apply here.
+      tags: [campaigns]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100000
+          description: 1-based page number.
+        - name: perPage
+          in: query
+          required: true
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 200
+          description: Page size.
+        - name: sort
+          in: query
+          required: true
+          schema:
+            $ref: "#/components/schemas/CampaignListSortField"
+        - name: order
+          in: query
+          required: true
+          schema:
+            $ref: "#/components/schemas/SortOrder"
+        - name: search
+          in: query
+          required: false
+          schema:
+            type: string
+            maxLength: 128
+          description: |
+            Free-text substring search over campaign name (case-insensitive).
+            Trimmed; empty/blank after trim disables the filter. Special
+            ILIKE characters (`%`, `_`, `\`) are escaped server-side so they
+            match literally.
+        - name: isDeleted
+          in: query
+          required: false
+          schema:
+            type: boolean
+          description: |
+            true → only soft-deleted campaigns. false → only live. Missing
+            disables the filter (returns both live and soft-deleted rows).
+      responses:
+        "200":
+          description: Page of campaigns matching the filter
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CampaignsListResult"
+        "401":
+          description: Unauthenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          description: Validation error (unknown sort/order, page/perPage out of range, search too long)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: "#/components/responses/UnexpectedError"
 
   /campaigns/{id}:
     parameters:
@@ -2486,6 +2572,37 @@ components:
       properties:
         data:
           $ref: "#/components/schemas/Campaign"
+
+    CampaignListSortField:
+      type: string
+      description: |
+        Sort field for the admin list. Mapped to a SQL column on the backend.
+        Unknown values are rejected with 422.
+      enum: [created_at, updated_at, name]
+
+    CampaignsListData:
+      type: object
+      required: [items, total, page, perPage]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/Campaign"
+        total:
+          type: integer
+          format: int64
+          description: Total number of matching campaigns across all pages.
+        page:
+          type: integer
+        perPage:
+          type: integer
+
+    CampaignsListResult:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: "#/components/schemas/CampaignsListData"
 
   securitySchemes:
     bearerAuth:

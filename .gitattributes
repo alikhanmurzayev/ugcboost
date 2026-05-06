@@ -1,0 +1,6 @@
+# Auto-generated OpenAPI Go server/client (oapi-codegen).
+# Collapses these files in GitHub PR diffs and excludes them from language stats.
+**/*.gen.go linguist-generated=true
+
+# Auto-generated TypeScript schemas (openapi-typescript).
+frontend/*/src/api/generated/** linguist-generated=true

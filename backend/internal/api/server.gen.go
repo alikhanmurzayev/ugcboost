@@ -22,6 +22,27 @@ const (
 	BearerAuthScopes = "bearerAuth.Scopes"
 )
 
+// Defines values for CampaignListSortField.
+const (
+	CampaignListSortFieldCreatedAt CampaignListSortField = "created_at"
+	CampaignListSortFieldName      CampaignListSortField = "name"
+	CampaignListSortFieldUpdatedAt CampaignListSortField = "updated_at"
+)
+
+// Valid indicates whether the value is a known member of the CampaignListSortField enum.
+func (e CampaignListSortField) Valid() bool {
+	switch e {
+	case CampaignListSortFieldCreatedAt:
+		return true
+	case CampaignListSortFieldName:
+		return true
+	case CampaignListSortFieldUpdatedAt:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ConsentType.
 const (
 	CrossBorder ConsentType = "cross_border"
@@ -102,25 +123,25 @@ func (e CreatorApplicationStatus) Valid() bool {
 
 // Defines values for CreatorListSortField.
 const (
-	CreatorListSortFieldBirthDate CreatorListSortField = "birth_date"
-	CreatorListSortFieldCityName  CreatorListSortField = "city_name"
-	CreatorListSortFieldCreatedAt CreatorListSortField = "created_at"
-	CreatorListSortFieldFullName  CreatorListSortField = "full_name"
-	CreatorListSortFieldUpdatedAt CreatorListSortField = "updated_at"
+	BirthDate CreatorListSortField = "birth_date"
+	CityName  CreatorListSortField = "city_name"
+	CreatedAt CreatorListSortField = "created_at"
+	FullName  CreatorListSortField = "full_name"
+	UpdatedAt CreatorListSortField = "updated_at"
 )
 
 // Valid indicates whether the value is a known member of the CreatorListSortField enum.
 func (e CreatorListSortField) Valid() bool {
 	switch e {
-	case CreatorListSortFieldBirthDate:
+	case BirthDate:
 		return true
-	case CreatorListSortFieldCityName:
+	case CityName:
 		return true
-	case CreatorListSortFieldCreatedAt:
+	case CreatedAt:
 		return true
-	case CreatorListSortFieldFullName:
+	case FullName:
 		return true
-	case CreatorListSortFieldUpdatedAt:
+	case UpdatedAt:
 		return true
 	default:
 		return false
@@ -346,6 +367,25 @@ type CampaignInput struct {
 
 	// TmaUrl URL of the TMA-side ТЗ landing page embedded into creator invites.
 	TmaUrl string `json:"tmaUrl"`
+}
+
+// CampaignListSortField Sort field for the admin list. Mapped to a SQL column on the backend.
+// Unknown values are rejected with 422.
+type CampaignListSortField string
+
+// CampaignsListData defines model for CampaignsListData.
+type CampaignsListData struct {
+	Items   []Campaign `json:"items"`
+	Page    int        `json:"page"`
+	PerPage int        `json:"perPage"`
+
+	// Total Total number of matching campaigns across all pages.
+	Total int64 `json:"total"`
+}
+
+// CampaignsListResult defines model for CampaignsListResult.
+type CampaignsListResult struct {
+	Data CampaignsListData `json:"data"`
 }
 
 // ConsentType Canonical consent type captured at creator application submission.
@@ -1096,6 +1136,27 @@ type ListAuditLogsParams struct {
 	PerPage *PerPageQueryParam `form:"perPage,omitempty" json:"perPage,omitempty"`
 }
 
+// ListCampaignsParams defines parameters for ListCampaigns.
+type ListCampaignsParams struct {
+	// Page 1-based page number.
+	Page int `form:"page" json:"page"`
+
+	// PerPage Page size.
+	PerPage int                   `form:"perPage" json:"perPage"`
+	Sort    CampaignListSortField `form:"sort" json:"sort"`
+	Order   SortOrder             `form:"order" json:"order"`
+
+	// Search Free-text substring search over campaign name (case-insensitive).
+	// Trimmed; empty/blank after trim disables the filter. Special
+	// ILIKE characters (`%`, `_`, `\`) are escaped server-side so they
+	// match literally.
+	Search *string `form:"search,omitempty" json:"search,omitempty"`
+
+	// IsDeleted true → only soft-deleted campaigns. false → only live. Missing
+	// disables the filter (returns both live and soft-deleted rows).
+	IsDeleted *bool `form:"isDeleted,omitempty" json:"isDeleted,omitempty"`
+}
+
 // VerifyCreatorApplicationSocialJSONBody defines parameters for VerifyCreatorApplicationSocial.
 type VerifyCreatorApplicationSocialJSONBody = map[string]interface{}
 
@@ -1185,6 +1246,9 @@ type ServerInterface interface {
 	// Remove manager from brand
 	// (DELETE /brands/{brandID}/managers/{userID})
 	RemoveManager(w http.ResponseWriter, r *http.Request, brandID string, userID string)
+	// List marketing campaigns with pagination, search and filter (admin-only)
+	// (GET /campaigns)
+	ListCampaigns(w http.ResponseWriter, r *http.Request, params ListCampaignsParams)
 	// Create a marketing campaign (admin-only)
 	// (POST /campaigns)
 	CreateCampaign(w http.ResponseWriter, r *http.Request)
@@ -1317,6 +1381,12 @@ func (_ Unimplemented) AssignManager(w http.ResponseWriter, r *http.Request, bra
 // Remove manager from brand
 // (DELETE /brands/{brandID}/managers/{userID})
 func (_ Unimplemented) RemoveManager(w http.ResponseWriter, r *http.Request, brandID string, userID string) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// List marketing campaigns with pagination, search and filter (admin-only)
+// (GET /campaigns)
+func (_ Unimplemented) ListCampaigns(w http.ResponseWriter, r *http.Request, params ListCampaignsParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -1793,6 +1863,107 @@ func (siw *ServerInterfaceWrapper) RemoveManager(w http.ResponseWriter, r *http.
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.RemoveManager(w, r, brandID, userID)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListCampaigns operation middleware
+func (siw *ServerInterfaceWrapper) ListCampaigns(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListCampaignsParams
+
+	// ------------- Required query parameter "page" -------------
+
+	if paramValue := r.URL.Query().Get("page"); paramValue != "" {
+
+	} else {
+		siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "page"})
+		return
+	}
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "page", r.URL.Query(), &params.Page, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "page", Err: err})
+		return
+	}
+
+	// ------------- Required query parameter "perPage" -------------
+
+	if paramValue := r.URL.Query().Get("perPage"); paramValue != "" {
+
+	} else {
+		siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "perPage"})
+		return
+	}
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "perPage", r.URL.Query(), &params.PerPage, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "perPage", Err: err})
+		return
+	}
+
+	// ------------- Required query parameter "sort" -------------
+
+	if paramValue := r.URL.Query().Get("sort"); paramValue != "" {
+
+	} else {
+		siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "sort"})
+		return
+	}
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "sort", r.URL.Query(), &params.Sort, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "sort", Err: err})
+		return
+	}
+
+	// ------------- Required query parameter "order" -------------
+
+	if paramValue := r.URL.Query().Get("order"); paramValue != "" {
+
+	} else {
+		siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "order"})
+		return
+	}
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "order", r.URL.Query(), &params.Order, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "order", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "search" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "search", r.URL.Query(), &params.Search, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "search", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "isDeleted" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "isDeleted", r.URL.Query(), &params.IsDeleted, runtime.BindQueryParameterOptions{Type: "boolean", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "isDeleted", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListCampaigns(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -2329,6 +2500,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Delete(options.BaseURL+"/brands/{brandID}/managers/{userID}", wrapper.RemoveManager)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/campaigns", wrapper.ListCampaigns)
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/campaigns", wrapper.CreateCampaign)
@@ -2959,6 +3133,62 @@ type RemoveManagerdefaultJSONResponse struct {
 }
 
 func (response RemoveManagerdefaultJSONResponse) VisitRemoveManagerResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+
+	return json.NewEncoder(w).Encode(response.Body)
+}
+
+type ListCampaignsRequestObject struct {
+	Params ListCampaignsParams
+}
+
+type ListCampaignsResponseObject interface {
+	VisitListCampaignsResponse(w http.ResponseWriter) error
+}
+
+type ListCampaigns200JSONResponse CampaignsListResult
+
+func (response ListCampaigns200JSONResponse) VisitListCampaignsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type ListCampaigns401JSONResponse ErrorResponse
+
+func (response ListCampaigns401JSONResponse) VisitListCampaignsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type ListCampaigns403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response ListCampaigns403JSONResponse) VisitListCampaignsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type ListCampaigns422JSONResponse ErrorResponse
+
+func (response ListCampaigns422JSONResponse) VisitListCampaignsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(422)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type ListCampaignsdefaultJSONResponse struct {
+	Body       ErrorResponse
+	StatusCode int
+}
+
+func (response ListCampaignsdefaultJSONResponse) VisitListCampaignsResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(response.StatusCode)
 
@@ -3831,6 +4061,9 @@ type StrictServerInterface interface {
 	// Remove manager from brand
 	// (DELETE /brands/{brandID}/managers/{userID})
 	RemoveManager(ctx context.Context, request RemoveManagerRequestObject) (RemoveManagerResponseObject, error)
+	// List marketing campaigns with pagination, search and filter (admin-only)
+	// (GET /campaigns)
+	ListCampaigns(ctx context.Context, request ListCampaignsRequestObject) (ListCampaignsResponseObject, error)
 	// Create a marketing campaign (admin-only)
 	// (POST /campaigns)
 	CreateCampaign(ctx context.Context, request CreateCampaignRequestObject) (CreateCampaignResponseObject, error)
@@ -4291,6 +4524,32 @@ func (sh *strictHandler) RemoveManager(w http.ResponseWriter, r *http.Request, b
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(RemoveManagerResponseObject); ok {
 		if err := validResponse.VisitRemoveManagerResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListCampaigns operation middleware
+func (sh *strictHandler) ListCampaigns(w http.ResponseWriter, r *http.Request, params ListCampaignsParams) {
+	var request ListCampaignsRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListCampaigns(ctx, request.(ListCampaignsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListCampaigns")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListCampaignsResponseObject); ok {
+		if err := validResponse.VisitListCampaignsResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

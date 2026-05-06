@@ -34,3 +34,11 @@ func (a *AuthzService) CanUpdateCampaign(ctx context.Context) error {
 	}
 	return nil
 }
+
+// CanListCampaigns gates GET /campaigns to admins only.
+func (a *AuthzService) CanListCampaigns(ctx context.Context) error {
+	if middleware.RoleFromContext(ctx) != api.Admin {
+		return domain.ErrForbidden
+	}
+	return nil
+}
