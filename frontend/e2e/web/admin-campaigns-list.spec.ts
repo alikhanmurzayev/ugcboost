@@ -24,8 +24,8 @@
  * search/sort page сбрасывается в URL».
  *
  * CTA «Создать кампанию» — клик по data-testid `campaigns-create-button` ведёт
- * на /campaigns/new (стаб chunk 8: data-testid `campain-new-stub`). Закрывает
- * AC «CTA-кнопка ведёт на /campaigns/new».
+ * на /campaigns/new (страница создания chunk 8a: data-testid
+ * `campaign-create-page`). Закрывает AC «CTA-кнопка ведёт на /campaigns/new».
  *
  * Row click + disabled delete — клик по строке открывает /campaigns/:id
  * (стаб chunk 8: data-testid `campaign-detail-stub`). Кнопка «Удалить» в строке
@@ -182,7 +182,7 @@ test.describe("Admin campaigns list", () => {
     );
   });
 
-  test("CTA «Создать кампанию» — link goes to /campaigns/new stub", async ({
+  test("CTA «Создать кампанию» — link goes to /campaigns/new create page", async ({
     page,
     request,
   }) => {
@@ -194,7 +194,7 @@ test.describe("Admin campaigns list", () => {
 
     await page.getByTestId("campaigns-create-button").click();
     await expect(page).toHaveURL("/campaigns/new");
-    await expect(page.getByTestId("campaign-new-stub")).toBeVisible();
+    await expect(page.getByTestId("campaign-create-page")).toBeVisible();
   });
 
   test("Row click → /campaigns/:id stub; disabled delete does not navigate", async ({

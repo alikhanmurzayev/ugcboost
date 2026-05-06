@@ -15,6 +15,7 @@ import ModerationPage from "@/features/creatorApplications/ModerationPage";
 import RejectedPage from "@/features/creatorApplications/stubs/RejectedPage";
 import CreatorsListPage from "@/features/creators/CreatorsListPage";
 import CampaignsListPage from "@/features/campaigns/CampaignsListPage";
+import CampaignCreatePage from "@/features/campaigns/CampaignCreatePage";
 import RoleGuard from "@/features/auth/RoleGuard";
 import ErrorBoundary from "@/shared/components/ErrorBoundary";
 import Spinner from "@/shared/components/Spinner";
@@ -80,7 +81,7 @@ function App() {
                   <Route path={ROUTES.CAMPAIGNS} element={<CampaignsListPage />} />
                   <Route
                     path={ROUTES.CAMPAIGN_NEW}
-                    element={<ComingSoonPage testid="campaign-new-stub" />}
+                    element={<CampaignCreatePage />}
                   />
                   <Route
                     path={ROUTES.CAMPAIGN_DETAIL_PATTERN}

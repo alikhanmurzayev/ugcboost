@@ -13,15 +13,17 @@ vi.mock("./client", () => {
   return {
     default: {
       GET: vi.fn(),
+      POST: vi.fn(),
     },
     ApiError,
   };
 });
 
 import client, { ApiError } from "./client";
-import { listCampaigns } from "./campaigns";
+import { listCampaigns, createCampaign } from "./campaigns";
 
 const mockedGet = vi.mocked(client.GET);
+const mockedPost = vi.mocked(client.POST);
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -130,5 +132,67 @@ describe("listCampaigns", () => {
         order: "desc",
       }),
     ).rejects.toBeInstanceOf(ApiError);
+  });
+});
+
+describe("createCampaign", () => {
+  it("calls POST /campaigns with body and returns data on 201", async () => {
+    mockedPost.mockResolvedValueOnce({
+      data: { data: { id: "11111111-2222-3333-4444-555555555555" } },
+      response: { status: 201 } as Response,
+    });
+
+    const input = {
+      name: "Spring promo",
+      tmaUrl: "https://t.me/foo/bar",
+    };
+    const result = await createCampaign(input);
+
+    expect(mockedPost).toHaveBeenCalledTimes(1);
+    expect(mockedPost).toHaveBeenCalledWith("/campaigns", { body: input });
+    expect(result).toEqual({
+      data: { id: "11111111-2222-3333-4444-555555555555" },
+    });
+  });
+
+  it("throws ApiError on 409 with code from error body", async () => {
+    mockedPost.mockResolvedValueOnce({
+      error: { error: { code: "CAMPAIGN_NAME_TAKEN", message: "taken" } },
+      response: { status: 409 } as Response,
+    });
+
+    await expect(
+      createCampaign({ name: "Existing", tmaUrl: "https://t.me/x" }),
+    ).rejects.toMatchObject({
+      status: 409,
+      code: "CAMPAIGN_NAME_TAKEN",
+    });
+  });
+
+  it("throws ApiError on 422 with code from error body", async () => {
+    mockedPost.mockResolvedValueOnce({
+      error: {
+        error: { code: "CAMPAIGN_NAME_TOO_LONG", message: "too long" },
+      },
+      response: { status: 422 } as Response,
+    });
+
+    await expect(
+      createCampaign({ name: "x".repeat(300), tmaUrl: "https://t.me/x" }),
+    ).rejects.toMatchObject({
+      status: 422,
+      code: "CAMPAIGN_NAME_TOO_LONG",
+    });
+  });
+
+  it("falls back to INTERNAL_ERROR on malformed error body", async () => {
+    mockedPost.mockResolvedValueOnce({
+      error: {},
+      response: { status: 500 } as Response,
+    });
+
+    await expect(
+      createCampaign({ name: "Any", tmaUrl: "https://t.me/x" }),
+    ).rejects.toMatchObject({ status: 500, code: "INTERNAL_ERROR" });
   });
 });
