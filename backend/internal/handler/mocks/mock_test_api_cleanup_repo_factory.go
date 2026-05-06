@@ -90,6 +90,59 @@ func (_c *MockTestAPICleanupRepoFactory_NewBrandRepo_Call) RunAndReturn(run func
 	return _c
 }
 
+// NewCampaignRepo provides a mock function for the type MockTestAPICleanupRepoFactory
+func (_mock *MockTestAPICleanupRepoFactory) NewCampaignRepo(db dbutil.DB) repository.CampaignRepo {
+	ret := _mock.Called(db)
+
+	if len(ret) == 0 {
+		panic("no return value specified for NewCampaignRepo")
+	}
+
+	var r0 repository.CampaignRepo
+	if returnFunc, ok := ret.Get(0).(func(dbutil.DB) repository.CampaignRepo); ok {
+		r0 = returnFunc(db)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(repository.CampaignRepo)
+		}
+	}
+	return r0
+}
+
+// MockTestAPICleanupRepoFactory_NewCampaignRepo_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'NewCampaignRepo'
+type MockTestAPICleanupRepoFactory_NewCampaignRepo_Call struct {
+	*mock.Call
+}
+
+// NewCampaignRepo is a helper method to define mock.On call
+//   - db dbutil.DB
+func (_e *MockTestAPICleanupRepoFactory_Expecter) NewCampaignRepo(db interface{}) *MockTestAPICleanupRepoFactory_NewCampaignRepo_Call {
+	return &MockTestAPICleanupRepoFactory_NewCampaignRepo_Call{Call: _e.mock.On("NewCampaignRepo", db)}
+}
+
+func (_c *MockTestAPICleanupRepoFactory_NewCampaignRepo_Call) Run(run func(db dbutil.DB)) *MockTestAPICleanupRepoFactory_NewCampaignRepo_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 dbutil.DB
+		if args[0] != nil {
+			arg0 = args[0].(dbutil.DB)
+		}
+		run(
+			arg0,
+		)
+	})
+	return _c
+}
+
+func (_c *MockTestAPICleanupRepoFactory_NewCampaignRepo_Call) Return(campaignRepo repository.CampaignRepo) *MockTestAPICleanupRepoFactory_NewCampaignRepo_Call {
+	_c.Call.Return(campaignRepo)
+	return _c
+}
+
+func (_c *MockTestAPICleanupRepoFactory_NewCampaignRepo_Call) RunAndReturn(run func(db dbutil.DB) repository.CampaignRepo) *MockTestAPICleanupRepoFactory_NewCampaignRepo_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // NewCreatorApplicationRepo provides a mock function for the type MockTestAPICleanupRepoFactory
 func (_mock *MockTestAPICleanupRepoFactory) NewCreatorApplicationRepo(db dbutil.DB) repository.CreatorApplicationRepo {
 	ret := _mock.Called(db)

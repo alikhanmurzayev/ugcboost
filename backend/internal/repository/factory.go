@@ -80,3 +80,8 @@ func (f *RepoFactory) NewCreatorSocialRepo(db dbutil.DB) CreatorSocialRepo {
 func (f *RepoFactory) NewCreatorCategoryRepo(db dbutil.DB) CreatorCategoryRepo {
 	return &creatorCategoryRepository{db: db}
 }
+
+// NewCampaignRepo creates a campaign repository bound to the given DB.
+func (f *RepoFactory) NewCampaignRepo(db dbutil.DB) CampaignRepo {
+	return &campaignRepository{db: db}
+}

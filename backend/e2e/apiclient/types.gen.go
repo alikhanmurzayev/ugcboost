@@ -299,6 +299,26 @@ type BrandResult struct {
 	Data Brand `json:"data"`
 }
 
+// CampaignCreatedData defines model for CampaignCreatedData.
+type CampaignCreatedData struct {
+	// Id Server-stamped UUID of the freshly created campaign.
+	Id openapi_types.UUID `json:"id"`
+}
+
+// CampaignCreatedResult defines model for CampaignCreatedResult.
+type CampaignCreatedResult struct {
+	Data CampaignCreatedData `json:"data"`
+}
+
+// CampaignInput Mutable subset of a campaign — used for create.
+type CampaignInput struct {
+	// Name Display name of the campaign. Unique among non-deleted campaigns.
+	Name string `json:"name"`
+
+	// TmaUrl URL of the TMA-side ТЗ landing page embedded into creator invites.
+	TmaUrl string `json:"tmaUrl"`
+}
+
 // ConsentType Canonical consent type captured at creator application submission.
 type ConsentType string
 
@@ -1062,6 +1082,9 @@ type UpdateBrandJSONRequestBody = BrandInput
 
 // AssignManagerJSONRequestBody defines body for AssignManager for application/json ContentType.
 type AssignManagerJSONRequestBody = AssignManagerRequest
+
+// CreateCampaignJSONRequestBody defines body for CreateCampaign for application/json ContentType.
+type CreateCampaignJSONRequestBody = CampaignInput
 
 // SubmitCreatorApplicationJSONRequestBody defines body for SubmitCreatorApplication for application/json ContentType.
 type SubmitCreatorApplicationJSONRequestBody = CreatorApplicationSubmitRequest

@@ -544,6 +544,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/campaigns": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create a marketing campaign (admin-only)
+         * @description Creates a new marketing campaign. The TMA-side ТЗ landing page lives
+         *     at a hardcoded secret URL inside the TMA app; the URL is stored here
+         *     only to be embedded into outbound creator-invite messages. Name is
+         *     unique among non-deleted campaigns (partial unique index).
+         */
+        post: operations["createCampaign"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/webhooks/sendpulse/instagram": {
         parameters: {
             query?: never;
@@ -1292,6 +1315,23 @@ export interface components {
         };
         CreatorsListResult: {
             data: components["schemas"]["CreatorsListData"];
+        };
+        /** @description Mutable subset of a campaign — used for create. */
+        CampaignInput: {
+            /** @description Display name of the campaign. Unique among non-deleted campaigns. */
+            name: string;
+            /** @description URL of the TMA-side ТЗ landing page embedded into creator invites. */
+            tmaUrl: string;
+        };
+        CampaignCreatedData: {
+            /**
+             * Format: uuid
+             * @description Server-stamped UUID of the freshly created campaign.
+             */
+            id: string;
+        };
+        CampaignCreatedResult: {
+            data: components["schemas"]["CampaignCreatedData"];
         };
     };
     responses: {
@@ -2238,6 +2278,59 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             /** @description Creator not found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            default: components["responses"]["UnexpectedError"];
+        };
+    };
+    createCampaign: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CampaignInput"];
+            };
+        };
+        responses: {
+            /** @description Campaign created */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CampaignCreatedResult"];
+                };
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            /** @description Campaign name already taken among non-deleted campaigns. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation error */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };
