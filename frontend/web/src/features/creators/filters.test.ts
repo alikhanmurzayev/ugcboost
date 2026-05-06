@@ -10,8 +10,7 @@ import {
 
 describe("parseFilters", () => {
   it("returns empty/default values for empty params", () => {
-    const f = parseFilters(new URLSearchParams());
-    expect(f).toEqual({
+    expect(parseFilters(new URLSearchParams())).toEqual({
       search: undefined,
       dateFrom: undefined,
       dateTo: undefined,
@@ -19,13 +18,12 @@ describe("parseFilters", () => {
       ageFrom: undefined,
       ageTo: undefined,
       categories: [],
-      telegramLinked: undefined,
     });
   });
 
   it("parses all fields from URL", () => {
     const sp = new URLSearchParams(
-      "q=Иван&dateFrom=2026-04-01&dateTo=2026-05-01&cities=ALA,AST&ageFrom=18&ageTo=35&categories=fashion,beauty&telegramLinked=true",
+      "q=Иван&dateFrom=2026-04-01&dateTo=2026-05-01&cities=ALA,AST&ageFrom=18&ageTo=35&categories=fashion,beauty",
     );
     expect(parseFilters(sp)).toEqual({
       search: "Иван",
@@ -35,18 +33,7 @@ describe("parseFilters", () => {
       ageFrom: 18,
       ageTo: 35,
       categories: ["fashion", "beauty"],
-      telegramLinked: true,
     });
-  });
-
-  it("parses telegramLinked false explicitly", () => {
-    const f = parseFilters(new URLSearchParams("telegramLinked=false"));
-    expect(f.telegramLinked).toBe(false);
-  });
-
-  it("ignores malformed telegramLinked value", () => {
-    const f = parseFilters(new URLSearchParams("telegramLinked=maybe"));
-    expect(f.telegramLinked).toBeUndefined();
   });
 
   it("ignores malformed date params", () => {
@@ -59,6 +46,12 @@ describe("parseFilters", () => {
   it("ignores malformed age params", () => {
     const sp = new URLSearchParams("ageFrom=abc&ageTo=-5");
     const f = parseFilters(sp);
+    expect(f.ageFrom).toBeUndefined();
+    expect(f.ageTo).toBeUndefined();
+  });
+
+  it("rejects unbounded numeric inputs (e.g. ageFrom=1e10)", () => {
+    const f = parseFilters(new URLSearchParams("ageFrom=1e10&ageTo=200"));
     expect(f.ageFrom).toBeUndefined();
     expect(f.ageTo).toBeUndefined();
   });
@@ -81,7 +74,6 @@ describe("writeFilters", () => {
       ageFrom: 20,
       ageTo: 30,
       categories: ["fashion"],
-      telegramLinked: false,
     };
     const sp = new URLSearchParams();
     writeFilters(sp, original);
@@ -89,41 +81,33 @@ describe("writeFilters", () => {
   });
 
   it("removes keys for undefined/empty values", () => {
-    const sp = new URLSearchParams(
-      "q=stale&cities=stale&telegramLinked=true",
-    );
+    const sp = new URLSearchParams("q=stale&cities=stale");
     writeFilters(sp, {
       search: undefined,
       cities: [],
       categories: [],
-      telegramLinked: undefined,
     });
     expect(sp.has("q")).toBe(false);
     expect(sp.has("cities")).toBe(false);
-    expect(sp.has("telegramLinked")).toBe(false);
   });
 });
 
 describe("clearFilters", () => {
   it("removes all known filter keys but keeps others", () => {
     const sp = new URLSearchParams(
-      "q=x&dateFrom=2026-01-01&cities=ALA&telegramLinked=false&id=keep-me&page=2",
+      "q=x&dateFrom=2026-01-01&cities=ALA&id=keep-me&page=2",
     );
     clearFilters(sp);
     expect(sp.has("q")).toBe(false);
     expect(sp.has("dateFrom")).toBe(false);
     expect(sp.has("cities")).toBe(false);
-    expect(sp.has("telegramLinked")).toBe(false);
     expect(sp.get("id")).toBe("keep-me");
     expect(sp.get("page")).toBe("2");
   });
 });
 
 describe("isFilterActive", () => {
-  const empty = {
-    cities: [] as string[],
-    categories: [] as string[],
-  };
+  const empty = { cities: [] as string[], categories: [] as string[] };
 
   it("returns false for empty filters", () => {
     expect(isFilterActive(empty)).toBe(false);
@@ -137,8 +121,6 @@ describe("isFilterActive", () => {
     expect(isFilterActive({ ...empty, categories: ["x"] })).toBe(true);
     expect(isFilterActive({ ...empty, ageFrom: 18 })).toBe(true);
     expect(isFilterActive({ ...empty, ageTo: 30 })).toBe(true);
-    expect(isFilterActive({ ...empty, telegramLinked: true })).toBe(true);
-    expect(isFilterActive({ ...empty, telegramLinked: false })).toBe(true);
   });
 });
 
@@ -151,9 +133,8 @@ describe("countActive", () => {
         cities: ["ALA"],
         categories: ["x"],
         ageFrom: 18,
-        telegramLinked: false,
       }),
-    ).toBe(5);
+    ).toBe(4);
     expect(
       countActive({
         dateFrom: "2026-01-01",
@@ -162,39 +143,27 @@ describe("countActive", () => {
         categories: [],
       }),
     ).toBe(1);
-    expect(
-      countActive({
-        cities: [],
-        categories: [],
-        telegramLinked: true,
-      }),
-    ).toBe(1);
   });
 });
 
 describe("toListInput", () => {
   const baseOpts = {
-    statuses: ["verification" as const],
-    sort: { sort: "created_at" as const, order: "desc" as const },
+    sort: { sort: "full_name" as const, order: "asc" as const },
     page: 1,
     perPage: 50,
   };
 
   it("emits required fields with empty filters", () => {
-    const body = toListInput(
-      { cities: [], categories: [] },
-      baseOpts,
-    );
+    const body = toListInput({ cities: [], categories: [] }, baseOpts);
     expect(body).toEqual({
       page: 1,
       perPage: 50,
-      sort: "created_at",
-      order: "desc",
-      statuses: ["verification"],
+      sort: "full_name",
+      order: "asc",
     });
   });
 
-  it("matches AC body for typical URL filters", () => {
+  it("matches body for typical URL filters", () => {
     const body = toListInput(
       {
         search: "Иван",
@@ -207,9 +176,8 @@ describe("toListInput", () => {
     expect(body).toEqual({
       page: 1,
       perPage: 50,
-      sort: "created_at",
-      order: "desc",
-      statuses: ["verification"],
+      sort: "full_name",
+      order: "asc",
       search: "Иван",
       dateFrom: "2026-04-01T00:00:00.000Z",
       cities: ["ALA"],
@@ -246,26 +214,4 @@ describe("toListInput", () => {
     expect(body.ageFrom).toBe(18);
     expect(body.ageTo).toBe(35);
   });
-
-  it("emits telegramLinked=true when set", () => {
-    const body = toListInput(
-      { cities: [], categories: [], telegramLinked: true },
-      baseOpts,
-    );
-    expect(body.telegramLinked).toBe(true);
-  });
-
-  it("emits telegramLinked=false when set", () => {
-    const body = toListInput(
-      { cities: [], categories: [], telegramLinked: false },
-      baseOpts,
-    );
-    expect(body.telegramLinked).toBe(false);
-  });
-
-  it("omits telegramLinked when undefined", () => {
-    const body = toListInput({ cities: [], categories: [] }, baseOpts);
-    expect("telegramLinked" in body).toBe(false);
-  });
 });
-

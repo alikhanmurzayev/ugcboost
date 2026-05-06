@@ -15,6 +15,12 @@ export const creatorApplicationKeys = {
   counts: () => ["creator-applications", "counts"] as const,
 };
 
+export const creatorKeys = {
+  all: () => ["creators"] as const,
+  list: (params: Record<string, unknown>) => ["creators", "list", params] as const,
+  detail: (id: string) => ["creators", "detail", id] as const,
+};
+
 export const dictionaryKeys = {
   list: (type: string) => ["dictionaries", type] as const,
 };

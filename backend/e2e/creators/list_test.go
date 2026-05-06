@@ -70,6 +70,27 @@ func defaultCreatorOpts() testutil.CreatorApplicationFixture {
 	}
 }
 
+// newMarker returns a unique lowercase token reused across one test scenario
+// to scope list queries via body.Search. Anchors fixtures to a marker-private
+// subset so assertions stay deterministic on a busy staging DB regardless of
+// what other parallel tests are seeding.
+func newMarker() string {
+	return strings.ToLower("e2e" + testutil.UniqueIIN()[6:])
+}
+
+// defaultCreatorOptsScoped attaches the marker to the verified IG handle so
+// the resulting creator surfaces under body.Search = marker. Same for the
+// non-verified TikTok handle — keeps the dual-platform shape used by
+// defaultCreatorOpts.
+func defaultCreatorOptsScoped(marker, suffix string) testutil.CreatorApplicationFixture {
+	return testutil.CreatorApplicationFixture{
+		Socials: []testutil.SocialFixture{
+			{Platform: string(apiclient.Instagram), Handle: marker + "_" + suffix, Verification: testutil.VerificationAutoIG},
+			{Platform: string(apiclient.Tiktok), Handle: marker + "_tt_" + suffix, Verification: testutil.VerificationNone},
+		},
+	}
+}
+
 func TestCreatorsList(t *testing.T) {
 	t.Parallel()
 
@@ -145,14 +166,16 @@ func TestCreatorsList(t *testing.T) {
 
 	t.Run("happy: cities filter narrows to single city", func(t *testing.T) {
 		t.Parallel()
-		almaty := testutil.SetupApprovedCreator(t, defaultCreatorOpts())
-		astanaOpts := defaultCreatorOpts()
+		marker := newMarker()
+		almaty := testutil.SetupApprovedCreator(t, defaultCreatorOptsScoped(marker, "ala"))
+		astanaOpts := defaultCreatorOptsScoped(marker, "ast")
 		astanaOpts.CityCode = "astana"
 		astana := testutil.SetupApprovedCreator(t, astanaOpts)
 
 		body := validCreatorListBody()
 		cities := []string{"astana"}
 		body.Cities = &cities
+		body.Search = pointer.ToString(marker)
 		body.PerPage = 200
 
 		c := testutil.NewAPIClient(t)
@@ -171,17 +194,19 @@ func TestCreatorsList(t *testing.T) {
 
 	t.Run("happy: categories filter is any-of EXISTS", func(t *testing.T) {
 		t.Parallel()
-		beautyOpts := defaultCreatorOpts()
+		marker := newMarker()
+		beautyOpts := defaultCreatorOptsScoped(marker, "beauty")
 		beautyOpts.CategoryCodes = []string{"beauty", "fashion"}
 		beauty := testutil.SetupApprovedCreator(t, beautyOpts)
 
-		foodOpts := defaultCreatorOpts()
+		foodOpts := defaultCreatorOptsScoped(marker, "food")
 		foodOpts.CategoryCodes = []string{"food"}
 		food := testutil.SetupApprovedCreator(t, foodOpts)
 
 		body := validCreatorListBody()
 		cats := []string{"beauty"}
 		body.Categories = &cats
+		body.Search = pointer.ToString(marker)
 		body.PerPage = 200
 
 		c := testutil.NewAPIClient(t)
@@ -196,11 +221,13 @@ func TestCreatorsList(t *testing.T) {
 
 	t.Run("happy: dateFrom narrows to creators created near a marker", func(t *testing.T) {
 		t.Parallel()
-		marker := time.Now().UTC().Add(-2 * time.Second)
-		fresh := testutil.SetupApprovedCreator(t, defaultCreatorOpts())
+		dateMarker := time.Now().UTC().Add(-2 * time.Second)
+		marker := newMarker()
+		fresh := testutil.SetupApprovedCreator(t, defaultCreatorOptsScoped(marker, "fresh"))
 
 		body := validCreatorListBody()
-		body.DateFrom = pointer.ToTime(marker)
+		body.DateFrom = pointer.ToTime(dateMarker)
+		body.Search = pointer.ToString(marker)
 		body.PerPage = 200
 
 		c := testutil.NewAPIClient(t)
@@ -218,10 +245,12 @@ func TestCreatorsList(t *testing.T) {
 
 	t.Run("happy: ageFrom matches creators >= threshold", func(t *testing.T) {
 		t.Parallel()
-		creator := testutil.SetupApprovedCreator(t, defaultCreatorOpts())
+		marker := newMarker()
+		creator := testutil.SetupApprovedCreator(t, defaultCreatorOptsScoped(marker, "age"))
 
 		body := validCreatorListBody()
 		body.AgeFrom = pointer.ToInt(18)
+		body.Search = pointer.ToString(marker)
 		body.PerPage = 200
 
 		c := testutil.NewAPIClient(t)
@@ -234,10 +263,12 @@ func TestCreatorsList(t *testing.T) {
 
 	t.Run("happy: ageTo=10 excludes adult creators", func(t *testing.T) {
 		t.Parallel()
-		creator := testutil.SetupApprovedCreator(t, defaultCreatorOpts())
+		marker := newMarker()
+		creator := testutil.SetupApprovedCreator(t, defaultCreatorOptsScoped(marker, "ageto"))
 
 		body := validCreatorListBody()
 		body.AgeTo = pointer.ToInt(10)
+		body.Search = pointer.ToString(marker)
 		body.PerPage = 200
 
 		c := testutil.NewAPIClient(t)
@@ -252,6 +283,8 @@ func TestCreatorsList(t *testing.T) {
 		t.Parallel()
 		creator := testutil.SetupApprovedCreator(t, defaultCreatorOpts())
 
+		// IIN is unique by construction (testutil.UniqueIIN), so search scoping
+		// is implicit — no need for marker overlay.
 		body := validCreatorListBody()
 		body.Search = pointer.ToString(creator.IIN)
 		body.PerPage = 200
@@ -266,11 +299,17 @@ func TestCreatorsList(t *testing.T) {
 
 	t.Run("happy: search by phone matches substring", func(t *testing.T) {
 		t.Parallel()
-		creator := testutil.SetupApprovedCreator(t, defaultCreatorOpts())
+		// Use a unique phone so the substring search hits exactly this creator
+		// regardless of how many other parallel seeders left "+77001234567"
+		// rows around. The 7-digit suffix is drawn from UniqueIIN for parallel
+		// safety.
+		phoneSuffix := testutil.UniqueIIN()[:7]
+		opts := defaultCreatorOpts()
+		opts.Phone = "+7700" + phoneSuffix
+		creator := testutil.SetupApprovedCreator(t, opts)
 
-		// Phone is "+77001234567" by default — admin pasting last 7 digits must match.
 		body := validCreatorListBody()
-		body.Search = pointer.ToString("7001234567")
+		body.Search = pointer.ToString(phoneSuffix)
 		body.PerPage = 200
 
 		c := testutil.NewAPIClient(t)
@@ -304,9 +343,15 @@ func TestCreatorsList(t *testing.T) {
 
 	t.Run("happy: blank search after trim disables filter", func(t *testing.T) {
 		t.Parallel()
+		// Blank search after trim disables the search filter — but on a busy
+		// staging DB the unfiltered list quickly exceeds perPage=200 and the
+		// freshly seeded creator gets pushed off the first page. Sort by
+		// created_at desc puts it at the head; perPage=200 is then enough.
 		creator := testutil.SetupApprovedCreator(t, defaultCreatorOpts())
 
 		body := validCreatorListBody()
+		body.Sort = apiclient.CreatorListSortFieldCreatedAt
+		body.Order = apiclient.Desc
 		body.Search = pointer.ToString("   ")
 		body.PerPage = 200
 
@@ -322,8 +367,7 @@ func TestCreatorsList(t *testing.T) {
 		t.Parallel()
 		// "100%" must not glob — without escape every creator in the table
 		// would match. The seeded creator has neither "100%" nor "%" in any
-		// PII field, so escaped search returns empty; the marker fixture is
-		// only needed to bootstrap admin token.
+		// PII field, so escaped search returns empty.
 		creator := testutil.SetupApprovedCreator(t, defaultCreatorOpts())
 
 		body := validCreatorListBody()
@@ -341,13 +385,15 @@ func TestCreatorsList(t *testing.T) {
 
 	t.Run("sort: created_at asc orders by approve time", func(t *testing.T) {
 		t.Parallel()
-		first := testutil.SetupApprovedCreator(t, defaultCreatorOpts())
+		marker := newMarker()
+		first := testutil.SetupApprovedCreator(t, defaultCreatorOptsScoped(marker, "first"))
 		time.Sleep(1100 * time.Millisecond)
-		second := testutil.SetupApprovedCreator(t, defaultCreatorOpts())
+		second := testutil.SetupApprovedCreator(t, defaultCreatorOptsScoped(marker, "second"))
 
 		body := validCreatorListBody()
 		body.Sort = apiclient.CreatorListSortFieldCreatedAt
 		body.Order = apiclient.Asc
+		body.Search = pointer.ToString(marker)
 		body.PerPage = 200
 
 		c := testutil.NewAPIClient(t)
@@ -362,15 +408,17 @@ func TestCreatorsList(t *testing.T) {
 
 	t.Run("sort: city_name asc orders by ct.name", func(t *testing.T) {
 		t.Parallel()
-		almatyOpts := defaultCreatorOpts()
+		marker := newMarker()
+		almatyOpts := defaultCreatorOptsScoped(marker, "ala")
 		almaty := testutil.SetupApprovedCreator(t, almatyOpts)
-		astanaOpts := defaultCreatorOpts()
+		astanaOpts := defaultCreatorOptsScoped(marker, "ast")
 		astanaOpts.CityCode = "astana"
 		astana := testutil.SetupApprovedCreator(t, astanaOpts)
 
 		body := validCreatorListBody()
 		body.Sort = apiclient.CreatorListSortFieldCityName
 		body.Order = apiclient.Asc
+		body.Search = pointer.ToString(marker)
 		body.PerPage = 200
 
 		c := testutil.NewAPIClient(t)
@@ -385,12 +433,13 @@ func TestCreatorsList(t *testing.T) {
 
 	t.Run("sort: full_name asc orders by last_name", func(t *testing.T) {
 		t.Parallel()
-		aOpts := defaultCreatorOpts()
+		marker := newMarker()
+		aOpts := defaultCreatorOptsScoped(marker, "a")
 		aOpts.LastName = "Аaaaaaaaa" + testutil.UniqueIIN()[6:]
 		aOpts.FirstName = "Айдана"
 		aCreator := testutil.SetupApprovedCreator(t, aOpts)
 
-		zOpts := defaultCreatorOpts()
+		zOpts := defaultCreatorOptsScoped(marker, "z")
 		zOpts.LastName = "Яyyyyyyyy" + testutil.UniqueIIN()[6:]
 		zOpts.FirstName = "Айдана"
 		zCreator := testutil.SetupApprovedCreator(t, zOpts)
@@ -398,6 +447,7 @@ func TestCreatorsList(t *testing.T) {
 		body := validCreatorListBody()
 		body.Sort = apiclient.CreatorListSortFieldFullName
 		body.Order = apiclient.Asc
+		body.Search = pointer.ToString(marker)
 		body.PerPage = 200
 
 		c := testutil.NewAPIClient(t)
@@ -412,12 +462,13 @@ func TestCreatorsList(t *testing.T) {
 
 	t.Run("sort: full_name desc reverses last_name order", func(t *testing.T) {
 		t.Parallel()
-		aOpts := defaultCreatorOpts()
+		marker := newMarker()
+		aOpts := defaultCreatorOptsScoped(marker, "a")
 		aOpts.LastName = "Аaaaaaaaa" + testutil.UniqueIIN()[6:]
 		aOpts.FirstName = "Айдана"
 		aCreator := testutil.SetupApprovedCreator(t, aOpts)
 
-		zOpts := defaultCreatorOpts()
+		zOpts := defaultCreatorOptsScoped(marker, "z")
 		zOpts.LastName = "Яyyyyyyyy" + testutil.UniqueIIN()[6:]
 		zOpts.FirstName = "Айдана"
 		zCreator := testutil.SetupApprovedCreator(t, zOpts)
@@ -425,6 +476,7 @@ func TestCreatorsList(t *testing.T) {
 		body := validCreatorListBody()
 		body.Sort = apiclient.CreatorListSortFieldFullName
 		body.Order = apiclient.Desc
+		body.Search = pointer.ToString(marker)
 		body.PerPage = 200
 
 		c := testutil.NewAPIClient(t)
@@ -442,12 +494,14 @@ func TestCreatorsList(t *testing.T) {
 		// UniqueIIN samples birth year from 1985..2005, so two fresh creators
 		// will likely differ in birth date. We do not assert which one is
 		// first — just that the relative order matches the field ordering.
-		first := testutil.SetupApprovedCreator(t, defaultCreatorOpts())
-		second := testutil.SetupApprovedCreator(t, defaultCreatorOpts())
+		marker := newMarker()
+		first := testutil.SetupApprovedCreator(t, defaultCreatorOptsScoped(marker, "first"))
+		second := testutil.SetupApprovedCreator(t, defaultCreatorOptsScoped(marker, "second"))
 
 		body := validCreatorListBody()
 		body.Sort = apiclient.CreatorListSortFieldBirthDate
 		body.Order = apiclient.Desc
+		body.Search = pointer.ToString(marker)
 		body.PerPage = 200
 
 		c := testutil.NewAPIClient(t)
@@ -465,7 +519,7 @@ func TestCreatorsList(t *testing.T) {
 			}
 			prev = it
 		}
-		// Also verify both seeded creators are in the response.
+		// Both seeded creators are in the response.
 		ids := collectCreatorIDs(resp.JSON200.Data.Items)
 		require.Contains(t, ids, first.CreatorID)
 		require.Contains(t, ids, second.CreatorID)
@@ -473,11 +527,13 @@ func TestCreatorsList(t *testing.T) {
 
 	t.Run("sort: updated_at asc returns 200", func(t *testing.T) {
 		t.Parallel()
-		creator := testutil.SetupApprovedCreator(t, defaultCreatorOpts())
+		marker := newMarker()
+		creator := testutil.SetupApprovedCreator(t, defaultCreatorOptsScoped(marker, "u"))
 
 		body := validCreatorListBody()
 		body.Sort = apiclient.CreatorListSortFieldUpdatedAt
 		body.Order = apiclient.Asc
+		body.Search = pointer.ToString(marker)
 		body.PerPage = 200
 
 		c := testutil.NewAPIClient(t)
@@ -490,12 +546,16 @@ func TestCreatorsList(t *testing.T) {
 
 	t.Run("pagination: page=2 returns next slice", func(t *testing.T) {
 		t.Parallel()
-		// Three creators, perPage=2 → page 1 has 2, page 2 has the third.
-		first := testutil.SetupApprovedCreator(t, defaultCreatorOpts())
-		_ = testutil.SetupApprovedCreator(t, defaultCreatorOpts())
-		_ = testutil.SetupApprovedCreator(t, defaultCreatorOpts())
+		// Three marker-scoped creators, perPage=2 → page 1 has 2, page 2 has
+		// the third. Marker isolates the dataset from any other parallel
+		// seeders so total stays exactly 3 even on a busy staging DB.
+		marker := newMarker()
+		first := testutil.SetupApprovedCreator(t, defaultCreatorOptsScoped(marker, "1"))
+		_ = testutil.SetupApprovedCreator(t, defaultCreatorOptsScoped(marker, "2"))
+		_ = testutil.SetupApprovedCreator(t, defaultCreatorOptsScoped(marker, "3"))
 
 		body := validCreatorListBody()
+		body.Search = pointer.ToString(marker)
 		body.PerPage = 2
 		body.Page = 1
 
@@ -505,12 +565,14 @@ func TestCreatorsList(t *testing.T) {
 		require.Equal(t, http.StatusOK, resp1.StatusCode())
 		require.NotNil(t, resp1.JSON200)
 		require.Len(t, resp1.JSON200.Data.Items, 2)
+		require.Equal(t, int64(3), resp1.JSON200.Data.Total, "total must reflect the marker-scoped count")
 
 		body.Page = 2
 		resp2, err := c.ListCreatorsWithResponse(context.Background(), body, testutil.WithAuth(first.AdminToken))
 		require.NoError(t, err)
 		require.Equal(t, http.StatusOK, resp2.StatusCode())
 		require.NotNil(t, resp2.JSON200)
+		require.Len(t, resp2.JSON200.Data.Items, 1)
 		// Page 2 must not duplicate page 1 ids.
 		page1IDs := collectCreatorIDs(resp1.JSON200.Data.Items)
 		page2IDs := collectCreatorIDs(resp2.JSON200.Data.Items)
@@ -521,11 +583,13 @@ func TestCreatorsList(t *testing.T) {
 
 	t.Run("pagination: beyond last page returns empty items, total preserved", func(t *testing.T) {
 		t.Parallel()
-		creator := testutil.SetupApprovedCreator(t, defaultCreatorOpts())
+		marker := newMarker()
+		creator := testutil.SetupApprovedCreator(t, defaultCreatorOptsScoped(marker, "tail"))
 
 		// Page bound is CreatorListPageMax (100_000) — pick a value comfortably
-		// inside the bound but past any plausible creators total under test.
+		// inside the bound but past the marker-scoped count of 1.
 		body := validCreatorListBody()
+		body.Search = pointer.ToString(marker)
 		body.PerPage = 1
 		body.Page = 99_999
 
@@ -535,7 +599,7 @@ func TestCreatorsList(t *testing.T) {
 		require.Equal(t, http.StatusOK, resp.StatusCode())
 		require.NotNil(t, resp.JSON200)
 		require.Empty(t, resp.JSON200.Data.Items)
-		require.GreaterOrEqual(t, resp.JSON200.Data.Total, int64(1))
+		require.Equal(t, int64(1), resp.JSON200.Data.Total)
 	})
 
 	t.Run("item shape: hydrated city/categories, lean PII set", func(t *testing.T) {

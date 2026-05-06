@@ -9,13 +9,13 @@ import {
 import { creatorApplicationKeys } from "@/shared/constants/queryKeys";
 import Spinner from "@/shared/components/Spinner";
 import ErrorState from "@/shared/components/ErrorState";
-import ApplicationsTable, { type Column } from "./components/ApplicationsTable";
+import Table, { type Column } from "@/shared/components/Table";
+import { CategoryChips } from "@/shared/components/CategoryChip";
+import SocialLink from "@/shared/components/SocialLink";
 import ApplicationActions from "./components/ApplicationActions";
 import ApplicationDrawer from "./components/ApplicationDrawer";
 import ApplicationFilters from "./components/ApplicationFilters";
-import { CategoryChips } from "./components/CategoryChip";
 import HoursBadge from "./components/HoursBadge";
-import SocialLink from "./components/SocialLink";
 import { hoursSince } from "./hours";
 import { isFilterActive, parseFilters, toListInput } from "./filters";
 import {
@@ -158,7 +158,7 @@ export default function ModerationPage() {
         />
       ) : (
         <>
-          <ApplicationsTable
+          <Table
             rows={items}
             columns={columns}
             rowKey={(row) => row.id}
@@ -170,6 +170,7 @@ export default function ModerationPage() {
             emptyMessage={
               isFilterActive(filters) ? t("emptyFiltered") : t("empty")
             }
+            testid="applications-table"
           />
 
           {totalPages > 1 && (

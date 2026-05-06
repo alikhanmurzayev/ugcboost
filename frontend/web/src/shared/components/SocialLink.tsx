@@ -1,4 +1,7 @@
-import { PLATFORM_LABELS, type SocialPlatform } from "../types";
+import {
+  PLATFORM_LABELS,
+  type SocialPlatform,
+} from "@/shared/constants/socials";
 
 const PLATFORM_ICON_SRC: Record<SocialPlatform, string> = {
   instagram: "/social/instagram.svg",

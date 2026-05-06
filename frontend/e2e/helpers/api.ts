@@ -37,6 +37,7 @@ type GetCreatorApplicationResult =
   components["schemas"]["GetCreatorApplicationResult"];
 type CreatorApplicationDetailData =
   components["schemas"]["CreatorApplicationDetailData"];
+type CreatorApprovalResult = components["schemas"]["CreatorApprovalResult"];
 type SendPulseInstagramWebhookRequest =
   components["schemas"]["SendPulseInstagramWebhookRequest"];
 
@@ -507,6 +508,117 @@ export async function manualVerifyApplicationSocial(
     throw new Error(
       `manualVerifyApplicationSocial ${applicationId}/${socialId}: ${resp.status()} ${await resp.text()}`,
     );
+  }
+}
+
+async function cleanupCreator(
+  request: APIRequestContext,
+  apiUrl: string,
+  creatorId: string,
+): Promise<void> {
+  if (process.env.E2E_CLEANUP === "false") return;
+  const body: CleanupEntityRequest = { type: "creator", id: creatorId };
+  const resp = await request.post(`${apiUrl}/test/cleanup-entity`, { data: body });
+  if (resp.status() !== 204 && resp.status() !== 404) {
+    throw new Error(`cleanupCreator ${creatorId}: ${resp.status()} ${await resp.text()}`);
+  }
+}
+
+// approveApplication drives admin POST /creators/applications/{id}/approve and
+// returns the freshly-materialised creator id. Caller is responsible for
+// having walked the application up to `moderation` first (link Telegram +
+// verify all socials).
+export async function approveApplication(
+  request: APIRequestContext,
+  apiUrl: string,
+  applicationId: string,
+  token: string,
+): Promise<string> {
+  const resp = await request.post(
+    `${apiUrl}/creators/applications/${applicationId}/approve`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+  if (resp.status() !== 200) {
+    throw new Error(
+      `approveApplication ${applicationId}: ${resp.status()} ${await resp.text()}`,
+    );
+  }
+  const result = (await resp.json()) as CreatorApprovalResult;
+  return result.data.creatorId;
+}
+
+export type SeedApprovedCreatorOpts = SeedCreatorApplicationOpts;
+
+export interface SeededApprovedCreator {
+  creatorId: string;
+  applicationId: string;
+  application: SeededCreatorApplication;
+  telegram: LinkedTelegram;
+  cleanup: () => Promise<void>;
+}
+
+// seedApprovedCreator composes the full happy path that materialises a row in
+// `creators`: seed an application via the public endpoint, link Telegram so
+// moderation is unblocked, manually verify every social (admin path — keeps
+// the helper sync without polling SendPulse), then approve as admin. Cleanup
+// drops the creator row first (cascade-safe) and then the originating
+// application — matching defer-LIFO ordering callers expect.
+export async function seedApprovedCreator(
+  request: APIRequestContext,
+  apiUrl: string,
+  adminToken: string,
+  opts: SeedApprovedCreatorOpts = {},
+): Promise<SeededApprovedCreator> {
+  const application = await seedCreatorApplication(request, apiUrl, opts);
+  try {
+    const telegram = await linkTelegramToApplication(
+      request,
+      apiUrl,
+      application.applicationId,
+    );
+    const detail = await fetchApplicationDetail(
+      request,
+      apiUrl,
+      application.applicationId,
+      adminToken,
+    );
+    for (const social of detail.socials) {
+      if (!social.verified) {
+        await manualVerifyApplicationSocial(
+          request,
+          apiUrl,
+          application.applicationId,
+          social.id,
+          adminToken,
+        );
+      }
+    }
+    const creatorId = await approveApplication(
+      request,
+      apiUrl,
+      application.applicationId,
+      adminToken,
+    );
+
+    return {
+      creatorId,
+      applicationId: application.applicationId,
+      application,
+      telegram,
+      cleanup: async () => {
+        try {
+          await cleanupCreator(request, apiUrl, creatorId);
+        } finally {
+          await application.cleanup();
+        }
+      },
+    };
+  } catch (err) {
+    // Partial failure: roll back the application we already created so the row
+    // does not leak into the next test run. Cleanup errors are swallowed —
+    // surfacing the original failure is more useful than a chained 5xx.
+    await application.cleanup().catch(() => {});
+    throw err;
   }
 }
 

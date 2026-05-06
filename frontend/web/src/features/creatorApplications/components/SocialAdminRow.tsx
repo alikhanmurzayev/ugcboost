@@ -1,7 +1,7 @@
 import { useTranslation } from "react-i18next";
 import type { components } from "@/api/generated/schema";
-import { PLATFORM_LABELS } from "../types";
-import SocialLink from "./SocialLink";
+import SocialLink from "@/shared/components/SocialLink";
+import { PLATFORM_LABELS } from "@/shared/constants/socials";
 
 type DetailSocial = components["schemas"]["CreatorApplicationDetailSocial"];
 

@@ -2,35 +2,30 @@ import { useMemo } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
-import {
-  getCreatorApplication,
-  listCreatorApplications,
-} from "@/api/creatorApplications";
-import { creatorApplicationKeys } from "@/shared/constants/queryKeys";
+import { listCreators, getCreator } from "@/api/creators";
+import { creatorKeys } from "@/shared/constants/queryKeys";
 import Spinner from "@/shared/components/Spinner";
 import ErrorState from "@/shared/components/ErrorState";
 import Table, { type Column } from "@/shared/components/Table";
 import { CategoryChips } from "@/shared/components/CategoryChip";
 import SocialLink from "@/shared/components/SocialLink";
-import ApplicationActions from "./components/ApplicationActions";
-import ApplicationDrawer from "./components/ApplicationDrawer";
-import ApplicationFilters from "./components/ApplicationFilters";
-import HoursBadge from "./components/HoursBadge";
-import { hoursSince } from "./hours";
+import { calcAge } from "@/shared/utils/age";
+import CreatorFilters from "./CreatorFilters";
+import CreatorDrawer from "./CreatorDrawer";
 import { isFilterActive, parseFilters, toListInput } from "./filters";
 import {
+  activeColumnForSort,
   fieldForColumn,
   parseSortFromUrl,
   serializeSort,
   toggleSort,
 } from "./sort";
-import type { Application } from "./types";
+import type { CreatorListItem } from "./types";
 
 const PER_PAGE = 50;
-const STATUSES = ["verification"] as const;
 
-export default function VerificationPage() {
-  const { t } = useTranslation("creatorApplications");
+export default function CreatorsListPage() {
+  const { t } = useTranslation("creators");
   const { t: tCommon } = useTranslation("common");
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -42,7 +37,6 @@ export default function VerificationPage() {
   const listInput = useMemo(
     () =>
       toListInput(filters, {
-        statuses: [...STATUSES],
         sort: sortState,
         page,
         perPage: PER_PAGE,
@@ -51,13 +45,13 @@ export default function VerificationPage() {
   );
 
   const listQuery = useQuery({
-    queryKey: creatorApplicationKeys.list(listInput),
-    queryFn: () => listCreatorApplications(listInput),
+    queryKey: creatorKeys.list(listInput),
+    queryFn: () => listCreators(listInput),
   });
 
   const detailQuery = useQuery({
-    queryKey: creatorApplicationKeys.detail(selectedId ?? ""),
-    queryFn: () => getCreatorApplication(selectedId ?? ""),
+    queryKey: creatorKeys.detail(selectedId ?? ""),
+    queryFn: () => getCreator(selectedId ?? ""),
     enabled: !!selectedId,
   });
 
@@ -68,11 +62,12 @@ export default function VerificationPage() {
   const idx = items.findIndex((r) => r.id === selectedId);
   const canPrev = idx > 0;
   const canNext = idx >= 0 && idx < items.length - 1;
+  const prefill = idx >= 0 ? items[idx] : undefined;
 
-  const columns: Column<Application>[] = useMemo(() => buildColumns(t), [t]);
+  const columns: Column<CreatorListItem>[] = useMemo(() => buildColumns(t), [t]);
   const activeColumn = activeColumnForSort(sortState.sort);
 
-  function openApplication(id: string) {
+  function openCreator(id: string) {
     setSearchParams((prev) => {
       const np = new URLSearchParams(prev);
       np.set("id", id);
@@ -80,7 +75,7 @@ export default function VerificationPage() {
     });
   }
 
-  function closeApplication() {
+  function closeCreator() {
     setSearchParams((prev) => {
       const np = new URLSearchParams(prev);
       np.delete("id");
@@ -90,12 +85,12 @@ export default function VerificationPage() {
 
   function goPrev() {
     const prevItem = items[idx - 1];
-    if (prevItem) openApplication(prevItem.id);
+    if (prevItem) openCreator(prevItem.id);
   }
 
   function goNext() {
     const nextItem = items[idx + 1];
-    if (nextItem) openApplication(nextItem.id);
+    if (nextItem) openCreator(nextItem.id);
   }
 
   function handleSortChange(columnKey: string) {
@@ -120,23 +115,21 @@ export default function VerificationPage() {
   }
 
   return (
-    <div data-testid="creator-applications-verification-page">
+    <div data-testid="creators-list-page">
       <h1 className="flex items-baseline gap-3 text-2xl font-bold text-gray-900">
-        {t("stages.verification.title")}
+        {t("title")}
         {!listQuery.isLoading && !listQuery.isError && (
           <span
             className="text-lg font-medium text-gray-400"
-            data-testid="verification-total"
+            data-testid="creators-total"
           >
             {total}
           </span>
         )}
       </h1>
-      <p className="mt-1 text-sm text-gray-500">
-        {t("stages.verification.description")}
-      </p>
+      <p className="mt-1 text-sm text-gray-500">{t("description")}</p>
 
-      <ApplicationFilters />
+      <CreatorFilters />
 
       {listQuery.isLoading ? (
         <Spinner className="mt-6" />
@@ -154,12 +147,12 @@ export default function VerificationPage() {
             sortColumn={activeColumn}
             sortOrder={sortState.order}
             onSortChange={handleSortChange}
-            onRowClick={(row) => openApplication(row.id)}
+            onRowClick={(row) => openCreator(row.id)}
             selectedKey={selectedId ?? undefined}
             emptyMessage={
               isFilterActive(filters) ? t("emptyFiltered") : t("empty")
             }
-            testid="applications-table"
+            testid="creators-table"
           />
 
           {totalPages > 1 && (
@@ -196,23 +189,23 @@ export default function VerificationPage() {
         </>
       )}
 
-      <ApplicationDrawer
-        application={detailQuery.data?.data}
+      <CreatorDrawer
+        prefill={prefill}
+        detail={detailQuery.data?.data}
         isLoading={detailQuery.isLoading}
         isError={detailQuery.isError}
         open={!!selectedId}
-        onClose={closeApplication}
+        onClose={closeCreator}
         onPrev={goPrev}
         onNext={goNext}
         canPrev={canPrev}
         canNext={canNext}
-        footer={<ApplicationActions application={detailQuery.data?.data} />}
       />
     </div>
   );
 }
 
-function buildColumns(t: (key: string) => string): Column<Application>[] {
+function buildColumns(t: (key: string) => string): Column<CreatorListItem>[] {
   return [
     {
       key: "index",
@@ -260,72 +253,30 @@ function buildColumns(t: (key: string) => string): Column<Application>[] {
       render: (row) => <CategoryChips categories={row.categories} />,
     },
     {
-      key: "telegram",
-      header: t("columns.telegram"),
-      render: (row) => (
-        <TelegramCell
-          linked={row.telegramLinked}
-          linkedLabel={t("telegramLinked")}
-          notLinkedLabel={t("telegramNotLinked")}
-        />
-      ),
+      key: "age",
+      header: t("columns.age"),
+      render: (row) => calcAge(row.birthDate),
+      sortable: true,
       align: "right",
       width: "w-20",
     },
     {
-      key: "submittedAt",
-      header: t("columns.submittedAt"),
+      key: "city",
+      header: t("columns.city"),
+      render: (row) => (
+        <span className="text-gray-700">{row.city.name}</span>
+      ),
+      sortable: true,
+      width: "w-32",
+    },
+    {
+      key: "createdAt",
+      header: t("columns.createdAt"),
       render: (row) => formatShortDate(row.createdAt),
       sortable: true,
       width: "w-24",
     },
-    {
-      key: "hoursInStage",
-      header: t("columns.hoursInStage"),
-      render: (row) => <HoursBadge hours={hoursSince(row.createdAt)} />,
-      align: "right",
-      width: "w-24",
-    },
   ];
-}
-
-function TelegramCell({
-  linked,
-  linkedLabel,
-  notLinkedLabel,
-}: {
-  linked: boolean;
-  linkedLabel: string;
-  notLinkedLabel: string;
-}) {
-  const label = linked ? linkedLabel : notLinkedLabel;
-  return (
-    <span
-      title={label}
-      aria-label={label}
-      data-testid={
-        linked ? "row-telegram-linked" : "row-telegram-not-linked"
-      }
-      className={`inline-flex h-5 w-5 items-center justify-center ${
-        linked ? "text-sky-500" : "text-gray-300"
-      }`}
-    >
-      <TelegramIcon />
-    </span>
-  );
-}
-
-function TelegramIcon() {
-  return (
-    <svg
-      className="h-4 w-4"
-      viewBox="0 0 24 24"
-      fill="currentColor"
-      aria-hidden="true"
-    >
-      <path d="M9.78 18.65l.28-4.23 7.68-6.92c.34-.31-.07-.46-.52-.19L7.74 13.3 3.64 12c-.88-.25-.89-.86.2-1.3L19.52 4.6c.73-.33 1.43.18 1.15 1.3l-3.05 13.53c-.19.85-.7 1.06-1.42.66l-3.92-2.9-1.88 1.83c-.22.22-.4.4-.82.4l.3-2.27z" />
-    </svg>
-  );
 }
 
 function formatShortDate(iso: string): string {
@@ -335,14 +286,11 @@ function formatShortDate(iso: string): string {
   });
 }
 
-function activeColumnForSort(field: string): string | undefined {
-  if (field === "full_name") return "fullName";
-  if (field === "created_at") return "submittedAt";
-  return undefined;
-}
+const MAX_PAGE = 1_000_000;
 
 function parsePage(value: string | null): number {
   if (!value) return 1;
   const n = Number(value);
-  return Number.isFinite(n) && n >= 1 ? Math.trunc(n) : 1;
+  if (!Number.isFinite(n) || n < 1) return 1;
+  return Math.min(MAX_PAGE, Math.trunc(n));
 }

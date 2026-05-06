@@ -12,7 +12,7 @@ import AuditLogPage from "@/features/audit/AuditLogPage";
 import VerificationPage from "@/features/creatorApplications/VerificationPage";
 import ModerationPage from "@/features/creatorApplications/ModerationPage";
 import RejectedPage from "@/features/creatorApplications/stubs/RejectedPage";
-import CreatorsPage from "@/features/creatorApplications/stubs/CreatorsPage";
+import CreatorsListPage from "@/features/creators/CreatorsListPage";
 import CampaignsStubPage from "@/features/campaigns/stubs/CampaignsStubPage";
 import RoleGuard from "@/features/auth/RoleGuard";
 import ErrorBoundary from "@/shared/components/ErrorBoundary";
@@ -75,7 +75,7 @@ function App() {
                     path={ROUTES.CREATOR_APP_REJECTED}
                     element={<RejectedPage />}
                   />
-                  <Route path={ROUTES.CREATORS} element={<CreatorsPage />} />
+                  <Route path={ROUTES.CREATORS} element={<CreatorsListPage />} />
                 </Route>
 
                 <Route

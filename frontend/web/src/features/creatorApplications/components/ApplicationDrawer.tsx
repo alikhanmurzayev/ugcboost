@@ -8,10 +8,10 @@ import {
 import { useTranslation } from "react-i18next";
 import type { components } from "@/api/generated/schema";
 import Spinner from "@/shared/components/Spinner";
-import CategoryChip from "./CategoryChip";
+import CategoryChip from "@/shared/components/CategoryChip";
+import { calcAge } from "@/shared/utils/age";
 import SocialAdminRow from "./SocialAdminRow";
 import VerifyManualDialog from "./VerifyManualDialog";
-import { calcAge } from "../filters";
 import type { ApplicationDetail } from "../types";
 import { DrawerContext } from "./drawerContext";
 

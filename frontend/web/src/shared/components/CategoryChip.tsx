@@ -1,5 +1,5 @@
 import { type ReactNode } from "react";
-import type { DictionaryItem } from "../types";
+import type { DictionaryItem } from "@/api/dictionaries";
 
 export default function CategoryChip({
   children,

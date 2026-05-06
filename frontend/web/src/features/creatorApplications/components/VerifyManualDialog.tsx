@@ -6,7 +6,7 @@ import { verifyApplicationSocialManually } from "@/api/creatorApplications";
 import { ApiError } from "@/api/client";
 import { creatorApplicationKeys } from "@/shared/constants/queryKeys";
 import { getErrorMessage } from "@/shared/i18n/errors";
-import { PLATFORM_LABELS } from "../types";
+import { PLATFORM_LABELS } from "@/shared/constants/socials";
 
 type DetailSocial = components["schemas"]["CreatorApplicationDetailSocial"];
 
