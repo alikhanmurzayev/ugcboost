@@ -1,0 +1,63 @@
+{
+  "title": "Креаторы",
+  "description": "Список одобренных креаторов — кандидатов в кампании.",
+  "loadError": "Не удалось загрузить креаторов",
+  "empty": "Пока нет одобренных креаторов",
+  "emptyFiltered": "Нет креаторов по выбранным фильтрам",
+  "columns": {
+    "fullName": "ФИО",
+    "socials": "Соцсети",
+    "categories": "Категории",
+    "age": "Возраст",
+    "city": "Город",
+    "createdAt": "Одобрен"
+  },
+  "drawer": {
+    "approvedAt": "Одобрен",
+    "iin": "ИИН",
+    "birthDate": "Дата рождения",
+    "phone": "Телефон",
+    "city": "Город",
+    "middleName": "Отчество",
+    "address": "Адрес",
+    "categories": "Категории",
+    "categoryOther": "Другое",
+    "socials": "Соцсети",
+    "telegram": "Telegram",
+    "telegramId": "Telegram id",
+    "sourceApplicationId": "Заявка",
+    "close": "Закрыть",
+    "closeWindow": "Закрыть окно",
+    "years_one": "{{count}} год",
+    "years_few": "{{count}} года",
+    "years_many": "{{count}} лет",
+    "years_other": "{{count}} лет"
+  },
+  "drawerNav": {
+    "prev": "Предыдущий креатор",
+    "next": "Следующий креатор"
+  },
+  "filters": {
+    "title": "Фильтры",
+    "open": "Фильтры",
+    "search": "Поиск по ФИО, нику, ИИН, телефону",
+    "date": "Период одобрения",
+    "city": "Город",
+    "age": "Возраст",
+    "ageFrom": "Возраст от",
+    "ageTo": "Возраст до",
+    "categories": "Категории",
+    "reset": "Сбросить",
+    "anyCity": "Любой город",
+    "anyCategory": "Любая категория",
+    "searchCity": "Найти город",
+    "searchCategory": "Найти категорию"
+  },
+  "pagination": {
+    "page": "Страница {{page}} из {{total}}"
+  },
+  "copy": {
+    "copy": "Скопировать",
+    "copied": "Скопировано"
+  }
+}

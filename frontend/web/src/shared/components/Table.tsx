@@ -9,7 +9,7 @@ export interface Column<T> {
   width?: string;
 }
 
-interface ApplicationsTableProps<T> {
+interface TableProps<T> {
   rows: T[];
   columns: Column<T>[];
   rowKey: (row: T) => string;
@@ -22,7 +22,7 @@ interface ApplicationsTableProps<T> {
   testid?: string;
 }
 
-export default function ApplicationsTable<T>({
+export default function Table<T>({
   rows,
   columns,
   rowKey,
@@ -32,8 +32,8 @@ export default function ApplicationsTable<T>({
   onRowClick,
   selectedKey,
   emptyMessage,
-  testid = "applications-table",
-}: ApplicationsTableProps<T>) {
+  testid = "data-table",
+}: TableProps<T>) {
   function handleHeaderClick(col: Column<T>) {
     if (!col.sortable || !onSortChange) return;
     onSortChange(col.key);
