@@ -52,6 +52,7 @@ var (
 type CampaignRepo interface {
 	Create(ctx context.Context, name, tmaURL string) (*CampaignRow, error)
 	GetByID(ctx context.Context, id string) (*CampaignRow, error)
+	Update(ctx context.Context, id, name, tmaURL string) (*CampaignRow, error)
 	DeleteForTests(ctx context.Context, id string) error
 }
 
@@ -90,6 +91,26 @@ func (r *campaignRepository) GetByID(ctx context.Context, id string) (*CampaignR
 		From(TableCampaigns).
 		Where(sq.Eq{CampaignColumnID: id})
 	return dbutil.One[CampaignRow](ctx, r.db, q)
+}
+
+// Update writes name/tma_url + updated_at=now() and RETURNINGs the row.
+// is_deleted is not filtered here — the gate lives in CampaignService.
+func (r *campaignRepository) Update(ctx context.Context, id, name, tmaURL string) (*CampaignRow, error) {
+	q := sq.Update(TableCampaigns).
+		Set(CampaignColumnName, name).
+		Set(CampaignColumnTmaURL, tmaURL).
+		Set(CampaignColumnUpdatedAt, sq.Expr("now()")).
+		Where(sq.Eq{CampaignColumnID: id}).
+		Suffix(returningClause(campaignSelectColumns))
+	row, err := dbutil.One[CampaignRow](ctx, r.db, q)
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" && pgErr.ConstraintName == CampaignsNameActiveUnique {
+			return nil, domain.ErrCampaignNameTaken
+		}
+		return nil, err
+	}
+	return row, nil
 }
 
 // DeleteForTests hard-deletes a campaign by id. Returns sql.ErrNoRows when

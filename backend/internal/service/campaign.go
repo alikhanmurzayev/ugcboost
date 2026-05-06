@@ -36,13 +36,13 @@ func NewCampaignService(pool dbutil.Pool, repoFactory CampaignRepoFactory, log l
 // the same transaction. The whole *domain.Campaign is serialized into
 // audit_logs.new_value so the payload follows the struct as it grows in
 // future chunks without per-callsite changes.
-func (s *CampaignService) CreateCampaign(ctx context.Context, name, tmaURL string) (*domain.Campaign, error) {
+func (s *CampaignService) CreateCampaign(ctx context.Context, in domain.CampaignInput) (*domain.Campaign, error) {
 	var campaign *domain.Campaign
 	err := dbutil.WithTx(ctx, s.pool, func(tx dbutil.DB) error {
 		campaignRepo := s.repoFactory.NewCampaignRepo(tx)
 		auditRepo := s.repoFactory.NewAuditRepo(tx)
 
-		row, err := campaignRepo.Create(ctx, name, tmaURL)
+		row, err := campaignRepo.Create(ctx, in.Name, in.TmaURL)
 		if err != nil {
 			return err
 		}
@@ -59,6 +59,49 @@ func (s *CampaignService) CreateCampaign(ctx context.Context, name, tmaURL strin
 	// claims success in stdout-логах (backend-transactions.md § Аудит-лог).
 	s.logger.Info(ctx, "campaign created", "campaign_id", campaign.ID)
 	return campaign, nil
+}
+
+// UpdateCampaign full-replaces name/tma_url and writes a campaign_update audit
+// row in the same tx. Pre-fetch via GetByID feeds audit_logs.old_value;
+// soft-deleted rows are refused with ErrCampaignNotFound (gate is here, not repo).
+func (s *CampaignService) UpdateCampaign(ctx context.Context, id string, in domain.CampaignInput) error {
+	err := dbutil.WithTx(ctx, s.pool, func(tx dbutil.DB) error {
+		campaignRepo := s.repoFactory.NewCampaignRepo(tx)
+		auditRepo := s.repoFactory.NewAuditRepo(tx)
+
+		oldRow, err := campaignRepo.GetByID(ctx, id)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return domain.ErrCampaignNotFound
+			}
+			return fmt.Errorf("get campaign: %w", err)
+		}
+		if oldRow.IsDeleted {
+			return domain.ErrCampaignNotFound
+		}
+		oldCampaign := campaignRowToDomain(oldRow)
+
+		newRow, err := campaignRepo.Update(ctx, id, in.Name, in.TmaURL)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return domain.ErrCampaignNotFound
+			}
+			if errors.Is(err, domain.ErrCampaignNameTaken) {
+				return err
+			}
+			return fmt.Errorf("update campaign: %w", err)
+		}
+		newCampaign := campaignRowToDomain(newRow)
+
+		return writeAudit(ctx, auditRepo,
+			AuditActionCampaignUpdate, AuditEntityTypeCampaign, newCampaign.ID,
+			oldCampaign, newCampaign)
+	})
+	if err != nil {
+		return err
+	}
+	s.logger.Info(ctx, "campaign updated", "campaign_id", id)
+	return nil
 }
 
 // GetByID fetches a campaign by id. The read runs against the pool directly —

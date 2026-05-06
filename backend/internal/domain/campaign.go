@@ -24,6 +24,12 @@ type Campaign struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
+// CampaignInput is the mutable subset of a campaign for create/update services.
+type CampaignInput struct {
+	Name   string
+	TmaURL string
+}
+
 // ErrCampaignNameTaken is the sentinel raised by CampaignRepo.Create when a
 // 23505 fires on the partial unique index campaigns_name_active_unique —
 // another non-deleted campaign already uses this name. respondError maps any

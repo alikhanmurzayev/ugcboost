@@ -339,14 +339,6 @@ type CampaignInput struct {
 	TmaUrl string `json:"tmaUrl"`
 }
 
-// CampaignResult defines model for CampaignResult.
-type CampaignResult struct {
-	// Data Full marketing campaign as returned by GET /campaigns/{id}. The shape
-	// is shared by upcoming list / patch responses — they reuse this schema
-	// instead of inlining a copy.
-	Data Campaign `json:"data"`
-}
-
 // ConsentType Canonical consent type captured at creator application submission.
 type ConsentType string
 
@@ -881,6 +873,14 @@ type GetBrandResult struct {
 	Data BrandDetailData `json:"data"`
 }
 
+// GetCampaignResult defines model for GetCampaignResult.
+type GetCampaignResult struct {
+	// Data Full marketing campaign as returned by GET /campaigns/{id}. The shape
+	// is shared by upcoming list / patch responses — they reuse this schema
+	// instead of inlining a copy.
+	Data Campaign `json:"data"`
+}
+
 // GetCreatorApplicationResult defines model for GetCreatorApplicationResult.
 type GetCreatorApplicationResult struct {
 	Data CreatorApplicationDetailData `json:"data"`
@@ -1113,6 +1113,9 @@ type AssignManagerJSONRequestBody = AssignManagerRequest
 
 // CreateCampaignJSONRequestBody defines body for CreateCampaign for application/json ContentType.
 type CreateCampaignJSONRequestBody = CampaignInput
+
+// UpdateCampaignJSONRequestBody defines body for UpdateCampaign for application/json ContentType.
+type UpdateCampaignJSONRequestBody = CampaignInput
 
 // SubmitCreatorApplicationJSONRequestBody defines body for SubmitCreatorApplication for application/json ContentType.
 type SubmitCreatorApplicationJSONRequestBody = CreatorApplicationSubmitRequest
