@@ -1323,19 +1323,15 @@ export interface components {
             /** @description URL of the TMA-side ТЗ landing page embedded into creator invites. */
             tmaUrl: string;
         };
-        Campaign: {
-            /** Format: uuid */
+        CampaignCreatedData: {
+            /**
+             * Format: uuid
+             * @description Server-stamped UUID of the freshly created campaign.
+             */
             id: string;
-            name: string;
-            tmaUrl: string;
-            isDeleted: boolean;
-            /** Format: date-time */
-            createdAt: string;
-            /** Format: date-time */
-            updatedAt: string;
         };
-        CampaignResult: {
-            data: components["schemas"]["Campaign"];
+        CampaignCreatedResult: {
+            data: components["schemas"]["CampaignCreatedData"];
         };
     };
     responses: {
@@ -2311,7 +2307,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["CampaignResult"];
+                    "application/json": components["schemas"]["CampaignCreatedResult"];
                 };
             };
             /** @description Unauthenticated */

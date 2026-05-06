@@ -35,7 +35,6 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -134,7 +133,7 @@ func TestCreateCampaign(t *testing.T) {
 		require.Contains(t, resp.JSON422.Error.Message, "слишком длинная")
 	})
 
-	t.Run("success returns 201 with full payload and writes audit row", func(t *testing.T) {
+	t.Run("success returns 201 with id-only payload and writes audit row", func(t *testing.T) {
 		t.Parallel()
 		c, token, _ := testutil.SetupAdminClient(t)
 		name := "Promo-" + testutil.UniqueEmail("happy")
@@ -147,27 +146,10 @@ func TestCreateCampaign(t *testing.T) {
 		require.Equal(t, http.StatusCreated, resp.StatusCode())
 		require.NotNil(t, resp.JSON201)
 
+		// id-only payload: only assert a real uuid came back; the full row
+		// shape will be exercised by the GET /campaigns/{id} test in chunk #4.
 		got := resp.JSON201.Data
 		require.NotEqual(t, uuid.Nil, got.Id, "server-stamped uuid must be present")
-		require.Equal(t, name, got.Name)
-		require.Equal(t, validTmaURL, got.TmaUrl)
-		require.False(t, got.IsDeleted)
-		now := time.Now().UTC()
-		const recentWindow = 5 * time.Minute
-		require.WithinDuration(t, now, got.CreatedAt, recentWindow)
-		require.WithinDuration(t, now, got.UpdatedAt, recentWindow)
-		// Same-tx insert means the two timestamps are identical at row birth.
-		require.Equal(t, got.CreatedAt, got.UpdatedAt)
-
-		expected := apiclient.Campaign{
-			Id:        got.Id,
-			Name:      name,
-			TmaUrl:    validTmaURL,
-			IsDeleted: false,
-			CreatedAt: got.CreatedAt,
-			UpdatedAt: got.UpdatedAt,
-		}
-		require.Equal(t, expected, got)
 
 		testutil.RegisterCampaignCleanup(t, got.Id.String())
 		testutil.AssertAuditEntry(t, c, token, "campaign", got.Id.String(), "campaign_create")

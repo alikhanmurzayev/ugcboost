@@ -982,7 +982,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CampaignResult"
+                $ref: "#/components/schemas/CampaignCreatedResult"
         "401":
           description: Unauthenticated
           content:
@@ -2332,32 +2332,21 @@ components:
           type: string
           description: URL of the TMA-side ТЗ landing page embedded into creator invites.
 
-    Campaign:
+    CampaignCreatedData:
       type: object
-      required: [id, name, tmaUrl, isDeleted, createdAt, updatedAt]
+      required: [id]
       properties:
         id:
           type: string
           format: uuid
-        name:
-          type: string
-        tmaUrl:
-          type: string
-        isDeleted:
-          type: boolean
-        createdAt:
-          type: string
-          format: date-time
-        updatedAt:
-          type: string
-          format: date-time
+          description: Server-stamped UUID of the freshly created campaign.
 
-    CampaignResult:
+    CampaignCreatedResult:
       type: object
       required: [data]
       properties:
         data:
-          $ref: "#/components/schemas/Campaign"
+          $ref: "#/components/schemas/CampaignCreatedData"
 
   securitySchemes:
     bearerAuth:

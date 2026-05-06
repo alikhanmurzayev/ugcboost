@@ -2,7 +2,7 @@
 title: 'Backend chunk #3: campaigns table + POST /campaigns (admin-only)'
 type: 'feature'
 created: '2026-05-06'
-status: 'in-progress'
+status: 'in-review'
 baseline_commit: 'd0dd15c653591343167b1c53a7ae665188de8fbf'
 context:
   - 'docs/standards/'
@@ -47,7 +47,7 @@ context:
 
 | Сценарий | Вход / Состояние | Ответ | Обработка ошибок |
 |---|---|---|---|
-| Happy path | admin, `name="Promo X"`, `tmaUrl="https://tma.../tz/abc"` | 201 + `CampaignResult{Data: Campaign{id, name, tmaUrl, isDeleted:false, *At}}` + audit-row `campaign_create` | — |
+| Happy path | admin, `name="Promo X"`, `tmaUrl="https://tma.../tz/abc"` | 201 + `CampaignCreatedResult{Data: CampaignCreatedData{id}}` + audit-row `campaign_create` | — |
 | Не аутентифицирован | без токена | 401 `UNAUTHORIZED` | middleware |
 | brand-manager | manager-токен | 403 `FORBIDDEN` (до любого DB-чтения) | `CanCreateCampaign` |
 | Пустое имя | `name=""` или whitespace | 422 `CodeCampaignNameRequired` + actionable message | `domain.ValidateCampaignName` |
@@ -122,6 +122,7 @@ context:
 ## Spec Change Log
 
 - 2026-05-06: реализация чанка завершена — 22 таска [x], все 5 acceptance criteria зелёные локально (build / lint / unit + per-method coverage gate / e2e со всеми 10 пакетами / ручная sanity-проверка). Имплементационных дельт от спеки нет; единственная попутная правка — `testapi_test.go` "unknown type returns 422" переключён с литерала `"campaign"` на `"totally_unknown"` (campaign теперь часть enum, нужно отдельное несуществующее значение для покрытия default-ветки).
+- 2026-05-06 (renegotiation, post-implementation): по решению Alikhan'а контракт ответа `POST /campaigns` сужен до id-only — `CampaignResult{Data: Campaign{...}}` заменён на `CampaignCreatedResult{Data: CampaignCreatedData{id}}`. Полная read-проекция кампании уйдёт в чанк #4 (`GET /campaigns/{id}`), там же дополнится e2e-ассерт shape'а. Удалены: схема `Campaign` из openapi, `domainCampaignToAPI` мэппер. `*domain.Campaign` остаётся как payload audit-row'а (требование Boundaries «Always» сохранено). Изменены: openapi.yaml (новые `CampaignCreatedData/Result`), `handler/campaign.go` (response — id-only), `handler/campaign_test.go` + `e2e/campaign/campaign_test.go` (success-ассерт сужен до `require.NotEqual(uuid.Nil, id)` + audit-row).
 
 ## Design Notes
 

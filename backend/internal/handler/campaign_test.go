@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/mock"
@@ -127,34 +126,25 @@ func TestServer_CreateCampaign(t *testing.T) {
 		require.Equal(t, domain.CodeInternal, resp.Error.Code)
 	})
 
-	t.Run("success trims whitespace and returns 201", func(t *testing.T) {
+	t.Run("success trims whitespace and returns 201 with id-only payload", func(t *testing.T) {
 		t.Parallel()
 		authz := mocks.NewMockAuthzService(t)
 		authz.EXPECT().CanCreateCampaign(mock.Anything).Return(nil)
 		campaigns := mocks.NewMockCampaignService(t)
-		created := time.Date(2026, 5, 6, 12, 0, 0, 0, time.UTC)
 		campaigns.EXPECT().CreateCampaign(mock.Anything, "Promo X", "https://tma.ugcboost.kz/tz/abc").
 			Return(&domain.Campaign{
-				ID:        "11111111-2222-3333-4444-555555555555",
-				Name:      "Promo X",
-				TmaURL:    "https://tma.ugcboost.kz/tz/abc",
-				IsDeleted: false,
-				CreatedAt: created,
-				UpdatedAt: created,
+				ID:     "11111111-2222-3333-4444-555555555555",
+				Name:   "Promo X",
+				TmaURL: "https://tma.ugcboost.kz/tz/abc",
 			}, nil)
 
 		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, campaigns, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
-		w, resp := doJSON[api.CampaignResult](t, router, http.MethodPost, "/campaigns",
+		w, resp := doJSON[api.CampaignCreatedResult](t, router, http.MethodPost, "/campaigns",
 			api.CampaignInput{Name: "  Promo X  ", TmaUrl: "  https://tma.ugcboost.kz/tz/abc  "})
 		require.Equal(t, http.StatusCreated, w.Code)
-		require.Equal(t, api.CampaignResult{
-			Data: api.Campaign{
-				Id:        uuid.MustParse("11111111-2222-3333-4444-555555555555"),
-				Name:      "Promo X",
-				TmaUrl:    "https://tma.ugcboost.kz/tz/abc",
-				IsDeleted: false,
-				CreatedAt: created,
-				UpdatedAt: created,
+		require.Equal(t, api.CampaignCreatedResult{
+			Data: api.CampaignCreatedData{
+				Id: uuid.MustParse("11111111-2222-3333-4444-555555555555"),
 			},
 		}, resp)
 	})
@@ -164,15 +154,11 @@ func TestServer_CreateCampaign(t *testing.T) {
 		authz := mocks.NewMockAuthzService(t)
 		authz.EXPECT().CanCreateCampaign(mock.Anything).Return(nil)
 		campaigns := mocks.NewMockCampaignService(t)
-		created := time.Date(2026, 5, 6, 12, 0, 0, 0, time.UTC)
 		campaigns.EXPECT().CreateCampaign(mock.Anything, "Promo X", "https://tma.ugcboost.kz/tz/abc").
 			Return(&domain.Campaign{
-				ID:        "not-a-uuid",
-				Name:      "Promo X",
-				TmaURL:    "https://tma.ugcboost.kz/tz/abc",
-				IsDeleted: false,
-				CreatedAt: created,
-				UpdatedAt: created,
+				ID:     "not-a-uuid",
+				Name:   "Promo X",
+				TmaURL: "https://tma.ugcboost.kz/tz/abc",
 			}, nil)
 		log := logmocks.NewMockLogger(t)
 		expectHandlerUnexpectedErrorLog(log, "/campaigns")

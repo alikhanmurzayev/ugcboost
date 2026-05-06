@@ -2265,7 +2265,7 @@ func (r RemoveManagerResponse) StatusCode() int {
 type CreateCampaignResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
-	JSON201      *CampaignResult
+	JSON201      *CampaignCreatedResult
 	JSON401      *ErrorResponse
 	JSON403      *Forbidden
 	JSON409      *ErrorResponse
@@ -3531,7 +3531,7 @@ func ParseCreateCampaignResponse(rsp *http.Response) (*CreateCampaignResponse, e
 
 	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
-		var dest CampaignResult
+		var dest CampaignCreatedResult
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}
