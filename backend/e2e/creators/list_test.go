@@ -33,7 +33,7 @@ import (
 
 func validCreatorListBody() apiclient.CreatorsListRequest {
 	return apiclient.CreatorsListRequest{
-		Sort:    apiclient.CreatorListSortFieldCreatedAt,
+		Sort:    apiclient.CreatedAt,
 		Order:   apiclient.Desc,
 		Page:    1,
 		PerPage: 50,
@@ -350,7 +350,7 @@ func TestCreatorsList(t *testing.T) {
 		creator := testutil.SetupApprovedCreator(t, defaultCreatorOpts())
 
 		body := validCreatorListBody()
-		body.Sort = apiclient.CreatorListSortFieldCreatedAt
+		body.Sort = apiclient.CreatedAt
 		body.Order = apiclient.Desc
 		body.Search = pointer.ToString("   ")
 		body.PerPage = 200
@@ -391,7 +391,7 @@ func TestCreatorsList(t *testing.T) {
 		second := testutil.SetupApprovedCreator(t, defaultCreatorOptsScoped(marker, "second"))
 
 		body := validCreatorListBody()
-		body.Sort = apiclient.CreatorListSortFieldCreatedAt
+		body.Sort = apiclient.CreatedAt
 		body.Order = apiclient.Asc
 		body.Search = pointer.ToString(marker)
 		body.PerPage = 200
@@ -416,7 +416,7 @@ func TestCreatorsList(t *testing.T) {
 		astana := testutil.SetupApprovedCreator(t, astanaOpts)
 
 		body := validCreatorListBody()
-		body.Sort = apiclient.CreatorListSortFieldCityName
+		body.Sort = apiclient.CityName
 		body.Order = apiclient.Asc
 		body.Search = pointer.ToString(marker)
 		body.PerPage = 200
@@ -445,7 +445,7 @@ func TestCreatorsList(t *testing.T) {
 		zCreator := testutil.SetupApprovedCreator(t, zOpts)
 
 		body := validCreatorListBody()
-		body.Sort = apiclient.CreatorListSortFieldFullName
+		body.Sort = apiclient.FullName
 		body.Order = apiclient.Asc
 		body.Search = pointer.ToString(marker)
 		body.PerPage = 200
@@ -474,7 +474,7 @@ func TestCreatorsList(t *testing.T) {
 		zCreator := testutil.SetupApprovedCreator(t, zOpts)
 
 		body := validCreatorListBody()
-		body.Sort = apiclient.CreatorListSortFieldFullName
+		body.Sort = apiclient.FullName
 		body.Order = apiclient.Desc
 		body.Search = pointer.ToString(marker)
 		body.PerPage = 200
@@ -499,7 +499,7 @@ func TestCreatorsList(t *testing.T) {
 		second := testutil.SetupApprovedCreator(t, defaultCreatorOptsScoped(marker, "second"))
 
 		body := validCreatorListBody()
-		body.Sort = apiclient.CreatorListSortFieldBirthDate
+		body.Sort = apiclient.BirthDate
 		body.Order = apiclient.Desc
 		body.Search = pointer.ToString(marker)
 		body.PerPage = 200
@@ -531,7 +531,7 @@ func TestCreatorsList(t *testing.T) {
 		creator := testutil.SetupApprovedCreator(t, defaultCreatorOptsScoped(marker, "u"))
 
 		body := validCreatorListBody()
-		body.Sort = apiclient.CreatorListSortFieldUpdatedAt
+		body.Sort = apiclient.UpdatedAt
 		body.Order = apiclient.Asc
 		body.Search = pointer.ToString(marker)
 		body.PerPage = 200

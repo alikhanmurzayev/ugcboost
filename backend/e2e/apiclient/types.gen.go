@@ -13,6 +13,27 @@ const (
 	BearerAuthScopes = "bearerAuth.Scopes"
 )
 
+// Defines values for CampaignListSortField.
+const (
+	CampaignListSortFieldCreatedAt CampaignListSortField = "created_at"
+	CampaignListSortFieldName      CampaignListSortField = "name"
+	CampaignListSortFieldUpdatedAt CampaignListSortField = "updated_at"
+)
+
+// Valid indicates whether the value is a known member of the CampaignListSortField enum.
+func (e CampaignListSortField) Valid() bool {
+	switch e {
+	case CampaignListSortFieldCreatedAt:
+		return true
+	case CampaignListSortFieldName:
+		return true
+	case CampaignListSortFieldUpdatedAt:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ConsentType.
 const (
 	CrossBorder ConsentType = "cross_border"
@@ -93,25 +114,25 @@ func (e CreatorApplicationStatus) Valid() bool {
 
 // Defines values for CreatorListSortField.
 const (
-	CreatorListSortFieldBirthDate CreatorListSortField = "birth_date"
-	CreatorListSortFieldCityName  CreatorListSortField = "city_name"
-	CreatorListSortFieldCreatedAt CreatorListSortField = "created_at"
-	CreatorListSortFieldFullName  CreatorListSortField = "full_name"
-	CreatorListSortFieldUpdatedAt CreatorListSortField = "updated_at"
+	BirthDate CreatorListSortField = "birth_date"
+	CityName  CreatorListSortField = "city_name"
+	CreatedAt CreatorListSortField = "created_at"
+	FullName  CreatorListSortField = "full_name"
+	UpdatedAt CreatorListSortField = "updated_at"
 )
 
 // Valid indicates whether the value is a known member of the CreatorListSortField enum.
 func (e CreatorListSortField) Valid() bool {
 	switch e {
-	case CreatorListSortFieldBirthDate:
+	case BirthDate:
 		return true
-	case CreatorListSortFieldCityName:
+	case CityName:
 		return true
-	case CreatorListSortFieldCreatedAt:
+	case CreatedAt:
 		return true
-	case CreatorListSortFieldFullName:
+	case FullName:
 		return true
-	case CreatorListSortFieldUpdatedAt:
+	case UpdatedAt:
 		return true
 	default:
 		return false
@@ -337,6 +358,25 @@ type CampaignInput struct {
 
 	// TmaUrl URL of the TMA-side ТЗ landing page embedded into creator invites.
 	TmaUrl string `json:"tmaUrl"`
+}
+
+// CampaignListSortField Sort field for the admin list. Mapped to a SQL column on the backend.
+// Unknown values are rejected with 422.
+type CampaignListSortField string
+
+// CampaignsListData defines model for CampaignsListData.
+type CampaignsListData struct {
+	Items   []Campaign `json:"items"`
+	Page    int        `json:"page"`
+	PerPage int        `json:"perPage"`
+
+	// Total Total number of matching campaigns across all pages.
+	Total int64 `json:"total"`
+}
+
+// CampaignsListResult defines model for CampaignsListResult.
+type CampaignsListResult struct {
+	Data CampaignsListData `json:"data"`
 }
 
 // ConsentType Canonical consent type captured at creator application submission.
@@ -1085,6 +1125,27 @@ type ListAuditLogsParams struct {
 
 	// PerPage Page size, between 1 and 200 inclusive.
 	PerPage *PerPageQueryParam `form:"perPage,omitempty" json:"perPage,omitempty"`
+}
+
+// ListCampaignsParams defines parameters for ListCampaigns.
+type ListCampaignsParams struct {
+	// Page 1-based page number.
+	Page int `form:"page" json:"page"`
+
+	// PerPage Page size.
+	PerPage int                   `form:"perPage" json:"perPage"`
+	Sort    CampaignListSortField `form:"sort" json:"sort"`
+	Order   SortOrder             `form:"order" json:"order"`
+
+	// Search Free-text substring search over campaign name (case-insensitive).
+	// Trimmed; empty/blank after trim disables the filter. Special
+	// ILIKE characters (`%`, `_`, `\`) are escaped server-side so they
+	// match literally.
+	Search *string `form:"search,omitempty" json:"search,omitempty"`
+
+	// IsDeleted true → only soft-deleted campaigns. false → only live. Missing
+	// disables the filter (returns both live and soft-deleted rows).
+	IsDeleted *bool `form:"isDeleted,omitempty" json:"isDeleted,omitempty"`
 }
 
 // VerifyCreatorApplicationSocialJSONBody defines parameters for VerifyCreatorApplicationSocial.

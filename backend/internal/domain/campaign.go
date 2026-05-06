@@ -87,3 +87,39 @@ func ValidateCampaignTmaURL(url string) (string, error) {
 	}
 	return url, nil
 }
+
+const (
+	CampaignSortCreatedAt = "created_at"
+	CampaignSortUpdatedAt = "updated_at"
+	CampaignSortName      = "name"
+)
+
+var CampaignListSortFieldValues = []string{
+	CampaignSortCreatedAt,
+	CampaignSortUpdatedAt,
+	CampaignSortName,
+}
+
+const (
+	CampaignListPageMin      = 1
+	CampaignListPageMax      = 100_000
+	CampaignListPerPageMin   = 1
+	CampaignListPerPageMax   = 200
+	CampaignListSearchMaxLen = 128
+)
+
+type CampaignListInput struct {
+	Search    string
+	IsDeleted *bool
+	Sort      string
+	Order     string
+	Page      int
+	PerPage   int
+}
+
+type CampaignListPage struct {
+	Items   []*Campaign
+	Total   int64
+	Page    int
+	PerPage int
+}

@@ -1,12 +1,14 @@
 package handler
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/AlekSi/pointer"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -402,5 +404,280 @@ func TestServer_UpdateCampaign(t *testing.T) {
 			api.CampaignInput{Name: "  Promo Y  ", TmaUrl: "  https://tma.ugcboost.kz/tz/new  "})
 		require.Equal(t, http.StatusNoContent, w.Code)
 		require.Zero(t, w.Body.Len(), "204 must have empty body")
+	})
+}
+
+func TestServer_ListCampaigns(t *testing.T) {
+	t.Parallel()
+
+	const validQuery = "/campaigns?page=1&perPage=10&sort=created_at&order=desc"
+
+	t.Run("forbidden for manager", func(t *testing.T) {
+		t.Parallel()
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanListCampaigns(mock.Anything).Return(domain.ErrForbidden)
+
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodGet, validQuery, nil)
+		require.Equal(t, http.StatusForbidden, w.Code)
+		require.Equal(t, domain.CodeForbidden, resp.Error.Code)
+	})
+
+	t.Run("missing required page → 400 from wrapper", func(t *testing.T) {
+		t.Parallel()
+		// Required-param errors are converted by HandleParamError into 400 +
+		// CodeValidation before the handler ever runs, so no authz/service mocks
+		// participate. The 400 (not 422) matches the rest of the handler-layer
+		// contract for malformed query params — see HandleParamError.
+		router := newTestRouter(t, NewServer(nil, nil, mocks.NewMockAuthzService(t), nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodGet, "/campaigns?perPage=10&sort=created_at&order=desc", nil)
+		require.Equal(t, http.StatusBadRequest, w.Code)
+		require.Equal(t, domain.CodeValidation, resp.Error.Code)
+	})
+
+	t.Run("invalid sort enum → 422 CodeValidation", func(t *testing.T) {
+		t.Parallel()
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanListCampaigns(mock.Anything).Return(nil)
+
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodGet, "/campaigns?page=1&perPage=10&sort=bogus&order=asc", nil)
+		require.Equal(t, http.StatusUnprocessableEntity, w.Code)
+		require.Equal(t, domain.CodeValidation, resp.Error.Code)
+		require.Contains(t, resp.Error.Message, "sort")
+	})
+
+	t.Run("invalid order enum → 422 CodeValidation", func(t *testing.T) {
+		t.Parallel()
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanListCampaigns(mock.Anything).Return(nil)
+
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodGet, "/campaigns?page=1&perPage=10&sort=created_at&order=sideways", nil)
+		require.Equal(t, http.StatusUnprocessableEntity, w.Code)
+		require.Equal(t, domain.CodeValidation, resp.Error.Code)
+		require.Contains(t, resp.Error.Message, "order")
+	})
+
+	t.Run("page=0 → 422 CodeValidation", func(t *testing.T) {
+		t.Parallel()
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanListCampaigns(mock.Anything).Return(nil)
+
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodGet, "/campaigns?page=0&perPage=10&sort=created_at&order=asc", nil)
+		require.Equal(t, http.StatusUnprocessableEntity, w.Code)
+		require.Equal(t, domain.CodeValidation, resp.Error.Code)
+		require.Contains(t, resp.Error.Message, "page")
+	})
+
+	t.Run("perPage above maximum → 422 CodeValidation", func(t *testing.T) {
+		t.Parallel()
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanListCampaigns(mock.Anything).Return(nil)
+
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodGet, "/campaigns?page=1&perPage=201&sort=created_at&order=asc", nil)
+		require.Equal(t, http.StatusUnprocessableEntity, w.Code)
+		require.Equal(t, domain.CodeValidation, resp.Error.Code)
+		require.Contains(t, resp.Error.Message, "perPage")
+	})
+
+	t.Run("search above maxLength → 422 CodeValidation", func(t *testing.T) {
+		t.Parallel()
+		// oapi-codegen wrapper does NOT enforce maxLength at runtime — the
+		// explicit handler check is the actual guard, so it must surface 422
+		// with a search-specific message rather than letting a megabyte ILIKE
+		// pattern reach Postgres.
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanListCampaigns(mock.Anything).Return(nil)
+
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		long := strings.Repeat("a", domain.CampaignListSearchMaxLen+1)
+		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodGet,
+			"/campaigns?page=1&perPage=10&sort=created_at&order=asc&search="+long, nil)
+		require.Equal(t, http.StatusUnprocessableEntity, w.Code)
+		require.Equal(t, domain.CodeValidation, resp.Error.Code)
+		require.Contains(t, resp.Error.Message, "search")
+	})
+
+	t.Run("service error → 500 CodeInternal", func(t *testing.T) {
+		t.Parallel()
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanListCampaigns(mock.Anything).Return(nil)
+		campaigns := mocks.NewMockCampaignService(t)
+		campaigns.EXPECT().List(mock.Anything, mock.Anything).
+			Return((*domain.CampaignListPage)(nil), errors.New("db unavailable"))
+		log := logmocks.NewMockLogger(t)
+		expectHandlerUnexpectedErrorLog(log, "/campaigns")
+
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, campaigns, nil, ServerConfig{Version: "test-version"}, log))
+		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodGet, validQuery, nil)
+		require.Equal(t, http.StatusInternalServerError, w.Code)
+		require.Equal(t, domain.CodeInternal, resp.Error.Code)
+	})
+
+	t.Run("empty page returns 200 with empty items array", func(t *testing.T) {
+		t.Parallel()
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanListCampaigns(mock.Anything).Return(nil)
+		campaigns := mocks.NewMockCampaignService(t)
+		campaigns.EXPECT().List(mock.Anything, domain.CampaignListInput{
+			Search:    "",
+			IsDeleted: nil,
+			Sort:      domain.CampaignSortCreatedAt,
+			Order:     domain.SortOrderDesc,
+			Page:      5,
+			PerPage:   10,
+		}).Return(&domain.CampaignListPage{
+			Items:   nil,
+			Total:   0,
+			Page:    5,
+			PerPage: 10,
+		}, nil)
+
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, campaigns, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		w, resp := doJSON[api.CampaignsListResult](t, router, http.MethodGet, "/campaigns?page=5&perPage=10&sort=created_at&order=desc", nil)
+		require.Equal(t, http.StatusOK, w.Code)
+		require.NotNil(t, resp.Data.Items, "items must be a non-nil empty array, never JSON null")
+		require.Empty(t, resp.Data.Items)
+		require.EqualValues(t, 0, resp.Data.Total)
+		require.Equal(t, 5, resp.Data.Page)
+		require.Equal(t, 10, resp.Data.PerPage)
+	})
+
+	t.Run("beyond-last page returns empty items but non-zero total", func(t *testing.T) {
+		t.Parallel()
+		// I/O Matrix row "Page beyond last → 200 + items:[], total>0". Empty
+		// list short-circuit returns total=0; this case proves the handler
+		// surfaces total even when the requested page sits past the last row.
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanListCampaigns(mock.Anything).Return(nil)
+		campaigns := mocks.NewMockCampaignService(t)
+		campaigns.EXPECT().List(mock.Anything, mock.Anything).
+			Return(&domain.CampaignListPage{
+				Items:   nil,
+				Total:   25,
+				Page:    99,
+				PerPage: 10,
+			}, nil)
+
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, campaigns, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		w, resp := doJSON[api.CampaignsListResult](t, router, http.MethodGet, "/campaigns?page=99&perPage=10&sort=created_at&order=desc", nil)
+		require.Equal(t, http.StatusOK, w.Code)
+		require.Empty(t, resp.Data.Items)
+		require.EqualValues(t, 25, resp.Data.Total)
+		require.Equal(t, 99, resp.Data.Page)
+	})
+
+	t.Run("isDeleted=missing leaves nil at service boundary", func(t *testing.T) {
+		t.Parallel()
+		// Captured-input asserts that omitting isDeleted in the URL leaves
+		// in.IsDeleted == nil at the service boundary — drift between query
+		// parsing and domain.CampaignListInput would slip through otherwise.
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanListCampaigns(mock.Anything).Return(nil)
+		campaigns := mocks.NewMockCampaignService(t)
+		campaigns.EXPECT().List(mock.Anything, mock.Anything).
+			Run(func(_ context.Context, in domain.CampaignListInput) {
+				require.Nil(t, in.IsDeleted, "missing query param must remain nil")
+			}).
+			Return(&domain.CampaignListPage{Items: nil, Total: 0, Page: 1, PerPage: 10}, nil)
+
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, campaigns, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		w, _ := doJSON[api.CampaignsListResult](t, router, http.MethodGet, "/campaigns?page=1&perPage=10&sort=created_at&order=asc", nil)
+		require.Equal(t, http.StatusOK, w.Code)
+	})
+
+	t.Run("happy path passes captured input and maps rows", func(t *testing.T) {
+		t.Parallel()
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanListCampaigns(mock.Anything).Return(nil)
+		campaigns := mocks.NewMockCampaignService(t)
+
+		isDeleted := false
+		created := time.Date(2026, 5, 6, 12, 0, 0, 0, time.UTC)
+		updated := created.Add(time.Hour)
+		// Captured input asserts that the handler passes the trimmed search,
+		// the validated enums and the parsed isDeleted pointer to the service
+		// — drift between query-param parsing and domain.CampaignListInput is
+		// exactly what this assertion guards against.
+		campaigns.EXPECT().List(mock.Anything, mock.Anything).
+			Run(func(_ context.Context, in domain.CampaignListInput) {
+				require.Equal(t, domain.CampaignListInput{
+					Search:    "promo",
+					IsDeleted: pointer.ToBool(false),
+					Sort:      domain.CampaignSortName,
+					Order:     domain.SortOrderAsc,
+					Page:      2,
+					PerPage:   25,
+				}, in)
+			}).
+			Return(&domain.CampaignListPage{
+				Items: []*domain.Campaign{
+					{ID: "11111111-2222-3333-4444-555555555555", Name: "Promo A", TmaURL: "https://tma.ugcboost.kz/tz/a", IsDeleted: false, CreatedAt: created, UpdatedAt: updated},
+					{ID: "22222222-3333-4444-5555-666666666666", Name: "Promo B", TmaURL: "https://tma.ugcboost.kz/tz/b", IsDeleted: false, CreatedAt: created, UpdatedAt: updated},
+				},
+				Total:   42,
+				Page:    2,
+				PerPage: 25,
+			}, nil)
+
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, campaigns, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		// Search has surrounding whitespace so we exercise the trim contract.
+		w, resp := doJSON[api.CampaignsListResult](t, router, http.MethodGet,
+			"/campaigns?page=2&perPage=25&sort=name&order=asc&search=%20promo%20&isDeleted=false", nil)
+		require.Equal(t, http.StatusOK, w.Code)
+		require.EqualValues(t, 42, resp.Data.Total)
+		require.Equal(t, 2, resp.Data.Page)
+		require.Equal(t, 25, resp.Data.PerPage)
+		require.Len(t, resp.Data.Items, 2)
+		require.Equal(t, "Promo A", resp.Data.Items[0].Name)
+		require.Equal(t, "Promo B", resp.Data.Items[1].Name)
+		require.Equal(t, uuid.MustParse("11111111-2222-3333-4444-555555555555"), resp.Data.Items[0].Id)
+		require.False(t, resp.Data.Items[0].IsDeleted)
+		require.Equal(t, isDeleted, resp.Data.Items[0].IsDeleted)
+	})
+
+	t.Run("isDeleted=true filter is forwarded to service", func(t *testing.T) {
+		t.Parallel()
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanListCampaigns(mock.Anything).Return(nil)
+		campaigns := mocks.NewMockCampaignService(t)
+		campaigns.EXPECT().List(mock.Anything, mock.Anything).
+			Run(func(_ context.Context, in domain.CampaignListInput) {
+				require.NotNil(t, in.IsDeleted)
+				require.True(t, *in.IsDeleted)
+			}).
+			Return(&domain.CampaignListPage{Items: nil, Total: 0, Page: 1, PerPage: 10}, nil)
+
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, campaigns, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		w, _ := doJSON[api.CampaignsListResult](t, router, http.MethodGet,
+			"/campaigns?page=1&perPage=10&sort=created_at&order=asc&isDeleted=true", nil)
+		require.Equal(t, http.StatusOK, w.Code)
+	})
+
+	t.Run("corrupted ID from service surfaces as 500", func(t *testing.T) {
+		t.Parallel()
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanListCampaigns(mock.Anything).Return(nil)
+		campaigns := mocks.NewMockCampaignService(t)
+		campaigns.EXPECT().List(mock.Anything, mock.Anything).
+			Return(&domain.CampaignListPage{
+				Items: []*domain.Campaign{
+					{ID: "not-a-uuid", Name: "Broken"},
+				},
+				Total:   1,
+				Page:    1,
+				PerPage: 10,
+			}, nil)
+		log := logmocks.NewMockLogger(t)
+		expectHandlerUnexpectedErrorLog(log, "/campaigns")
+
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, campaigns, nil, ServerConfig{Version: "test-version"}, log))
+		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodGet, validQuery, nil)
+		require.Equal(t, http.StatusInternalServerError, w.Code)
+		require.Equal(t, domain.CodeInternal, resp.Error.Code,
+			"corrupted UUID surfaces through respondError default branch as 500/INTERNAL")
 	})
 }

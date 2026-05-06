@@ -44,7 +44,7 @@ func serverWithAuthzCreatorAndDict(t *testing.T, authz AuthzService, creators Cr
 // its branch.
 func validCreatorListBody() api.CreatorsListRequest {
 	return api.CreatorsListRequest{
-		Sort:    api.CreatorListSortFieldCreatedAt,
+		Sort:    api.CreatedAt,
 		Order:   api.Desc,
 		Page:    1,
 		PerPage: 20,

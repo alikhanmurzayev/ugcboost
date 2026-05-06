@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/dbutil"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/domain"
@@ -119,6 +120,51 @@ func (s *CampaignService) GetByID(ctx context.Context, id string) (*domain.Campa
 		return nil, fmt.Errorf("get campaign: %w", err)
 	}
 	return campaignRowToDomain(row), nil
+}
+
+// List returns a page of campaigns matching the validated filter set. The
+// handler enforces sort/order whitelists and page/perPage bounds; this
+// method trusts those invariants, trims the optional search and runs the
+// repo's page+count query against the pool. No transaction (cross-row
+// consistency on the order of milliseconds is not required for an admin
+// list read), no audit, no success log.
+func (s *CampaignService) List(ctx context.Context, in domain.CampaignListInput) (*domain.CampaignListPage, error) {
+	params := campaignListInputToRepo(in)
+
+	rows, total, err := s.repoFactory.NewCampaignRepo(s.pool).List(ctx, params)
+	if err != nil {
+		return nil, fmt.Errorf("list campaigns: %w", err)
+	}
+	if total == 0 || len(rows) == 0 {
+		return &domain.CampaignListPage{
+			Items:   nil,
+			Total:   total,
+			Page:    in.Page,
+			PerPage: in.PerPage,
+		}, nil
+	}
+
+	items := make([]*domain.Campaign, len(rows))
+	for i, row := range rows {
+		items[i] = campaignRowToDomain(row)
+	}
+	return &domain.CampaignListPage{
+		Items:   items,
+		Total:   total,
+		Page:    in.Page,
+		PerPage: in.PerPage,
+	}, nil
+}
+
+func campaignListInputToRepo(in domain.CampaignListInput) repository.CampaignListParams {
+	return repository.CampaignListParams{
+		Search:    strings.ToLower(strings.TrimSpace(in.Search)),
+		IsDeleted: in.IsDeleted,
+		Sort:      in.Sort,
+		Order:     in.Order,
+		Page:      in.Page,
+		PerPage:   in.PerPage,
+	}
 }
 
 func campaignRowToDomain(row *repository.CampaignRow) *domain.Campaign {

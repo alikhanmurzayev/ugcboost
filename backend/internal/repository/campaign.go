@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"time"
 
 	sq "github.com/Masterminds/squirrel"
@@ -53,7 +54,20 @@ type CampaignRepo interface {
 	Create(ctx context.Context, name, tmaURL string) (*CampaignRow, error)
 	GetByID(ctx context.Context, id string) (*CampaignRow, error)
 	Update(ctx context.Context, id, name, tmaURL string) (*CampaignRow, error)
+	List(ctx context.Context, params CampaignListParams) ([]*CampaignRow, int64, error)
 	DeleteForTests(ctx context.Context, id string) error
+}
+
+// CampaignListParams carries the validated search/filter/sort/pagination
+// inputs the service hands to the repo. The repo trusts these values
+// (sort/order whitelisted, page/perPage bounded) and builds SQL directly.
+type CampaignListParams struct {
+	Search    string
+	IsDeleted *bool
+	Sort      string
+	Order     string
+	Page      int
+	PerPage   int
 }
 
 type campaignRepository struct {
@@ -111,6 +125,79 @@ func (r *campaignRepository) Update(ctx context.Context, id, name, tmaURL string
 		return nil, err
 	}
 	return row, nil
+}
+
+// List returns one page of campaigns matching the filter set, plus the
+// unpaginated total. Page-q and count-q share the same WHERE-chain via
+// applyCampaignListFilters so total is always consistent with items.
+//
+// Defensive bounds check: handler validates the range, but a future
+// re-caller could pass garbage; without this, `int → uint64` silently wraps
+// a negative offset into a giant unsigned number.
+func (r *campaignRepository) List(ctx context.Context, params CampaignListParams) ([]*CampaignRow, int64, error) {
+	if params.Page < 1 || params.PerPage < 1 {
+		return nil, 0, fmt.Errorf("campaign_repository.List: invalid pagination page=%d perPage=%d", params.Page, params.PerPage)
+	}
+
+	countQ := applyCampaignListFilters(sq.Select("COUNT(*)").From(TableCampaigns), params)
+	total, err := dbutil.Val[int64](ctx, r.db, countQ)
+	if err != nil {
+		return nil, 0, err
+	}
+	if total == 0 {
+		return nil, 0, nil
+	}
+
+	q := sq.Select(campaignSelectColumns...).From(TableCampaigns)
+	q = applyCampaignListFilters(q, params)
+	q, err = applyCampaignListOrder(q, params.Sort, params.Order)
+	if err != nil {
+		return nil, 0, err
+	}
+	offset := (params.Page - 1) * params.PerPage
+	q = q.Limit(uint64(params.PerPage)).Offset(uint64(offset))
+
+	rows, err := dbutil.Many[CampaignRow](ctx, r.db, q)
+	if err != nil {
+		return nil, 0, err
+	}
+	return rows, total, nil
+}
+
+// applyCampaignListFilters appends the active filters. ILIKE wildcards in
+// search (`%`, `_`, `\`) are escaped so an admin searching for "100%" gets
+// a literal substring match instead of Postgres' wildcard semantics.
+func applyCampaignListFilters(q sq.SelectBuilder, p CampaignListParams) sq.SelectBuilder {
+	if p.IsDeleted != nil {
+		q = q.Where(sq.Eq{CampaignColumnIsDeleted: *p.IsDeleted})
+	}
+	if p.Search != "" {
+		pattern := "%" + escapeLikeWildcards(p.Search) + "%"
+		q = q.Where(sq.Expr(CampaignColumnName+` ILIKE ? ESCAPE '\'`, pattern))
+	}
+	return q
+}
+
+// applyCampaignListOrder picks ORDER BY for the validated sort. Every branch
+// tail-orders by id ASC so rows with equal sort keys stay stable across
+// pages and direction flips. Unknown sort returns a wrapped error rather
+// than silently falling back — handler+service reject upstream.
+func applyCampaignListOrder(q sq.SelectBuilder, sort, order string) (sq.SelectBuilder, error) {
+	dir := "ASC"
+	if order == domain.SortOrderDesc {
+		dir = "DESC"
+	}
+	tieBreaker := CampaignColumnID + " ASC"
+	switch sort {
+	case domain.CampaignSortCreatedAt:
+		return q.OrderBy(CampaignColumnCreatedAt+" "+dir, tieBreaker), nil
+	case domain.CampaignSortUpdatedAt:
+		return q.OrderBy(CampaignColumnUpdatedAt+" "+dir, tieBreaker), nil
+	case domain.CampaignSortName:
+		return q.OrderBy(CampaignColumnName+" "+dir, tieBreaker), nil
+	default:
+		return q, fmt.Errorf("campaign_repository.applyCampaignListOrder: unsupported sort %q", sort)
+	}
 }
 
 // DeleteForTests hard-deletes a campaign by id. Returns sql.ErrNoRows when

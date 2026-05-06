@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 	openapi_types "github.com/oapi-codegen/runtime/types"
@@ -97,6 +98,77 @@ func (s *Server) UpdateCampaign(ctx context.Context, request api.UpdateCampaignR
 		return nil, err
 	}
 	return api.UpdateCampaign204Response{}, nil
+}
+
+// ListCampaigns handles GET /campaigns (admin-only).
+func (s *Server) ListCampaigns(ctx context.Context, request api.ListCampaignsRequestObject) (api.ListCampaignsResponseObject, error) {
+	if err := s.authzService.CanListCampaigns(ctx); err != nil {
+		return nil, err
+	}
+	params := request.Params
+
+	if !params.Sort.Valid() {
+		return nil, domain.NewValidationError(domain.CodeValidation,
+			fmt.Sprintf("Неподдерживаемое значение sort. Допустимы: %s",
+				strings.Join(domain.CampaignListSortFieldValues, ", ")))
+	}
+	if !params.Order.Valid() {
+		return nil, domain.NewValidationError(domain.CodeValidation,
+			fmt.Sprintf("Неподдерживаемое значение order. Допустимы: %s",
+				strings.Join(domain.SortOrderValues, ", ")))
+	}
+	if params.Page < domain.CampaignListPageMin || params.Page > domain.CampaignListPageMax {
+		return nil, domain.NewValidationError(domain.CodeValidation,
+			fmt.Sprintf("Параметр page должен быть в диапазоне %d..%d",
+				domain.CampaignListPageMin, domain.CampaignListPageMax))
+	}
+	if params.PerPage < domain.CampaignListPerPageMin || params.PerPage > domain.CampaignListPerPageMax {
+		return nil, domain.NewValidationError(domain.CodeValidation,
+			fmt.Sprintf("Параметр perPage должен быть в диапазоне %d..%d",
+				domain.CampaignListPerPageMin, domain.CampaignListPerPageMax))
+	}
+
+	search := ""
+	if params.Search != nil {
+		trimmed := strings.TrimSpace(*params.Search)
+		if len([]rune(trimmed)) > domain.CampaignListSearchMaxLen {
+			return nil, domain.NewValidationError(domain.CodeValidation,
+				fmt.Sprintf("Параметр search не должен превышать %d символов",
+					domain.CampaignListSearchMaxLen))
+		}
+		search = trimmed
+	}
+
+	in := domain.CampaignListInput{
+		Search:    search,
+		IsDeleted: params.IsDeleted,
+		Sort:      string(params.Sort),
+		Order:     string(params.Order),
+		Page:      params.Page,
+		PerPage:   params.PerPage,
+	}
+
+	page, err := s.campaignService.List(ctx, in)
+	if err != nil {
+		return nil, err
+	}
+
+	items := make([]api.Campaign, len(page.Items))
+	for i, c := range page.Items {
+		mapped, err := domainCampaignToAPI(c)
+		if err != nil {
+			return nil, err
+		}
+		items[i] = mapped
+	}
+	return api.ListCampaigns200JSONResponse{
+		Data: api.CampaignsListData{
+			Items:   items,
+			Total:   page.Total,
+			Page:    page.Page,
+			PerPage: page.PerPage,
+		},
+	}, nil
 }
 
 // domainCampaignToAPI maps the domain campaign onto its strict-server

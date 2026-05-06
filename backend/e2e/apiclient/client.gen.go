@@ -144,6 +144,9 @@ type ClientInterface interface {
 	// RemoveManager request
 	RemoveManager(ctx context.Context, brandID string, userID string, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// ListCampaigns request
+	ListCampaigns(ctx context.Context, params *ListCampaignsParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// CreateCampaignWithBody request with any body
 	CreateCampaignWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -434,6 +437,18 @@ func (c *Client) AssignManager(ctx context.Context, brandID string, body AssignM
 
 func (c *Client) RemoveManager(ctx context.Context, brandID string, userID string, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewRemoveManagerRequest(c.Server, brandID, userID)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ListCampaigns(ctx context.Context, params *ListCampaignsParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListCampaignsRequest(c.Server, params)
 	if err != nil {
 		return nil, err
 	}
@@ -1340,6 +1355,119 @@ func NewRemoveManagerRequest(server string, brandID string, userID string) (*htt
 	return req, nil
 }
 
+// NewListCampaignsRequest generates requests for ListCampaigns
+func NewListCampaignsRequest(server string, params *ListCampaignsParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/campaigns")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", true, "page", params.Page, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", true, "perPage", params.PerPage, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", true, "sort", params.Sort, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", true, "order", params.Order, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if params.Search != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "search", *params.Search, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		if params.IsDeleted != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "isDeleted", *params.IsDeleted, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "boolean", Format: ""}); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewCreateCampaignRequest calls the generic CreateCampaign builder with application/json body
 func NewCreateCampaignRequest(server string, body CreateCampaignJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
@@ -1996,6 +2124,9 @@ type ClientWithResponsesInterface interface {
 	// RemoveManagerWithResponse request
 	RemoveManagerWithResponse(ctx context.Context, brandID string, userID string, reqEditors ...RequestEditorFn) (*RemoveManagerResponse, error)
 
+	// ListCampaignsWithResponse request
+	ListCampaignsWithResponse(ctx context.Context, params *ListCampaignsParams, reqEditors ...RequestEditorFn) (*ListCampaignsResponse, error)
+
 	// CreateCampaignWithBodyWithResponse request with any body
 	CreateCampaignWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CreateCampaignResponse, error)
 
@@ -2389,6 +2520,32 @@ func (r RemoveManagerResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r RemoveManagerResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type ListCampaignsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *CampaignsListResult
+	JSON401      *ErrorResponse
+	JSON403      *Forbidden
+	JSON422      *ErrorResponse
+	JSONDefault  *UnexpectedError
+}
+
+// Status returns HTTPResponse.Status
+func (r ListCampaignsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListCampaignsResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -2954,6 +3111,15 @@ func (c *ClientWithResponses) RemoveManagerWithResponse(ctx context.Context, bra
 		return nil, err
 	}
 	return ParseRemoveManagerResponse(rsp)
+}
+
+// ListCampaignsWithResponse request returning *ListCampaignsResponse
+func (c *ClientWithResponses) ListCampaignsWithResponse(ctx context.Context, params *ListCampaignsParams, reqEditors ...RequestEditorFn) (*ListCampaignsResponse, error) {
+	rsp, err := c.ListCampaigns(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListCampaignsResponse(rsp)
 }
 
 // CreateCampaignWithBodyWithResponse request with arbitrary body returning *CreateCampaignResponse
@@ -3715,6 +3881,60 @@ func ParseRemoveManagerResponse(rsp *http.Response) (*RemoveManagerResponse, err
 			return nil, err
 		}
 		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest UnexpectedError
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseListCampaignsResponse parses an HTTP response from a ListCampaignsWithResponse call
+func ParseListCampaignsResponse(rsp *http.Response) (*ListCampaignsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListCampaignsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest CampaignsListResult
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON422 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
 		var dest UnexpectedError

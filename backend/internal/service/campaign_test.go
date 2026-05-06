@@ -472,3 +472,116 @@ func TestCampaignService_UpdateCampaign(t *testing.T) {
 		require.NoError(t, err)
 	})
 }
+
+func TestCampaignService_List(t *testing.T) {
+	t.Parallel()
+
+	t.Run("repo error wraps with context", func(t *testing.T) {
+		t.Parallel()
+		pool := dbmocks.NewMockPool(t)
+		factory := svcmocks.NewMockCampaignRepoFactory(t)
+		campaigns := repomocks.NewMockCampaignRepo(t)
+
+		factory.EXPECT().NewCampaignRepo(pool).Return(campaigns)
+		// Captured input asserts that the service passes a trimmed + lowercased
+		// search and untouched sort/order/page/perPage to the repo — drift
+		// between domain.CampaignListInput and repository.CampaignListParams
+		// would slip through if we matched on mock.Anything.
+		campaigns.EXPECT().List(mock.Anything, mock.Anything).
+			Run(func(_ context.Context, p repository.CampaignListParams) {
+				require.Equal(t, repository.CampaignListParams{
+					Search:    "promo",
+					IsDeleted: nil,
+					Sort:      domain.CampaignSortCreatedAt,
+					Order:     domain.SortOrderDesc,
+					Page:      1,
+					PerPage:   10,
+				}, p)
+			}).
+			Return(nil, int64(0), errors.New("db down"))
+
+		svc := NewCampaignService(pool, factory, logmocks.NewMockLogger(t))
+		_, err := svc.List(context.Background(), domain.CampaignListInput{
+			Search:  "  PROMO  ", // trim + lowercase happen in the service
+			Sort:    domain.CampaignSortCreatedAt,
+			Order:   domain.SortOrderDesc,
+			Page:    1,
+			PerPage: 10,
+		})
+		require.ErrorContains(t, err, "list campaigns")
+		require.ErrorContains(t, err, "db down")
+	})
+
+	t.Run("empty result short-circuits with echoed pagination", func(t *testing.T) {
+		t.Parallel()
+		pool := dbmocks.NewMockPool(t)
+		factory := svcmocks.NewMockCampaignRepoFactory(t)
+		campaigns := repomocks.NewMockCampaignRepo(t)
+
+		factory.EXPECT().NewCampaignRepo(pool).Return(campaigns)
+		campaigns.EXPECT().List(mock.Anything, mock.Anything).
+			Return(nil, int64(0), nil)
+
+		svc := NewCampaignService(pool, factory, logmocks.NewMockLogger(t))
+		got, err := svc.List(context.Background(), domain.CampaignListInput{
+			Sort:    domain.CampaignSortCreatedAt,
+			Order:   domain.SortOrderAsc,
+			Page:    3,
+			PerPage: 25,
+		})
+		require.NoError(t, err)
+		require.Equal(t, &domain.CampaignListPage{
+			Items:   nil,
+			Total:   0,
+			Page:    3,
+			PerPage: 25,
+		}, got)
+	})
+
+	t.Run("success maps rows to domain campaigns", func(t *testing.T) {
+		t.Parallel()
+		pool := dbmocks.NewMockPool(t)
+		factory := svcmocks.NewMockCampaignRepoFactory(t)
+		campaigns := repomocks.NewMockCampaignRepo(t)
+		created := time.Date(2026, 5, 6, 12, 0, 0, 0, time.UTC)
+		updated := created.Add(time.Hour)
+
+		isDeleted := true
+		factory.EXPECT().NewCampaignRepo(pool).Return(campaigns)
+		campaigns.EXPECT().List(mock.Anything, mock.Anything).
+			Run(func(_ context.Context, p repository.CampaignListParams) {
+				require.Equal(t, repository.CampaignListParams{
+					Search:    "promo",
+					IsDeleted: pointer.ToBool(true),
+					Sort:      domain.CampaignSortName,
+					Order:     domain.SortOrderAsc,
+					Page:      2,
+					PerPage:   5,
+				}, p)
+			}).
+			Return([]*repository.CampaignRow{
+				{ID: "c-1", Name: "Promo A", TmaURL: "https://tma.ugcboost.kz/tz/a", IsDeleted: false, CreatedAt: created, UpdatedAt: updated},
+				{ID: "c-2", Name: "Promo B", TmaURL: "https://tma.ugcboost.kz/tz/b", IsDeleted: true, CreatedAt: created, UpdatedAt: updated},
+			}, int64(7), nil)
+
+		svc := NewCampaignService(pool, factory, logmocks.NewMockLogger(t))
+		got, err := svc.List(context.Background(), domain.CampaignListInput{
+			Search:    "promo",
+			IsDeleted: &isDeleted,
+			Sort:      domain.CampaignSortName,
+			Order:     domain.SortOrderAsc,
+			Page:      2,
+			PerPage:   5,
+		})
+		require.NoError(t, err)
+		require.Equal(t, &domain.CampaignListPage{
+			Items: []*domain.Campaign{
+				{ID: "c-1", Name: "Promo A", TmaURL: "https://tma.ugcboost.kz/tz/a", IsDeleted: false, CreatedAt: created, UpdatedAt: updated},
+				{ID: "c-2", Name: "Promo B", TmaURL: "https://tma.ugcboost.kz/tz/b", IsDeleted: true, CreatedAt: created, UpdatedAt: updated},
+			},
+			Total:   7,
+			Page:    2,
+			PerPage: 5,
+		}, got)
+	})
+}
