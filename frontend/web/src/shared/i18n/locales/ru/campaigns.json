@@ -1,0 +1,27 @@
+{
+  "title": "Кампании",
+  "description": "Список кампаний для рассылки приглашений креаторам.",
+  "loadError": "Не удалось загрузить кампании",
+  "empty": "Пока нет ни одной кампании",
+  "emptyFiltered": "Нет кампаний по выбранным фильтрам",
+  "createButton": "Создать кампанию",
+  "columns": {
+    "name": "Название",
+    "tmaUrl": "Ссылка ТЗ",
+    "createdAt": "Создана"
+  },
+  "filters": {
+    "search": "Поиск по названию",
+    "showDeleted": "Показать удалённые"
+  },
+  "actions": {
+    "delete": "Удалить",
+    "deleteDisabledHint": "Появится позже"
+  },
+  "labels": {
+    "deletedBadge": "Удалена"
+  },
+  "pagination": {
+    "page": "Страница {{page}} из {{total}}"
+  }
+}

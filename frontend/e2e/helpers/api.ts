@@ -23,6 +23,8 @@ type CreatorApplicationSubmitRequest =
   components["schemas"]["CreatorApplicationSubmitRequest"];
 type CreatorApplicationSubmitResult =
   components["schemas"]["CreatorApplicationSubmitResult"];
+type CampaignInput = components["schemas"]["CampaignInput"];
+type CampaignCreatedResult = components["schemas"]["CampaignCreatedResult"];
 type SeedUserRequest = testComponents["schemas"]["SeedUserRequest"];
 type SeedUserResult = testComponents["schemas"]["SeedUserResult"];
 type SeedUserRole = SeedUserRequest["role"];
@@ -620,6 +622,62 @@ export async function seedApprovedCreator(
     await application.cleanup().catch(() => {});
     throw err;
   }
+}
+
+async function cleanupCampaign(
+  request: APIRequestContext,
+  apiUrl: string,
+  campaignId: string,
+): Promise<void> {
+  if (process.env.E2E_CLEANUP === "false") return;
+  const body: CleanupEntityRequest = { type: "campaign", id: campaignId };
+  const resp = await request.post(`${apiUrl}/test/cleanup-entity`, { data: body });
+  if (resp.status() !== 204 && resp.status() !== 404) {
+    throw new Error(`cleanupCampaign ${campaignId}: ${resp.status()} ${await resp.text()}`);
+  }
+}
+
+export type SeedCampaignOpts = Partial<CampaignInput>;
+
+export interface SeededCampaign {
+  campaignId: string;
+  name: string;
+  tmaUrl: string;
+  cleanup: () => Promise<void>;
+}
+
+// seedCampaign drives the production POST /campaigns endpoint with an admin
+// bearer so the seeded row is indistinguishable from a real admin-created
+// campaign (same audit log, same uniqueness guarantees). Defaults pick a
+// uuid-suffixed name to keep parallel workers from colliding on the unique
+// `name` index. Cleanup uses /test/cleanup-entity type=campaign and is
+// idempotent (404 = already gone).
+export async function seedCampaign(
+  request: APIRequestContext,
+  apiUrl: string,
+  adminToken: string,
+  opts: SeedCampaignOpts = {},
+): Promise<SeededCampaign> {
+  const uuid = randomUUID();
+  const name = opts.name ?? `e2e-campaign-${uuid.slice(0, 8)}`;
+  const tmaUrl =
+    opts.tmaUrl ?? `https://t.me/ugcboost_bot/app?startapp=${uuid.slice(0, 8)}`;
+  const body: CampaignInput = { name, tmaUrl };
+  const resp = await request.post(`${apiUrl}/campaigns`, {
+    headers: { Authorization: `Bearer ${adminToken}` },
+    data: body,
+  });
+  if (resp.status() !== 201) {
+    throw new Error(`seedCampaign: ${resp.status()} ${await resp.text()}`);
+  }
+  const result = (await resp.json()) as CampaignCreatedResult;
+  const campaignId = result.data.id;
+  return {
+    campaignId,
+    name,
+    tmaUrl,
+    cleanup: () => cleanupCampaign(request, apiUrl, campaignId),
+  };
 }
 
 // SendPulseWebhookSecret defaults to the local-dev value baked into

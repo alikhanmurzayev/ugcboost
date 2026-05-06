@@ -21,6 +21,13 @@ export const creatorKeys = {
   detail: (id: string) => ["creators", "detail", id] as const,
 };
 
+export const campaignKeys = {
+  all: () => ["campaigns"] as const,
+  list: (params: Record<string, unknown>) =>
+    ["campaigns", "list", params] as const,
+  detail: (id: string) => ["campaigns", "detail", id] as const,
+};
+
 export const dictionaryKeys = {
   list: (type: string) => ["dictionaries", type] as const,
 };

@@ -2,6 +2,7 @@ import "@/shared/i18n/config";
 import { lazy, Suspense } from "react";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import LoginPage from "@/features/auth/LoginPage";
 import AuthGuard from "@/features/auth/AuthGuard";
 import DashboardLayout from "@/shared/layouts/DashboardLayout";
@@ -13,7 +14,7 @@ import VerificationPage from "@/features/creatorApplications/VerificationPage";
 import ModerationPage from "@/features/creatorApplications/ModerationPage";
 import RejectedPage from "@/features/creatorApplications/stubs/RejectedPage";
 import CreatorsListPage from "@/features/creators/CreatorsListPage";
-import CampaignsStubPage from "@/features/campaigns/stubs/CampaignsStubPage";
+import CampaignsListPage from "@/features/campaigns/CampaignsListPage";
 import RoleGuard from "@/features/auth/RoleGuard";
 import ErrorBoundary from "@/shared/components/ErrorBoundary";
 import Spinner from "@/shared/components/Spinner";
@@ -76,42 +77,31 @@ function App() {
                     element={<RejectedPage />}
                   />
                   <Route path={ROUTES.CREATORS} element={<CreatorsListPage />} />
+                  <Route path={ROUTES.CAMPAIGNS} element={<CampaignsListPage />} />
+                  <Route
+                    path={ROUTES.CAMPAIGN_NEW}
+                    element={<ComingSoonPage testid="campaign-new-stub" />}
+                  />
+                  <Route
+                    path={ROUTES.CAMPAIGN_DETAIL_PATTERN}
+                    element={<ComingSoonPage testid="campaign-detail-stub" />}
+                  />
                 </Route>
-
-                <Route
-                  path={ROUTES.CAMPAIGNS_ACTIVE}
-                  element={<CampaignsStubPage />}
-                />
-                <Route
-                  path={ROUTES.CAMPAIGNS_PENDING}
-                  element={<CampaignsStubPage />}
-                />
-                <Route
-                  path={ROUTES.CAMPAIGNS_REJECTED}
-                  element={<CampaignsStubPage />}
-                />
-                <Route
-                  path={ROUTES.CAMPAIGNS_DRAFT}
-                  element={<CampaignsStubPage />}
-                />
-                <Route
-                  path={ROUTES.CAMPAIGNS_COMPLETED}
-                  element={<CampaignsStubPage />}
-                />
-                <Route
-                  path={ROUTES.CAMPAIGN_NEW}
-                  element={<CampaignsStubPage />}
-                />
-                <Route
-                  path={ROUTES.CAMPAIGN_DETAIL_PATTERN}
-                  element={<CampaignsStubPage />}
-                />
               </Route>
             </Route>
           </Routes>
         </BrowserRouter>
       </QueryClientProvider>
     </ErrorBoundary>
+  );
+}
+
+function ComingSoonPage({ testid }: { testid: string }) {
+  const { t } = useTranslation("common");
+  return (
+    <div data-testid={testid} className="text-sm text-gray-500">
+      {t("comingSoon")}
+    </div>
   );
 }
 
