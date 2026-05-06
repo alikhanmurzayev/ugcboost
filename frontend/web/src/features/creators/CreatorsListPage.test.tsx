@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -313,6 +313,37 @@ describe("CreatorsListPage — list body roundtrip", () => {
         }),
       );
     });
+  });
+});
+
+describe("CreatorsListPage — keyboard navigation race", () => {
+  // fireEvent (not userEvent) is intentional: this test reproduces the
+  // race where two ArrowRight events fire before React commits the
+  // re-render between them. userEvent flushes React between events and
+  // would hide the very bug we're guarding against.
+  it("two consecutive ArrowRight presses navigate by two steps without dropping the second", async () => {
+    const item1 = { ...FIXTURE_ITEM, id: "id-aaaa-1111", lastName: "Aaaa" };
+    const item2 = { ...FIXTURE_ITEM, id: "id-bbbb-2222", lastName: "Bbbb" };
+    const item3 = { ...FIXTURE_ITEM, id: "id-cccc-3333", lastName: "Cccc" };
+    vi.mocked(listCreators).mockResolvedValue({
+      data: { items: [item1, item2, item3], total: 3, page: 1, perPage: 50 },
+    });
+    vi.mocked(getCreator).mockImplementation(() => new Promise(() => {}));
+
+    renderPage(`/creators?id=${item1.id}`);
+
+    expect(await screen.findByTestId("drawer")).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByTestId("drawer-prev")).toBeDisabled(),
+    );
+
+    fireEvent.keyDown(window, { key: "ArrowRight" });
+    fireEvent.keyDown(window, { key: "ArrowRight" });
+
+    await waitFor(() =>
+      expect(screen.getByTestId("drawer-next")).toBeDisabled(),
+    );
+    await waitFor(() => expect(getCreator).toHaveBeenCalledWith(item3.id));
   });
 });
 

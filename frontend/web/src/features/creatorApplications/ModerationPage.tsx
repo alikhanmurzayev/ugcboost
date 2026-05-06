@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useLayoutEffect, useMemo, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
@@ -12,6 +12,7 @@ import ErrorState from "@/shared/components/ErrorState";
 import Table, { type Column } from "@/shared/components/Table";
 import { CategoryChips } from "@/shared/components/CategoryChip";
 import SocialLink from "@/shared/components/SocialLink";
+import { readCurrentId } from "@/shared/utils/readCurrentId";
 import ApplicationActions from "./components/ApplicationActions";
 import ApplicationDrawer from "./components/ApplicationDrawer";
 import ApplicationFilters from "./components/ApplicationFilters";
@@ -80,6 +81,14 @@ export default function ModerationPage() {
   const canPrev = idx > 0;
   const canNext = idx >= 0 && idx < items.length - 1;
 
+  // Rationale for the URL+ref read pattern: see shared/utils/readCurrentId.
+  const selectedIdRef = useRef<string | null>(selectedId);
+  const itemsRef = useRef<Application[]>(items);
+  useLayoutEffect(() => {
+    selectedIdRef.current = selectedId;
+    itemsRef.current = items;
+  });
+
   const columns: Column<Application>[] = useMemo(() => buildColumns(t), [t]);
   const activeColumn = activeColumnForSort(sortState.sort);
 
@@ -100,13 +109,21 @@ export default function ModerationPage() {
   }
 
   function goPrev() {
-    const prevItem = items[idx - 1];
-    if (prevItem) openApplication(prevItem.id);
+    const currentId = readCurrentId(selectedIdRef);
+    if (!currentId) return;
+    const list = itemsRef.current;
+    const i = list.findIndex((r) => r.id === currentId);
+    const prev = i > 0 ? list[i - 1] : undefined;
+    if (prev) openApplication(prev.id);
   }
 
   function goNext() {
-    const nextItem = items[idx + 1];
-    if (nextItem) openApplication(nextItem.id);
+    const currentId = readCurrentId(selectedIdRef);
+    if (!currentId) return;
+    const list = itemsRef.current;
+    const i = list.findIndex((r) => r.id === currentId);
+    const next = i >= 0 ? list[i + 1] : undefined;
+    if (next) openApplication(next.id);
   }
 
   function handleSortChange(columnKey: string) {
