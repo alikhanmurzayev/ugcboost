@@ -391,8 +391,6 @@ func TestCreatorService_GetByID(t *testing.T) {
 		require.Equal(t, "almaty", got.CityName, "deactivated city must fall back to code")
 	})
 
-	_ = fullCreatorSocialRows // shared with TestCreatorService_List below
-
 	t.Run("deactivated category falls back to code", func(t *testing.T) {
 		t.Parallel()
 		rig := newCreatorReadRig(t)
@@ -578,7 +576,7 @@ func TestCreatorService_List(t *testing.T) {
 		}, got)
 	})
 
-	t.Run("trims search before passing to repo", func(t *testing.T) {
+	t.Run("forwards search verbatim (handler owns the trim)", func(t *testing.T) {
 		t.Parallel()
 		rig := newCreatorReadRig(t)
 		rig.factory.EXPECT().NewCreatorRepo(rig.pool).Return(rig.creatorRepo)
@@ -591,7 +589,7 @@ func TestCreatorService_List(t *testing.T) {
 
 		svc := NewCreatorService(rig.pool, rig.factory, rig.logger)
 		_, err := svc.List(context.Background(), domain.CreatorListInput{
-			Search: "   aidana   ",
+			Search: "aidana",
 			Sort:   domain.CreatorSortCreatedAt, Order: domain.SortOrderAsc, Page: 1, PerPage: 20,
 		})
 		require.NoError(t, err)

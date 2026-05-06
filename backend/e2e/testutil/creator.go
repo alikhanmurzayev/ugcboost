@@ -37,8 +37,6 @@ type ApprovedCreatorFixture struct {
 	CategoryCodes    []string
 	Socials          []SocialFixture
 	TelegramUsername *string
-
-	CreatedAt time.Time
 }
 
 // SetupApprovedCreator drives an application from submit through to the
@@ -90,10 +88,8 @@ func SetupApprovedCreator(t *testing.T, opts CreatorApplicationFixture) Approved
 		CategoryCodes:    append([]string(nil), app.CategoryCodes...),
 		Socials:          append([]SocialFixture(nil), app.Socials...),
 		TelegramUsername: app.TelegramUsername,
-		CreatedAt:        time.Now().UTC(),
 	}
 }
-
 
 // RegisterCreatorCleanup schedules a POST /test/cleanup-entity for a creator
 // row after the test. The testapi handler delegates to CreatorRepo.DeleteForTests

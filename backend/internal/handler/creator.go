@@ -138,7 +138,8 @@ func (s *Server) ListCreators(ctx context.Context, request api.ListCreatorsReque
 		return nil, err
 	}
 	if body.AgeFrom != nil && body.AgeTo != nil && *body.AgeFrom > *body.AgeTo {
-		return nil, domain.NewValidationError(domain.CodeValidation, "ageFrom не может быть больше ageTo")
+		return nil, domain.NewValidationError(domain.CodeValidation,
+			fmt.Sprintf("ageFrom (%d) не может быть больше ageTo (%d)", *body.AgeFrom, *body.AgeTo))
 	}
 	if err := validateDateBound("dateFrom", body.DateFrom); err != nil {
 		return nil, err
@@ -146,6 +147,8 @@ func (s *Server) ListCreators(ctx context.Context, request api.ListCreatorsReque
 	if err := validateDateBound("dateTo", body.DateTo); err != nil {
 		return nil, err
 	}
+	// Strict After: equality (DateFrom == DateTo) passes — narrows the filter
+	// to a single moment, which is a legitimate use case.
 	if body.DateFrom != nil && body.DateTo != nil && body.DateFrom.After(*body.DateTo) {
 		return nil, domain.NewValidationError(domain.CodeValidation, "dateFrom не может быть позже dateTo")
 	}
@@ -230,12 +233,19 @@ func validateCreatorAgeBound(field string, age *int) error {
 // validateCreatorSearch trims the optional search string and enforces the
 // OpenAPI length cap. An empty search after trim is returned as "" so the
 // service / repo can ignore it; a search longer than the limit is rejected
-// so a client cannot push a 1MB ILIKE pattern through the body limit.
+// so a client cannot push a 1MB ILIKE pattern through the body limit. NUL
+// bytes are rejected up-front because Postgres' text/varchar columns reject
+// them at the driver level — letting one through would surface as a generic
+// 500 instead of a clean 422.
 func validateCreatorSearch(p *string) (string, error) {
 	if p == nil {
 		return "", nil
 	}
 	trimmed := strings.TrimSpace(*p)
+	if strings.ContainsRune(trimmed, 0) {
+		return "", domain.NewValidationError(domain.CodeValidation,
+			"Параметр search содержит недопустимый символ")
+	}
 	if len([]rune(trimmed)) > domain.CreatorListSearchMaxLen {
 		return "", domain.NewValidationError(domain.CodeValidation,
 			fmt.Sprintf("Параметр search не должен превышать %d символов",
@@ -265,7 +275,7 @@ func validateCreatorCodeArray(field string, p *[]string, maxLen int) ([]string, 
 			return nil, domain.NewValidationError(domain.CodeValidation,
 				fmt.Sprintf("Параметр %s содержит пустое значение", field))
 		}
-		if len(code) > maxLen {
+		if len([]rune(code)) > maxLen {
 			return nil, domain.NewValidationError(domain.CodeValidation,
 				fmt.Sprintf("Длина значения в %s не должна превышать %d символов", field, maxLen))
 		}

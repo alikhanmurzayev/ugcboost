@@ -210,9 +210,9 @@ func (r *creatorRepository) DeleteForTests(ctx context.Context, id string) error
 //
 // Defensive bounds check on Page/PerPage: the handler already validates the
 // range, but a future re-caller (cron, another service, a unit test calling
-// the repo directly) could pass garbage. Without this guard `int → uint64`
-// silently wraps a negative offset into a giant unsigned number and feeds a
-// gigabyte-sized OFFSET to Postgres.
+// the repo directly) could pass garbage. A negative `int` cast to `uint64`
+// becomes a giant unsigned number — Postgres accepts the OFFSET and runs a
+// full table scan to seek that far before returning zero rows.
 func (r *creatorRepository) List(ctx context.Context, params CreatorListParams) ([]*CreatorListRow, int64, error) {
 	if params.Page < 1 || params.PerPage < 1 {
 		return nil, 0, fmt.Errorf("creator_repository.List: invalid pagination page=%d perPage=%d", params.Page, params.PerPage)
@@ -241,8 +241,8 @@ func (r *creatorRepository) List(ctx context.Context, params CreatorListParams) 
 		return nil, 0, err
 	}
 
-	offset := (params.Page - 1) * params.PerPage
-	q = q.Limit(uint64(params.PerPage)).Offset(uint64(offset))
+	offset := uint64(params.Page-1) * uint64(params.PerPage)
+	q = q.Limit(uint64(params.PerPage)).Offset(offset)
 
 	rows, err := dbutil.Many[CreatorListRow](ctx, r.db, q)
 	if err != nil {
@@ -279,10 +279,10 @@ func applyCreatorListFilters(q sq.SelectBuilder, p CreatorListParams) sq.SelectB
 		ccatCode := creatorListCategoryAlias + "." + CreatorCategoryColumnCategoryCode
 		sub := sq.Select("1").
 			From(TableCreatorCategories + " " + creatorListCategoryAlias).
-			// Cross-column equality — squirrel.Eq parameterises the RHS, so a
-			// raw Where with column-name constants is the only way to express
-			// it. Both sides are package constants; user input never enters.
-			Where(ccatCreatorID + " = " + crID).
+			// Cross-column equality wrapped in sq.Expr so the raw SQL fragment
+			// is documented as deliberate. Both sides are package-level column
+			// constants; user input never enters this string.
+			Where(sq.Expr(ccatCreatorID + " = " + crID)).
 			Where(sq.Eq{ccatCode: p.Categories})
 		q = q.Where(sq.Expr("EXISTS (?)", sub))
 	}
@@ -310,7 +310,7 @@ func applyCreatorListFilters(q sq.SelectBuilder, p CreatorListParams) sq.SelectB
 		pattern := "%" + escapeLikeWildcards(p.Search) + "%"
 		socialsSub := sq.Select("1").
 			From(TableCreatorSocials + " " + creatorListSocialAlias).
-			Where(csocCreatorID + " = " + crID).
+			Where(sq.Expr(csocCreatorID + " = " + crID)).
 			Where(sq.Expr(csocHandle+` ILIKE ? ESCAPE '\'`, pattern))
 		q = q.Where(sq.Or{
 			sq.Expr(crLastName+` ILIKE ? ESCAPE '\'`, pattern),

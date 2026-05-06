@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/dbutil"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/domain"
@@ -231,10 +230,9 @@ func (s *CreatorService) List(ctx context.Context, in domain.CreatorListInput) (
 }
 
 // creatorListInputToRepo translates the validated handler input into the
-// repo-shaped params struct. Search trimming happens here so the repo never
-// sees whitespace-only queries (an empty Search ignores the filter). All
-// other fields pass through unchanged — the handler is the single source of
-// truth for validation.
+// repo-shaped params struct. The handler is the single source of truth for
+// validation (sort/order whitelisted, page/perPage bounded, search already
+// trimmed by validateCreatorSearch); this mapping is a pure shape change.
 func creatorListInputToRepo(in domain.CreatorListInput) repository.CreatorListParams {
 	return repository.CreatorListParams{
 		Cities:     in.Cities,
@@ -243,7 +241,7 @@ func creatorListInputToRepo(in domain.CreatorListInput) repository.CreatorListPa
 		DateTo:     in.DateTo,
 		AgeFrom:    in.AgeFrom,
 		AgeTo:      in.AgeTo,
-		Search:     strings.TrimSpace(in.Search),
+		Search:     in.Search,
 		Sort:       in.Sort,
 		Order:      in.Order,
 		Page:       in.Page,

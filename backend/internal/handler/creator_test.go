@@ -676,6 +676,13 @@ func TestValidateCreatorSearch(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, "aidana", out)
 	})
+	t.Run("rejects NUL byte", func(t *testing.T) {
+		t.Parallel()
+		s := "ai\x00dana"
+		_, err := validateCreatorSearch(&s)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "search")
+	})
 }
 
 func TestValidateCreatorCodeArray(t *testing.T) {

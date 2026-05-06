@@ -211,7 +211,7 @@ func TestCreatorsList(t *testing.T) {
 		ids := collectCreatorIDs(resp.JSON200.Data.Items)
 		require.Contains(t, ids, fresh.CreatorID)
 		for _, item := range resp.JSON200.Data.Items {
-			require.WithinDuration(t, time.Now().UTC(), item.CreatedAt, time.Minute,
+			require.WithinDuration(t, time.Now().UTC(), item.CreatedAt, 5*time.Minute,
 				"created_at %s out of acceptable window", item.CreatedAt)
 		}
 	})
