@@ -38,7 +38,7 @@ import (
 
 func validBody() apiclient.CreatorApplicationsListRequest {
 	return apiclient.CreatorApplicationsListRequest{
-		Sort:    apiclient.CreatedAt,
+		Sort:    apiclient.CreatorApplicationListSortFieldCreatedAt,
 		Order:   apiclient.Desc,
 		Page:    1,
 		PerPage: 50,
@@ -375,7 +375,7 @@ func TestCreatorApplicationsList(t *testing.T) {
 		second := testutil.SetupCreatorApplicationViaLanding(t)
 
 		body := validBody()
-		body.Sort = apiclient.CreatedAt
+		body.Sort = apiclient.CreatorApplicationListSortFieldCreatedAt
 		body.Order = apiclient.Asc
 		body.PerPage = 200
 
@@ -401,7 +401,7 @@ func TestCreatorApplicationsList(t *testing.T) {
 		})
 
 		body := validBody()
-		body.Sort = apiclient.CityName
+		body.Sort = apiclient.CreatorApplicationListSortFieldCityName
 		body.Order = apiclient.Asc
 		body.PerPage = 200
 
@@ -427,7 +427,7 @@ func TestCreatorApplicationsList(t *testing.T) {
 		})
 
 		body := validBody()
-		body.Sort = apiclient.FullName
+		body.Sort = apiclient.CreatorApplicationListSortFieldFullName
 		body.Order = apiclient.Asc
 		body.PerPage = 200
 
@@ -453,7 +453,7 @@ func TestCreatorApplicationsList(t *testing.T) {
 		})
 
 		body := validBody()
-		body.Sort = apiclient.FullName
+		body.Sort = apiclient.CreatorApplicationListSortFieldFullName
 		body.Order = apiclient.Desc
 		body.PerPage = 200
 
@@ -477,7 +477,7 @@ func TestCreatorApplicationsList(t *testing.T) {
 		})
 
 		body := validBody()
-		body.Sort = apiclient.CityName
+		body.Sort = apiclient.CreatorApplicationListSortFieldCityName
 		body.Order = apiclient.Desc
 		body.PerPage = 200
 
@@ -504,7 +504,7 @@ func TestCreatorApplicationsList(t *testing.T) {
 
 		c := testutil.NewAPIClient(t)
 		body := validBody()
-		body.Sort = apiclient.UpdatedAt
+		body.Sort = apiclient.CreatorApplicationListSortFieldUpdatedAt
 		body.PerPage = 200
 
 		body.Order = apiclient.Asc
@@ -536,7 +536,7 @@ func TestCreatorApplicationsList(t *testing.T) {
 
 		c := testutil.NewAPIClient(t)
 		body := validBody()
-		body.Sort = apiclient.BirthDate
+		body.Sort = apiclient.CreatorApplicationListSortFieldBirthDate
 		body.PerPage = 200
 
 		for _, dir := range []apiclient.SortOrder{apiclient.Asc, apiclient.Desc} {
@@ -574,7 +574,7 @@ func TestCreatorApplicationsList(t *testing.T) {
 		c := testutil.NewAPIClient(t)
 		body := validBody()
 		body.PerPage = 1
-		body.Sort = apiclient.CreatedAt
+		body.Sort = apiclient.CreatorApplicationListSortFieldCreatedAt
 		body.Order = apiclient.Desc
 		body.Search = pointer.ToString(marker)
 

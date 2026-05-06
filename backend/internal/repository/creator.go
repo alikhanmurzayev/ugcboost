@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"time"
 
 	sq "github.com/Masterminds/squirrel"
@@ -71,15 +72,66 @@ type CreatorRow struct {
 }
 
 var (
-	creatorSelectColumns = sortColumns(stom.MustNewStom(CreatorRow{}).SetTag(string(tagSelect)).TagValues())
-	creatorInsertMapper  = stom.MustNewStom(CreatorRow{}).SetTag(string(tagInsert))
+	creatorSelectColumns  = sortColumns(stom.MustNewStom(CreatorRow{}).SetTag(string(tagSelect)).TagValues())
+	creatorInsertMapper   = stom.MustNewStom(CreatorRow{}).SetTag(string(tagInsert))
+	creatorListRowColumns = sortColumns(stom.MustNewStom(CreatorListRow{}).SetTag(string(tagSelect)).TagValues())
+	creatorListProjection = aliasedColumns(creatorListAlias, creatorListRowColumns)
+)
+
+// Aliases for the multi-table list query — composing column references via
+// constants keeps "no string literals for column names" from the constants
+// standard intact.
+const (
+	creatorListAlias         = "cr"
+	creatorListCityAlias     = "ct"
+	creatorListCategoryAlias = "ccat"
+	creatorListSocialAlias   = "csoc"
 )
 
 // CreatorRepo lists every public method of the creator repository.
 type CreatorRepo interface {
 	Create(ctx context.Context, row CreatorRow) (*CreatorRow, error)
 	GetByID(ctx context.Context, id string) (*CreatorRow, error)
+	List(ctx context.Context, params CreatorListParams) ([]*CreatorListRow, int64, error)
 	DeleteForTests(ctx context.Context, id string) error
+}
+
+// CreatorListParams carries the validated filter/sort/search/pagination inputs
+// the service hands to the repo. The repo trusts these values (sort/order
+// whitelisted, page/perPage bounded) and builds the SQL query directly —
+// without re-validation.
+type CreatorListParams struct {
+	Cities     []string
+	Categories []string
+	DateFrom   *time.Time
+	DateTo     *time.Time
+	AgeFrom    *int
+	AgeTo      *int
+	Search     string
+	Sort       string
+	Order      string
+	Page       int
+	PerPage    int
+}
+
+// CreatorListRow is the projected row returned by List. It carries only the
+// columns surfaced in the list response — address, category_other_text, the
+// telegram_user_id/first/last metadata and source_application_id stay in
+// CreatorRow for the GET aggregate. The dedicated row type keeps the SELECT
+// explicit at the call site and avoids polluting CreatorRow with a list-only
+// projection.
+type CreatorListRow struct {
+	ID               string    `db:"id"`
+	LastName         string    `db:"last_name"`
+	FirstName        string    `db:"first_name"`
+	MiddleName       *string   `db:"middle_name"`
+	IIN              string    `db:"iin"`
+	BirthDate        time.Time `db:"birth_date"`
+	Phone            string    `db:"phone"`
+	CityCode         string    `db:"city_code"`
+	TelegramUsername *string   `db:"telegram_username"`
+	CreatedAt        time.Time `db:"created_at"`
+	UpdatedAt        time.Time `db:"updated_at"`
 }
 
 type creatorRepository struct {
@@ -144,4 +196,170 @@ func (r *creatorRepository) DeleteForTests(ctx context.Context, id string) error
 		return sql.ErrNoRows
 	}
 	return nil
+}
+
+// List returns one page of approved creators matching the filter set, plus
+// the unpaginated total. Both queries share the same WHERE chain so total
+// stays in sync with what the page would yield without LIMIT/OFFSET. The
+// page query additionally LEFT JOINs cities so sort=city_name resolves the
+// human-readable name from the dictionary; that join is added only when the
+// sort actually needs it so a scan over an unrelated sort key does not pull
+// every row through an extra dictionary lookup. Deactivated city codes leave
+// a NULL ct.name; Postgres orders them at the natural extreme of the chosen
+// direction (NULLS LAST on ASC / NULLS FIRST on DESC).
+//
+// Defensive bounds check on Page/PerPage: the handler already validates the
+// range, but a future re-caller (cron, another service, a unit test calling
+// the repo directly) could pass garbage. A negative `int` cast to `uint64`
+// becomes a giant unsigned number — Postgres accepts the OFFSET and runs a
+// full table scan to seek that far before returning zero rows.
+func (r *creatorRepository) List(ctx context.Context, params CreatorListParams) ([]*CreatorListRow, int64, error) {
+	if params.Page < 1 || params.PerPage < 1 {
+		return nil, 0, fmt.Errorf("creator_repository.List: invalid pagination page=%d perPage=%d", params.Page, params.PerPage)
+	}
+
+	countQ := applyCreatorListFilters(
+		sq.Select("COUNT(*)").From(TableCreators+" "+creatorListAlias),
+		params,
+	)
+	total, err := dbutil.Val[int64](ctx, r.db, countQ)
+	if err != nil {
+		return nil, 0, err
+	}
+	if total == 0 {
+		return nil, 0, nil
+	}
+
+	q := sq.Select(creatorListProjection...).
+		From(TableCreators + " " + creatorListAlias)
+	if params.Sort == domain.CreatorSortCityName {
+		q = q.LeftJoin(creatorListCityJoin())
+	}
+	q = applyCreatorListFilters(q, params)
+	q, err = applyCreatorListOrder(q, params.Sort, params.Order)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	offset := uint64(params.Page-1) * uint64(params.PerPage)
+	q = q.Limit(uint64(params.PerPage)).Offset(offset)
+
+	rows, err := dbutil.Many[CreatorListRow](ctx, r.db, q)
+	if err != nil {
+		return nil, 0, err
+	}
+	return rows, total, nil
+}
+
+func creatorListCityJoin() string {
+	return TableCities + " " + creatorListCityAlias +
+		" ON " + creatorListCityAlias + "." + DictionaryColumnCode +
+		" = " + creatorListAlias + "." + CreatorColumnCityCode
+}
+
+// applyCreatorListFilters appends every active filter condition. Multi-value
+// arrays produce IN-clauses (any-of), the categories filter goes through an
+// EXISTS subquery on the M:N table, and the search clause spans the six PII
+// columns (last/first/middle name, IIN, phone, telegram_username) plus an
+// EXISTS on socials.handle. Search is escaped for ILIKE wildcards so an admin
+// searching for "100%" or "_test" gets a literal substring match instead of
+// Postgres' wildcard semantics. Subqueries are passed to squirrel as Sqlizer
+// objects so argument numbering stays correct.
+func applyCreatorListFilters(q sq.SelectBuilder, p CreatorListParams) sq.SelectBuilder {
+	crCity := creatorListAlias + "." + CreatorColumnCityCode
+	crCreatedAt := creatorListAlias + "." + CreatorColumnCreatedAt
+	crBirthDate := creatorListAlias + "." + CreatorColumnBirthDate
+	crID := creatorListAlias + "." + CreatorColumnID
+
+	if len(p.Cities) > 0 {
+		q = q.Where(sq.Eq{crCity: p.Cities})
+	}
+	if len(p.Categories) > 0 {
+		ccatCreatorID := creatorListCategoryAlias + "." + CreatorCategoryColumnCreatorID
+		ccatCode := creatorListCategoryAlias + "." + CreatorCategoryColumnCategoryCode
+		sub := sq.Select("1").
+			From(TableCreatorCategories + " " + creatorListCategoryAlias).
+			// Cross-column equality wrapped in sq.Expr so the raw SQL fragment
+			// is documented as deliberate. Both sides are package-level column
+			// constants; user input never enters this string.
+			Where(sq.Expr(ccatCreatorID + " = " + crID)).
+			Where(sq.Eq{ccatCode: p.Categories})
+		q = q.Where(sq.Expr("EXISTS (?)", sub))
+	}
+	if p.DateFrom != nil {
+		q = q.Where(sq.GtOrEq{crCreatedAt: *p.DateFrom})
+	}
+	if p.DateTo != nil {
+		q = q.Where(sq.LtOrEq{crCreatedAt: *p.DateTo})
+	}
+	if p.AgeFrom != nil {
+		q = q.Where(sq.Expr(crBirthDate+" <= NOW()::date - make_interval(years => ?)", *p.AgeFrom))
+	}
+	if p.AgeTo != nil {
+		q = q.Where(sq.Expr(crBirthDate+" > NOW()::date - make_interval(years => ?)", *p.AgeTo+1))
+	}
+	if p.Search != "" {
+		crLastName := creatorListAlias + "." + CreatorColumnLastName
+		crFirstName := creatorListAlias + "." + CreatorColumnFirstName
+		crMiddleName := creatorListAlias + "." + CreatorColumnMiddleName
+		crIIN := creatorListAlias + "." + CreatorColumnIIN
+		crPhone := creatorListAlias + "." + CreatorColumnPhone
+		crTelegramUsername := creatorListAlias + "." + CreatorColumnTelegramUsername
+		csocCreatorID := creatorListSocialAlias + "." + CreatorSocialColumnCreatorID
+		csocHandle := creatorListSocialAlias + "." + CreatorSocialColumnHandle
+		pattern := "%" + escapeLikeWildcards(p.Search) + "%"
+		socialsSub := sq.Select("1").
+			From(TableCreatorSocials + " " + creatorListSocialAlias).
+			Where(sq.Expr(csocCreatorID + " = " + crID)).
+			Where(sq.Expr(csocHandle+` ILIKE ? ESCAPE '\'`, pattern))
+		q = q.Where(sq.Or{
+			sq.Expr(crLastName+` ILIKE ? ESCAPE '\'`, pattern),
+			sq.Expr(crFirstName+` ILIKE ? ESCAPE '\'`, pattern),
+			sq.Expr(crMiddleName+` ILIKE ? ESCAPE '\'`, pattern),
+			sq.Expr(crIIN+` ILIKE ? ESCAPE '\'`, pattern),
+			sq.Expr(crPhone+` ILIKE ? ESCAPE '\'`, pattern),
+			sq.Expr(crTelegramUsername+` ILIKE ? ESCAPE '\'`, pattern),
+			sq.Expr("EXISTS (?)", socialsSub),
+		})
+	}
+	return q
+}
+
+// applyCreatorListOrder picks the SQL ORDER BY clause for the validated sort
+// field. Every branch tail-orders by id ASC so creators with equal sort keys
+// stay deterministically ordered across pages and across direction flips —
+// fixing the tie-breaker direction independently of the main sort means a
+// page boundary captured at sort=DESC stays in the same place when the same
+// query is later run with sort=ASC.
+//
+// Unknown sort returns a wrapped error rather than a silent fallback: the
+// service+handler reject unknown sort upstream, so reaching this branch means
+// a code-level drift, and silently sorting by created_at would mask the bug.
+func applyCreatorListOrder(q sq.SelectBuilder, sort, order string) (sq.SelectBuilder, error) {
+	dir := "ASC"
+	if order == domain.SortOrderDesc {
+		dir = "DESC"
+	}
+	tieBreaker := creatorListAlias + "." + CreatorColumnID + " ASC"
+	switch sort {
+	case domain.CreatorSortCreatedAt:
+		col := creatorListAlias + "." + CreatorColumnCreatedAt
+		return q.OrderBy(col+" "+dir, tieBreaker), nil
+	case domain.CreatorSortUpdatedAt:
+		col := creatorListAlias + "." + CreatorColumnUpdatedAt
+		return q.OrderBy(col+" "+dir, tieBreaker), nil
+	case domain.CreatorSortBirthDate:
+		col := creatorListAlias + "." + CreatorColumnBirthDate
+		return q.OrderBy(col+" "+dir, tieBreaker), nil
+	case domain.CreatorSortFullName:
+		last := creatorListAlias + "." + CreatorColumnLastName
+		first := creatorListAlias + "." + CreatorColumnFirstName
+		middle := creatorListAlias + "." + CreatorColumnMiddleName
+		return q.OrderBy(last+" "+dir, first+" "+dir, middle+" "+dir, tieBreaker), nil
+	case domain.CreatorSortCityName:
+		name := creatorListCityAlias + "." + DictionaryColumnName
+		return q.OrderBy(name+" "+dir, tieBreaker), nil
+	default:
+		return q, fmt.Errorf("creator_repository.applyCreatorListOrder: unsupported sort %q", sort)
+	}
 }

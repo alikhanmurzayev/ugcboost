@@ -39,25 +39,25 @@ func (e ConsentType) Valid() bool {
 
 // Defines values for CreatorApplicationListSortField.
 const (
-	BirthDate CreatorApplicationListSortField = "birth_date"
-	CityName  CreatorApplicationListSortField = "city_name"
-	CreatedAt CreatorApplicationListSortField = "created_at"
-	FullName  CreatorApplicationListSortField = "full_name"
-	UpdatedAt CreatorApplicationListSortField = "updated_at"
+	CreatorApplicationListSortFieldBirthDate CreatorApplicationListSortField = "birth_date"
+	CreatorApplicationListSortFieldCityName  CreatorApplicationListSortField = "city_name"
+	CreatorApplicationListSortFieldCreatedAt CreatorApplicationListSortField = "created_at"
+	CreatorApplicationListSortFieldFullName  CreatorApplicationListSortField = "full_name"
+	CreatorApplicationListSortFieldUpdatedAt CreatorApplicationListSortField = "updated_at"
 )
 
 // Valid indicates whether the value is a known member of the CreatorApplicationListSortField enum.
 func (e CreatorApplicationListSortField) Valid() bool {
 	switch e {
-	case BirthDate:
+	case CreatorApplicationListSortFieldBirthDate:
 		return true
-	case CityName:
+	case CreatorApplicationListSortFieldCityName:
 		return true
-	case CreatedAt:
+	case CreatorApplicationListSortFieldCreatedAt:
 		return true
-	case FullName:
+	case CreatorApplicationListSortFieldFullName:
 		return true
-	case UpdatedAt:
+	case CreatorApplicationListSortFieldUpdatedAt:
 		return true
 	default:
 		return false
@@ -85,6 +85,33 @@ func (e CreatorApplicationStatus) Valid() bool {
 	case Verification:
 		return true
 	case Withdrawn:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CreatorListSortField.
+const (
+	CreatorListSortFieldBirthDate CreatorListSortField = "birth_date"
+	CreatorListSortFieldCityName  CreatorListSortField = "city_name"
+	CreatorListSortFieldCreatedAt CreatorListSortField = "created_at"
+	CreatorListSortFieldFullName  CreatorListSortField = "full_name"
+	CreatorListSortFieldUpdatedAt CreatorListSortField = "updated_at"
+)
+
+// Valid indicates whether the value is a known member of the CreatorListSortField enum.
+func (e CreatorListSortField) Valid() bool {
+	switch e {
+	case CreatorListSortFieldBirthDate:
+		return true
+	case CreatorListSortFieldCityName:
+		return true
+	case CreatorListSortFieldCreatedAt:
+		return true
+	case CreatorListSortFieldFullName:
+		return true
+	case CreatorListSortFieldUpdatedAt:
 		return true
 	default:
 		return false
@@ -668,6 +695,108 @@ type CreatorApprovalResult struct {
 	Data CreatorApprovalData `json:"data"`
 }
 
+// CreatorListItem One row in the admin creator list. Includes identity, contact details
+// searchable from the admin UI (phone, telegram_username) and the
+// dictionary-hydrated city/categories. Address, category_other_text and
+// the full Telegram metadata are reserved for `GET /creators/{id}`.
+type CreatorListItem struct {
+	BirthDate openapi_types.Date `json:"birthDate"`
+
+	// Categories Categories selected by the creator, sorted by sort_order then code.
+	Categories []DictionaryItem `json:"categories"`
+
+	// City Single entry from a public dictionary (categories, cities, etc.).
+	// Reused for the dictionary-listing endpoint and for hydrated dictionary
+	// references on creator-application reads, where the backend falls back
+	// to `(code, code, 0)` when the underlying dictionary row has been
+	// deactivated.
+	City      DictionaryItem     `json:"city"`
+	CreatedAt time.Time          `json:"createdAt"`
+	FirstName string             `json:"firstName"`
+	Id        openapi_types.UUID `json:"id"`
+
+	// Iin Kazakhstani individual identification number (12 digits).
+	Iin        string  `json:"iin"`
+	LastName   string  `json:"lastName"`
+	MiddleName *string `json:"middleName,omitempty"`
+	Phone      string  `json:"phone"`
+
+	// Socials Social accounts attached to the creator, sorted by platform then handle.
+	Socials          []CreatorListSocial `json:"socials"`
+	TelegramUsername *string             `json:"telegramUsername,omitempty"`
+	UpdatedAt        time.Time           `json:"updatedAt"`
+}
+
+// CreatorListSocial Lean social-account row returned in the creator list. Only the
+// platform/handle pair is surfaced — verification metadata, ids and
+// timestamps stay in the full GET aggregate.
+type CreatorListSocial struct {
+	Handle string `json:"handle"`
+
+	// Platform Supported social network for creator accounts (MVP scope).
+	Platform SocialPlatform `json:"platform"`
+}
+
+// CreatorListSortField Sort field for the admin creator list. Mapped to a SQL column /
+// expression on the backend. Unknown values are rejected with 422.
+type CreatorListSortField string
+
+// CreatorsListData defines model for CreatorsListData.
+type CreatorsListData struct {
+	Items   []CreatorListItem `json:"items"`
+	Page    int               `json:"page"`
+	PerPage int               `json:"perPage"`
+
+	// Total Total number of matching creators across all pages.
+	Total int64 `json:"total"`
+}
+
+// CreatorsListRequest defines model for CreatorsListRequest.
+type CreatorsListRequest struct {
+	// AgeFrom Inclusive lower bound for the creator's age in full years (computed from birth_date).
+	AgeFrom *int `json:"ageFrom,omitempty"`
+
+	// AgeTo Inclusive upper bound for the creator's age in full years.
+	AgeTo *int `json:"ageTo,omitempty"`
+
+	// Categories Match creators that include any of these category codes.
+	Categories *[]string `json:"categories,omitempty"`
+
+	// Cities Match any of these city codes (from the cities dictionary).
+	Cities *[]string `json:"cities,omitempty"`
+
+	// DateFrom Inclusive lower bound for `created_at` (creator's approve moment).
+	DateFrom *time.Time `json:"dateFrom,omitempty"`
+
+	// DateTo Inclusive upper bound for `created_at`.
+	DateTo *time.Time `json:"dateTo,omitempty"`
+
+	// Order Sort direction.
+	Order SortOrder `json:"order"`
+
+	// Page 1-based page index.
+	Page int `json:"page"`
+
+	// PerPage Page size, between 1 and 200 inclusive.
+	PerPage int `json:"perPage"`
+
+	// Search Free-text search across last_name, first_name, middle_name, IIN,
+	// phone, telegram_username (case-insensitive) and social-account
+	// handles. Trimmed; empty/blank after trim disables the filter.
+	// Carries PII — the endpoint is POST so this never lands in URL
+	// params.
+	Search *string `json:"search,omitempty"`
+
+	// Sort Sort field for the admin creator list. Mapped to a SQL column /
+	// expression on the backend. Unknown values are rejected with 422.
+	Sort CreatorListSortField `json:"sort"`
+}
+
+// CreatorsListResult defines model for CreatorsListResult.
+type CreatorsListResult struct {
+	Data CreatorsListData `json:"data"`
+}
+
 // DictionaryItem Single entry from a public dictionary (categories, cities, etc.).
 // Reused for the dictionary-listing endpoint and for hydrated dictionary
 // references on creator-application reads, where the backend falls back
@@ -942,6 +1071,9 @@ type ListCreatorApplicationsJSONRequestBody = CreatorApplicationsListRequest
 
 // VerifyCreatorApplicationSocialJSONRequestBody defines body for VerifyCreatorApplicationSocial for application/json ContentType.
 type VerifyCreatorApplicationSocialJSONRequestBody = VerifyCreatorApplicationSocialJSONBody
+
+// ListCreatorsJSONRequestBody defines body for ListCreators for application/json ContentType.
+type ListCreatorsJSONRequestBody = CreatorsListRequest
 
 // SendPulseInstagramWebhookJSONRequestBody defines body for SendPulseInstagramWebhook for application/json ContentType.
 type SendPulseInstagramWebhookJSONRequestBody = SendPulseInstagramWebhookRequest

@@ -51,7 +51,7 @@ var (
 // rules; uniqueness is on (creator_id, platform, handle).
 type CreatorSocialRepo interface {
 	InsertMany(ctx context.Context, rows []CreatorSocialRow) error
-	ListByCreatorID(ctx context.Context, creatorID string) ([]*CreatorSocialRow, error)
+	ListByCreatorIDs(ctx context.Context, creatorIDs []string) (map[string][]*CreatorSocialRow, error)
 }
 
 type creatorSocialRepository struct {
@@ -72,13 +72,30 @@ func (r *creatorSocialRepository) InsertMany(ctx context.Context, rows []Creator
 	return err
 }
 
-// ListByCreatorID returns every social row tied to the given creator,
-// sorted by (platform, handle) so 18c's aggregate response is deterministic
-// regardless of insertion order.
-func (r *creatorSocialRepository) ListByCreatorID(ctx context.Context, creatorID string) ([]*CreatorSocialRow, error) {
+// ListByCreatorIDs hydrates social accounts for every supplied creator id in a
+// single query. The returned map is keyed by creator id; each slice keeps the
+// (platform, handle) ordering so callers (single-creator GET aggregate, list
+// hydration) can rely on a deterministic projection. An empty input set is a
+// no-op and returns an empty map without hitting the database.
+func (r *creatorSocialRepository) ListByCreatorIDs(ctx context.Context, creatorIDs []string) (map[string][]*CreatorSocialRow, error) {
+	if len(creatorIDs) == 0 {
+		return map[string][]*CreatorSocialRow{}, nil
+	}
 	q := sq.Select(creatorSocialSelectColumns...).
 		From(TableCreatorSocials).
-		Where(sq.Eq{CreatorSocialColumnCreatorID: creatorID}).
-		OrderBy(CreatorSocialColumnPlatform+" ASC", CreatorSocialColumnHandle+" ASC")
-	return dbutil.Many[CreatorSocialRow](ctx, r.db, q)
+		Where(sq.Eq{CreatorSocialColumnCreatorID: creatorIDs}).
+		OrderBy(
+			CreatorSocialColumnCreatorID+" ASC",
+			CreatorSocialColumnPlatform+" ASC",
+			CreatorSocialColumnHandle+" ASC",
+		)
+	rows, err := dbutil.Many[CreatorSocialRow](ctx, r.db, q)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string][]*CreatorSocialRow, len(creatorIDs))
+	for _, row := range rows {
+		out[row.CreatorID] = append(out[row.CreatorID], row)
+	}
+	return out, nil
 }

@@ -48,25 +48,25 @@ func (e ConsentType) Valid() bool {
 
 // Defines values for CreatorApplicationListSortField.
 const (
-	BirthDate CreatorApplicationListSortField = "birth_date"
-	CityName  CreatorApplicationListSortField = "city_name"
-	CreatedAt CreatorApplicationListSortField = "created_at"
-	FullName  CreatorApplicationListSortField = "full_name"
-	UpdatedAt CreatorApplicationListSortField = "updated_at"
+	CreatorApplicationListSortFieldBirthDate CreatorApplicationListSortField = "birth_date"
+	CreatorApplicationListSortFieldCityName  CreatorApplicationListSortField = "city_name"
+	CreatorApplicationListSortFieldCreatedAt CreatorApplicationListSortField = "created_at"
+	CreatorApplicationListSortFieldFullName  CreatorApplicationListSortField = "full_name"
+	CreatorApplicationListSortFieldUpdatedAt CreatorApplicationListSortField = "updated_at"
 )
 
 // Valid indicates whether the value is a known member of the CreatorApplicationListSortField enum.
 func (e CreatorApplicationListSortField) Valid() bool {
 	switch e {
-	case BirthDate:
+	case CreatorApplicationListSortFieldBirthDate:
 		return true
-	case CityName:
+	case CreatorApplicationListSortFieldCityName:
 		return true
-	case CreatedAt:
+	case CreatorApplicationListSortFieldCreatedAt:
 		return true
-	case FullName:
+	case CreatorApplicationListSortFieldFullName:
 		return true
-	case UpdatedAt:
+	case CreatorApplicationListSortFieldUpdatedAt:
 		return true
 	default:
 		return false
@@ -94,6 +94,33 @@ func (e CreatorApplicationStatus) Valid() bool {
 	case Verification:
 		return true
 	case Withdrawn:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CreatorListSortField.
+const (
+	CreatorListSortFieldBirthDate CreatorListSortField = "birth_date"
+	CreatorListSortFieldCityName  CreatorListSortField = "city_name"
+	CreatorListSortFieldCreatedAt CreatorListSortField = "created_at"
+	CreatorListSortFieldFullName  CreatorListSortField = "full_name"
+	CreatorListSortFieldUpdatedAt CreatorListSortField = "updated_at"
+)
+
+// Valid indicates whether the value is a known member of the CreatorListSortField enum.
+func (e CreatorListSortField) Valid() bool {
+	switch e {
+	case CreatorListSortFieldBirthDate:
+		return true
+	case CreatorListSortFieldCityName:
+		return true
+	case CreatorListSortFieldCreatedAt:
+		return true
+	case CreatorListSortFieldFullName:
+		return true
+	case CreatorListSortFieldUpdatedAt:
 		return true
 	default:
 		return false
@@ -677,6 +704,108 @@ type CreatorApprovalResult struct {
 	Data CreatorApprovalData `json:"data"`
 }
 
+// CreatorListItem One row in the admin creator list. Includes identity, contact details
+// searchable from the admin UI (phone, telegram_username) and the
+// dictionary-hydrated city/categories. Address, category_other_text and
+// the full Telegram metadata are reserved for `GET /creators/{id}`.
+type CreatorListItem struct {
+	BirthDate openapi_types.Date `json:"birthDate"`
+
+	// Categories Categories selected by the creator, sorted by sort_order then code.
+	Categories []DictionaryItem `json:"categories"`
+
+	// City Single entry from a public dictionary (categories, cities, etc.).
+	// Reused for the dictionary-listing endpoint and for hydrated dictionary
+	// references on creator-application reads, where the backend falls back
+	// to `(code, code, 0)` when the underlying dictionary row has been
+	// deactivated.
+	City      DictionaryItem     `json:"city"`
+	CreatedAt time.Time          `json:"createdAt"`
+	FirstName string             `json:"firstName"`
+	Id        openapi_types.UUID `json:"id"`
+
+	// Iin Kazakhstani individual identification number (12 digits).
+	Iin        string  `json:"iin"`
+	LastName   string  `json:"lastName"`
+	MiddleName *string `json:"middleName,omitempty"`
+	Phone      string  `json:"phone"`
+
+	// Socials Social accounts attached to the creator, sorted by platform then handle.
+	Socials          []CreatorListSocial `json:"socials"`
+	TelegramUsername *string             `json:"telegramUsername,omitempty"`
+	UpdatedAt        time.Time           `json:"updatedAt"`
+}
+
+// CreatorListSocial Lean social-account row returned in the creator list. Only the
+// platform/handle pair is surfaced — verification metadata, ids and
+// timestamps stay in the full GET aggregate.
+type CreatorListSocial struct {
+	Handle string `json:"handle"`
+
+	// Platform Supported social network for creator accounts (MVP scope).
+	Platform SocialPlatform `json:"platform"`
+}
+
+// CreatorListSortField Sort field for the admin creator list. Mapped to a SQL column /
+// expression on the backend. Unknown values are rejected with 422.
+type CreatorListSortField string
+
+// CreatorsListData defines model for CreatorsListData.
+type CreatorsListData struct {
+	Items   []CreatorListItem `json:"items"`
+	Page    int               `json:"page"`
+	PerPage int               `json:"perPage"`
+
+	// Total Total number of matching creators across all pages.
+	Total int64 `json:"total"`
+}
+
+// CreatorsListRequest defines model for CreatorsListRequest.
+type CreatorsListRequest struct {
+	// AgeFrom Inclusive lower bound for the creator's age in full years (computed from birth_date).
+	AgeFrom *int `json:"ageFrom,omitempty"`
+
+	// AgeTo Inclusive upper bound for the creator's age in full years.
+	AgeTo *int `json:"ageTo,omitempty"`
+
+	// Categories Match creators that include any of these category codes.
+	Categories *[]string `json:"categories,omitempty"`
+
+	// Cities Match any of these city codes (from the cities dictionary).
+	Cities *[]string `json:"cities,omitempty"`
+
+	// DateFrom Inclusive lower bound for `created_at` (creator's approve moment).
+	DateFrom *time.Time `json:"dateFrom,omitempty"`
+
+	// DateTo Inclusive upper bound for `created_at`.
+	DateTo *time.Time `json:"dateTo,omitempty"`
+
+	// Order Sort direction.
+	Order SortOrder `json:"order"`
+
+	// Page 1-based page index.
+	Page int `json:"page"`
+
+	// PerPage Page size, between 1 and 200 inclusive.
+	PerPage int `json:"perPage"`
+
+	// Search Free-text search across last_name, first_name, middle_name, IIN,
+	// phone, telegram_username (case-insensitive) and social-account
+	// handles. Trimmed; empty/blank after trim disables the filter.
+	// Carries PII — the endpoint is POST so this never lands in URL
+	// params.
+	Search *string `json:"search,omitempty"`
+
+	// Sort Sort field for the admin creator list. Mapped to a SQL column /
+	// expression on the backend. Unknown values are rejected with 422.
+	Sort CreatorListSortField `json:"sort"`
+}
+
+// CreatorsListResult defines model for CreatorsListResult.
+type CreatorsListResult struct {
+	Data CreatorsListData `json:"data"`
+}
+
 // DictionaryItem Single entry from a public dictionary (categories, cities, etc.).
 // Reused for the dictionary-listing endpoint and for hydrated dictionary
 // references on creator-application reads, where the backend falls back
@@ -952,6 +1081,9 @@ type ListCreatorApplicationsJSONRequestBody = CreatorApplicationsListRequest
 // VerifyCreatorApplicationSocialJSONRequestBody defines body for VerifyCreatorApplicationSocial for application/json ContentType.
 type VerifyCreatorApplicationSocialJSONRequestBody = VerifyCreatorApplicationSocialJSONBody
 
+// ListCreatorsJSONRequestBody defines body for ListCreators for application/json ContentType.
+type ListCreatorsJSONRequestBody = CreatorsListRequest
+
 // SendPulseInstagramWebhookJSONRequestBody defines body for SendPulseInstagramWebhook for application/json ContentType.
 type SendPulseInstagramWebhookJSONRequestBody = SendPulseInstagramWebhookRequest
 
@@ -1020,6 +1152,9 @@ type ServerInterface interface {
 	// Mark a creator application's social account as manually verified (admin only)
 	// (POST /creators/applications/{id}/socials/{socialId}/verify)
 	VerifyCreatorApplicationSocial(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, socialId openapi_types.UUID)
+	// List approved creators with filters, search, sorting and pagination (admin only)
+	// (POST /creators/list)
+	ListCreators(w http.ResponseWriter, r *http.Request)
 	// Get full creator aggregate (admin only)
 	// (GET /creators/{id})
 	GetCreator(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
@@ -1161,6 +1296,12 @@ func (_ Unimplemented) RejectCreatorApplication(w http.ResponseWriter, r *http.R
 // Mark a creator application's social account as manually verified (admin only)
 // (POST /creators/applications/{id}/socials/{socialId}/verify)
 func (_ Unimplemented) VerifyCreatorApplicationSocial(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, socialId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// List approved creators with filters, search, sorting and pagination (admin only)
+// (POST /creators/list)
+func (_ Unimplemented) ListCreators(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -1767,6 +1908,26 @@ func (siw *ServerInterfaceWrapper) VerifyCreatorApplicationSocial(w http.Respons
 	handler.ServeHTTP(w, r)
 }
 
+// ListCreators operation middleware
+func (siw *ServerInterfaceWrapper) ListCreators(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListCreators(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetCreator operation middleware
 func (siw *ServerInterfaceWrapper) GetCreator(w http.ResponseWriter, r *http.Request) {
 
@@ -2026,6 +2187,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/creators/applications/{id}/socials/{socialId}/verify", wrapper.VerifyCreatorApplicationSocial)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/creators/list", wrapper.ListCreators)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/creators/{id}", wrapper.GetCreator)
@@ -3040,6 +3204,62 @@ func (response VerifyCreatorApplicationSocialdefaultJSONResponse) VisitVerifyCre
 	return json.NewEncoder(w).Encode(response.Body)
 }
 
+type ListCreatorsRequestObject struct {
+	Body *ListCreatorsJSONRequestBody
+}
+
+type ListCreatorsResponseObject interface {
+	VisitListCreatorsResponse(w http.ResponseWriter) error
+}
+
+type ListCreators200JSONResponse CreatorsListResult
+
+func (response ListCreators200JSONResponse) VisitListCreatorsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type ListCreators401JSONResponse ErrorResponse
+
+func (response ListCreators401JSONResponse) VisitListCreatorsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type ListCreators403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response ListCreators403JSONResponse) VisitListCreatorsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type ListCreators422JSONResponse ErrorResponse
+
+func (response ListCreators422JSONResponse) VisitListCreatorsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(422)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type ListCreatorsdefaultJSONResponse struct {
+	Body       ErrorResponse
+	StatusCode int
+}
+
+func (response ListCreatorsdefaultJSONResponse) VisitListCreatorsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+
+	return json.NewEncoder(w).Encode(response.Body)
+}
+
 type GetCreatorRequestObject struct {
 	Id openapi_types.UUID `json:"id"`
 }
@@ -3265,6 +3485,9 @@ type StrictServerInterface interface {
 	// Mark a creator application's social account as manually verified (admin only)
 	// (POST /creators/applications/{id}/socials/{socialId}/verify)
 	VerifyCreatorApplicationSocial(ctx context.Context, request VerifyCreatorApplicationSocialRequestObject) (VerifyCreatorApplicationSocialResponseObject, error)
+	// List approved creators with filters, search, sorting and pagination (admin only)
+	// (POST /creators/list)
+	ListCreators(ctx context.Context, request ListCreatorsRequestObject) (ListCreatorsResponseObject, error)
 	// Get full creator aggregate (admin only)
 	// (GET /creators/{id})
 	GetCreator(ctx context.Context, request GetCreatorRequestObject) (GetCreatorResponseObject, error)
@@ -3893,6 +4116,37 @@ func (sh *strictHandler) VerifyCreatorApplicationSocial(w http.ResponseWriter, r
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(VerifyCreatorApplicationSocialResponseObject); ok {
 		if err := validResponse.VisitVerifyCreatorApplicationSocialResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListCreators operation middleware
+func (sh *strictHandler) ListCreators(w http.ResponseWriter, r *http.Request) {
+	var request ListCreatorsRequestObject
+
+	var body ListCreatorsJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListCreators(ctx, request.(ListCreatorsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListCreators")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListCreatorsResponseObject); ok {
+		if err := validResponse.VisitListCreatorsResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

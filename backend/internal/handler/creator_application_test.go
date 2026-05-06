@@ -277,7 +277,7 @@ func serverWithAuthzAndCreatorAndDict(t *testing.T, authz AuthzService, creator 
 // endpoint test cases. Each case mutates one field to exercise its branch.
 func validListBody() api.CreatorApplicationsListRequest {
 	return api.CreatorApplicationsListRequest{
-		Sort:    api.CreatedAt,
+		Sort:    api.CreatorApplicationListSortFieldCreatedAt,
 		Order:   api.Desc,
 		Page:    1,
 		PerPage: 20,

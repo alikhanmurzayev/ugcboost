@@ -57,52 +57,87 @@ func TestCreatorCategoryRepository_InsertMany(t *testing.T) {
 	})
 }
 
-func TestCreatorCategoryRepository_ListByCreatorID(t *testing.T) {
+func TestCreatorCategoryRepository_ListByCreatorIDs(t *testing.T) {
 	t.Parallel()
 
-	const sqlStmt = "SELECT category_code FROM creator_categories WHERE creator_id = $1 ORDER BY category_code ASC"
+	const sqlStmtSingle = "SELECT creator_id, category_code FROM creator_categories WHERE creator_id IN ($1) ORDER BY creator_id ASC, category_code ASC"
+	const sqlStmtPair = "SELECT creator_id, category_code FROM creator_categories WHERE creator_id IN ($1,$2) ORDER BY creator_id ASC, category_code ASC"
 
-	t.Run("happy: returns codes in ascending order", func(t *testing.T) {
+	t.Run("empty input short-circuits without query", func(t *testing.T) {
 		t.Parallel()
 		mock := newPgxmock(t)
 		repo := &creatorCategoryRepository{db: mock}
 
-		mock.ExpectQuery(sqlStmt).
-			WithArgs("creator-1").
-			WillReturnRows(pgxmock.NewRows([]string{"category_code"}).
-				AddRow("fashion").
-				AddRow("food").
-				AddRow("lifestyle"))
-
-		got, err := repo.ListByCreatorID(context.Background(), "creator-1")
-		require.NoError(t, err)
-		require.Equal(t, []string{"fashion", "food", "lifestyle"}, got)
-	})
-
-	t.Run("empty result returns nil slice", func(t *testing.T) {
-		t.Parallel()
-		mock := newPgxmock(t)
-		repo := &creatorCategoryRepository{db: mock}
-
-		mock.ExpectQuery(sqlStmt).
-			WithArgs("creator-1").
-			WillReturnRows(pgxmock.NewRows([]string{"category_code"}))
-
-		got, err := repo.ListByCreatorID(context.Background(), "creator-1")
+		got, err := repo.ListByCreatorIDs(context.Background(), nil)
 		require.NoError(t, err)
 		require.Empty(t, got)
 	})
 
-	t.Run("propagates db error", func(t *testing.T) {
+	t.Run("happy single creator: returns codes in ascending order", func(t *testing.T) {
 		t.Parallel()
 		mock := newPgxmock(t)
 		repo := &creatorCategoryRepository{db: mock}
 
-		mock.ExpectQuery(sqlStmt).
+		mock.ExpectQuery(sqlStmtSingle).
 			WithArgs("creator-1").
+			WillReturnRows(pgxmock.NewRows([]string{"creator_id", "category_code"}).
+				AddRow("creator-1", "fashion").
+				AddRow("creator-1", "food").
+				AddRow("creator-1", "lifestyle"))
+
+		got, err := repo.ListByCreatorIDs(context.Background(), []string{"creator-1"})
+		require.NoError(t, err)
+		require.Equal(t, map[string][]string{
+			"creator-1": {"fashion", "food", "lifestyle"},
+		}, got)
+	})
+
+	t.Run("happy pair: groups codes by creator id", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &creatorCategoryRepository{db: mock}
+
+		mock.ExpectQuery(sqlStmtPair).
+			WithArgs("creator-1", "creator-2").
+			WillReturnRows(pgxmock.NewRows([]string{"creator_id", "category_code"}).
+				AddRow("creator-1", "beauty").
+				AddRow("creator-1", "fashion").
+				AddRow("creator-2", "food"))
+
+		got, err := repo.ListByCreatorIDs(context.Background(), []string{"creator-1", "creator-2"})
+		require.NoError(t, err)
+		require.Equal(t, map[string][]string{
+			"creator-1": {"beauty", "fashion"},
+			"creator-2": {"food"},
+		}, got)
+	})
+
+	t.Run("missing creator id surfaces as no-key in map", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &creatorCategoryRepository{db: mock}
+
+		mock.ExpectQuery(sqlStmtPair).
+			WithArgs("creator-1", "creator-empty").
+			WillReturnRows(pgxmock.NewRows([]string{"creator_id", "category_code"}).
+				AddRow("creator-1", "beauty"))
+
+		got, err := repo.ListByCreatorIDs(context.Background(), []string{"creator-1", "creator-empty"})
+		require.NoError(t, err)
+		require.Equal(t, map[string][]string{"creator-1": {"beauty"}}, got)
+		require.NotContains(t, got, "creator-empty")
+	})
+
+	t.Run("propagates query error", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &creatorCategoryRepository{db: mock}
+
+		mock.ExpectQuery(sqlStmtPair).
+			WithArgs("creator-1", "creator-2").
 			WillReturnError(errors.New("db down"))
 
-		_, err := repo.ListByCreatorID(context.Background(), "creator-1")
+		_, err := repo.ListByCreatorIDs(context.Background(), []string{"creator-1", "creator-2"})
 		require.ErrorContains(t, err, "db down")
 	})
 }

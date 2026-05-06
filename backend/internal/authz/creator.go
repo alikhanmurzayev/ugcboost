@@ -21,3 +21,18 @@ func (a *AuthzService) CanViewCreator(ctx context.Context) error {
 	}
 	return nil
 }
+
+// CanViewCreators gates the admin POST /creators/list endpoint. The list-item
+// shape carries lighter PII than the full GET aggregate (no address, no
+// category_other_text, no full Telegram block) but still includes IIN, full
+// names, phone and telegram_username, so admin role is the only acceptable
+// authorization. Held separately from CanViewCreator so a future widening
+// (manager-side catalog browsing on the list, single profile reads still
+// admin-only — or vice versa) ships without rippling regressions across the
+// other endpoint.
+func (a *AuthzService) CanViewCreators(ctx context.Context) error {
+	if middleware.RoleFromContext(ctx) != api.Admin {
+		return domain.ErrForbidden
+	}
+	return nil
+}

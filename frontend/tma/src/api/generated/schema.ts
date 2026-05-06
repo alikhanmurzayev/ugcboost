@@ -478,6 +478,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/creators/list": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * List approved creators with filters, search, sorting and pagination (admin only)
+         * @description Admin-only paginated list endpoint backing the campaign-side catalog.
+         *     POST is used (not GET) because the search field carries PII (IIN,
+         *     names, social handles, phone, telegram_username) which `security.md`
+         *     forbids in URL params. Authorisation is evaluated before any business
+         *     logic so non-admin callers get 403 regardless of whether matching
+         *     creators exist. Pagination, sort field and sort order are required —
+         *     there are no server-side defaults, the client must explicitly choose.
+         *
+         *     The item shape is intentionally lean: list-views surface identity,
+         *     contact details that admins copy from the table (phone,
+         *     telegram_username) and the dictionary-hydrated city/categories. Full
+         *     PII (address, category_other_text, the source application id, the
+         *     full Telegram block) is reserved for `GET /creators/{id}`. LiveDune
+         *     analytics, completed-orders metrics and TrustMe sign-state are
+         *     deliberately out of scope for this chunk and ship in follow-ups.
+         */
+        post: operations["listCreators"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/creators/{id}": {
         parameters: {
             query?: never;
@@ -1166,6 +1200,98 @@ export interface components {
         };
         GetCreatorResult: {
             data: components["schemas"]["CreatorAggregate"];
+        };
+        /**
+         * @description Sort field for the admin creator list. Mapped to a SQL column /
+         *     expression on the backend. Unknown values are rejected with 422.
+         * @enum {string}
+         */
+        CreatorListSortField: "created_at" | "updated_at" | "full_name" | "birth_date" | "city_name";
+        /**
+         * @description Filter, search, sort and pagination payload for the admin creator
+         *     list. All filter fields are optional and combined with AND between
+         *     fields, OR (any-of) within a single array. Empty/whitespace `search`
+         *     is ignored.
+         */
+        CreatorsListRequest: components["schemas"]["PaginationInput"] & {
+            /** @description Match any of these city codes (from the cities dictionary). */
+            cities?: string[];
+            /** @description Match creators that include any of these category codes. */
+            categories?: string[];
+            /**
+             * Format: date-time
+             * @description Inclusive lower bound for `created_at` (creator's approve moment).
+             */
+            dateFrom?: string;
+            /**
+             * Format: date-time
+             * @description Inclusive upper bound for `created_at`.
+             */
+            dateTo?: string;
+            /** @description Inclusive lower bound for the creator's age in full years (computed from birth_date). */
+            ageFrom?: number;
+            /** @description Inclusive upper bound for the creator's age in full years. */
+            ageTo?: number;
+            /**
+             * @description Free-text search across last_name, first_name, middle_name, IIN,
+             *     phone, telegram_username (case-insensitive) and social-account
+             *     handles. Trimmed; empty/blank after trim disables the filter.
+             *     Carries PII — the endpoint is POST so this never lands in URL
+             *     params.
+             */
+            search?: string;
+            sort: components["schemas"]["CreatorListSortField"];
+            order: components["schemas"]["SortOrder"];
+        };
+        /**
+         * @description Lean social-account row returned in the creator list. Only the
+         *     platform/handle pair is surfaced — verification metadata, ids and
+         *     timestamps stay in the full GET aggregate.
+         */
+        CreatorListSocial: {
+            platform: components["schemas"]["SocialPlatform"];
+            handle: string;
+        };
+        /**
+         * @description One row in the admin creator list. Includes identity, contact details
+         *     searchable from the admin UI (phone, telegram_username) and the
+         *     dictionary-hydrated city/categories. Address, category_other_text and
+         *     the full Telegram metadata are reserved for `GET /creators/{id}`.
+         */
+        CreatorListItem: {
+            /** Format: uuid */
+            id: string;
+            lastName: string;
+            firstName: string;
+            middleName?: string | null;
+            /** @description Kazakhstani individual identification number (12 digits). */
+            iin: string;
+            /** Format: date */
+            birthDate: string;
+            phone: string;
+            city: components["schemas"]["DictionaryItem"];
+            /** @description Categories selected by the creator, sorted by sort_order then code. */
+            categories: components["schemas"]["DictionaryItem"][];
+            /** @description Social accounts attached to the creator, sorted by platform then handle. */
+            socials: components["schemas"]["CreatorListSocial"][];
+            telegramUsername?: string | null;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        CreatorsListData: {
+            items: components["schemas"]["CreatorListItem"][];
+            /**
+             * Format: int64
+             * @description Total number of matching creators across all pages.
+             */
+            total: number;
+            page: number;
+            perPage: number;
+        };
+        CreatorsListResult: {
+            data: components["schemas"]["CreatorsListData"];
         };
     };
     responses: {
@@ -2025,6 +2151,50 @@ export interface operations {
              *     corresponding creator row already exists or the Telegram account
              *     is already taken by another creator.
              */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            default: components["responses"]["UnexpectedError"];
+        };
+    };
+    listCreators: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreatorsListRequest"];
+            };
+        };
+        responses: {
+            /** @description Page of approved creators matching the filter */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CreatorsListResult"];
+                };
+            };
+            /** @description Authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            /** @description Validation error (unknown sort/order, page/perPage out of range, malformed filters) */
             422: {
                 headers: {
                     [name: string]: unknown;
