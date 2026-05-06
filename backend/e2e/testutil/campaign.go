@@ -6,30 +6,8 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/stretchr/testify/require"
-
-	"github.com/alikhanmurzayev/ugcboost/backend/e2e/apiclient"
 	"github.com/alikhanmurzayev/ugcboost/backend/e2e/testclient"
 )
-
-// SetupCampaign creates a campaign through POST /campaigns using adminToken
-// and returns its UUID. Cleanup runs through POST /test/cleanup-entity (no
-// business DELETE endpoint exists yet — chunk #7 will introduce soft-delete;
-// this hard-delete via testapi is intentionally test-only).
-func SetupCampaign(t *testing.T, c *apiclient.ClientWithResponses, adminToken, name, tmaURL string) string {
-	t.Helper()
-	resp, err := c.CreateCampaignWithResponse(context.Background(), apiclient.CreateCampaignJSONRequestBody{
-		Name:   name,
-		TmaUrl: tmaURL,
-	}, WithAuth(adminToken))
-	require.NoError(t, err)
-	require.Equalf(t, http.StatusCreated, resp.StatusCode(),
-		"SetupCampaign: create must return 201, got %d", resp.StatusCode())
-	require.NotNil(t, resp.JSON201)
-	id := resp.JSON201.Data.Id.String()
-	RegisterCampaignCleanup(t, id)
-	return id
-}
 
 // RegisterCampaignCleanup schedules a POST /test/cleanup-entity for a
 // campaign row after the test. 404 is treated as success — the row may have

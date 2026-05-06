@@ -52,6 +52,8 @@ func (s *CampaignService) CreateCampaign(ctx context.Context, name, tmaURL strin
 	if err != nil {
 		return nil, err
 	}
+	// Success log lives AFTER WithTx returns so a rolled-back tx never
+	// claims success in stdout-логах (backend-transactions.md § Аудит-лог).
 	s.logger.Info(ctx, "campaign created", "campaign_id", campaign.ID)
 	return campaign, nil
 }

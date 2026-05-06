@@ -30,6 +30,7 @@ package campaign
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"strings"
 	"sync"
@@ -150,9 +151,25 @@ func TestCreateCampaign(t *testing.T) {
 		// shape will be exercised by the GET /campaigns/{id} test in chunk #4.
 		got := resp.JSON201.Data
 		require.NotEqual(t, uuid.Nil, got.Id, "server-stamped uuid must be present")
-
 		testutil.RegisterCampaignCleanup(t, got.Id.String())
-		testutil.AssertAuditEntry(t, c, token, "campaign", got.Id.String(), "campaign_create")
+
+		// Audit-row carries the entire *domain.Campaign serialized into
+		// new_value with snake_case keys (Boundaries «Always»). Validate the
+		// payload shape end-to-end so AC #4 is closed at the e2e layer too.
+		entry := testutil.FindAuditEntry(t, c, token, "campaign", got.Id.String(), "campaign_create")
+		require.NotNil(t, entry.NewValue, "audit row must carry new_value JSON")
+		// NewValue arrives as interface{} from the generated client; round-trip
+		// through json.Marshal+Unmarshal lands a typed map for assertions.
+		raw, err := json.Marshal(entry.NewValue)
+		require.NoError(t, err)
+		var payload map[string]any
+		require.NoError(t, json.Unmarshal(raw, &payload))
+		require.Equal(t, got.Id.String(), payload["id"])
+		require.Equal(t, name, payload["name"])
+		require.Equal(t, validTmaURL, payload["tma_url"])
+		require.Equal(t, false, payload["is_deleted"])
+		require.NotEmpty(t, payload["created_at"])
+		require.NotEmpty(t, payload["updated_at"])
 	})
 }
 
@@ -169,10 +186,18 @@ func TestCreateCampaign_RaceUniqueName(t *testing.T) {
 		winnerUUID  uuid.UUID
 		otherStatus atomic.Int32
 	)
+	// start barrier: both goroutines park on <-start, then close(start)
+	// releases them simultaneously so partial-unique 23505 is actually
+	// exercised. Without this the for-loop launches goroutines sequentially
+	// with enough scheduler slack that the first INSERT often commits before
+	// the second goroutine even forms its request — turning a "race" test
+	// into a sequential 201→409 check.
+	start := make(chan struct{})
 	wg.Add(2)
 	for i := 0; i < 2; i++ {
 		go func() {
 			defer wg.Done()
+			<-start
 			resp, err := c.CreateCampaignWithResponse(context.Background(), apiclient.CreateCampaignJSONRequestBody{
 				Name:   name,
 				TmaUrl: validTmaURL,
@@ -183,8 +208,8 @@ func TestCreateCampaign_RaceUniqueName(t *testing.T) {
 				ok201.Add(1)
 				require.NotNil(t, resp.JSON201)
 				winnerLock.Lock()
+				defer winnerLock.Unlock()
 				winnerUUID = resp.JSON201.Data.Id
-				winnerLock.Unlock()
 			case http.StatusConflict:
 				require.NotNil(t, resp.JSON409)
 				require.Equal(t, "CAMPAIGN_NAME_TAKEN", resp.JSON409.Error.Code)
@@ -195,8 +220,11 @@ func TestCreateCampaign_RaceUniqueName(t *testing.T) {
 			}
 		}()
 	}
+	close(start)
 	wg.Wait()
 
+	// otherStatus first so a 5xx surfaces immediately in the failure message
+	// instead of being masked by the "expected 1, got 0" on ok201.
 	require.Zero(t, otherStatus.Load(), "no 5xx / unexpected status under race")
 	require.Equal(t, int32(1), ok201.Load(), "exactly one create must succeed")
 	require.Equal(t, int32(1), ok409.Load(), "exactly one create must lose the race with CAMPAIGN_NAME_TAKEN")

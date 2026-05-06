@@ -33,42 +33,46 @@ var ErrCampaignNameTaken = NewBusinessError(
 )
 
 // ValidateCampaignName enforces the trim + non-empty + ≤255 contract on the
-// campaign display name. Trim is performed inside so the validator stays the
-// single source of truth — passing a whitespace-only string still fails.
-func ValidateCampaignName(name string) error {
+// campaign display name. Returns the trimmed value so callers don't have to
+// re-trim before passing the name downstream — single source of truth for
+// normalization plus error.
+func ValidateCampaignName(name string) (string, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
-		return NewValidationError(
+		return "", NewValidationError(
 			CodeCampaignNameRequired,
 			"Название кампании обязательно. Укажите хотя бы один непробельный символ.",
 		)
 	}
 	if utf8.RuneCountInString(name) > campaignNameMaxLen {
-		return NewValidationError(
+		return "", NewValidationError(
 			CodeCampaignNameTooLong,
 			"Название кампании слишком длинное. Сократите до 255 символов.",
 		)
 	}
-	return nil
+	return name, nil
 }
 
 // ValidateCampaignTmaURL enforces the trim + non-empty + ≤2048 contract on
-// the TMA-side ТЗ landing URL. Format-wise we only require non-empty — host
-// differs between local / staging / production and the value lives only to
-// be embedded into outbound creator-invite messages.
-func ValidateCampaignTmaURL(url string) error {
+// the TMA-side ТЗ landing URL and returns the trimmed value. Format-wise we
+// only require non-empty — host differs between local / staging / production
+// and the value lives only to be embedded into outbound creator-invite
+// messages. Security note: the value is admin-controlled but downstream code
+// embedding it into outbound Telegram-messages MUST escape it for the target
+// surface (Markdown / HTML); we do not enforce a scheme whitelist here.
+func ValidateCampaignTmaURL(url string) (string, error) {
 	url = strings.TrimSpace(url)
 	if url == "" {
-		return NewValidationError(
+		return "", NewValidationError(
 			CodeCampaignTmaURLRequired,
 			"Ссылка на TMA-страницу обязательна. Укажите URL без пробелов.",
 		)
 	}
 	if utf8.RuneCountInString(url) > campaignTmaURLMaxLen {
-		return NewValidationError(
+		return "", NewValidationError(
 			CodeCampaignTmaURLTooLong,
 			"Ссылка на TMA-страницу слишком длинная. Сократите URL до 2048 символов.",
 		)
 	}
-	return nil
+	return url, nil
 }

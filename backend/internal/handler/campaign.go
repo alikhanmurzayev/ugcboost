@@ -3,7 +3,6 @@ package handler
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	"github.com/google/uuid"
 
@@ -14,9 +13,9 @@ import (
 // CreateCampaign handles POST /campaigns (admin-only).
 //
 // Authorisation runs first so non-admin callers receive 403 before any DB
-// touch. After authz, name and tmaUrl are trimmed and validated against the
-// granular CodeCampaign* contract — empty / >255-name / empty / >2048-url
-// each surface as their own 422 code. The 23505 race on
+// touch. After authz, name and tmaUrl pass through the domain validators
+// which trim AND check granular CodeCampaign* — empty / >255-name / empty
+// / >2048-url each surface as their own 422 code. The 23505 race on
 // campaigns_name_active_unique is translated by the repo into
 // domain.ErrCampaignNameTaken (a *BusinessError) and rendered as 409
 // CAMPAIGN_NAME_TAKEN by respondError's generic *BusinessError branch.
@@ -29,12 +28,12 @@ func (s *Server) CreateCampaign(ctx context.Context, request api.CreateCampaignR
 		return nil, err
 	}
 
-	name := strings.TrimSpace(request.Body.Name)
-	tmaURL := strings.TrimSpace(request.Body.TmaUrl)
-	if err := domain.ValidateCampaignName(name); err != nil {
+	name, err := domain.ValidateCampaignName(request.Body.Name)
+	if err != nil {
 		return nil, err
 	}
-	if err := domain.ValidateCampaignTmaURL(tmaURL); err != nil {
+	tmaURL, err := domain.ValidateCampaignTmaURL(request.Body.TmaUrl)
+	if err != nil {
 		return nil, err
 	}
 
@@ -43,6 +42,8 @@ func (s *Server) CreateCampaign(ctx context.Context, request api.CreateCampaignR
 		return nil, err
 	}
 
+	// Defensive parse — campaign.ID is stamped by gen_random_uuid() at INSERT,
+	// so this branch only fires on a corrupted DB row, not user input.
 	id, err := uuid.Parse(campaign.ID)
 	if err != nil {
 		return nil, fmt.Errorf("parse campaign id %q: %w", campaign.ID, err)
