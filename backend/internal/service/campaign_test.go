@@ -246,6 +246,33 @@ func TestCampaignService_UpdateCampaign(t *testing.T) {
 		require.ErrorContains(t, err, "db unavailable")
 	})
 
+	t.Run("soft-deleted campaign refused with ErrCampaignNotFound", func(t *testing.T) {
+		t.Parallel()
+		pool := dbmocks.NewMockPool(t)
+		factory := svcmocks.NewMockCampaignRepoFactory(t)
+		campaigns := repomocks.NewMockCampaignRepo(t)
+		audit := repomocks.NewMockAuditRepo(t)
+		created := time.Date(2026, 5, 6, 12, 0, 0, 0, time.UTC)
+
+		pool.EXPECT().Begin(mock.Anything).Return(testTx{}, nil)
+		factory.EXPECT().NewCampaignRepo(mock.Anything).Return(campaigns)
+		factory.EXPECT().NewAuditRepo(mock.Anything).Return(audit)
+		campaigns.EXPECT().GetByID(mock.Anything, "c-1").
+			Return(&repository.CampaignRow{
+				ID:        "c-1",
+				Name:      "Promo X",
+				TmaURL:    "https://tma.ugcboost.kz/tz/abc",
+				IsDeleted: true,
+				CreatedAt: created,
+				UpdatedAt: created,
+			}, nil)
+
+		svc := NewCampaignService(pool, factory, logmocks.NewMockLogger(t))
+		err := svc.UpdateCampaign(context.Background(), "c-1",
+			domain.CampaignInput{Name: "Promo Y", TmaURL: "https://tma.ugcboost.kz/tz/new"})
+		require.ErrorIs(t, err, domain.ErrCampaignNotFound)
+	})
+
 	t.Run("not found between get and update", func(t *testing.T) {
 		t.Parallel()
 		pool := dbmocks.NewMockPool(t)

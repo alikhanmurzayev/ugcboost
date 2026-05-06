@@ -184,13 +184,14 @@ func TestCampaignRepository_Update(t *testing.T) {
 		}, got)
 	})
 
-	t.Run("success returns soft-deleted row (no is_deleted filter)", func(t *testing.T) {
+	t.Run("data layer does not filter is_deleted", func(t *testing.T) {
 		t.Parallel()
 		mock := newPgxmock(t)
 		repo := &campaignRepository{db: mock}
 		createdAt := time.Date(2026, 5, 6, 12, 0, 0, 0, time.UTC)
 		updatedAt := createdAt.Add(time.Hour)
 
+		// Soft-deleted gate is in the service (UpdateCampaign), not here.
 		mock.ExpectQuery(sqlStmt).
 			WithArgs("Promo Y", "https://tma.ugcboost.kz/tz/new", "c-2").
 			WillReturnRows(pgxmock.NewRows([]string{"created_at", "id", "is_deleted", "name", "tma_url", "updated_at"}).
@@ -198,7 +199,7 @@ func TestCampaignRepository_Update(t *testing.T) {
 
 		got, err := repo.Update(context.Background(), "c-2", "Promo Y", "https://tma.ugcboost.kz/tz/new")
 		require.NoError(t, err)
-		require.True(t, got.IsDeleted, "Update must return soft-deleted rows untouched — admin contract")
+		require.True(t, got.IsDeleted)
 	})
 
 	t.Run("name taken returns ErrCampaignNameTaken", func(t *testing.T) {

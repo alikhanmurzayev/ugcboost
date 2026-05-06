@@ -24,9 +24,7 @@ type Campaign struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
-// CampaignInput is the mutable subset of a campaign accepted by both create
-// and update service methods. Mirrors the OpenAPI CampaignInput schema; new
-// editable fields land here so service signatures don't churn per callsite.
+// CampaignInput is the mutable subset of a campaign for create/update services.
 type CampaignInput struct {
 	Name   string
 	TmaURL string

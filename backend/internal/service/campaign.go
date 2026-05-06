@@ -61,21 +61,9 @@ func (s *CampaignService) CreateCampaign(ctx context.Context, in domain.Campaign
 	return campaign, nil
 }
 
-// UpdateCampaign full-replaces the mutable subset (name, tma_url) of a
-// campaign and writes a campaign_update audit row in the same transaction.
-// The pre-fetch through GetByID exists solely so audit_logs.old_value carries
-// the row before the change — replacing it with a single CTE+RETURNING saves
-// one round-trip but blocks straightforward repo factoring, hence two reads.
-//
-// sql.ErrNoRows on either GetByID or Update RETURNING (post-fetch race-delete)
-// surfaces as ErrCampaignNotFound for a 404. ErrCampaignNameTaken from the
-// repo (pgconn 23505 against campaigns_name_active_unique) bubbles up for a
-// 409. All other DB errors get wrapped with context so logs explain which
-// step failed.
-//
-// 204 No Content — the handler returns an empty body, callers refetch via
-// GET /campaigns/{id} to observe the new state. The success log fires after
-// WithTx returns so a rolled-back tx never claims success in stdout.
+// UpdateCampaign full-replaces name/tma_url and writes a campaign_update audit
+// row in the same tx. Pre-fetch via GetByID feeds audit_logs.old_value;
+// soft-deleted rows are refused with ErrCampaignNotFound (gate is here, not repo).
 func (s *CampaignService) UpdateCampaign(ctx context.Context, id string, in domain.CampaignInput) error {
 	err := dbutil.WithTx(ctx, s.pool, func(tx dbutil.DB) error {
 		campaignRepo := s.repoFactory.NewCampaignRepo(tx)
@@ -87,6 +75,9 @@ func (s *CampaignService) UpdateCampaign(ctx context.Context, id string, in doma
 				return domain.ErrCampaignNotFound
 			}
 			return fmt.Errorf("get campaign: %w", err)
+		}
+		if oldRow.IsDeleted {
+			return domain.ErrCampaignNotFound
 		}
 		oldCampaign := campaignRowToDomain(oldRow)
 
