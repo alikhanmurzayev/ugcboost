@@ -99,7 +99,7 @@ func TestServer_CreateCampaign(t *testing.T) {
 		authz := mocks.NewMockAuthzService(t)
 		authz.EXPECT().CanCreateCampaign(mock.Anything).Return(nil)
 		campaigns := mocks.NewMockCampaignService(t)
-		campaigns.EXPECT().CreateCampaign(mock.Anything, "Promo X", "https://tma.ugcboost.kz/tz/abc").
+		campaigns.EXPECT().CreateCampaign(mock.Anything, domain.CampaignInput{Name: "Promo X", TmaURL: "https://tma.ugcboost.kz/tz/abc"}).
 			Return((*domain.Campaign)(nil), domain.ErrCampaignNameTaken)
 
 		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, campaigns, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
@@ -115,7 +115,7 @@ func TestServer_CreateCampaign(t *testing.T) {
 		authz := mocks.NewMockAuthzService(t)
 		authz.EXPECT().CanCreateCampaign(mock.Anything).Return(nil)
 		campaigns := mocks.NewMockCampaignService(t)
-		campaigns.EXPECT().CreateCampaign(mock.Anything, "Promo X", "https://tma.ugcboost.kz/tz/abc").
+		campaigns.EXPECT().CreateCampaign(mock.Anything, domain.CampaignInput{Name: "Promo X", TmaURL: "https://tma.ugcboost.kz/tz/abc"}).
 			Return((*domain.Campaign)(nil), errors.New("db unavailable"))
 		log := logmocks.NewMockLogger(t)
 		expectHandlerUnexpectedErrorLog(log, "/campaigns")
@@ -132,7 +132,7 @@ func TestServer_CreateCampaign(t *testing.T) {
 		authz := mocks.NewMockAuthzService(t)
 		authz.EXPECT().CanCreateCampaign(mock.Anything).Return(nil)
 		campaigns := mocks.NewMockCampaignService(t)
-		campaigns.EXPECT().CreateCampaign(mock.Anything, "Promo X", "https://tma.ugcboost.kz/tz/abc").
+		campaigns.EXPECT().CreateCampaign(mock.Anything, domain.CampaignInput{Name: "Promo X", TmaURL: "https://tma.ugcboost.kz/tz/abc"}).
 			Return(&domain.Campaign{
 				ID:     "11111111-2222-3333-4444-555555555555",
 				Name:   "Promo X",
@@ -155,7 +155,7 @@ func TestServer_CreateCampaign(t *testing.T) {
 		authz := mocks.NewMockAuthzService(t)
 		authz.EXPECT().CanCreateCampaign(mock.Anything).Return(nil)
 		campaigns := mocks.NewMockCampaignService(t)
-		campaigns.EXPECT().CreateCampaign(mock.Anything, "Promo X", "https://tma.ugcboost.kz/tz/abc").
+		campaigns.EXPECT().CreateCampaign(mock.Anything, domain.CampaignInput{Name: "Promo X", TmaURL: "https://tma.ugcboost.kz/tz/abc"}).
 			Return(&domain.Campaign{
 				ID:     "not-a-uuid",
 				Name:   "Promo X",
@@ -255,9 +255,9 @@ func TestServer_GetCampaign(t *testing.T) {
 			}, nil)
 
 		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, campaigns, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
-		w, resp := doJSON[api.CampaignResult](t, router, http.MethodGet, campaignPath, nil)
+		w, resp := doJSON[api.GetCampaignResult](t, router, http.MethodGet, campaignPath, nil)
 		require.Equal(t, http.StatusOK, w.Code)
-		require.Equal(t, api.CampaignResult{
+		require.Equal(t, api.GetCampaignResult{
 			Data: api.Campaign{
 				Id:        campaignID,
 				Name:      "Promo X",
@@ -267,5 +267,140 @@ func TestServer_GetCampaign(t *testing.T) {
 				UpdatedAt: updated,
 			},
 		}, resp)
+	})
+}
+
+func TestServer_UpdateCampaign(t *testing.T) {
+	t.Parallel()
+
+	const campaignPath = "/campaigns/aaaa1111-1111-1111-1111-111111111111"
+	const campaignIDStr = "aaaa1111-1111-1111-1111-111111111111"
+
+	t.Run("forbidden for manager", func(t *testing.T) {
+		t.Parallel()
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanUpdateCampaign(mock.Anything).Return(domain.ErrForbidden)
+
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPatch, campaignPath,
+			api.CampaignInput{Name: "Promo Y", TmaUrl: "https://tma.ugcboost.kz/tz/new"})
+		require.Equal(t, http.StatusForbidden, w.Code)
+		require.Equal(t, domain.CodeForbidden, resp.Error.Code)
+	})
+
+	t.Run("empty name after trim → 422 CAMPAIGN_NAME_REQUIRED", func(t *testing.T) {
+		t.Parallel()
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanUpdateCampaign(mock.Anything).Return(nil)
+
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPatch, campaignPath,
+			api.CampaignInput{Name: "   ", TmaUrl: "https://tma.ugcboost.kz/tz/new"})
+		require.Equal(t, http.StatusUnprocessableEntity, w.Code)
+		require.Equal(t, domain.CodeCampaignNameRequired, resp.Error.Code)
+	})
+
+	t.Run("name >255 → 422 CAMPAIGN_NAME_TOO_LONG", func(t *testing.T) {
+		t.Parallel()
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanUpdateCampaign(mock.Anything).Return(nil)
+
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPatch, campaignPath,
+			api.CampaignInput{Name: strings.Repeat("a", 256), TmaUrl: "https://tma.ugcboost.kz/tz/new"})
+		require.Equal(t, http.StatusUnprocessableEntity, w.Code)
+		require.Equal(t, domain.CodeCampaignNameTooLong, resp.Error.Code)
+	})
+
+	t.Run("empty tmaUrl after trim → 422 CAMPAIGN_TMA_URL_REQUIRED", func(t *testing.T) {
+		t.Parallel()
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanUpdateCampaign(mock.Anything).Return(nil)
+
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPatch, campaignPath,
+			api.CampaignInput{Name: "Promo Y", TmaUrl: "   "})
+		require.Equal(t, http.StatusUnprocessableEntity, w.Code)
+		require.Equal(t, domain.CodeCampaignTmaURLRequired, resp.Error.Code)
+	})
+
+	t.Run("tmaUrl >2048 → 422 CAMPAIGN_TMA_URL_TOO_LONG", func(t *testing.T) {
+		t.Parallel()
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanUpdateCampaign(mock.Anything).Return(nil)
+
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPatch, campaignPath,
+			api.CampaignInput{Name: "Promo Y", TmaUrl: strings.Repeat("a", 2049)})
+		require.Equal(t, http.StatusUnprocessableEntity, w.Code)
+		require.Equal(t, domain.CodeCampaignTmaURLTooLong, resp.Error.Code)
+	})
+
+	t.Run("not found returns 404 CAMPAIGN_NOT_FOUND", func(t *testing.T) {
+		t.Parallel()
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanUpdateCampaign(mock.Anything).Return(nil)
+		campaigns := mocks.NewMockCampaignService(t)
+		campaigns.EXPECT().UpdateCampaign(mock.Anything, campaignIDStr,
+			domain.CampaignInput{Name: "Promo Y", TmaURL: "https://tma.ugcboost.kz/tz/new"}).
+			Return(domain.ErrCampaignNotFound)
+
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, campaigns, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPatch, campaignPath,
+			api.CampaignInput{Name: "Promo Y", TmaUrl: "https://tma.ugcboost.kz/tz/new"})
+		require.Equal(t, http.StatusNotFound, w.Code)
+		require.Equal(t, domain.CodeCampaignNotFound, resp.Error.Code)
+		require.Equal(t, "Кампания не найдена.", resp.Error.Message)
+	})
+
+	t.Run("name taken → 409 CAMPAIGN_NAME_TAKEN", func(t *testing.T) {
+		t.Parallel()
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanUpdateCampaign(mock.Anything).Return(nil)
+		campaigns := mocks.NewMockCampaignService(t)
+		campaigns.EXPECT().UpdateCampaign(mock.Anything, campaignIDStr,
+			domain.CampaignInput{Name: "Promo Y", TmaURL: "https://tma.ugcboost.kz/tz/new"}).
+			Return(domain.ErrCampaignNameTaken)
+
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, campaigns, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPatch, campaignPath,
+			api.CampaignInput{Name: "Promo Y", TmaUrl: "https://tma.ugcboost.kz/tz/new"})
+		require.Equal(t, http.StatusConflict, w.Code)
+		require.Equal(t, domain.CodeCampaignNameTaken, resp.Error.Code)
+		require.Contains(t, resp.Error.Message, "Кампания с таким названием")
+	})
+
+	t.Run("generic service error → 500 INTERNAL_ERROR", func(t *testing.T) {
+		t.Parallel()
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanUpdateCampaign(mock.Anything).Return(nil)
+		campaigns := mocks.NewMockCampaignService(t)
+		campaigns.EXPECT().UpdateCampaign(mock.Anything, campaignIDStr,
+			domain.CampaignInput{Name: "Promo Y", TmaURL: "https://tma.ugcboost.kz/tz/new"}).
+			Return(errors.New("db unavailable"))
+		log := logmocks.NewMockLogger(t)
+		expectHandlerUnexpectedErrorLog(log, campaignPath)
+
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, campaigns, nil, ServerConfig{Version: "test-version"}, log))
+		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPatch, campaignPath,
+			api.CampaignInput{Name: "Promo Y", TmaUrl: "https://tma.ugcboost.kz/tz/new"})
+		require.Equal(t, http.StatusInternalServerError, w.Code)
+		require.Equal(t, domain.CodeInternal, resp.Error.Code)
+	})
+
+	t.Run("success trims whitespace and returns 204 with empty body", func(t *testing.T) {
+		t.Parallel()
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanUpdateCampaign(mock.Anything).Return(nil)
+		campaigns := mocks.NewMockCampaignService(t)
+		campaigns.EXPECT().UpdateCampaign(mock.Anything, campaignIDStr,
+			domain.CampaignInput{Name: "Promo Y", TmaURL: "https://tma.ugcboost.kz/tz/new"}).
+			Return(nil)
+
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, campaigns, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		w, _ := doJSON[struct{}](t, router, http.MethodPatch, campaignPath,
+			api.CampaignInput{Name: "  Promo Y  ", TmaUrl: "  https://tma.ugcboost.kz/tz/new  "})
+		require.Equal(t, http.StatusNoContent, w.Code)
+		require.Zero(t, w.Body.Len(), "204 must have empty body")
 	})
 }

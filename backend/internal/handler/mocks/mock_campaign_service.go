@@ -39,8 +39,8 @@ func (_m *MockCampaignService) EXPECT() *MockCampaignService_Expecter {
 }
 
 // CreateCampaign provides a mock function for the type MockCampaignService
-func (_mock *MockCampaignService) CreateCampaign(ctx context.Context, name string, tmaURL string) (*domain.Campaign, error) {
-	ret := _mock.Called(ctx, name, tmaURL)
+func (_mock *MockCampaignService) CreateCampaign(ctx context.Context, in domain.CampaignInput) (*domain.Campaign, error) {
+	ret := _mock.Called(ctx, in)
 
 	if len(ret) == 0 {
 		panic("no return value specified for CreateCampaign")
@@ -48,18 +48,18 @@ func (_mock *MockCampaignService) CreateCampaign(ctx context.Context, name strin
 
 	var r0 *domain.Campaign
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) (*domain.Campaign, error)); ok {
-		return returnFunc(ctx, name, tmaURL)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, domain.CampaignInput) (*domain.Campaign, error)); ok {
+		return returnFunc(ctx, in)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) *domain.Campaign); ok {
-		r0 = returnFunc(ctx, name, tmaURL)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, domain.CampaignInput) *domain.Campaign); ok {
+		r0 = returnFunc(ctx, in)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(*domain.Campaign)
 		}
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string) error); ok {
-		r1 = returnFunc(ctx, name, tmaURL)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, domain.CampaignInput) error); ok {
+		r1 = returnFunc(ctx, in)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -73,30 +73,24 @@ type MockCampaignService_CreateCampaign_Call struct {
 
 // CreateCampaign is a helper method to define mock.On call
 //   - ctx context.Context
-//   - name string
-//   - tmaURL string
-func (_e *MockCampaignService_Expecter) CreateCampaign(ctx interface{}, name interface{}, tmaURL interface{}) *MockCampaignService_CreateCampaign_Call {
-	return &MockCampaignService_CreateCampaign_Call{Call: _e.mock.On("CreateCampaign", ctx, name, tmaURL)}
+//   - in domain.CampaignInput
+func (_e *MockCampaignService_Expecter) CreateCampaign(ctx interface{}, in interface{}) *MockCampaignService_CreateCampaign_Call {
+	return &MockCampaignService_CreateCampaign_Call{Call: _e.mock.On("CreateCampaign", ctx, in)}
 }
 
-func (_c *MockCampaignService_CreateCampaign_Call) Run(run func(ctx context.Context, name string, tmaURL string)) *MockCampaignService_CreateCampaign_Call {
+func (_c *MockCampaignService_CreateCampaign_Call) Run(run func(ctx context.Context, in domain.CampaignInput)) *MockCampaignService_CreateCampaign_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
 			arg0 = args[0].(context.Context)
 		}
-		var arg1 string
+		var arg1 domain.CampaignInput
 		if args[1] != nil {
-			arg1 = args[1].(string)
-		}
-		var arg2 string
-		if args[2] != nil {
-			arg2 = args[2].(string)
+			arg1 = args[1].(domain.CampaignInput)
 		}
 		run(
 			arg0,
 			arg1,
-			arg2,
 		)
 	})
 	return _c
@@ -107,7 +101,7 @@ func (_c *MockCampaignService_CreateCampaign_Call) Return(campaign *domain.Campa
 	return _c
 }
 
-func (_c *MockCampaignService_CreateCampaign_Call) RunAndReturn(run func(ctx context.Context, name string, tmaURL string) (*domain.Campaign, error)) *MockCampaignService_CreateCampaign_Call {
+func (_c *MockCampaignService_CreateCampaign_Call) RunAndReturn(run func(ctx context.Context, in domain.CampaignInput) (*domain.Campaign, error)) *MockCampaignService_CreateCampaign_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -176,6 +170,69 @@ func (_c *MockCampaignService_GetByID_Call) Return(campaign *domain.Campaign, er
 }
 
 func (_c *MockCampaignService_GetByID_Call) RunAndReturn(run func(ctx context.Context, id string) (*domain.Campaign, error)) *MockCampaignService_GetByID_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// UpdateCampaign provides a mock function for the type MockCampaignService
+func (_mock *MockCampaignService) UpdateCampaign(ctx context.Context, id string, in domain.CampaignInput) error {
+	ret := _mock.Called(ctx, id, in)
+
+	if len(ret) == 0 {
+		panic("no return value specified for UpdateCampaign")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, domain.CampaignInput) error); ok {
+		r0 = returnFunc(ctx, id, in)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockCampaignService_UpdateCampaign_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'UpdateCampaign'
+type MockCampaignService_UpdateCampaign_Call struct {
+	*mock.Call
+}
+
+// UpdateCampaign is a helper method to define mock.On call
+//   - ctx context.Context
+//   - id string
+//   - in domain.CampaignInput
+func (_e *MockCampaignService_Expecter) UpdateCampaign(ctx interface{}, id interface{}, in interface{}) *MockCampaignService_UpdateCampaign_Call {
+	return &MockCampaignService_UpdateCampaign_Call{Call: _e.mock.On("UpdateCampaign", ctx, id, in)}
+}
+
+func (_c *MockCampaignService_UpdateCampaign_Call) Run(run func(ctx context.Context, id string, in domain.CampaignInput)) *MockCampaignService_UpdateCampaign_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 domain.CampaignInput
+		if args[2] != nil {
+			arg2 = args[2].(domain.CampaignInput)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockCampaignService_UpdateCampaign_Call) Return(err error) *MockCampaignService_UpdateCampaign_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockCampaignService_UpdateCampaign_Call) RunAndReturn(run func(ctx context.Context, id string, in domain.CampaignInput) error) *MockCampaignService_UpdateCampaign_Call {
 	_c.Call.Return(run)
 	return _c
 }

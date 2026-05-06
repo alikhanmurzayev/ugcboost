@@ -52,6 +52,7 @@ var (
 type CampaignRepo interface {
 	Create(ctx context.Context, name, tmaURL string) (*CampaignRow, error)
 	GetByID(ctx context.Context, id string) (*CampaignRow, error)
+	Update(ctx context.Context, id, name, tmaURL string) (*CampaignRow, error)
 	DeleteForTests(ctx context.Context, id string) error
 }
 
@@ -90,6 +91,33 @@ func (r *campaignRepository) GetByID(ctx context.Context, id string) (*CampaignR
 		From(TableCampaigns).
 		Where(sq.Eq{CampaignColumnID: id})
 	return dbutil.One[CampaignRow](ctx, r.db, q)
+}
+
+// Update applies a full-replace of the mutable subset (name, tma_url) plus
+// updated_at = now() and returns the post-update row through RETURNING. The
+// WHERE clause has no is_deleted filter — admin PATCH may target soft-deleted
+// rows for typo fixes, mirroring GetByID. dbutil.One propagates sql.ErrNoRows
+// (wrapped) when no row matches; the service maps it to ErrCampaignNotFound.
+// Concurrent renames against the partial unique index
+// campaigns_name_active_unique trip a 23505 — translated into
+// domain.ErrCampaignNameTaken so the service surfaces a 409 instead of
+// leaking the raw Postgres error.
+func (r *campaignRepository) Update(ctx context.Context, id, name, tmaURL string) (*CampaignRow, error) {
+	q := sq.Update(TableCampaigns).
+		Set(CampaignColumnName, name).
+		Set(CampaignColumnTmaURL, tmaURL).
+		Set(CampaignColumnUpdatedAt, sq.Expr("now()")).
+		Where(sq.Eq{CampaignColumnID: id}).
+		Suffix(returningClause(campaignSelectColumns))
+	row, err := dbutil.One[CampaignRow](ctx, r.db, q)
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" && pgErr.ConstraintName == CampaignsNameActiveUnique {
+			return nil, domain.ErrCampaignNameTaken
+		}
+		return nil, err
+	}
+	return row, nil
 }
 
 // DeleteForTests hard-deletes a campaign by id. Returns sql.ErrNoRows when

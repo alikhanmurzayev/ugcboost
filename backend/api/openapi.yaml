@@ -1035,7 +1035,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CampaignResult"
+                $ref: "#/components/schemas/GetCampaignResult"
         "401":
           description: Unauthenticated
           content:
@@ -1046,6 +1046,63 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           description: Campaign not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: "#/components/responses/UnexpectedError"
+    patch:
+      operationId: updateCampaign
+      summary: Update a marketing campaign by id (admin-only)
+      description: |
+        Full-replace update of the mutable subset of a campaign (`name`,
+        `tmaUrl`). Admin role is required — non-admin callers receive 403
+        before any DB read, so the endpoint never leaks campaign IDs.
+
+        Soft-deleted campaigns remain editable: the per-id read endpoint
+        already exposes them and the moderation UI may need to fix typos
+        on archived rows. The success response is intentionally empty
+        (204 No Content) — clients refetch via GET /campaigns/{id} to
+        observe the new state.
+
+        Race against the partial unique index
+        `campaigns_name_active_unique` (WHERE is_deleted = false) on
+        `name` is translated by the repo into 409 CAMPAIGN_NAME_TAKEN.
+      tags: [campaigns]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CampaignInput"
+      responses:
+        "204":
+          description: Campaign updated.
+        "401":
+          description: Unauthenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: Campaign not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: Campaign name already taken among non-deleted campaigns.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Validation error
           content:
             application/json:
               schema:
@@ -2423,7 +2480,7 @@ components:
           type: string
           format: date-time
 
-    CampaignResult:
+    GetCampaignResult:
       type: object
       required: [data]
       properties:

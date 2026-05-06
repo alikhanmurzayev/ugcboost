@@ -38,7 +38,7 @@ func (s *Server) CreateCampaign(ctx context.Context, request api.CreateCampaignR
 		return nil, err
 	}
 
-	campaign, err := s.campaignService.CreateCampaign(ctx, name, tmaURL)
+	campaign, err := s.campaignService.CreateCampaign(ctx, domain.CampaignInput{Name: name, TmaURL: tmaURL})
 	if err != nil {
 		return nil, err
 	}
@@ -75,6 +75,35 @@ func (s *Server) GetCampaign(ctx context.Context, request api.GetCampaignRequest
 		return nil, err
 	}
 	return api.GetCampaign200JSONResponse{Data: data}, nil
+}
+
+// UpdateCampaign handles PATCH /campaigns/{id} (admin-only).
+//
+// Authorisation runs first so non-admin callers get 403 before any DB read,
+// keeping response timing identical regardless of whether the row exists.
+// The body uses the shared CampaignInput schema; both fields pass through the
+// granular domain validators which trim and emit the same CodeCampaign* codes
+// as POST /campaigns. Success returns 204 — clients refetch via GET to
+// observe the new state, mirroring the id-only contract of the create path.
+func (s *Server) UpdateCampaign(ctx context.Context, request api.UpdateCampaignRequestObject) (api.UpdateCampaignResponseObject, error) {
+	if err := s.authzService.CanUpdateCampaign(ctx); err != nil {
+		return nil, err
+	}
+
+	name, err := domain.ValidateCampaignName(request.Body.Name)
+	if err != nil {
+		return nil, err
+	}
+	tmaURL, err := domain.ValidateCampaignTmaURL(request.Body.TmaUrl)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := s.campaignService.UpdateCampaign(ctx, request.Id.String(),
+		domain.CampaignInput{Name: name, TmaURL: tmaURL}); err != nil {
+		return nil, err
+	}
+	return api.UpdateCampaign204Response{}, nil
 }
 
 // domainCampaignToAPI maps the domain campaign onto its strict-server

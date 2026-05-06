@@ -36,13 +36,13 @@ func NewCampaignService(pool dbutil.Pool, repoFactory CampaignRepoFactory, log l
 // the same transaction. The whole *domain.Campaign is serialized into
 // audit_logs.new_value so the payload follows the struct as it grows in
 // future chunks without per-callsite changes.
-func (s *CampaignService) CreateCampaign(ctx context.Context, name, tmaURL string) (*domain.Campaign, error) {
+func (s *CampaignService) CreateCampaign(ctx context.Context, in domain.CampaignInput) (*domain.Campaign, error) {
 	var campaign *domain.Campaign
 	err := dbutil.WithTx(ctx, s.pool, func(tx dbutil.DB) error {
 		campaignRepo := s.repoFactory.NewCampaignRepo(tx)
 		auditRepo := s.repoFactory.NewAuditRepo(tx)
 
-		row, err := campaignRepo.Create(ctx, name, tmaURL)
+		row, err := campaignRepo.Create(ctx, in.Name, in.TmaURL)
 		if err != nil {
 			return err
 		}
@@ -59,6 +59,58 @@ func (s *CampaignService) CreateCampaign(ctx context.Context, name, tmaURL strin
 	// claims success in stdout-логах (backend-transactions.md § Аудит-лог).
 	s.logger.Info(ctx, "campaign created", "campaign_id", campaign.ID)
 	return campaign, nil
+}
+
+// UpdateCampaign full-replaces the mutable subset (name, tma_url) of a
+// campaign and writes a campaign_update audit row in the same transaction.
+// The pre-fetch through GetByID exists solely so audit_logs.old_value carries
+// the row before the change — replacing it with a single CTE+RETURNING saves
+// one round-trip but blocks straightforward repo factoring, hence two reads.
+//
+// sql.ErrNoRows on either GetByID or Update RETURNING (post-fetch race-delete)
+// surfaces as ErrCampaignNotFound for a 404. ErrCampaignNameTaken from the
+// repo (pgconn 23505 against campaigns_name_active_unique) bubbles up for a
+// 409. All other DB errors get wrapped with context so logs explain which
+// step failed.
+//
+// 204 No Content — the handler returns an empty body, callers refetch via
+// GET /campaigns/{id} to observe the new state. The success log fires after
+// WithTx returns so a rolled-back tx never claims success in stdout.
+func (s *CampaignService) UpdateCampaign(ctx context.Context, id string, in domain.CampaignInput) error {
+	err := dbutil.WithTx(ctx, s.pool, func(tx dbutil.DB) error {
+		campaignRepo := s.repoFactory.NewCampaignRepo(tx)
+		auditRepo := s.repoFactory.NewAuditRepo(tx)
+
+		oldRow, err := campaignRepo.GetByID(ctx, id)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return domain.ErrCampaignNotFound
+			}
+			return fmt.Errorf("get campaign: %w", err)
+		}
+		oldCampaign := campaignRowToDomain(oldRow)
+
+		newRow, err := campaignRepo.Update(ctx, id, in.Name, in.TmaURL)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return domain.ErrCampaignNotFound
+			}
+			if errors.Is(err, domain.ErrCampaignNameTaken) {
+				return err
+			}
+			return fmt.Errorf("update campaign: %w", err)
+		}
+		newCampaign := campaignRowToDomain(newRow)
+
+		return writeAudit(ctx, auditRepo,
+			AuditActionCampaignUpdate, AuditEntityTypeCampaign, newCampaign.ID,
+			oldCampaign, newCampaign)
+	})
+	if err != nil {
+		return err
+	}
+	s.logger.Info(ctx, "campaign updated", "campaign_id", id)
+	return nil
 }
 
 // GetByID fetches a campaign by id. The read runs against the pool directly —

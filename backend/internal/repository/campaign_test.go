@@ -155,6 +155,107 @@ func TestCampaignRepository_GetByID(t *testing.T) {
 	})
 }
 
+func TestCampaignRepository_Update(t *testing.T) {
+	t.Parallel()
+
+	const sqlStmt = "UPDATE campaigns SET name = $1, tma_url = $2, updated_at = now() WHERE id = $3 RETURNING created_at, id, is_deleted, name, tma_url, updated_at"
+
+	t.Run("success maps row to struct", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &campaignRepository{db: mock}
+		createdAt := time.Date(2026, 5, 6, 12, 0, 0, 0, time.UTC)
+		updatedAt := createdAt.Add(time.Hour)
+
+		mock.ExpectQuery(sqlStmt).
+			WithArgs("Promo Y", "https://tma.ugcboost.kz/tz/new", "c-1").
+			WillReturnRows(pgxmock.NewRows([]string{"created_at", "id", "is_deleted", "name", "tma_url", "updated_at"}).
+				AddRow(createdAt, "c-1", false, "Promo Y", "https://tma.ugcboost.kz/tz/new", updatedAt))
+
+		got, err := repo.Update(context.Background(), "c-1", "Promo Y", "https://tma.ugcboost.kz/tz/new")
+		require.NoError(t, err)
+		require.Equal(t, &CampaignRow{
+			ID:        "c-1",
+			Name:      "Promo Y",
+			TmaURL:    "https://tma.ugcboost.kz/tz/new",
+			IsDeleted: false,
+			CreatedAt: createdAt,
+			UpdatedAt: updatedAt,
+		}, got)
+	})
+
+	t.Run("success returns soft-deleted row (no is_deleted filter)", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &campaignRepository{db: mock}
+		createdAt := time.Date(2026, 5, 6, 12, 0, 0, 0, time.UTC)
+		updatedAt := createdAt.Add(time.Hour)
+
+		mock.ExpectQuery(sqlStmt).
+			WithArgs("Promo Y", "https://tma.ugcboost.kz/tz/new", "c-2").
+			WillReturnRows(pgxmock.NewRows([]string{"created_at", "id", "is_deleted", "name", "tma_url", "updated_at"}).
+				AddRow(createdAt, "c-2", true, "Promo Y", "https://tma.ugcboost.kz/tz/new", updatedAt))
+
+		got, err := repo.Update(context.Background(), "c-2", "Promo Y", "https://tma.ugcboost.kz/tz/new")
+		require.NoError(t, err)
+		require.True(t, got.IsDeleted, "Update must return soft-deleted rows untouched — admin contract")
+	})
+
+	t.Run("name taken returns ErrCampaignNameTaken", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &campaignRepository{db: mock}
+
+		mock.ExpectQuery(sqlStmt).
+			WithArgs("Promo Y", "https://tma.ugcboost.kz/tz/new", "c-1").
+			WillReturnError(&pgconn.PgError{Code: "23505", ConstraintName: CampaignsNameActiveUnique})
+
+		_, err := repo.Update(context.Background(), "c-1", "Promo Y", "https://tma.ugcboost.kz/tz/new")
+		require.ErrorIs(t, err, domain.ErrCampaignNameTaken)
+	})
+
+	t.Run("unrelated 23505 propagates raw", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &campaignRepository{db: mock}
+		pgErr := &pgconn.PgError{Code: "23505", ConstraintName: "campaigns_other_unique"}
+
+		mock.ExpectQuery(sqlStmt).
+			WithArgs("Promo Y", "https://tma.ugcboost.kz/tz/new", "c-1").
+			WillReturnError(pgErr)
+
+		_, err := repo.Update(context.Background(), "c-1", "Promo Y", "https://tma.ugcboost.kz/tz/new")
+		require.NotErrorIs(t, err, domain.ErrCampaignNameTaken)
+		require.ErrorIs(t, err, pgErr)
+	})
+
+	t.Run("not found propagates sql.ErrNoRows", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &campaignRepository{db: mock}
+
+		mock.ExpectQuery(sqlStmt).
+			WithArgs("Promo Y", "https://tma.ugcboost.kz/tz/new", "missing").
+			WillReturnError(sql.ErrNoRows)
+
+		_, err := repo.Update(context.Background(), "missing", "Promo Y", "https://tma.ugcboost.kz/tz/new")
+		require.ErrorIs(t, err, sql.ErrNoRows)
+	})
+
+	t.Run("propagates other errors", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &campaignRepository{db: mock}
+
+		mock.ExpectQuery(sqlStmt).
+			WithArgs("Promo Y", "https://tma.ugcboost.kz/tz/new", "c-1").
+			WillReturnError(errors.New("db unavailable"))
+
+		_, err := repo.Update(context.Background(), "c-1", "Promo Y", "https://tma.ugcboost.kz/tz/new")
+		require.ErrorContains(t, err, "db unavailable")
+	})
+}
+
 func TestCampaignRepository_DeleteForTests(t *testing.T) {
 	t.Parallel()
 

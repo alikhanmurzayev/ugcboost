@@ -593,7 +593,23 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * Update a marketing campaign by id (admin-only)
+         * @description Full-replace update of the mutable subset of a campaign (`name`,
+         *     `tmaUrl`). Admin role is required — non-admin callers receive 403
+         *     before any DB read, so the endpoint never leaks campaign IDs.
+         *
+         *     Soft-deleted campaigns remain editable: the per-id read endpoint
+         *     already exposes them and the moderation UI may need to fix typos
+         *     on archived rows. The success response is intentionally empty
+         *     (204 No Content) — clients refetch via GET /campaigns/{id} to
+         *     observe the new state.
+         *
+         *     Race against the partial unique index
+         *     `campaigns_name_active_unique` (WHERE is_deleted = false) on
+         *     `name` is translated by the repo into 409 CAMPAIGN_NAME_TAKEN.
+         */
+        patch: operations["updateCampaign"];
         trace?: never;
     };
     "/webhooks/sendpulse/instagram": {
@@ -1384,7 +1400,7 @@ export interface components {
             /** Format: date-time */
             updatedAt: string;
         };
-        CampaignResult: {
+        GetCampaignResult: {
             data: components["schemas"]["Campaign"];
         };
     };
@@ -2412,7 +2428,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["CampaignResult"];
+                    "application/json": components["schemas"]["GetCampaignResult"];
                 };
             };
             /** @description Unauthenticated */
@@ -2427,6 +2443,68 @@ export interface operations {
             403: components["responses"]["Forbidden"];
             /** @description Campaign not found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            default: components["responses"]["UnexpectedError"];
+        };
+    };
+    updateCampaign: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CampaignInput"];
+            };
+        };
+        responses: {
+            /** @description Campaign updated. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            /** @description Campaign not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Campaign name already taken among non-deleted campaigns. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation error */
+            422: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -26,3 +26,11 @@ func (a *AuthzService) CanGetCampaign(ctx context.Context) error {
 	}
 	return nil
 }
+
+// CanUpdateCampaign gates PATCH /campaigns/{id} to admins only.
+func (a *AuthzService) CanUpdateCampaign(ctx context.Context) error {
+	if middleware.RoleFromContext(ctx) != api.Admin {
+		return domain.ErrForbidden
+	}
+	return nil
+}
