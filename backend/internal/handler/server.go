@@ -53,6 +53,7 @@ type AuthzService interface {
 	CanViewCreator(ctx context.Context) error
 	CanViewCreators(ctx context.Context) error
 	CanCreateCampaign(ctx context.Context) error
+	CanGetCampaign(ctx context.Context) error
 }
 
 // AuditLogService is the interface Server needs from the audit service.
@@ -90,10 +91,11 @@ type CreatorService interface {
 }
 
 // CampaignService is the interface Server needs from the campaign service —
-// admin-only POST /campaigns for the current chunk; subsequent chunks (#4–#7)
-// extend it with read / update / soft-delete.
+// admin-only POST /campaigns plus per-id read; subsequent chunks (#5–#7)
+// extend it with list / update / soft-delete.
 type CampaignService interface {
 	CreateCampaign(ctx context.Context, name, tmaURL string) (*domain.Campaign, error)
+	GetByID(ctx context.Context, id string) (*domain.Campaign, error)
 }
 
 // ServerConfig bundles configuration values the handler layer needs. Keeping

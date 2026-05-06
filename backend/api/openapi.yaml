@@ -1006,6 +1006,53 @@ paths:
         default:
           $ref: "#/components/responses/UnexpectedError"
 
+  /campaigns/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    get:
+      operationId: getCampaign
+      summary: Get a marketing campaign by id (admin-only)
+      description: |
+        Returns the full campaign by id. Admin role is required — non-admin
+        callers receive 403 regardless of whether the campaign exists, so the
+        endpoint never leaks campaign IDs.
+
+        The response includes soft-deleted campaigns (`isDeleted=true`) so
+        admins can audit and restore deletions. The list endpoint exposes a
+        filter for the live/deleted split; the per-id read deliberately does
+        not.
+      tags: [campaigns]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Campaign aggregate
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CampaignResult"
+        "401":
+          description: Unauthenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: Campaign not found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: "#/components/responses/UnexpectedError"
+
   /webhooks/sendpulse/instagram:
     post:
       operationId: sendPulseInstagramWebhook
@@ -2347,6 +2394,41 @@ components:
       properties:
         data:
           $ref: "#/components/schemas/CampaignCreatedData"
+
+    Campaign:
+      type: object
+      description: |
+        Full marketing campaign as returned by GET /campaigns/{id}. The shape
+        is shared by upcoming list / patch responses — they reuse this schema
+        instead of inlining a copy.
+      required: [id, name, tmaUrl, isDeleted, createdAt, updatedAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Server-stamped UUID of the campaign.
+        name:
+          type: string
+          description: Display name of the campaign. Unique among non-deleted campaigns.
+        tmaUrl:
+          type: string
+          description: URL of the TMA-side ТЗ landing page embedded into creator invites.
+        isDeleted:
+          type: boolean
+          description: Soft-delete flag — true means the campaign was removed but is still readable for audit.
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CampaignResult:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: "#/components/schemas/Campaign"
 
   securitySchemes:
     bearerAuth:

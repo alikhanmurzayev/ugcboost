@@ -567,6 +567,35 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/campaigns/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * Get a marketing campaign by id (admin-only)
+         * @description Returns the full campaign by id. Admin role is required — non-admin
+         *     callers receive 403 regardless of whether the campaign exists, so the
+         *     endpoint never leaks campaign IDs.
+         *
+         *     The response includes soft-deleted campaigns (`isDeleted=true`) so
+         *     admins can audit and restore deletions. The list endpoint exposes a
+         *     filter for the live/deleted split; the per-id read deliberately does
+         *     not.
+         */
+        get: operations["getCampaign"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/webhooks/sendpulse/instagram": {
         parameters: {
             query?: never;
@@ -1332,6 +1361,31 @@ export interface components {
         };
         CampaignCreatedResult: {
             data: components["schemas"]["CampaignCreatedData"];
+        };
+        /**
+         * @description Full marketing campaign as returned by GET /campaigns/{id}. The shape
+         *     is shared by upcoming list / patch responses — they reuse this schema
+         *     instead of inlining a copy.
+         */
+        Campaign: {
+            /**
+             * Format: uuid
+             * @description Server-stamped UUID of the campaign.
+             */
+            id: string;
+            /** @description Display name of the campaign. Unique among non-deleted campaigns. */
+            name: string;
+            /** @description URL of the TMA-side ТЗ landing page embedded into creator invites. */
+            tmaUrl: string;
+            /** @description Soft-delete flag — true means the campaign was removed but is still readable for audit. */
+            isDeleted: boolean;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        CampaignResult: {
+            data: components["schemas"]["Campaign"];
         };
     };
     responses: {
@@ -2331,6 +2385,48 @@ export interface operations {
             };
             /** @description Validation error */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            default: components["responses"]["UnexpectedError"];
+        };
+    };
+    getCampaign: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Campaign aggregate */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CampaignResult"];
+                };
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            /** @description Campaign not found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

@@ -28,6 +28,8 @@ const (
 	// 409 — partial unique index `campaigns_name_active_unique` was violated:
 	// another non-deleted campaign already uses this name.
 	CodeCampaignNameTaken = "CAMPAIGN_NAME_TAKEN"
+	// 404 — GET /campaigns/{id} could not find a campaign with this id.
+	CodeCampaignNotFound = "CAMPAIGN_NOT_FOUND"
 )
 
 // Sentinel domain errors — handlers map these to HTTP status codes.

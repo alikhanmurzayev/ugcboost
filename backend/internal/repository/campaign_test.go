@@ -84,6 +84,77 @@ func TestCampaignRepository_Create(t *testing.T) {
 	})
 }
 
+func TestCampaignRepository_GetByID(t *testing.T) {
+	t.Parallel()
+
+	const sqlStmt = "SELECT created_at, id, is_deleted, name, tma_url, updated_at FROM campaigns WHERE id = $1"
+
+	t.Run("success maps row to struct", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &campaignRepository{db: mock}
+		createdAt := time.Date(2026, 5, 6, 12, 0, 0, 0, time.UTC)
+
+		mock.ExpectQuery(sqlStmt).
+			WithArgs("c-1").
+			WillReturnRows(pgxmock.NewRows([]string{"created_at", "id", "is_deleted", "name", "tma_url", "updated_at"}).
+				AddRow(createdAt, "c-1", false, "Promo X", "https://tma.ugcboost.kz/tz/abc", createdAt))
+
+		got, err := repo.GetByID(context.Background(), "c-1")
+		require.NoError(t, err)
+		require.Equal(t, &CampaignRow{
+			ID:        "c-1",
+			Name:      "Promo X",
+			TmaURL:    "https://tma.ugcboost.kz/tz/abc",
+			IsDeleted: false,
+			CreatedAt: createdAt,
+			UpdatedAt: createdAt,
+		}, got)
+	})
+
+	t.Run("success returns soft-deleted row (no is_deleted filter)", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &campaignRepository{db: mock}
+		createdAt := time.Date(2026, 5, 6, 12, 0, 0, 0, time.UTC)
+
+		mock.ExpectQuery(sqlStmt).
+			WithArgs("c-2").
+			WillReturnRows(pgxmock.NewRows([]string{"created_at", "id", "is_deleted", "name", "tma_url", "updated_at"}).
+				AddRow(createdAt, "c-2", true, "Promo Y", "https://tma.ugcboost.kz/tz/y", createdAt))
+
+		got, err := repo.GetByID(context.Background(), "c-2")
+		require.NoError(t, err)
+		require.True(t, got.IsDeleted, "GetByID must return soft-deleted rows untouched — admin contract")
+	})
+
+	t.Run("not found propagates sql.ErrNoRows", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &campaignRepository{db: mock}
+
+		mock.ExpectQuery(sqlStmt).
+			WithArgs("missing").
+			WillReturnError(sql.ErrNoRows)
+
+		_, err := repo.GetByID(context.Background(), "missing")
+		require.ErrorIs(t, err, sql.ErrNoRows)
+	})
+
+	t.Run("propagates other errors", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &campaignRepository{db: mock}
+
+		mock.ExpectQuery(sqlStmt).
+			WithArgs("c-1").
+			WillReturnError(errors.New("db unavailable"))
+
+		_, err := repo.GetByID(context.Background(), "c-1")
+		require.ErrorContains(t, err, "db unavailable")
+	})
+}
+
 func TestCampaignRepository_DeleteForTests(t *testing.T) {
 	t.Parallel()
 

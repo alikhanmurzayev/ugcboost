@@ -1,18 +1,27 @@
 // Package campaign — E2E тесты HTTP-поверхности /campaigns.
 //
-// TestCreateCampaign проходит POST /campaigns во всех задокументированных
-// ответах. Без токена ручка возвращает 401 — публичный доступ к админ-каталогу
-// кампаний закрыт middleware'ом ещё до handler'а. От лица brand_manager —
-// 403 FORBIDDEN: создавать кампании в текущем MVP может только админ
-// (brand-self-service-флоу выпал из роудмапа). Затем сетка валидаций для
-// admin-токена: пустое имя (после trim) уходит сырым HTTP, чтобы дойти до
-// серверной валидации, и возвращает 422 CAMPAIGN_NAME_REQUIRED; имя длиной
-// >255 рун — 422 CAMPAIGN_NAME_TOO_LONG; пустой tmaUrl — 422
-// CAMPAIGN_TMA_URL_REQUIRED; tmaUrl длиннее 2048 — 422
-// CAMPAIGN_TMA_URL_TOO_LONG. Каждый код актуален для подсказки на форме.
-// Happy-path: 201 + полный Campaign с server-stamped uuid, isDeleted=false и
-// двумя совпадающими timestamp'ами, плюс audit-row campaign_create в той же
-// транзакции (проверка через testutil.AssertAuditEntry).
+// TestCampaignCRUD проходит обе ручки кампаний (POST /campaigns и
+// GET /campaigns/{id}) во всех задокументированных ответах. Без токена
+// POST возвращает 401 — публичный доступ к админ-каталогу кампаний закрыт
+// middleware'ом ещё до handler'а. От лица brand_manager — 403 FORBIDDEN:
+// создавать кампании в текущем MVP может только админ (brand-self-service-флоу
+// выпал из роудмапа). Затем сетка валидаций для admin-токена: пустое имя
+// (после trim) уходит сырым HTTP, чтобы дойти до серверной валидации, и
+// возвращает 422 CAMPAIGN_NAME_REQUIRED; имя длиной >255 рун — 422
+// CAMPAIGN_NAME_TOO_LONG; пустой tmaUrl — 422 CAMPAIGN_TMA_URL_REQUIRED;
+// tmaUrl длиннее 2048 — 422 CAMPAIGN_TMA_URL_TOO_LONG. Каждый код актуален
+// для подсказки на форме. Happy-path POST: 201 + id-only payload с
+// server-stamped uuid плюс audit-row campaign_create в той же транзакции
+// (проверка через testutil.FindAuditEntry).
+//
+// GET /campaigns/{id} — admin-only read-by-id. Без токена middleware
+// возвращает 401 ещё до handler'а; brand_manager-токен ловит 403 FORBIDDEN
+// от authz-сервиса (timing-safe, до DB-чтения), несуществующий uuid — 404
+// CAMPAIGN_NOT_FOUND с RU-сообщением «Кампания не найдена.». Happy-path:
+// после POST из соседнего t.Run (или inline) GET по тому же id отдаёт 200 +
+// полный Campaign — id совпадает с создающим ответом, name/tmaUrl равны
+// исходным значениям, isDeleted=false для свежесозданной кампании, оба
+// timestamp'а близки к моменту POST (через WithinDuration ~1 мин).
 //
 // TestCreateCampaign_RaceUniqueName закрывает партиальный UNIQUE индекс
 // campaigns_name_active_unique (WHERE is_deleted = false). Два concurrent
@@ -21,11 +30,11 @@
 // EAFP-обработка 23505 в repo осталась бы незакрытой согласно
 // backend-testing-e2e.md § Race-сценарии.
 //
-// Сетап компонуется через testutil.SetupAdminClient + SetupCampaign и
-// SetupBrand + SetupManagerWithLogin для 403-кейса; созданные кампании
-// автоматически снимаются после теста через POST /test/cleanup-entity при
-// E2E_CLEANUP=true (дефолт). Имена кампаний уникализируются через
-// testutil.UniqueEmail чтобы тест проходил на любом состоянии БД.
+// Сетап компонуется через testutil.SetupAdminClient + SetupBrand +
+// SetupManagerWithLogin для 403-кейсов; созданные кампании автоматически
+// снимаются после теста через POST /test/cleanup-entity при E2E_CLEANUP=true
+// (дефолт). Имена кампаний уникализируются через testutil.UniqueEmail чтобы
+// тест проходил на любом состоянии БД.
 package campaign
 
 import (
@@ -36,6 +45,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -46,10 +56,10 @@ import (
 
 const validTmaURL = "https://tma.ugcboost.kz/tz/abc123secret"
 
-func TestCreateCampaign(t *testing.T) {
+func TestCampaignCRUD(t *testing.T) {
 	t.Parallel()
 
-	t.Run("unauthenticated returns 401", func(t *testing.T) {
+	t.Run("create unauthenticated returns 401", func(t *testing.T) {
 		t.Parallel()
 		// Raw HTTP: the generated client's WithAuth options force a Bearer
 		// header; we deliberately send no Authorization to exercise the
@@ -62,7 +72,7 @@ func TestCreateCampaign(t *testing.T) {
 		require.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 	})
 
-	t.Run("brand_manager forbidden", func(t *testing.T) {
+	t.Run("create brand_manager forbidden", func(t *testing.T) {
 		t.Parallel()
 		adminClient, adminToken, _ := testutil.SetupAdminClient(t)
 		brandID := testutil.SetupBrand(t, adminClient, adminToken, "HostBrand-"+testutil.UniqueEmail("host"))
@@ -78,7 +88,7 @@ func TestCreateCampaign(t *testing.T) {
 		require.Equal(t, "FORBIDDEN", resp.JSON403.Error.Code)
 	})
 
-	t.Run("empty name returns 422", func(t *testing.T) {
+	t.Run("create empty name returns 422", func(t *testing.T) {
 		t.Parallel()
 		c, token, _ := testutil.SetupAdminClient(t)
 		resp, err := c.CreateCampaignWithResponse(context.Background(), apiclient.CreateCampaignJSONRequestBody{
@@ -92,7 +102,7 @@ func TestCreateCampaign(t *testing.T) {
 		require.Contains(t, resp.JSON422.Error.Message, "Название кампании обязательно")
 	})
 
-	t.Run("name too long returns 422", func(t *testing.T) {
+	t.Run("create name too long returns 422", func(t *testing.T) {
 		t.Parallel()
 		c, token, _ := testutil.SetupAdminClient(t)
 		resp, err := c.CreateCampaignWithResponse(context.Background(), apiclient.CreateCampaignJSONRequestBody{
@@ -106,7 +116,7 @@ func TestCreateCampaign(t *testing.T) {
 		require.Contains(t, resp.JSON422.Error.Message, "слишком длинное")
 	})
 
-	t.Run("empty tmaUrl returns 422", func(t *testing.T) {
+	t.Run("create empty tmaUrl returns 422", func(t *testing.T) {
 		t.Parallel()
 		c, token, _ := testutil.SetupAdminClient(t)
 		resp, err := c.CreateCampaignWithResponse(context.Background(), apiclient.CreateCampaignJSONRequestBody{
@@ -120,7 +130,7 @@ func TestCreateCampaign(t *testing.T) {
 		require.Contains(t, resp.JSON422.Error.Message, "Ссылка на TMA-страницу обязательна")
 	})
 
-	t.Run("tmaUrl too long returns 422", func(t *testing.T) {
+	t.Run("create tmaUrl too long returns 422", func(t *testing.T) {
 		t.Parallel()
 		c, token, _ := testutil.SetupAdminClient(t)
 		resp, err := c.CreateCampaignWithResponse(context.Background(), apiclient.CreateCampaignJSONRequestBody{
@@ -134,7 +144,7 @@ func TestCreateCampaign(t *testing.T) {
 		require.Contains(t, resp.JSON422.Error.Message, "слишком длинная")
 	})
 
-	t.Run("success returns 201 with id-only payload and writes audit row", func(t *testing.T) {
+	t.Run("create success returns 201 with id-only payload and writes audit row", func(t *testing.T) {
 		t.Parallel()
 		c, token, _ := testutil.SetupAdminClient(t)
 		name := "Promo-" + testutil.UniqueEmail("happy")
@@ -148,7 +158,7 @@ func TestCreateCampaign(t *testing.T) {
 		require.NotNil(t, resp.JSON201)
 
 		// id-only payload: only assert a real uuid came back; the full row
-		// shape will be exercised by the GET /campaigns/{id} test in chunk #4.
+		// shape is exercised by the GET /campaigns/{id} t.Run below.
 		got := resp.JSON201.Data
 		require.NotEqual(t, uuid.Nil, got.Id, "server-stamped uuid must be present")
 		testutil.RegisterCampaignCleanup(t, got.Id.String())
@@ -170,6 +180,81 @@ func TestCreateCampaign(t *testing.T) {
 		require.Equal(t, false, payload["is_deleted"])
 		require.NotEmpty(t, payload["created_at"])
 		require.NotEmpty(t, payload["updated_at"])
+	})
+
+	t.Run("get unauthenticated returns 401", func(t *testing.T) {
+		t.Parallel()
+		// Generated client without WithAuth — no Authorization header reaches
+		// the server, so the auth middleware short-circuits to 401 before the
+		// handler runs.
+		c := testutil.NewAPIClient(t)
+		resp, err := c.GetCampaignWithResponse(context.Background(),
+			uuid.MustParse("00000000-0000-0000-0000-000000000001"))
+		require.NoError(t, err)
+		require.Equal(t, http.StatusUnauthorized, resp.StatusCode())
+		require.NotNil(t, resp.JSON401)
+		require.Equal(t, "UNAUTHORIZED", resp.JSON401.Error.Code)
+	})
+
+	t.Run("get brand_manager forbidden", func(t *testing.T) {
+		t.Parallel()
+		adminClient, adminToken, _ := testutil.SetupAdminClient(t)
+		brandID := testutil.SetupBrand(t, adminClient, adminToken, "HostBrand-"+testutil.UniqueEmail("getmgr"))
+		mgrClient, mgrToken, _ := testutil.SetupManagerWithLogin(t, adminClient, adminToken, brandID)
+
+		// Use any plausible-but-nonexistent uuid — authz must fail before any
+		// DB lookup, so the row's existence is irrelevant.
+		resp, err := mgrClient.GetCampaignWithResponse(context.Background(),
+			uuid.MustParse("00000000-0000-0000-0000-000000000002"),
+			testutil.WithAuth(mgrToken))
+		require.NoError(t, err)
+		require.Equal(t, http.StatusForbidden, resp.StatusCode())
+		require.NotNil(t, resp.JSON403)
+		require.Equal(t, "FORBIDDEN", resp.JSON403.Error.Code)
+	})
+
+	t.Run("get not found returns 404 CAMPAIGN_NOT_FOUND", func(t *testing.T) {
+		t.Parallel()
+		c, token, _ := testutil.SetupAdminClient(t)
+		resp, err := c.GetCampaignWithResponse(context.Background(),
+			uuid.MustParse("00000000-0000-0000-0000-deadbeef0000"),
+			testutil.WithAuth(token))
+		require.NoError(t, err)
+		require.Equal(t, http.StatusNotFound, resp.StatusCode())
+		require.NotNil(t, resp.JSON404)
+		require.Equal(t, "CAMPAIGN_NOT_FOUND", resp.JSON404.Error.Code)
+		require.Equal(t, "Кампания не найдена.", resp.JSON404.Error.Message)
+	})
+
+	t.Run("get success returns full campaign", func(t *testing.T) {
+		t.Parallel()
+		c, token, _ := testutil.SetupAdminClient(t)
+		name := "Promo-" + testutil.UniqueEmail("getok")
+		before := time.Now()
+
+		createResp, err := c.CreateCampaignWithResponse(context.Background(), apiclient.CreateCampaignJSONRequestBody{
+			Name:   name,
+			TmaUrl: validTmaURL,
+		}, testutil.WithAuth(token))
+		require.NoError(t, err)
+		require.Equal(t, http.StatusCreated, createResp.StatusCode())
+		require.NotNil(t, createResp.JSON201)
+		id := createResp.JSON201.Data.Id
+		require.NotEqual(t, uuid.Nil, id)
+		testutil.RegisterCampaignCleanup(t, id.String())
+
+		getResp, err := c.GetCampaignWithResponse(context.Background(), id, testutil.WithAuth(token))
+		require.NoError(t, err)
+		require.Equal(t, http.StatusOK, getResp.StatusCode())
+		require.NotNil(t, getResp.JSON200)
+
+		got := getResp.JSON200.Data
+		require.Equal(t, id, got.Id)
+		require.Equal(t, name, got.Name)
+		require.Equal(t, validTmaURL, got.TmaUrl)
+		require.False(t, got.IsDeleted, "freshly created campaign must be live")
+		require.WithinDuration(t, before, got.CreatedAt, time.Minute)
+		require.WithinDuration(t, before, got.UpdatedAt, time.Minute)
 	})
 }
 

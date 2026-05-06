@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"errors"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -31,6 +32,10 @@ var ErrCampaignNameTaken = NewBusinessError(
 	CodeCampaignNameTaken,
 	"Кампания с таким названием уже есть. Выберите другое название или удалите старую кампанию.",
 )
+
+// ErrCampaignNotFound is raised by CampaignService.GetByID when the lookup
+// hits sql.ErrNoRows. respondError maps it to 404 CAMPAIGN_NOT_FOUND.
+var ErrCampaignNotFound = errors.New("campaign not found")
 
 // ValidateCampaignName enforces the trim + non-empty + ≤255 contract on the
 // campaign display name. Returns the trimmed value so callers don't have to

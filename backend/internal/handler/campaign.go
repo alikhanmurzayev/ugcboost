@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+	openapi_types "github.com/oapi-codegen/runtime/types"
 
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/api"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/domain"
@@ -49,4 +50,48 @@ func (s *Server) CreateCampaign(ctx context.Context, request api.CreateCampaignR
 		return nil, fmt.Errorf("parse campaign id %q: %w", campaign.ID, err)
 	}
 	return api.CreateCampaign201JSONResponse{Data: api.CampaignCreatedData{Id: id}}, nil
+}
+
+// GetCampaign handles GET /campaigns/{id} (admin-only).
+//
+// Authorisation runs first so non-admin callers see 403 before any DB read;
+// that keeps the response timing identical regardless of whether the campaign
+// exists. ErrCampaignNotFound from the service is mapped to 404
+// CAMPAIGN_NOT_FOUND by respondError. Soft-deleted campaigns are returned as
+// well — the live/deleted split lives in the upcoming list endpoint, not
+// here.
+func (s *Server) GetCampaign(ctx context.Context, request api.GetCampaignRequestObject) (api.GetCampaignResponseObject, error) {
+	if err := s.authzService.CanGetCampaign(ctx); err != nil {
+		return nil, err
+	}
+
+	campaign, err := s.campaignService.GetByID(ctx, request.Id.String())
+	if err != nil {
+		return nil, err
+	}
+
+	data, err := domainCampaignToAPI(campaign)
+	if err != nil {
+		return nil, err
+	}
+	return api.GetCampaign200JSONResponse{Data: data}, nil
+}
+
+// domainCampaignToAPI maps the domain campaign onto its strict-server
+// counterpart. UUID parse failure on the stored id surfaces as a wrapped
+// error so the strict-server adapter renders 500 — the row is populated by
+// gen_random_uuid() so a parse failure means real corruption, not user input.
+func domainCampaignToAPI(c *domain.Campaign) (api.Campaign, error) {
+	id, err := uuid.Parse(c.ID)
+	if err != nil {
+		return api.Campaign{}, fmt.Errorf("parse campaign id %q: %w", c.ID, err)
+	}
+	return api.Campaign{
+		Id:        openapi_types.UUID(id),
+		Name:      c.Name,
+		TmaUrl:    c.TmaURL,
+		IsDeleted: c.IsDeleted,
+		CreatedAt: c.CreatedAt,
+		UpdatedAt: c.UpdatedAt,
+	}, nil
 }
