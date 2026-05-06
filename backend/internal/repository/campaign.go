@@ -51,6 +51,7 @@ var (
 // CampaignRepo lists every public method of the campaign repository.
 type CampaignRepo interface {
 	Create(ctx context.Context, name, tmaURL string) (*CampaignRow, error)
+	GetByID(ctx context.Context, id string) (*CampaignRow, error)
 	DeleteForTests(ctx context.Context, id string) error
 }
 
@@ -76,6 +77,19 @@ func (r *campaignRepository) Create(ctx context.Context, name, tmaURL string) (*
 		return nil, err
 	}
 	return row, nil
+}
+
+// GetByID returns the campaign row by id. The WHERE clause intentionally has
+// no is_deleted filter — admin reads include soft-deleted campaigns so the
+// moderation UI can audit and restore deletions; the live/deleted split lives
+// in the upcoming list endpoint. dbutil.One propagates sql.ErrNoRows wrapped;
+// the service forwards it untouched so the handler maps it to 404 via
+// errors.Is, mirroring the creatorRepository.GetByID contract.
+func (r *campaignRepository) GetByID(ctx context.Context, id string) (*CampaignRow, error) {
+	q := sq.Select(campaignSelectColumns...).
+		From(TableCampaigns).
+		Where(sq.Eq{CampaignColumnID: id})
+	return dbutil.One[CampaignRow](ctx, r.db, q)
 }
 
 // DeleteForTests hard-deletes a campaign by id. Returns sql.ErrNoRows when

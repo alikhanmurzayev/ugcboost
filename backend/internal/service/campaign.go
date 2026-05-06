@@ -2,6 +2,9 @@ package service
 
 import (
 	"context"
+	"database/sql"
+	"errors"
+	"fmt"
 
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/dbutil"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/domain"
@@ -56,6 +59,23 @@ func (s *CampaignService) CreateCampaign(ctx context.Context, name, tmaURL strin
 	// claims success in stdout-логах (backend-transactions.md § Аудит-лог).
 	s.logger.Info(ctx, "campaign created", "campaign_id", campaign.ID)
 	return campaign, nil
+}
+
+// GetByID fetches a campaign by id. The read runs against the pool directly —
+// no transaction, no audit, no success log (read paths stay quiet per
+// docs/standards/security.md). sql.ErrNoRows from the repo is translated into
+// domain.ErrCampaignNotFound at the boundary so the handler maps it to 404
+// CAMPAIGN_NOT_FOUND rather than the generic NOT_FOUND fallback. The repo
+// returns soft-deleted rows untouched — admins see and audit them.
+func (s *CampaignService) GetByID(ctx context.Context, id string) (*domain.Campaign, error) {
+	row, err := s.repoFactory.NewCampaignRepo(s.pool).GetByID(ctx, id)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, domain.ErrCampaignNotFound
+		}
+		return nil, fmt.Errorf("get campaign: %w", err)
+	}
+	return campaignRowToDomain(row), nil
 }
 
 func campaignRowToDomain(row *repository.CampaignRow) *domain.Campaign {

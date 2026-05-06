@@ -149,6 +149,9 @@ type ClientInterface interface {
 
 	CreateCampaign(ctx context.Context, body CreateCampaignJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// GetCampaign request
+	GetCampaign(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// SubmitCreatorApplicationWithBody request with any body
 	SubmitCreatorApplicationWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -450,6 +453,18 @@ func (c *Client) CreateCampaignWithBody(ctx context.Context, contentType string,
 
 func (c *Client) CreateCampaign(ctx context.Context, body CreateCampaignJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewCreateCampaignRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetCampaign(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetCampaignRequest(c.Server, id)
 	if err != nil {
 		return nil, err
 	}
@@ -1336,6 +1351,40 @@ func NewCreateCampaignRequestWithBody(server string, contentType string, body io
 	return req, nil
 }
 
+// NewGetCampaignRequest generates requests for GetCampaign
+func NewGetCampaignRequest(server string, id openapi_types.UUID) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/campaigns/%s", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewSubmitCreatorApplicationRequest calls the generic SubmitCreatorApplication builder with application/json body
 func NewSubmitCreatorApplicationRequest(server string, body SubmitCreatorApplicationJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
@@ -1876,6 +1925,9 @@ type ClientWithResponsesInterface interface {
 
 	CreateCampaignWithResponse(ctx context.Context, body CreateCampaignJSONRequestBody, reqEditors ...RequestEditorFn) (*CreateCampaignResponse, error)
 
+	// GetCampaignWithResponse request
+	GetCampaignWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetCampaignResponse, error)
+
 	// SubmitCreatorApplicationWithBodyWithResponse request with any body
 	SubmitCreatorApplicationWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SubmitCreatorApplicationResponse, error)
 
@@ -2283,6 +2335,32 @@ func (r CreateCampaignResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r CreateCampaignResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetCampaignResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *CampaignResult
+	JSON401      *ErrorResponse
+	JSON403      *Forbidden
+	JSON404      *ErrorResponse
+	JSONDefault  *UnexpectedError
+}
+
+// Status returns HTTPResponse.Status
+func (r GetCampaignResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetCampaignResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -2785,6 +2863,15 @@ func (c *ClientWithResponses) CreateCampaignWithResponse(ctx context.Context, bo
 		return nil, err
 	}
 	return ParseCreateCampaignResponse(rsp)
+}
+
+// GetCampaignWithResponse request returning *GetCampaignResponse
+func (c *ClientWithResponses) GetCampaignWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetCampaignResponse, error) {
+	rsp, err := c.GetCampaign(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetCampaignResponse(rsp)
 }
 
 // SubmitCreatorApplicationWithBodyWithResponse request with arbitrary body returning *SubmitCreatorApplicationResponse
@@ -3564,6 +3651,60 @@ func ParseCreateCampaignResponse(rsp *http.Response) (*CreateCampaignResponse, e
 			return nil, err
 		}
 		response.JSON422 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest UnexpectedError
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetCampaignResponse parses an HTTP response from a GetCampaignWithResponse call
+func ParseGetCampaignResponse(rsp *http.Response) (*GetCampaignResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetCampaignResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest CampaignResult
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
 		var dest UnexpectedError

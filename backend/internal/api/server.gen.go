@@ -308,6 +308,26 @@ type BrandResult struct {
 	Data Brand `json:"data"`
 }
 
+// Campaign Full marketing campaign as returned by GET /campaigns/{id}. The shape
+// is shared by upcoming list / patch responses — they reuse this schema
+// instead of inlining a copy.
+type Campaign struct {
+	CreatedAt time.Time `json:"createdAt"`
+
+	// Id Server-stamped UUID of the campaign.
+	Id openapi_types.UUID `json:"id"`
+
+	// IsDeleted Soft-delete flag — true means the campaign was removed but is still readable for audit.
+	IsDeleted bool `json:"isDeleted"`
+
+	// Name Display name of the campaign. Unique among non-deleted campaigns.
+	Name string `json:"name"`
+
+	// TmaUrl URL of the TMA-side ТЗ landing page embedded into creator invites.
+	TmaUrl    string    `json:"tmaUrl"`
+	UpdatedAt time.Time `json:"updatedAt"`
+}
+
 // CampaignCreatedData defines model for CampaignCreatedData.
 type CampaignCreatedData struct {
 	// Id Server-stamped UUID of the freshly created campaign.
@@ -326,6 +346,14 @@ type CampaignInput struct {
 
 	// TmaUrl URL of the TMA-side ТЗ landing page embedded into creator invites.
 	TmaUrl string `json:"tmaUrl"`
+}
+
+// CampaignResult defines model for CampaignResult.
+type CampaignResult struct {
+	// Data Full marketing campaign as returned by GET /campaigns/{id}. The shape
+	// is shared by upcoming list / patch responses — they reuse this schema
+	// instead of inlining a copy.
+	Data Campaign `json:"data"`
 }
 
 // ConsentType Canonical consent type captured at creator application submission.
@@ -1157,6 +1185,9 @@ type ServerInterface interface {
 	// Create a marketing campaign (admin-only)
 	// (POST /campaigns)
 	CreateCampaign(w http.ResponseWriter, r *http.Request)
+	// Get a marketing campaign by id (admin-only)
+	// (GET /campaigns/{id})
+	GetCampaign(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
 	// Submit a creator application from the public landing page
 	// (POST /creators/applications)
 	SubmitCreatorApplication(w http.ResponseWriter, r *http.Request)
@@ -1286,6 +1317,12 @@ func (_ Unimplemented) RemoveManager(w http.ResponseWriter, r *http.Request, bra
 // Create a marketing campaign (admin-only)
 // (POST /campaigns)
 func (_ Unimplemented) CreateCampaign(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Get a marketing campaign by id (admin-only)
+// (GET /campaigns/{id})
+func (_ Unimplemented) GetCampaign(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -1773,6 +1810,37 @@ func (siw *ServerInterfaceWrapper) CreateCampaign(w http.ResponseWriter, r *http
 	handler.ServeHTTP(w, r)
 }
 
+// GetCampaign operation middleware
+func (siw *ServerInterfaceWrapper) GetCampaign(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetCampaign(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // SubmitCreatorApplication operation middleware
 func (siw *ServerInterfaceWrapper) SubmitCreatorApplication(w http.ResponseWriter, r *http.Request) {
 
@@ -2221,6 +2289,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/campaigns", wrapper.CreateCampaign)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/campaigns/{id}", wrapper.GetCampaign)
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/creators/applications", wrapper.SubmitCreatorApplication)
@@ -2913,6 +2984,62 @@ func (response CreateCampaigndefaultJSONResponse) VisitCreateCampaignResponse(w 
 	return json.NewEncoder(w).Encode(response.Body)
 }
 
+type GetCampaignRequestObject struct {
+	Id openapi_types.UUID `json:"id"`
+}
+
+type GetCampaignResponseObject interface {
+	VisitGetCampaignResponse(w http.ResponseWriter) error
+}
+
+type GetCampaign200JSONResponse CampaignResult
+
+func (response GetCampaign200JSONResponse) VisitGetCampaignResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetCampaign401JSONResponse ErrorResponse
+
+func (response GetCampaign401JSONResponse) VisitGetCampaignResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetCampaign403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response GetCampaign403JSONResponse) VisitGetCampaignResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetCampaign404JSONResponse ErrorResponse
+
+func (response GetCampaign404JSONResponse) VisitGetCampaignResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetCampaigndefaultJSONResponse struct {
+	Body       ErrorResponse
+	StatusCode int
+}
+
+func (response GetCampaigndefaultJSONResponse) VisitGetCampaignResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+
+	return json.NewEncoder(w).Encode(response.Body)
+}
+
 type SubmitCreatorApplicationRequestObject struct {
 	Body *SubmitCreatorApplicationJSONRequestBody
 }
@@ -3587,6 +3714,9 @@ type StrictServerInterface interface {
 	// Create a marketing campaign (admin-only)
 	// (POST /campaigns)
 	CreateCampaign(ctx context.Context, request CreateCampaignRequestObject) (CreateCampaignResponseObject, error)
+	// Get a marketing campaign by id (admin-only)
+	// (GET /campaigns/{id})
+	GetCampaign(ctx context.Context, request GetCampaignRequestObject) (GetCampaignResponseObject, error)
 	// Submit a creator application from the public landing page
 	// (POST /creators/applications)
 	SubmitCreatorApplication(ctx context.Context, request SubmitCreatorApplicationRequestObject) (SubmitCreatorApplicationResponseObject, error)
@@ -4069,6 +4199,32 @@ func (sh *strictHandler) CreateCampaign(w http.ResponseWriter, r *http.Request) 
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(CreateCampaignResponseObject); ok {
 		if err := validResponse.VisitCreateCampaignResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetCampaign operation middleware
+func (sh *strictHandler) GetCampaign(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request GetCampaignRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetCampaign(ctx, request.(GetCampaignRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetCampaign")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetCampaignResponseObject); ok {
+		if err := validResponse.VisitGetCampaignResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

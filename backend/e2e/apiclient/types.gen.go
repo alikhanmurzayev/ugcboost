@@ -299,6 +299,26 @@ type BrandResult struct {
 	Data Brand `json:"data"`
 }
 
+// Campaign Full marketing campaign as returned by GET /campaigns/{id}. The shape
+// is shared by upcoming list / patch responses — they reuse this schema
+// instead of inlining a copy.
+type Campaign struct {
+	CreatedAt time.Time `json:"createdAt"`
+
+	// Id Server-stamped UUID of the campaign.
+	Id openapi_types.UUID `json:"id"`
+
+	// IsDeleted Soft-delete flag — true means the campaign was removed but is still readable for audit.
+	IsDeleted bool `json:"isDeleted"`
+
+	// Name Display name of the campaign. Unique among non-deleted campaigns.
+	Name string `json:"name"`
+
+	// TmaUrl URL of the TMA-side ТЗ landing page embedded into creator invites.
+	TmaUrl    string    `json:"tmaUrl"`
+	UpdatedAt time.Time `json:"updatedAt"`
+}
+
 // CampaignCreatedData defines model for CampaignCreatedData.
 type CampaignCreatedData struct {
 	// Id Server-stamped UUID of the freshly created campaign.
@@ -317,6 +337,14 @@ type CampaignInput struct {
 
 	// TmaUrl URL of the TMA-side ТЗ landing page embedded into creator invites.
 	TmaUrl string `json:"tmaUrl"`
+}
+
+// CampaignResult defines model for CampaignResult.
+type CampaignResult struct {
+	// Data Full marketing campaign as returned by GET /campaigns/{id}. The shape
+	// is shared by upcoming list / patch responses — they reuse this schema
+	// instead of inlining a copy.
+	Data Campaign `json:"data"`
 }
 
 // ConsentType Canonical consent type captured at creator application submission.
