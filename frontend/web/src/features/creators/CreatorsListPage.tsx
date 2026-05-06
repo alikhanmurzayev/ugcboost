@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useLayoutEffect, useMemo, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
@@ -10,6 +10,7 @@ import Table, { type Column } from "@/shared/components/Table";
 import { CategoryChips } from "@/shared/components/CategoryChip";
 import SocialLink from "@/shared/components/SocialLink";
 import { calcAge } from "@/shared/utils/age";
+import { readCurrentId } from "@/shared/utils/readCurrentId";
 import CreatorFilters from "./CreatorFilters";
 import CreatorDrawer from "./CreatorDrawer";
 import { isFilterActive, parseFilters, toListInput } from "./filters";
@@ -64,6 +65,14 @@ export default function CreatorsListPage() {
   const canNext = idx >= 0 && idx < items.length - 1;
   const prefill = idx >= 0 ? items[idx] : undefined;
 
+  // Rationale for the URL+ref read pattern: see shared/utils/readCurrentId.
+  const selectedIdRef = useRef<string | null>(selectedId);
+  const itemsRef = useRef<CreatorListItem[]>(items);
+  useLayoutEffect(() => {
+    selectedIdRef.current = selectedId;
+    itemsRef.current = items;
+  });
+
   const columns: Column<CreatorListItem>[] = useMemo(() => buildColumns(t), [t]);
   const activeColumn = activeColumnForSort(sortState.sort);
 
@@ -84,13 +93,21 @@ export default function CreatorsListPage() {
   }
 
   function goPrev() {
-    const prevItem = items[idx - 1];
-    if (prevItem) openCreator(prevItem.id);
+    const currentId = readCurrentId(selectedIdRef);
+    if (!currentId) return;
+    const list = itemsRef.current;
+    const i = list.findIndex((r) => r.id === currentId);
+    const prev = i > 0 ? list[i - 1] : undefined;
+    if (prev) openCreator(prev.id);
   }
 
   function goNext() {
-    const nextItem = items[idx + 1];
-    if (nextItem) openCreator(nextItem.id);
+    const currentId = readCurrentId(selectedIdRef);
+    if (!currentId) return;
+    const list = itemsRef.current;
+    const i = list.findIndex((r) => r.id === currentId);
+    const next = i >= 0 ? list[i + 1] : undefined;
+    if (next) openCreator(next.id);
   }
 
   function handleSortChange(columnKey: string) {
