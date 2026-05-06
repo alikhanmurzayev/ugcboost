@@ -84,6 +84,9 @@ export default function DashboardLayout() {
           items: [{ to: ROUTES.CREATORS, label: t("common:navCreators") }],
         },
         {
+          items: [{ to: ROUTES.CAMPAIGNS, label: t("common:navCampaigns") }],
+        },
+        {
           items: [{ to: ROUTES.BRANDS, label: t("brands:title") }],
         },
         {
