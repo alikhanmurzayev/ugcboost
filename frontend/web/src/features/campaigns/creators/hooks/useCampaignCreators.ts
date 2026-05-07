@@ -14,6 +14,7 @@ export interface CampaignCreatorRow {
 export interface UseCampaignCreatorsResult {
   rows: CampaignCreatorRow[];
   total: number;
+  existingCreatorIds: Set<string>;
   isLoading: boolean;
   isError: boolean;
   refetch: () => void;
@@ -76,6 +77,10 @@ export function useCampaignCreators(
     return [...known, ...missing];
   }, [ccQuery.data, profilesQuery.data]);
 
+  const existingCreatorIds = useMemo(() => {
+    return new Set((ccQuery.data ?? []).map((cc) => cc.creatorId));
+  }, [ccQuery.data]);
+
   const total = ccQuery.data?.length ?? 0;
   const isLoading =
     ccQuery.isLoading || (profilesEnabled && profilesQuery.isLoading);
@@ -86,5 +91,5 @@ export function useCampaignCreators(
     if (profilesEnabled) void profilesQuery.refetch();
   }
 
-  return { rows, total, isLoading, isError, refetch };
+  return { rows, total, existingCreatorIds, isLoading, isError, refetch };
 }

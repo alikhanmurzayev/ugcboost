@@ -14,22 +14,31 @@ vi.mock("./client", () => {
     default: {
       POST: vi.fn(),
       GET: vi.fn(),
+      DELETE: vi.fn(),
     },
     ApiError,
   };
 });
 
 import client from "./client";
-import { listCampaignCreators } from "./campaignCreators";
+import {
+  listCampaignCreators,
+  addCampaignCreators,
+  removeCampaignCreator,
+} from "./campaignCreators";
 
 const mockedGet = vi.mocked(client.GET);
+const mockedPost = vi.mocked(client.POST);
+const mockedDelete = vi.mocked(client.DELETE);
 
 const CAMPAIGN_ID = "11111111-1111-1111-1111-111111111111";
+const CREATOR_A = "22222222-2222-2222-2222-222222222222";
+const CREATOR_B = "33333333-3333-3333-3333-333333333333";
 
 const FIXTURE_CC = {
   id: "cc-1",
   campaignId: CAMPAIGN_ID,
-  creatorId: "22222222-2222-2222-2222-222222222222",
+  creatorId: CREATOR_A,
   status: "planned" as const,
   invitedAt: null,
   invitedCount: 0,
@@ -120,3 +129,145 @@ describe("listCampaignCreators", () => {
   });
 });
 
+describe("addCampaignCreators", () => {
+  it("calls POST /campaigns/{id}/creators with creatorIds and unwraps items", async () => {
+    mockedPost.mockResolvedValueOnce({
+      data: { data: { items: [FIXTURE_CC] } },
+      response: { status: 201 } as Response,
+    });
+
+    const result = await addCampaignCreators(CAMPAIGN_ID, [CREATOR_A]);
+
+    expect(mockedPost).toHaveBeenCalledTimes(1);
+    expect(mockedPost).toHaveBeenCalledWith("/campaigns/{id}/creators", {
+      params: { path: { id: CAMPAIGN_ID } },
+      body: { creatorIds: [CREATOR_A] },
+    });
+    expect(result).toEqual([FIXTURE_CC]);
+  });
+
+  it("supports batch with multiple creator ids", async () => {
+    mockedPost.mockResolvedValueOnce({
+      data: { data: { items: [FIXTURE_CC, { ...FIXTURE_CC, id: "cc-2", creatorId: CREATOR_B }] } },
+      response: { status: 201 } as Response,
+    });
+
+    const result = await addCampaignCreators(CAMPAIGN_ID, [CREATOR_A, CREATOR_B]);
+
+    expect(mockedPost).toHaveBeenCalledWith("/campaigns/{id}/creators", {
+      params: { path: { id: CAMPAIGN_ID } },
+      body: { creatorIds: [CREATOR_A, CREATOR_B] },
+    });
+    expect(result).toHaveLength(2);
+  });
+
+  it("throws ApiError with code on 422 CREATOR_ALREADY_IN_CAMPAIGN", async () => {
+    mockedPost.mockResolvedValueOnce({
+      error: { error: { code: "CREATOR_ALREADY_IN_CAMPAIGN", message: "race" } },
+      response: { status: 422 } as Response,
+    });
+
+    await expect(
+      addCampaignCreators(CAMPAIGN_ID, [CREATOR_A]),
+    ).rejects.toMatchObject({
+      status: 422,
+      code: "CREATOR_ALREADY_IN_CAMPAIGN",
+    });
+  });
+
+  it("throws ApiError with code on 404 CAMPAIGN_NOT_FOUND", async () => {
+    mockedPost.mockResolvedValueOnce({
+      error: { error: { code: "CAMPAIGN_NOT_FOUND", message: "soft-deleted" } },
+      response: { status: 404 } as Response,
+    });
+
+    await expect(
+      addCampaignCreators(CAMPAIGN_ID, [CREATOR_A]),
+    ).rejects.toMatchObject({
+      status: 404,
+      code: "CAMPAIGN_NOT_FOUND",
+    });
+  });
+
+  it("falls back to INTERNAL_ERROR on malformed 5xx body", async () => {
+    mockedPost.mockResolvedValueOnce({
+      error: {},
+      response: { status: 500 } as Response,
+    });
+
+    await expect(
+      addCampaignCreators(CAMPAIGN_ID, [CREATOR_A]),
+    ).rejects.toMatchObject({
+      status: 500,
+      code: "INTERNAL_ERROR",
+    });
+  });
+});
+
+describe("removeCampaignCreator", () => {
+  it("calls DELETE /campaigns/{id}/creators/{creatorId} with both path params", async () => {
+    mockedDelete.mockResolvedValueOnce({
+      response: { status: 204 } as Response,
+    });
+
+    await removeCampaignCreator(CAMPAIGN_ID, CREATOR_A);
+
+    expect(mockedDelete).toHaveBeenCalledTimes(1);
+    expect(mockedDelete).toHaveBeenCalledWith(
+      "/campaigns/{id}/creators/{creatorId}",
+      { params: { path: { id: CAMPAIGN_ID, creatorId: CREATOR_A } } },
+    );
+  });
+
+  it("returns void on 204 with no body", async () => {
+    mockedDelete.mockResolvedValueOnce({
+      response: { status: 204 } as Response,
+    });
+
+    const result = await removeCampaignCreator(CAMPAIGN_ID, CREATOR_A);
+
+    expect(result).toBeUndefined();
+  });
+
+  it("throws ApiError with code on 404 race", async () => {
+    mockedDelete.mockResolvedValueOnce({
+      error: { error: { code: "CAMPAIGN_CREATOR_NOT_FOUND", message: "race" } },
+      response: { status: 404 } as Response,
+    });
+
+    await expect(
+      removeCampaignCreator(CAMPAIGN_ID, CREATOR_A),
+    ).rejects.toMatchObject({
+      status: 404,
+      code: "CAMPAIGN_CREATOR_NOT_FOUND",
+    });
+  });
+
+  it("throws ApiError with code on 422 CREATOR_AGREED", async () => {
+    mockedDelete.mockResolvedValueOnce({
+      error: { error: { code: "CAMPAIGN_CREATOR_AGREED", message: "agreed" } },
+      response: { status: 422 } as Response,
+    });
+
+    await expect(
+      removeCampaignCreator(CAMPAIGN_ID, CREATOR_A),
+    ).rejects.toMatchObject({
+      status: 422,
+      code: "CAMPAIGN_CREATOR_AGREED",
+    });
+  });
+
+  it("falls back to INTERNAL_ERROR on malformed 5xx body", async () => {
+    mockedDelete.mockResolvedValueOnce({
+      error: {},
+      response: { status: 500 } as Response,
+    });
+
+    await expect(
+      removeCampaignCreator(CAMPAIGN_ID, CREATOR_A),
+    ).rejects.toMatchObject({
+      status: 500,
+      code: "INTERNAL_ERROR",
+    });
+  });
+});

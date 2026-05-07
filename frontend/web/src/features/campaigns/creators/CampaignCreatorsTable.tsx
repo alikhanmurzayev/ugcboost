@@ -10,6 +10,7 @@ interface CampaignCreatorsTableProps {
   rows: CampaignCreatorRow[];
   selectedKey?: string;
   onRowClick: (row: CampaignCreatorRow) => void;
+  onRemove?: (row: CampaignCreatorRow) => void;
   emptyMessage: string;
 }
 
@@ -17,14 +18,15 @@ export default function CampaignCreatorsTable({
   rows,
   selectedKey,
   onRowClick,
+  onRemove,
   emptyMessage,
 }: CampaignCreatorsTableProps) {
   const { t } = useTranslation("creators");
   const { t: tCampaigns } = useTranslation("campaigns");
 
   const columns = useMemo<Column<CampaignCreatorRow>[]>(
-    () => buildColumns(t, tCampaigns),
-    [t, tCampaigns],
+    () => buildColumns(t, tCampaigns, onRemove),
+    [t, tCampaigns, onRemove],
   );
 
   return (
@@ -43,11 +45,12 @@ export default function CampaignCreatorsTable({
 function buildColumns(
   t: (key: string) => string,
   tCampaigns: (key: string) => string,
+  onRemove?: (row: CampaignCreatorRow) => void,
 ): Column<CampaignCreatorRow>[] {
   const placeholder = tCampaigns("campaignCreators.deletedPlaceholder");
   const deletedTitle = tCampaigns("campaignCreators.creatorDeleted");
 
-  return [
+  const base: Column<CampaignCreatorRow>[] = [
     {
       key: "index",
       header: t("columns.index"),
@@ -169,6 +172,32 @@ function buildColumns(
       width: "w-24",
     },
   ];
+
+  if (!onRemove) return base;
+
+  return [
+    ...base,
+    {
+      key: "actions",
+      header: "",
+      width: "w-10",
+      render: (row) => (
+        <button
+          type="button"
+          aria-label={tCampaigns("campaignCreators.removeAria")}
+          data-testid={`campaign-creator-remove-${row.campaignCreator.creatorId}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            onRemove(row);
+          }}
+          className="rounded-button p-1 text-gray-400 transition hover:bg-red-50 hover:text-red-600"
+        >
+          <TrashIcon />
+        </button>
+      ),
+      align: "right",
+    },
+  ];
 }
 
 function formatShortDate(iso: string): string {
@@ -176,4 +205,25 @@ function formatShortDate(iso: string): string {
     day: "numeric",
     month: "short",
   });
+}
+
+function TrashIcon() {
+  return (
+    <svg
+      className="h-4 w-4"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <polyline points="3 6 5 6 21 6" />
+      <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+      <path d="M10 11v6" />
+      <path d="M14 11v6" />
+      <path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2" />
+    </svg>
+  );
 }

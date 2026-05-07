@@ -15,12 +15,14 @@ export { BASE as apiBase };
 export class ApiError extends Error {
   status: number;
   code: string;
+  serverMessage?: string;
 
-  constructor(status: number, code: string) {
+  constructor(status: number, code: string, serverMessage?: string) {
     super(code);
     this.name = "ApiError";
     this.status = status;
     this.code = code;
+    this.serverMessage = serverMessage;
   }
 }
 

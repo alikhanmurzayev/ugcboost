@@ -48,7 +48,12 @@ export default function Drawer({
         data-testid="drawer"
       >
         <header className="flex items-center justify-between border-b border-surface-300 px-6 py-4">
-          <div className="text-lg font-semibold text-gray-900">{title}</div>
+          <div
+            className="text-lg font-semibold text-gray-900"
+            data-testid="drawer-title"
+          >
+            {title}
+          </div>
           <button
             type="button"
             onClick={onClose}

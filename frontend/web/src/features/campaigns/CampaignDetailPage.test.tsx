@@ -577,14 +577,14 @@ describe("CampaignDetailPage — campaign creators section", () => {
     );
   });
 
-  it("disables the Add button with tooltip", async () => {
+  it("renders the Add button as enabled (mutations chunk 11/2 active)", async () => {
     vi.mocked(getCampaign).mockResolvedValueOnce({ data: FIXTURE_LIVE });
 
     renderPage();
 
     const btn = await screen.findByTestId("campaign-creators-add-button");
-    expect(btn).toBeDisabled();
-    expect(btn).toHaveAttribute("title", "Появится в следующем PR");
+    expect(btn).not.toBeDisabled();
+    expect(btn).not.toHaveAttribute("title");
   });
 });
 

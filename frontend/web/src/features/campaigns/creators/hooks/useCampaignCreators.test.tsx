@@ -187,6 +187,77 @@ describe("useCampaignCreators", () => {
     expect(listCreators).not.toHaveBeenCalled();
   });
 
+  it("exposes existingCreatorIds as a Set built from A3 creator ids", async () => {
+    vi.mocked(listCampaignCreators).mockResolvedValueOnce([
+      makeCC(CREATOR_A),
+      makeCC(CREATOR_B),
+    ]);
+    vi.mocked(listCreators).mockResolvedValueOnce({
+      data: {
+        items: [
+          makeCreator(CREATOR_A, "Aлексей"),
+          makeCreator(CREATOR_B, "Борис"),
+        ],
+        total: 2,
+        page: 1,
+        perPage: 200,
+      },
+    });
+
+    const { result } = renderHook(() => useCampaignCreators(CAMPAIGN_ID), {
+      wrapper: wrap(),
+    });
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+    });
+
+    expect(result.current.existingCreatorIds).toBeInstanceOf(Set);
+    expect(result.current.existingCreatorIds.size).toBe(2);
+    expect(result.current.existingCreatorIds.has(CREATOR_A)).toBe(true);
+    expect(result.current.existingCreatorIds.has(CREATOR_B)).toBe(true);
+  });
+
+  it("existingCreatorIds is empty when no creators are attached to the campaign", async () => {
+    vi.mocked(listCampaignCreators).mockResolvedValueOnce([]);
+
+    const { result } = renderHook(() => useCampaignCreators(CAMPAIGN_ID), {
+      wrapper: wrap(),
+    });
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+    });
+
+    expect(result.current.existingCreatorIds.size).toBe(0);
+  });
+
+  it("existingCreatorIds includes ids whose creator profile is missing (soft-deleted)", async () => {
+    vi.mocked(listCampaignCreators).mockResolvedValueOnce([
+      makeCC(CREATOR_A),
+      makeCC(CREATOR_B),
+    ]);
+    vi.mocked(listCreators).mockResolvedValueOnce({
+      data: {
+        items: [makeCreator(CREATOR_A, "Aлексей")],
+        total: 1,
+        page: 1,
+        perPage: 200,
+      },
+    });
+
+    const { result } = renderHook(() => useCampaignCreators(CAMPAIGN_ID), {
+      wrapper: wrap(),
+    });
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+    });
+
+    expect(result.current.existingCreatorIds.has(CREATOR_A)).toBe(true);
+    expect(result.current.existingCreatorIds.has(CREATOR_B)).toBe(true);
+  });
+
   it("refetch retries A3 and listCreators", async () => {
     const ccA = makeCC(CREATOR_A);
     const creatorA = makeCreator(CREATOR_A, "Aлексей");

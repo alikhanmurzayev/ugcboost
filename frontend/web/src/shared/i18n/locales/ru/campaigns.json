@@ -61,9 +61,30 @@
     "count": "{{count}} в кампании",
     "empty": "Креаторов пока нет",
     "addButton": "Добавить креаторов",
-    "addDisabledTooltip": "Появится в следующем PR",
     "loadError": "Не удалось загрузить креаторов",
     "creatorDeleted": "Креатор удалён из системы",
-    "deletedPlaceholder": "—"
+    "deletedPlaceholder": "—",
+    "addedBadge": "Добавлен",
+    "addDrawerTitle": "Добавить креаторов",
+    "addSubmitButton": "Добавить ({{count}})",
+    "addSubmittingButton": "Добавление…",
+    "capCounter": "Выбрано: {{count}} / 200",
+    "capHint": "Максимум 200 за одну операцию",
+    "removeAria": "Удалить креатора из кампании",
+    "selectAria": "Выбрать креатора {{name}}",
+    "removeConfirmTitle": "Удалить креатора?",
+    "removeConfirmMessage": "{{name}} будет удалён(а) из кампании. Это действие нельзя отменить.",
+    "removeConfirmButton": "Удалить",
+    "removeConfirmCloseAria": "Закрыть",
+    "removeSubmittingButton": "Удаление…",
+    "cancelButton": "Отмена",
+    "drawerEmpty": "Нет креаторов по выбранным фильтрам",
+    "errors": {
+      "alreadyInCampaign": "Часть выбранных уже в кампании. Список обновлён, отметьте только новых и повторите.",
+      "campaignDeleted": "Кампания удалена",
+      "creatorAgreed": "Креатор согласился — удалить нельзя",
+      "removeFailed": "Не удалось удалить, попробуйте ещё раз",
+      "addFailed": "Не удалось сохранить, попробуйте ещё раз"
+    }
   }
 }
