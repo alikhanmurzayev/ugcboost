@@ -370,14 +370,16 @@ func TestCreatorApplicationsList(t *testing.T) {
 	t.Run("sort: created_at asc orders by submission time", func(t *testing.T) {
 		t.Parallel()
 		_, adminToken, _ := testutil.SetupAdminClient(t)
-		first := testutil.SetupCreatorApplicationViaLanding(t)
+		marker := newSearchMarker("createdat")
+		first := testutil.SetupCreatorApplicationViaLanding(t, withSearchMarker(marker))
 		time.Sleep(1100 * time.Millisecond)
-		second := testutil.SetupCreatorApplicationViaLanding(t)
+		second := testutil.SetupCreatorApplicationViaLanding(t, withSearchMarker(marker))
 
 		body := validBody()
 		body.Sort = apiclient.CreatorApplicationListSortFieldCreatedAt
 		body.Order = apiclient.Asc
 		body.PerPage = 200
+		body.Search = pointer.ToString(marker)
 
 		c := testutil.NewAPIClient(t)
 		resp, err := c.ListCreatorApplicationsWithResponse(context.Background(), body, testutil.WithAuth(adminToken))
@@ -386,6 +388,8 @@ func TestCreatorApplicationsList(t *testing.T) {
 		require.NotNil(t, resp.JSON200)
 		// The two applications we created must appear in submission order.
 		positions := positionsFor(resp.JSON200.Data.Items, first.ApplicationID, second.ApplicationID)
+		require.Contains(t, positions, first.ApplicationID, "first must surface under marker scope")
+		require.Contains(t, positions, second.ApplicationID, "second must surface under marker scope")
 		require.Less(t, positions[first.ApplicationID], positions[second.ApplicationID],
 			"first application must precede second under created_at asc")
 	})
@@ -395,8 +399,9 @@ func TestCreatorApplicationsList(t *testing.T) {
 		_, adminToken, _ := testutil.SetupAdminClient(t)
 		// almaty (Алматы) and astana (Астана) — Almaty's "Алматы" sorts before
 		// Astana's "Астана" alphabetically in the Cyrillic codepoint order.
-		almaty := testutil.SetupCreatorApplicationViaLanding(t)
-		astana := testutil.SetupCreatorApplicationViaLanding(t, func(r *apiclient.CreatorApplicationSubmitRequest) {
+		marker := newSearchMarker("cityasc")
+		almaty := testutil.SetupCreatorApplicationViaLanding(t, withSearchMarker(marker))
+		astana := testutil.SetupCreatorApplicationViaLanding(t, withSearchMarker(marker), func(r *apiclient.CreatorApplicationSubmitRequest) {
 			r.City = "astana"
 		})
 
@@ -404,6 +409,7 @@ func TestCreatorApplicationsList(t *testing.T) {
 		body.Sort = apiclient.CreatorApplicationListSortFieldCityName
 		body.Order = apiclient.Asc
 		body.PerPage = 200
+		body.Search = pointer.ToString(marker)
 
 		c := testutil.NewAPIClient(t)
 		resp, err := c.ListCreatorApplicationsWithResponse(context.Background(), body, testutil.WithAuth(adminToken))
@@ -412,6 +418,8 @@ func TestCreatorApplicationsList(t *testing.T) {
 		require.NotNil(t, resp.JSON200)
 
 		positions := positionsFor(resp.JSON200.Data.Items, almaty.ApplicationID, astana.ApplicationID)
+		require.Contains(t, positions, almaty.ApplicationID, "almaty must surface under marker scope")
+		require.Contains(t, positions, astana.ApplicationID, "astana must surface under marker scope")
 		require.Less(t, positions[almaty.ApplicationID], positions[astana.ApplicationID],
 			"Алматы (almaty) must precede Астана (astana) under city_name asc")
 	})
@@ -419,10 +427,11 @@ func TestCreatorApplicationsList(t *testing.T) {
 	t.Run("sort: full_name asc with last-name discriminator", func(t *testing.T) {
 		t.Parallel()
 		_, adminToken, _ := testutil.SetupAdminClient(t)
-		ivanova := testutil.SetupCreatorApplicationViaLanding(t, func(r *apiclient.CreatorApplicationSubmitRequest) {
+		marker := newSearchMarker("fullasc")
+		ivanova := testutil.SetupCreatorApplicationViaLanding(t, withSearchMarker(marker), func(r *apiclient.CreatorApplicationSubmitRequest) {
 			r.LastName = "Иванова"
 		})
-		yakovleva := testutil.SetupCreatorApplicationViaLanding(t, func(r *apiclient.CreatorApplicationSubmitRequest) {
+		yakovleva := testutil.SetupCreatorApplicationViaLanding(t, withSearchMarker(marker), func(r *apiclient.CreatorApplicationSubmitRequest) {
 			r.LastName = "Яковлева"
 		})
 
@@ -430,6 +439,7 @@ func TestCreatorApplicationsList(t *testing.T) {
 		body.Sort = apiclient.CreatorApplicationListSortFieldFullName
 		body.Order = apiclient.Asc
 		body.PerPage = 200
+		body.Search = pointer.ToString(marker)
 
 		c := testutil.NewAPIClient(t)
 		resp, err := c.ListCreatorApplicationsWithResponse(context.Background(), body, testutil.WithAuth(adminToken))
@@ -438,6 +448,8 @@ func TestCreatorApplicationsList(t *testing.T) {
 		require.NotNil(t, resp.JSON200)
 
 		positions := positionsFor(resp.JSON200.Data.Items, ivanova.ApplicationID, yakovleva.ApplicationID)
+		require.Contains(t, positions, ivanova.ApplicationID, "ivanova must surface under marker scope")
+		require.Contains(t, positions, yakovleva.ApplicationID, "yakovleva must surface under marker scope")
 		require.Less(t, positions[ivanova.ApplicationID], positions[yakovleva.ApplicationID],
 			"Иванова must precede Яковлева under full_name asc")
 	})
@@ -445,10 +457,11 @@ func TestCreatorApplicationsList(t *testing.T) {
 	t.Run("sort: full_name desc reverses the last-name order", func(t *testing.T) {
 		t.Parallel()
 		_, adminToken, _ := testutil.SetupAdminClient(t)
-		ivanova := testutil.SetupCreatorApplicationViaLanding(t, func(r *apiclient.CreatorApplicationSubmitRequest) {
+		marker := newSearchMarker("fulldesc")
+		ivanova := testutil.SetupCreatorApplicationViaLanding(t, withSearchMarker(marker), func(r *apiclient.CreatorApplicationSubmitRequest) {
 			r.LastName = "Иванова"
 		})
-		yakovleva := testutil.SetupCreatorApplicationViaLanding(t, func(r *apiclient.CreatorApplicationSubmitRequest) {
+		yakovleva := testutil.SetupCreatorApplicationViaLanding(t, withSearchMarker(marker), func(r *apiclient.CreatorApplicationSubmitRequest) {
 			r.LastName = "Яковлева"
 		})
 
@@ -456,6 +469,7 @@ func TestCreatorApplicationsList(t *testing.T) {
 		body.Sort = apiclient.CreatorApplicationListSortFieldFullName
 		body.Order = apiclient.Desc
 		body.PerPage = 200
+		body.Search = pointer.ToString(marker)
 
 		c := testutil.NewAPIClient(t)
 		resp, err := c.ListCreatorApplicationsWithResponse(context.Background(), body, testutil.WithAuth(adminToken))
@@ -464,6 +478,8 @@ func TestCreatorApplicationsList(t *testing.T) {
 		require.NotNil(t, resp.JSON200)
 
 		positions := positionsFor(resp.JSON200.Data.Items, ivanova.ApplicationID, yakovleva.ApplicationID)
+		require.Contains(t, positions, ivanova.ApplicationID, "ivanova must surface under marker scope")
+		require.Contains(t, positions, yakovleva.ApplicationID, "yakovleva must surface under marker scope")
 		require.Less(t, positions[yakovleva.ApplicationID], positions[ivanova.ApplicationID],
 			"Яковлева must precede Иванова under full_name desc")
 	})
@@ -471,8 +487,9 @@ func TestCreatorApplicationsList(t *testing.T) {
 	t.Run("sort: city_name desc reverses the city order", func(t *testing.T) {
 		t.Parallel()
 		_, adminToken, _ := testutil.SetupAdminClient(t)
-		almaty := testutil.SetupCreatorApplicationViaLanding(t)
-		astana := testutil.SetupCreatorApplicationViaLanding(t, func(r *apiclient.CreatorApplicationSubmitRequest) {
+		marker := newSearchMarker("citydesc")
+		almaty := testutil.SetupCreatorApplicationViaLanding(t, withSearchMarker(marker))
+		astana := testutil.SetupCreatorApplicationViaLanding(t, withSearchMarker(marker), func(r *apiclient.CreatorApplicationSubmitRequest) {
 			r.City = "astana"
 		})
 
@@ -480,6 +497,7 @@ func TestCreatorApplicationsList(t *testing.T) {
 		body.Sort = apiclient.CreatorApplicationListSortFieldCityName
 		body.Order = apiclient.Desc
 		body.PerPage = 200
+		body.Search = pointer.ToString(marker)
 
 		c := testutil.NewAPIClient(t)
 		resp, err := c.ListCreatorApplicationsWithResponse(context.Background(), body, testutil.WithAuth(adminToken))
@@ -488,6 +506,8 @@ func TestCreatorApplicationsList(t *testing.T) {
 		require.NotNil(t, resp.JSON200)
 
 		positions := positionsFor(resp.JSON200.Data.Items, almaty.ApplicationID, astana.ApplicationID)
+		require.Contains(t, positions, almaty.ApplicationID, "almaty must surface under marker scope")
+		require.Contains(t, positions, astana.ApplicationID, "astana must surface under marker scope")
 		require.Less(t, positions[astana.ApplicationID], positions[almaty.ApplicationID],
 			"Астана must precede Алматы under city_name desc")
 	})
@@ -498,14 +518,16 @@ func TestCreatorApplicationsList(t *testing.T) {
 		// updated_at follows created_at on submission (no later mutation in
 		// chunk 4), so a 1.1s gap forces distinct timestamps and gives us a
 		// meaningful order to verify in both directions.
-		first := testutil.SetupCreatorApplicationViaLanding(t)
+		marker := newSearchMarker("updatedat")
+		first := testutil.SetupCreatorApplicationViaLanding(t, withSearchMarker(marker))
 		time.Sleep(1100 * time.Millisecond)
-		second := testutil.SetupCreatorApplicationViaLanding(t)
+		second := testutil.SetupCreatorApplicationViaLanding(t, withSearchMarker(marker))
 
 		c := testutil.NewAPIClient(t)
 		body := validBody()
 		body.Sort = apiclient.CreatorApplicationListSortFieldUpdatedAt
 		body.PerPage = 200
+		body.Search = pointer.ToString(marker)
 
 		body.Order = apiclient.Asc
 		respAsc, err := c.ListCreatorApplicationsWithResponse(context.Background(), body, testutil.WithAuth(adminToken))
@@ -513,6 +535,8 @@ func TestCreatorApplicationsList(t *testing.T) {
 		require.Equal(t, http.StatusOK, respAsc.StatusCode())
 		require.NotNil(t, respAsc.JSON200)
 		posAsc := positionsFor(respAsc.JSON200.Data.Items, first.ApplicationID, second.ApplicationID)
+		require.Contains(t, posAsc, first.ApplicationID)
+		require.Contains(t, posAsc, second.ApplicationID)
 		require.Less(t, posAsc[first.ApplicationID], posAsc[second.ApplicationID])
 
 		body.Order = apiclient.Desc
@@ -521,6 +545,8 @@ func TestCreatorApplicationsList(t *testing.T) {
 		require.Equal(t, http.StatusOK, respDesc.StatusCode())
 		require.NotNil(t, respDesc.JSON200)
 		posDesc := positionsFor(respDesc.JSON200.Data.Items, first.ApplicationID, second.ApplicationID)
+		require.Contains(t, posDesc, first.ApplicationID)
+		require.Contains(t, posDesc, second.ApplicationID)
 		require.Less(t, posDesc[second.ApplicationID], posDesc[first.ApplicationID])
 	})
 
@@ -531,13 +557,15 @@ func TestCreatorApplicationsList(t *testing.T) {
 		// almost certainly carry different birth_date values; if they happen to
 		// collide, the tie-breaker (id ASC) still gives a stable ordering. The
 		// assertion only checks that both rows surface in either direction.
-		appA := testutil.SetupCreatorApplicationViaLanding(t)
-		appB := testutil.SetupCreatorApplicationViaLanding(t)
+		marker := newSearchMarker("birthdate")
+		appA := testutil.SetupCreatorApplicationViaLanding(t, withSearchMarker(marker))
+		appB := testutil.SetupCreatorApplicationViaLanding(t, withSearchMarker(marker))
 
 		c := testutil.NewAPIClient(t)
 		body := validBody()
 		body.Sort = apiclient.CreatorApplicationListSortFieldBirthDate
 		body.PerPage = 200
+		body.Search = pointer.ToString(marker)
 
 		for _, dir := range []apiclient.SortOrder{apiclient.Asc, apiclient.Desc} {
 			body.Order = dir
@@ -686,6 +714,28 @@ func TestCreatorApplicationsList(t *testing.T) {
 			require.Nil(t, soc.VerifiedAt, "list socials[%d].verifiedAt must be nil for an unverified row", i)
 		}
 	})
+}
+
+// newSearchMarker returns a unique alphanumeric marker that scopes a sort
+// sub-test to its own seeded rows when used together with withSearchMarker
+// and `body.Search`. Without scoping, sort assertions break on environments
+// where many unrelated applications already exist (staging) — `positionsFor`
+// reports `0` for any seeded row that fell off the first 200-item page.
+func newSearchMarker(prefix string) string {
+	return strings.ToLower(prefix + "mark" + testutil.UniqueIIN()[8:])
+}
+
+// withSearchMarker pins `marker` into the seeded application's first name.
+// Backend `Search` ILIKEs first/middle/last name (among other fields), so a
+// list query with `body.Search = marker` returns only rows the test owns.
+// Avoid handles: defaults start with `@`, and prefixing the marker would
+// break submit-validation format checks. First name is free-text — full_name
+// sort still orders by last name first, so the marker doesn't perturb the
+// asserted ivanova/yakovleva order.
+func withSearchMarker(marker string) func(*apiclient.CreatorApplicationSubmitRequest) {
+	return func(r *apiclient.CreatorApplicationSubmitRequest) {
+		r.FirstName = marker + r.FirstName
+	}
 }
 
 func collectIDs(items []apiclient.CreatorApplicationListItem) []string {
