@@ -530,10 +530,31 @@ func TestListCampaignCreators(t *testing.T) {
 			require.True(t, items[0].Id.String() < items[1].Id.String(),
 				"on equal created_at the tie-breaker is id ASC")
 		}
+
+		// Per-item full contract: every required field carries a server-stamped
+		// value, every nullable timestamp is nil on `planned` rows, both counters
+		// are zero, and timestamps are recent. Pairing by CreatorId guards
+		// against a list-by-wrong-campaign regression that would still return
+		// 2 rows but with the wrong creators.
+		c1UUID := uuid.MustParse(creator1.CreatorID)
+		c2UUID := uuid.MustParse(creator2.CreatorID)
+		byCreator := map[uuid.UUID]apiclient.CampaignCreator{}
 		for _, item := range items {
+			byCreator[item.CreatorId] = item
+			require.NotEqual(t, uuid.Nil, item.Id, "server-stamped row id must be present")
 			require.Equal(t, campaignID, item.CampaignId)
 			require.Equal(t, apiclient.Planned, item.Status)
 			require.Equal(t, 0, item.InvitedCount)
+			require.Equal(t, 0, item.RemindedCount)
+			require.Nil(t, item.InvitedAt)
+			require.Nil(t, item.RemindedAt)
+			require.Nil(t, item.DecidedAt)
+			require.WithinDuration(t, time.Now().UTC(), item.CreatedAt, time.Minute)
+			require.WithinDuration(t, time.Now().UTC(), item.UpdatedAt, time.Minute)
 		}
+		_, ok1 := byCreator[c1UUID]
+		_, ok2 := byCreator[c2UUID]
+		require.True(t, ok1, "creator1 must appear in the listed roster")
+		require.True(t, ok2, "creator2 must appear in the listed roster")
 	})
 }

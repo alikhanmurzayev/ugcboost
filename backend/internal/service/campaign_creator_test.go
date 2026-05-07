@@ -81,6 +81,23 @@ func TestCampaignCreatorService_Add(t *testing.T) {
 		require.ErrorIs(t, err, domain.ErrCampaignNotFound)
 	})
 
+	t.Run("campaign GetByID returns generic error wraps with get campaign", func(t *testing.T) {
+		t.Parallel()
+		pool := dbmocks.NewMockPool(t)
+		factory := svcmocks.NewMockCampaignCreatorRepoFactory(t)
+		campaigns := repomocks.NewMockCampaignRepo(t)
+
+		factory.EXPECT().NewCampaignRepo(pool).Return(campaigns)
+		campaigns.EXPECT().GetByID(mock.Anything, "camp-1").
+			Return((*repository.CampaignRow)(nil), errors.New("db unavailable"))
+
+		svc := NewCampaignCreatorService(pool, factory, logmocks.NewMockLogger(t))
+		_, err := svc.Add(context.Background(), "camp-1", []string{"cr-1"})
+		require.ErrorContains(t, err, "get campaign")
+		require.ErrorContains(t, err, "db unavailable")
+		require.NotErrorIs(t, err, domain.ErrCampaignNotFound)
+	})
+
 	t.Run("repo Add returns ErrCreatorAlreadyInCampaign mid-batch rolls back", func(t *testing.T) {
 		t.Parallel()
 		pool := dbmocks.NewMockPool(t)
