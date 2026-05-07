@@ -41,9 +41,10 @@ import {
 } from "../helpers/api";
 
 const API_URL = process.env.API_URL || "http://localhost:8080";
-const CLEANUP_TIMEOUT_MS = 60_000;
+const CLEANUP_TIMEOUT_MS = 180_000;
 const TOTAL_CREATORS = 210;
 const SEED_BATCH = 15;
+const CLEANUP_BATCH = 20;
 
 test.describe("Admin campaign creators — large-scale (cap-cycle, 200+ members)", () => {
   test.use({ timezoneId: "UTC" });
@@ -95,27 +96,33 @@ test.describe("Admin campaign creators — large-scale (cap-cycle, 200+ members)
       SEED_BATCH,
       runId,
     );
-    for (const c of creators) {
-      cleanupStack.push(c.cleanup);
-    }
+    // Single batched cleanup hook for all 210 creators. LIFO ordering:
+    // detach-batch → campaign → creators-batch → admin. Sequential per-id
+    // cleanup (LIFO pop one by one) hit the 60s timeout before getting
+    // through 210 × 2 HTTP hops, leaving a creators-table mess that broke
+    // backend e2e sort tests on the next run.
+    cleanupStack.push(() => batchedCleanup(creators.map((c) => c.cleanup)));
 
     const campaign = await seedCampaign(request, API_URL, adminToken);
     cleanupStack.push(campaign.cleanup);
 
-    // Pre-register the detach hook for every seeded id so the LIFO cleanup
-    // releases the campaign_creators FK before campaign deletion fires —
-    // regardless of how many ids the UI ends up persisting.
-    for (const c of creators) {
-      cleanupStack.push(() =>
-        removeCampaignCreator(
-          request,
-          API_URL,
-          campaign.campaignId,
-          c.creatorId,
-          adminToken,
+    // Same batched approach for campaign_creators FK detach. Idempotent
+    // (404 = already gone) so it is safe to register before the UI persists
+    // any rows.
+    cleanupStack.push(() =>
+      batchedCleanup(
+        creators.map(
+          (c) => () =>
+            removeCampaignCreator(
+              request,
+              API_URL,
+              campaign.campaignId,
+              c.creatorId,
+              adminToken,
+            ),
         ),
-      );
-    }
+      ),
+    );
 
     await loginAs(page, admin.email, admin.password);
     await page.goto(`/campaigns/${campaign.campaignId}`);
@@ -295,6 +302,18 @@ async function seedApprovedCreatorsParallel(
     result.push(...batch);
   }
   return result;
+}
+
+// Runs cleanup callbacks in `CLEANUP_BATCH`-sized parallel chunks. Promise
+// .allSettled keeps a single 404 / network blip from aborting the whole
+// teardown and stranding rows in the creators table.
+async function batchedCleanup(
+  fns: Array<() => Promise<void>>,
+): Promise<void> {
+  for (let i = 0; i < fns.length; i += CLEANUP_BATCH) {
+    const slice = fns.slice(i, i + CLEANUP_BATCH);
+    await Promise.allSettled(slice.map((fn) => fn()));
+  }
 }
 
 async function loginAs(
