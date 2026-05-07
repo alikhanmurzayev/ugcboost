@@ -1020,9 +1020,12 @@ import {
       function showSuccess(botUrl: string | undefined): void {
         const screen = document.getElementById("success-screen");
         const cta = document.getElementById("success-cta");
+        const tgUrl =
+          typeof botUrl === "string" && botUrl.length > 0 ? botUrl : null;
+
         if (cta) {
-          if (typeof botUrl === "string" && botUrl.length > 0) {
-            cta.setAttribute("href", botUrl);
+          if (tgUrl) {
+            cta.setAttribute("href", tgUrl);
             cta.classList.remove("hidden");
           } else {
             // Empty botUrl is unexpected (backend env-checks at boot). Hide the
@@ -1033,6 +1036,14 @@ import {
         if (screen) {
           screen.classList.remove("hidden");
           screen.classList.add("flex");
+        }
+        if (tgUrl) {
+          // Auto-handoff to Telegram in a new tab. Креаторы часто закрывали
+          // вкладку, не нажав CTA, и теряли application_id-deep-link. Modal
+          // остаётся как fallback на случай popup-блокера или отказа от
+          // OS-handoff (поэтому success-screen рендерим всегда, не только
+          // когда window.open вернул null).
+          window.open(tgUrl, "_blank", "noopener,noreferrer");
         }
       }
 
