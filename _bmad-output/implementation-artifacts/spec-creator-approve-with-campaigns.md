@@ -201,70 +201,74 @@ Handler ApproveCreatorApplication
 **Контракт ручки**
 
 - Расширение `approveCreatorApplication` опциональным `campaignIds[]` + новый код `CAMPAIGN_ADD_AFTER_APPROVE_FAILED`.
-  `backend/api/openapi.yaml:785`
+  `backend/api/openapi.yaml:794`
 - Сгенерированный тип `CreatorApprovalInput` для request body.
-  `backend/api/openapi.yaml:2348`
+  `backend/api/openapi.yaml:2367`
 
 **Domain — error codes**
 
 - 4 новых `Code*` для всей цепочки validation + post-approve.
-  `backend/internal/domain/errors.go:31`
+  `backend/internal/domain/errors.go:36`
 - Sentinel errors + actionable message-конструктор для post-approve fail.
-  `backend/internal/domain/campaign.go:46`
+  `backend/internal/domain/campaign.go:48`
+- `domain.ErrorCode(err)` — helper для извлечения user-facing кода из обёрток (защищает структурное логирование от PII в raw error string).
+  `backend/internal/domain/errors.go:122`
 
 **Backend — pre-validation в handler**
 
-- Главная точка входа: `parseApproveCampaignIDs` cap 20 → dedupe → `AssertActiveCampaigns`.
-  `backend/internal/handler/creator_application.go:368`
-- Локальный single-method интерфейс по convention "accept interfaces, return structs".
-  `backend/internal/handler/server.go:108`
+- Главная точка входа: `parseApproveCampaignIDs` cap 20 → dedupe → `CampaignService.AssertActiveCampaigns`.
+  `backend/internal/handler/creator_application.go:389`
+- `CampaignService` теперь объявляет `AssertActiveCampaigns` напрямую (один параметр в `NewServer` вместо отдельного `CampaignActiveChecker` interface'а).
+  `backend/internal/handler/server.go:101`
 
 **Backend — service approve cycle**
 
-- Sequential add loop под `context.WithoutCancel(ctx)`, first-fail-stop с actionable error и логированием partial-state.
-  `backend/internal/service/creator_application.go:1308`
+- Sequential add loop под `context.WithoutCancel(ctx)`, first-fail-stop с actionable error, sanitized-логом (только `error_code`, не raw err) и repo-lookup'ом display name через campaignDisplay.
+  `backend/internal/service/creator_application.go:1327`
 - Внутренний `campaignCreatorAdder` (lowercase) — consumer-side dependency.
-  `backend/internal/service/creator_application.go:69`
+  `backend/internal/service/creator_application.go:74`
+- `campaignDisplay(ctx, id)` — fail-only repo round-trip за именем кампании, fallback на UUID.
+  `backend/internal/service/creator_application.go:1351`
 
 **Backend — repo + service для pre-validation**
 
-- `AssertActiveCampaigns`: noop при пустом, иначе ListByIDs + сравнение длин и `IsDeleted`.
-  `backend/internal/service/campaign.go:125`
-- `ListByIDs` через squirrel `WHERE id IN (...)` с empty-input guard.
-  `backend/internal/repository/campaign.go:113`
+- `AssertActiveCampaigns`: noop при пустом, ListByIDs + set-membership проверка (защита от phantom rows).
+  `backend/internal/service/campaign.go:137`
+- `ListByIDs` через squirrel `WHERE id IN (...)` с empty-input guard и `fmt.Errorf` обёрткой.
+  `backend/internal/repository/campaign.go:116`
 
 **Frontend — API + dialog UX**
 
-- `approveApplication(id, campaignIds?)` пробрасывает `error.message` от бэка в `ApiError.serverMessage`.
-  `frontend/web/src/api/creatorApplications.ts:78`
-- Диалог: useQuery campaigns, SearchableMultiselect, discriminator inline-error vs drawer-banner, invalidate creators/campaigns на success и на post-approve fail.
-  `frontend/web/src/features/creatorApplications/components/ApproveApplicationDialog.tsx:51`
-- 4 новых i18n-fallback'а (используются если backend не вернул `message`).
+- `approveApplication(id, campaignIds?)` пробрасывает `error.message` от бэка в `ApiError.serverMessage`; типизация через `components["schemas"]["CreatorApprovalInput"]` и `ErrorResponse`.
+  `frontend/web/src/api/creatorApplications.ts:81`
+- Диалог: useQuery campaigns, SearchableMultiselect (label/htmlFor → triggerId), empty-list explainer, discriminator inline-error vs drawer-banner, invalidate `campaignKeys.list` после `CAMPAIGN_NOT_AVAILABLE_FOR_ADD`, очистка selection после `CAMPAIGN_ADD_AFTER_APPROVE_FAILED`.
+  `frontend/web/src/features/creatorApplications/components/ApproveApplicationDialog.tsx:52`
+- 5 i18n-fallback'ов + новый `approveDialog.campaignsEmpty`.
   `frontend/web/src/shared/i18n/locales/ru/common.json:43`
 
 **Backend — unit-тесты**
 
-- Сервис: happy с N кампаний (captured order) + first-fail-stop (actionable error + log).
-  `backend/internal/service/creator_application_test.go:2716`
-- Handler: validation 422 / pre-validation / forwards campaignIDs.
-  `backend/internal/handler/creator_application_test.go:1672`
-- AssertActiveCampaigns + ListByIDs.
+- Сервис: happy с N кампаний (captured order, sequential notify→add invariant) + first-fail-stop (campaign display name, точный logger.Error matcher, full Equal на actionable message).
+  `backend/internal/service/creator_application_test.go:2718`
+- Handler: validation 422 / pre-validation / forwards campaignIDs / Message check.
+  `backend/internal/handler/creator_application_test.go:1671`
+- AssertActiveCampaigns + ListByIDs (full Equal на []*CampaignRow + ErrorContains на wrap).
   `backend/internal/service/campaign_test.go:589`
   `backend/internal/repository/campaign_test.go:158`
 
 **Backend — e2e**
 
-- Happy + 422 sub-scenarios на новой ручке.
-  `backend/e2e/creator_applications/approve_with_campaigns_test.go:74`
+- Happy + 422 sub-scenarios на новой ручке + typed audit-payload assertion (вместо substring на JSON).
+  `backend/e2e/creator_applications/approve_with_campaigns_test.go:89`
 
 **Frontend — unit + e2e**
 
-- Dialog unit-tests: 22 сценария (multiselect, loading, validation, post-approve fail, success invalidate).
+- Dialog unit-tests: 24 сценария (multiselect, loading, empty-list, label/htmlFor a11y, validation, post-approve fail с очисткой selection, success invalidate).
   `frontend/web/src/features/creatorApplications/components/ApproveApplicationDialog.test.tsx:1`
-- Browser e2e: full happy path с двумя кампаниями + assert обоих roster'ов.
-  `frontend/e2e/web/admin-creator-applications-moderation-approve-with-campaigns.spec.ts:74`
+- Browser e2e: full happy path с двумя кампаниями + assert обоих roster'ов; cleanup стек продолжает дренирование при сбоях через try/catch + AggregateError; типы request/response через generated schema.
+  `frontend/e2e/web/admin-creator-applications-moderation-approve-with-campaigns.spec.ts:89`
 
 **Bootstrap / wiring**
 
-- main.go: campaignCreatorSvc создаётся ДО creatorApplicationSvc; campaignSvc передан и как `CampaignService`, и как `CampaignActiveChecker`.
+- main.go: campaignCreatorSvc создаётся ДО creatorApplicationSvc; campaignSvc передаётся в `NewServer` единожды (убран дубль через объединение `CampaignActiveChecker` в `CampaignService`).
   `backend/cmd/api/main.go:99`

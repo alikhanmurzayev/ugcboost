@@ -21,6 +21,11 @@ Findings, surfaced by reviews/work, that we consciously kicked down the road. Ea
 **Почему отложено:** ortho-задача, ранее уже зафиксирована в deferred (chunk 11 slice 1/2 review round 2).
 **Когда возвращаться:** объединить с тем deferred-entry в один PR.
 
+### Approve add-loop без явного deadline на `approveCtx`
+**Что:** `service/creator_application.go` оборачивает post-tx1+notify add-loop в `context.WithoutCancel(ctx)`, но без `WithTimeout`. Если 20 кампаний по очереди висят на FK lock'ах, цикл может бежать минуты — клиент уже отвалился по HTTP read-timeout, а сервер всё ещё пишет.
+**Почему отложено:** в проде каждая `Add` транзакция короткая (один INSERT + audit), реальная вероятность многоминутного зависания мала; добавление таймаута требует Config-канала (`ENV ApproveAddLoopTimeout`) и обновления ~50 NewCreatorApplicationService call-site'ов в тестах. По стандарту backend-design.md hardcoded таймауты запрещены, поэтому inline-захардкодить тоже нельзя.
+**Когда возвращаться:** при первой жалобе на медленный approve, или при добавлении любого другого Config-параметра в service (тогда +1 поле в той же миграции).
+
 ---
 
 ## chunk 11 slice 2/2 — campaign_creators frontend mutations (PR #?)

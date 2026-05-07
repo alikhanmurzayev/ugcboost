@@ -3,6 +3,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import ApproveApplicationDialog from "./ApproveApplicationDialog";
+import { CAMPAIGNS_QUERY_PARAMS } from "./approveDialog.constants";
 
 vi.mock("@/api/creatorApplications", () => ({
   approveApplication: vi.fn(),
@@ -120,11 +121,15 @@ describe("ApproveApplicationDialog — dialog body", () => {
     ).toBeInTheDocument();
   });
 
-  it("renders campaign multiselect with optional-label hint", async () => {
+  it("renders campaign multiselect bound to its label (a11y: label htmlFor → button id)", async () => {
     setup();
     await userEvent.click(screen.getByTestId("approve-button"));
-    expect(screen.getByText("Добавить в кампании (опционально)")).toBeInTheDocument();
-    expect(screen.getByTestId("approve-campaigns-multiselect")).toBeInTheDocument();
+    // getByLabelText proves the <label htmlFor=...> resolves to the actual
+    // interactive trigger button — clicking the label text would otherwise
+    // be a no-op for screen readers and keyboard users.
+    expect(
+      screen.getByLabelText("Добавить в кампании (опционально)"),
+    ).toBe(screen.getByTestId("approve-campaigns-multiselect"));
   });
 });
 
@@ -134,13 +139,7 @@ describe("ApproveApplicationDialog — campaigns query", () => {
     expect(listCampaigns).not.toHaveBeenCalled();
     await userEvent.click(screen.getByTestId("approve-button"));
     await waitFor(() => {
-      expect(listCampaigns).toHaveBeenCalledWith({
-        page: 1,
-        perPage: 100,
-        sort: "name",
-        order: "asc",
-        isDeleted: false,
-      });
+      expect(listCampaigns).toHaveBeenCalledWith(CAMPAIGNS_QUERY_PARAMS);
     });
   });
 
@@ -162,7 +161,31 @@ describe("ApproveApplicationDialog — campaigns query", () => {
     expect(screen.getByTestId("approve-confirm-submit")).toBeDisabled();
   });
 
-  it("renders inline campaigns load-error when listCampaigns fails", async () => {
+  it("renders empty-list hint when listCampaigns returns 0 items (no active campaigns)", async () => {
+    vi.mocked(listCampaigns).mockResolvedValueOnce({
+      data: { items: [], total: 0, page: 1, perPage: 100 },
+    });
+    const queryClient = new QueryClient({
+      defaultOptions: { mutations: { retry: false }, queries: { retry: false } },
+    });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ApproveApplicationDialog
+          applicationId="app-1"
+          onApiError={vi.fn()}
+          onCloseDrawer={vi.fn()}
+        />
+      </QueryClientProvider>,
+    );
+    await userEvent.click(screen.getByTestId("approve-button"));
+    await waitFor(() => {
+      expect(screen.getByTestId("approve-dialog-campaigns-empty")).toHaveTextContent(
+        "Активных кампаний нет",
+      );
+    });
+  });
+
+  it("renders inline campaigns load-error with localized text when listCampaigns fails", async () => {
     vi.mocked(listCampaigns).mockRejectedValueOnce(new ApiError(500, "INTERNAL_ERROR"));
     const queryClient = new QueryClient({
       defaultOptions: { mutations: { retry: false }, queries: { retry: false } },
@@ -178,7 +201,9 @@ describe("ApproveApplicationDialog — campaigns query", () => {
     );
     await userEvent.click(screen.getByTestId("approve-button"));
     await waitFor(() => {
-      expect(screen.getByTestId("approve-dialog-campaigns-error")).toBeInTheDocument();
+      expect(screen.getByTestId("approve-dialog-campaigns-error")).toHaveTextContent(
+        "Не удалось загрузить кампании",
+      );
     });
   });
 });
@@ -285,7 +310,7 @@ describe("ApproveApplicationDialog — 4xx error handling", () => {
     expect(onCloseDrawer).not.toHaveBeenCalled();
   });
 
-  it("on 422 CAMPAIGN_NOT_AVAILABLE_FOR_ADD → inline error, dialog stays open, no invalidate", async () => {
+  it("on 422 CAMPAIGN_NOT_AVAILABLE_FOR_ADD → inline error, dialog stays open, refreshes campaigns cache", async () => {
     const code = "CAMPAIGN_NOT_AVAILABLE_FOR_ADD";
     vi.mocked(approveApplication).mockRejectedValueOnce(new ApiError(422, code));
     const { invalidateSpy, onCloseDrawer, onApiError } = setup();
@@ -299,18 +324,28 @@ describe("ApproveApplicationDialog — 4xx error handling", () => {
       );
     });
     expect(screen.getByTestId("approve-confirm-dialog")).toBeInTheDocument();
-    expect(invalidateSpy).not.toHaveBeenCalled();
+    // Invalidate forces a re-fetch of the cached campaigns list so the next
+    // open of the multiselect reflects the just-soft-deleted campaign rather
+    // than letting the admin retry against the same stale option.
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: ["campaigns", "list", CAMPAIGNS_QUERY_PARAMS],
+    });
     expect(onCloseDrawer).not.toHaveBeenCalled();
     expect(onApiError).not.toHaveBeenCalled();
   });
 
-  it("on 422 CAMPAIGN_ADD_AFTER_APPROVE_FAILED → inline error with serverMessage + invalidate creators/campaigns", async () => {
+  it("on 422 CAMPAIGN_ADD_AFTER_APPROVE_FAILED → inline error with serverMessage + invalidate creators/campaigns + clears selection", async () => {
     const code = "CAMPAIGN_ADD_AFTER_APPROVE_FAILED";
-    const serverMessage = "Не удалось добавить креатора в кампанию camp-x. Креатор уже создан — добавьте его вручную через страницу кампании.";
+    const serverMessage =
+      "Не удалось добавить креатора (id creator-1) в кампанию «Promo A». Креатор уже создан — найдите его в разделе «Креаторы» по id и добавьте в кампанию вручную.";
     vi.mocked(approveApplication).mockRejectedValueOnce(new ApiError(422, code, serverMessage));
     const { invalidateSpy, onCloseDrawer, onApiError } = setup();
 
     await openAndArm();
+    await userEvent.click(screen.getByTestId("approve-campaigns-multiselect"));
+    await userEvent.click(
+      screen.getByTestId("approve-campaigns-multiselect-option-11111111-1111-1111-1111-111111111111"),
+    );
     await userEvent.click(screen.getByTestId("approve-confirm-submit"));
 
     await waitFor(() => {
@@ -319,6 +354,14 @@ describe("ApproveApplicationDialog — 4xx error handling", () => {
     expect(screen.getByTestId("approve-confirm-dialog")).toBeInTheDocument();
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["creator-applications"] });
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ["creators"] });
+    // Selection is cleared so a follow-up submit cannot re-target the
+    // already-approved application (which would otherwise surface the
+    // aggregate CREATOR_APPLICATION_NOT_APPROVABLE in the drawer).
+    await waitFor(() => {
+      expect(
+        screen.getByTestId("approve-campaigns-multiselect"),
+      ).toHaveTextContent("Кампании не выбраны");
+    });
     expect(onCloseDrawer).not.toHaveBeenCalled();
     expect(onApiError).not.toHaveBeenCalled();
   });

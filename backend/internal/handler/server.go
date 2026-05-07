@@ -97,19 +97,14 @@ type CreatorService interface {
 
 // CampaignService is the interface Server needs from the campaign service —
 // admin-only POST /campaigns plus per-id read and patch; subsequent chunks
-// (#6–#7) extend it with list / soft-delete.
+// (#6–#7) extend it with list / soft-delete. AssertActiveCampaigns is the
+// pre-validation hook for the optional `campaignIds` payload of POST
+// /creators/applications/{id}/approve.
 type CampaignService interface {
 	CreateCampaign(ctx context.Context, in domain.CampaignInput) (*domain.Campaign, error)
 	GetByID(ctx context.Context, id string) (*domain.Campaign, error)
 	UpdateCampaign(ctx context.Context, id string, in domain.CampaignInput) error
 	List(ctx context.Context, in domain.CampaignListInput) (*domain.CampaignListPage, error)
-}
-
-// CampaignActiveChecker gates the optional `campaignIds` payload on the
-// approve-creator-application endpoint with a single-method consumer-side
-// interface (handler-level pre-validation; service approve only sees
-// post-validated ids). *CampaignService satisfies it.
-type CampaignActiveChecker interface {
 	AssertActiveCampaigns(ctx context.Context, ids []string) error
 }
 
@@ -141,7 +136,6 @@ type Server struct {
 	creatorApplicationService CreatorApplicationService
 	creatorService            CreatorService
 	campaignService           CampaignService
-	campaignActiveChecker     CampaignActiveChecker
 	campaignCreatorService    CampaignCreatorService
 	dictionaryService         DictionaryService
 	version                   string
@@ -163,7 +157,6 @@ func NewServer(
 	creatorApps CreatorApplicationService,
 	creators CreatorService,
 	campaigns CampaignService,
-	campaignActiveChecker CampaignActiveChecker,
 	campaignCreators CampaignCreatorService,
 	dict DictionaryService,
 	cfg ServerConfig,
@@ -177,7 +170,6 @@ func NewServer(
 		creatorApplicationService: creatorApps,
 		creatorService:            creators,
 		campaignService:           campaigns,
-		campaignActiveChecker:     campaignActiveChecker,
 		campaignCreatorService:    campaignCreators,
 		dictionaryService:         dict,
 		version:                   cfg.Version,

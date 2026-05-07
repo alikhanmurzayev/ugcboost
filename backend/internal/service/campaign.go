@@ -130,6 +130,10 @@ func (s *CampaignService) GetByID(ctx context.Context, id string) (*domain.Campa
 // or audit row is written. Race between this check and the per-campaign add
 // loop is caught by ErrCampaignNotFound from CampaignCreatorService.Add
 // (defense in depth).
+//
+// Membership uses an explicit set so duplicate or phantom rows (in theory
+// impossible behind the campaigns PK, but defensive against a future relaxed
+// query) cannot inflate len(rows) past len(ids) and silently pass the gate.
 func (s *CampaignService) AssertActiveCampaigns(ctx context.Context, ids []string) error {
 	if len(ids) == 0 {
 		return nil
@@ -138,11 +142,15 @@ func (s *CampaignService) AssertActiveCampaigns(ctx context.Context, ids []strin
 	if err != nil {
 		return fmt.Errorf("list campaigns by ids: %w", err)
 	}
-	if len(rows) != len(ids) {
-		return domain.ErrCampaignNotAvailableForAdd
-	}
+	active := make(map[string]struct{}, len(rows))
 	for _, row := range rows {
 		if row.IsDeleted {
+			return domain.ErrCampaignNotAvailableForAdd
+		}
+		active[row.ID] = struct{}{}
+	}
+	for _, id := range ids {
+		if _, ok := active[id]; !ok {
 			return domain.ErrCampaignNotAvailableForAdd
 		}
 	}

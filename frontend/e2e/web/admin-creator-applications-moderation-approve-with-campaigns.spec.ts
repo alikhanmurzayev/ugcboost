@@ -45,9 +45,13 @@ import {
   seedCreatorApplication,
   triggerSendPulseInstagramWebhook,
 } from "../helpers/api";
-import type { components } from "../types/test-schema";
+import type { components as testComponents } from "../types/test-schema";
+import type { components } from "../types/schema";
 
-type CleanupEntityRequest = components["schemas"]["CleanupEntityRequest"];
+type CleanupEntityRequest = testComponents["schemas"]["CleanupEntityRequest"];
+type CreatorApprovalResult = components["schemas"]["CreatorApprovalResult"];
+type ListCampaignCreatorsResult = components["schemas"]["ListCampaignCreatorsResult"];
+type CampaignCreator = components["schemas"]["CampaignCreator"];
 
 const API_URL = process.env.API_URL || "http://localhost:8080";
 const CLEANUP_TIMEOUT_MS = 5_000;
@@ -64,10 +68,21 @@ test.describe("Admin approve application action — moderation with campaigns", 
 
   test.afterEach(async () => {
     if (process.env.E2E_CLEANUP === "false") return;
+    // LIFO cleanup with continue-on-failure semantics: a failing pop must
+    // not strand the remaining stack (unattached campaigns / orphan
+    // creator rows leak between worker runs and flake adjacent specs).
+    const errors: unknown[] = [];
     while (cleanupStack.length > 0) {
       const fn = cleanupStack.pop();
       if (!fn) continue;
-      await withTimeout(fn(), CLEANUP_TIMEOUT_MS, "cleanup");
+      try {
+        await withTimeout(fn(), CLEANUP_TIMEOUT_MS, "cleanup");
+      } catch (e) {
+        errors.push(e);
+      }
+    }
+    if (errors.length > 0) {
+      throw new AggregateError(errors, `${errors.length} cleanup steps failed`);
     }
   });
 
@@ -178,9 +193,7 @@ test.describe("Admin approve application action — moderation with campaigns", 
       dialog.getByTestId("approve-confirm-submit").click(),
     ]);
     expect(approveResp.status()).toBe(200);
-    const approveBody = (await approveResp.json()) as {
-      data: { creatorId: string };
-    };
+    const approveBody = (await approveResp.json()) as CreatorApprovalResult;
     const creatorId = approveBody.data.creatorId;
     expect(creatorId).toMatch(
       /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
@@ -280,11 +293,6 @@ async function cleanupCreator(
   }
 }
 
-interface CampaignCreatorRow {
-  creatorId: string;
-  status: string;
-}
-
 async function assertCreatorInCampaign(
   request: APIRequestContext,
   apiUrl: string,
@@ -296,8 +304,10 @@ async function assertCreatorInCampaign(
     headers: { Authorization: `Bearer ${adminToken}` },
   });
   expect(resp.status()).toBe(200);
-  const body = (await resp.json()) as { data: { items: CampaignCreatorRow[] } };
-  const match = body.data.items.find((row) => row.creatorId === creatorId);
+  const body = (await resp.json()) as ListCampaignCreatorsResult;
+  const match = body.data.items.find(
+    (row: CampaignCreator) => row.creatorId === creatorId,
+  );
   expect(
     match,
     `expected creator ${creatorId} to be attached to campaign ${campaignId}`,

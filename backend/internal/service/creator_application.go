@@ -32,6 +32,7 @@ type CreatorApplicationRepoFactory interface {
 	NewCreatorRepo(db dbutil.DB) repository.CreatorRepo
 	NewCreatorSocialRepo(db dbutil.DB) repository.CreatorSocialRepo
 	NewCreatorCategoryRepo(db dbutil.DB) repository.CreatorCategoryRepo
+	NewCampaignRepo(db dbutil.DB) repository.CampaignRepo
 }
 
 // creatorApplicationListInputToRepo translates the validated handler input
@@ -1326,19 +1327,35 @@ func (s *CreatorApplicationService) ApproveApplication(ctx context.Context, appl
 		approveCtx := context.WithoutCancel(ctx)
 		for i, campaignID := range campaignIDs {
 			if _, addErr := s.campaignCreatorService.Add(approveCtx, campaignID, []string{createdCreatorID}); addErr != nil {
+				errCode := domain.ErrorCode(addErr)
+				if errCode == "" {
+					errCode = "non_domain"
+				}
 				s.logger.Error(approveCtx, "approve application: add-loop partial commit",
 					"creator_id", createdCreatorID,
 					"committed_count", i,
 					"failed_campaign_id", campaignID,
 					"remaining_count", len(campaignIDs)-i-1,
-					"error", addErr,
+					"error_code", errCode,
 				)
-				return "", domain.NewErrCampaignAddAfterApproveFailed(campaignID)
+				return "", domain.NewErrCampaignAddAfterApproveFailed(createdCreatorID, s.campaignDisplay(approveCtx, campaignID))
 			}
 		}
 	}
 
 	return createdCreatorID, nil
+}
+
+// campaignDisplay returns the campaign name for actionable error messages,
+// falling back to the UUID when the lookup itself fails. Called only on the
+// add-loop failure path so the extra repo round-trip is paid only when the
+// admin already needs to switch context to fix things manually.
+func (s *CreatorApplicationService) campaignDisplay(ctx context.Context, campaignID string) string {
+	row, err := s.repoFactory.NewCampaignRepo(s.pool).GetByID(ctx, campaignID)
+	if err != nil {
+		return campaignID
+	}
+	return row.Name
 }
 
 // notifyApplicationApproved runs after ApproveApplication's tx commits.

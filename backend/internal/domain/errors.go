@@ -118,3 +118,23 @@ func (e *BusinessError) Unwrap() error {
 func NewBusinessError(code, message string) *BusinessError {
 	return &BusinessError{Code: code, Message: message}
 }
+
+// ErrorCode extracts the user-facing code from a wrapped error chain. Returns
+// empty string when the error does not carry a domain code — caller picks a
+// sentinel like "non_domain". Used by structured logging where leaking the raw
+// error string risks PII contamination (security.md § PII в логах) but the
+// code itself is enum-safe.
+func ErrorCode(err error) string {
+	if err == nil {
+		return ""
+	}
+	var ve *ValidationError
+	if errors.As(err, &ve) {
+		return ve.Code
+	}
+	var be *BusinessError
+	if errors.As(err, &be) {
+		return be.Code
+	}
+	return ""
+}

@@ -23,7 +23,7 @@ func TestServer_CreateBrand(t *testing.T) {
 		authz := mocks.NewMockAuthzService(t)
 		authz.EXPECT().CanCreateBrand(mock.Anything).Return(domain.ErrForbidden)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/brands",
 			api.BrandInput{Name: "Test"})
 		require.Equal(t, http.StatusForbidden, w.Code)
@@ -37,7 +37,7 @@ func TestServer_CreateBrand(t *testing.T) {
 		// adapter layer with 422+CodeValidation via RequestErrorHandlerFunc.
 		authz := mocks.NewMockAuthzService(t)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/brands",
 			map[string]any{"name": 123})
 		require.Equal(t, http.StatusUnprocessableEntity, w.Code)
@@ -52,7 +52,7 @@ func TestServer_CreateBrand(t *testing.T) {
 		brands.EXPECT().CreateBrand(mock.Anything, "", (*string)(nil)).
 			Return((*domain.Brand)(nil), domain.NewValidationError(domain.CodeValidation, "Brand name is required"))
 
-		router := newTestRouter(t, NewServer(nil, brands, authz, nil, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, brands, authz, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/brands",
 			api.BrandInput{Name: ""})
 		require.Equal(t, http.StatusUnprocessableEntity, w.Code)
@@ -72,7 +72,7 @@ func TestServer_CreateBrand(t *testing.T) {
 				CreatedAt: created, UpdatedAt: created,
 			}, nil)
 
-		router := newTestRouter(t, NewServer(nil, brands, authz, nil, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, brands, authz, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.BrandResult](t, router, http.MethodPost, "/brands",
 			api.BrandInput{Name: "Test Brand", LogoUrl: &logoURL})
 		require.Equal(t, http.StatusCreated, w.Code)
@@ -99,7 +99,7 @@ func TestServer_ListBrands(t *testing.T) {
 				{ID: "b-1", Name: "Brand 1", ManagerCount: 2, CreatedAt: created, UpdatedAt: created},
 			}, nil)
 
-		router := newTestRouter(t, NewServer(nil, brands, authz, nil, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, brands, authz, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.ListBrandsResult](t, router, http.MethodGet, "/brands", nil)
 		require.Equal(t, http.StatusOK, w.Code)
 		require.Equal(t, api.ListBrandsResult{
@@ -119,7 +119,7 @@ func TestServer_ListBrands(t *testing.T) {
 		log := logmocks.NewMockLogger(t)
 		expectHandlerUnexpectedErrorLog(log, "/brands")
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, log))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, log))
 		w, _ := doJSON[api.ErrorResponse](t, router, http.MethodGet, "/brands", nil)
 		require.Equal(t, http.StatusInternalServerError, w.Code)
 	})
@@ -134,7 +134,7 @@ func TestServer_ListBrands(t *testing.T) {
 		log := logmocks.NewMockLogger(t)
 		expectHandlerUnexpectedErrorLog(log, "/brands")
 
-		router := newTestRouter(t, NewServer(nil, brands, authz, nil, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, log))
+		router := newTestRouter(t, NewServer(nil, brands, authz, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, log))
 		w, _ := doJSON[api.ErrorResponse](t, router, http.MethodGet, "/brands", nil)
 		require.Equal(t, http.StatusInternalServerError, w.Code)
 	})
@@ -148,7 +148,7 @@ func TestServer_ListBrands(t *testing.T) {
 		brands.EXPECT().ListBrands(mock.Anything, &uid).
 			Return([]*domain.BrandListItem{}, nil)
 
-		router := newTestRouter(t, NewServer(nil, brands, authz, nil, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, brands, authz, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.ListBrandsResult](t, router, http.MethodGet, "/brands", nil)
 		require.Equal(t, http.StatusOK, w.Code)
 		require.Equal(t, api.ListBrandsResult{
@@ -165,7 +165,7 @@ func TestServer_GetBrand(t *testing.T) {
 		authz := mocks.NewMockAuthzService(t)
 		authz.EXPECT().CanViewBrand(mock.Anything, "b-1").Return(domain.ErrForbidden)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, _ := doJSON[api.ErrorResponse](t, router, http.MethodGet, "/brands/b-1", nil)
 		require.Equal(t, http.StatusForbidden, w.Code)
 	})
@@ -178,7 +178,7 @@ func TestServer_GetBrand(t *testing.T) {
 		brands.EXPECT().GetBrand(mock.Anything, "b-1").
 			Return((*domain.Brand)(nil), domain.ErrNotFound)
 
-		router := newTestRouter(t, NewServer(nil, brands, authz, nil, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, brands, authz, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, _ := doJSON[api.ErrorResponse](t, router, http.MethodGet, "/brands/b-1", nil)
 		require.Equal(t, http.StatusNotFound, w.Code)
 	})
@@ -193,7 +193,7 @@ func TestServer_GetBrand(t *testing.T) {
 		brands.EXPECT().ListManagers(mock.Anything, "b-1").
 			Return(nil, domain.ErrNotFound)
 
-		router := newTestRouter(t, NewServer(nil, brands, authz, nil, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, brands, authz, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, _ := doJSON[api.ErrorResponse](t, router, http.MethodGet, "/brands/b-1", nil)
 		require.Equal(t, http.StatusNotFound, w.Code)
 	})
@@ -215,7 +215,7 @@ func TestServer_GetBrand(t *testing.T) {
 				{UserID: "u-2", Email: "mgr@example.com", AssignedAt: assigned},
 			}, nil)
 
-		router := newTestRouter(t, NewServer(nil, brands, authz, nil, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, brands, authz, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.GetBrandResult](t, router, http.MethodGet, "/brands/b-1", nil)
 		require.Equal(t, http.StatusOK, w.Code)
 		require.Equal(t, api.GetBrandResult{
@@ -238,7 +238,7 @@ func TestServer_UpdateBrand(t *testing.T) {
 		authz := mocks.NewMockAuthzService(t)
 		authz.EXPECT().CanUpdateBrand(mock.Anything, "b-1").Return(domain.ErrForbidden)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, _ := doJSON[api.ErrorResponse](t, router, http.MethodPut, "/brands/b-1",
 			api.BrandInput{Name: "X"})
 		require.Equal(t, http.StatusForbidden, w.Code)
@@ -249,7 +249,7 @@ func TestServer_UpdateBrand(t *testing.T) {
 		// See TestServer_CreateBrand/invalid_JSON for the authz-skip rationale.
 		authz := mocks.NewMockAuthzService(t)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPut, "/brands/b-1",
 			map[string]any{"name": 123})
 		require.Equal(t, http.StatusUnprocessableEntity, w.Code)
@@ -264,7 +264,7 @@ func TestServer_UpdateBrand(t *testing.T) {
 		brands.EXPECT().UpdateBrand(mock.Anything, "b-1", "X", (*string)(nil)).
 			Return((*domain.Brand)(nil), domain.ErrNotFound)
 
-		router := newTestRouter(t, NewServer(nil, brands, authz, nil, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, brands, authz, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, _ := doJSON[api.ErrorResponse](t, router, http.MethodPut, "/brands/b-1",
 			api.BrandInput{Name: "X"})
 		require.Equal(t, http.StatusNotFound, w.Code)
@@ -282,7 +282,7 @@ func TestServer_UpdateBrand(t *testing.T) {
 				CreatedAt: updated, UpdatedAt: updated,
 			}, nil)
 
-		router := newTestRouter(t, NewServer(nil, brands, authz, nil, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, brands, authz, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.BrandResult](t, router, http.MethodPut, "/brands/b-1",
 			api.BrandInput{Name: "New Name"})
 		require.Equal(t, http.StatusOK, w.Code)
@@ -303,7 +303,7 @@ func TestServer_DeleteBrand(t *testing.T) {
 		authz := mocks.NewMockAuthzService(t)
 		authz.EXPECT().CanDeleteBrand(mock.Anything, "b-1").Return(domain.ErrForbidden)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, _ := doJSON[api.ErrorResponse](t, router, http.MethodDelete, "/brands/b-1", nil)
 		require.Equal(t, http.StatusForbidden, w.Code)
 	})
@@ -315,7 +315,7 @@ func TestServer_DeleteBrand(t *testing.T) {
 		brands := mocks.NewMockBrandService(t)
 		brands.EXPECT().DeleteBrand(mock.Anything, "b-1").Return(domain.ErrNotFound)
 
-		router := newTestRouter(t, NewServer(nil, brands, authz, nil, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, brands, authz, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, _ := doJSON[api.ErrorResponse](t, router, http.MethodDelete, "/brands/b-1", nil)
 		require.Equal(t, http.StatusNotFound, w.Code)
 	})
@@ -327,7 +327,7 @@ func TestServer_DeleteBrand(t *testing.T) {
 		brands := mocks.NewMockBrandService(t)
 		brands.EXPECT().DeleteBrand(mock.Anything, "b-1").Return(nil)
 
-		router := newTestRouter(t, NewServer(nil, brands, authz, nil, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, brands, authz, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.MessageResponse](t, router, http.MethodDelete, "/brands/b-1", nil)
 		require.Equal(t, http.StatusOK, w.Code)
 		require.Equal(t, api.MessageResponse{Data: api.MessageData{Message: "Brand deleted"}}, resp)
@@ -342,7 +342,7 @@ func TestServer_AssignManager(t *testing.T) {
 		authz := mocks.NewMockAuthzService(t)
 		authz.EXPECT().CanAssignManager(mock.Anything, "b-1").Return(domain.ErrForbidden)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, _ := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/brands/b-1/managers",
 			api.AssignManagerRequest{Email: "x@x.com"})
 		require.Equal(t, http.StatusForbidden, w.Code)
@@ -353,7 +353,7 @@ func TestServer_AssignManager(t *testing.T) {
 		// See TestServer_CreateBrand/invalid_JSON for the authz-skip rationale.
 		authz := mocks.NewMockAuthzService(t)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/brands/b-1/managers",
 			map[string]any{"email": 42})
 		require.Equal(t, http.StatusUnprocessableEntity, w.Code)
@@ -368,7 +368,7 @@ func TestServer_AssignManager(t *testing.T) {
 		brands.EXPECT().AssignManager(mock.Anything, "b-1", "mgr@example.com").
 			Return(&domain.User{ID: "u-2", Email: "mgr@example.com", Role: api.BrandManager}, "temp-secret-123", nil)
 
-		router := newTestRouter(t, NewServer(nil, brands, authz, nil, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, brands, authz, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.AssignManagerResult](t, router, http.MethodPost, "/brands/b-1/managers",
 			api.AssignManagerRequest{Email: "mgr@example.com"})
 
@@ -395,7 +395,7 @@ func TestServer_AssignManager(t *testing.T) {
 		brands.EXPECT().AssignManager(mock.Anything, "b-1", "existing@example.com").
 			Return(&domain.User{ID: "u-2", Email: "existing@example.com", Role: api.BrandManager}, "", nil)
 
-		router := newTestRouter(t, NewServer(nil, brands, authz, nil, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, brands, authz, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.AssignManagerResult](t, router, http.MethodPost, "/brands/b-1/managers",
 			api.AssignManagerRequest{Email: "existing@example.com"})
 
@@ -419,7 +419,7 @@ func TestServer_RemoveManager(t *testing.T) {
 		authz := mocks.NewMockAuthzService(t)
 		authz.EXPECT().CanRemoveManager(mock.Anything, "b-1", "u-2").Return(domain.ErrForbidden)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, _ := doJSON[api.ErrorResponse](t, router, http.MethodDelete, "/brands/b-1/managers/u-2", nil)
 		require.Equal(t, http.StatusForbidden, w.Code)
 	})
@@ -431,7 +431,7 @@ func TestServer_RemoveManager(t *testing.T) {
 		brands := mocks.NewMockBrandService(t)
 		brands.EXPECT().RemoveManager(mock.Anything, "b-1", "u-2").Return(domain.ErrNotFound)
 
-		router := newTestRouter(t, NewServer(nil, brands, authz, nil, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, brands, authz, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, _ := doJSON[api.ErrorResponse](t, router, http.MethodDelete, "/brands/b-1/managers/u-2", nil)
 		require.Equal(t, http.StatusNotFound, w.Code)
 	})
@@ -443,7 +443,7 @@ func TestServer_RemoveManager(t *testing.T) {
 		brands := mocks.NewMockBrandService(t)
 		brands.EXPECT().RemoveManager(mock.Anything, "b-1", "u-2").Return(nil)
 
-		router := newTestRouter(t, NewServer(nil, brands, authz, nil, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, brands, authz, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.MessageResponse](t, router, http.MethodDelete, "/brands/b-1/managers/u-2", nil)
 		require.Equal(t, http.StatusOK, w.Code)
 		require.Equal(t, api.MessageResponse{Data: api.MessageData{Message: "Manager removed"}}, resp)

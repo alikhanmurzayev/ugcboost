@@ -69,14 +69,14 @@ var ErrCampaignNotAvailableForAdd = NewValidationError(
 // NewErrCampaignAddAfterApproveFailed is constructed by ApproveApplication
 // when the post-tx1 add-loop fails on a specific campaign. The text spells
 // out that the creator is already created so the admin does not retry the
-// approve and instead opens that campaign to attach manually. Carries the
-// failed campaign id rather than name to avoid an extra repo round-trip in
-// the failure path.
-func NewErrCampaignAddAfterApproveFailed(campaignID string) *ValidationError {
+// approve and includes both the new creator id (so the admin can find them
+// in /creators without searching by IIN) and the campaign display label
+// (name when the post-fail lookup succeeds, UUID fallback when it fails).
+func NewErrCampaignAddAfterApproveFailed(creatorID, campaignDisplay string) *ValidationError {
 	return NewValidationError(
 		CodeCampaignAddAfterApproveFailed,
-		"Не удалось добавить креатора в кампанию "+campaignID+
-			". Креатор уже создан — добавьте его вручную через страницу кампании.",
+		"Не удалось добавить креатора (id "+creatorID+") в кампанию «"+campaignDisplay+
+			"». Креатор уже создан — найдите его в разделе «Креаторы» по id и добавьте в кампанию вручную.",
 	)
 }
 

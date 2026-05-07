@@ -30,7 +30,7 @@ func TestServer_ListAuditLogs(t *testing.T) {
 		authz := mocks.NewMockAuthzService(t)
 		authz.EXPECT().CanListAuditLogs(mock.Anything).Return(domain.ErrForbidden)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodGet, "/audit-logs", nil)
 		require.Equal(t, http.StatusForbidden, w.Code)
 		require.Equal(t, domain.CodeForbidden, resp.Error.Code)
@@ -52,7 +52,7 @@ func TestServer_ListAuditLogs(t *testing.T) {
 				},
 			}, int64(1), nil)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, audit, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, nil, authz, audit, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.AuditLogsResult](t, router, http.MethodGet, "/audit-logs", nil)
 		require.Equal(t, http.StatusOK, w.Code)
 		require.Equal(t, api.AuditLogsResult{
@@ -100,7 +100,7 @@ func TestServer_ListAuditLogs(t *testing.T) {
 				},
 			}, int64(1), nil)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, audit, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, nil, authz, audit, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		url := "/audit-logs?actorId=u-1&entityType=brand&entityId=e-1&action=brand_update" +
 			"&dateFrom=2026-01-01T00:00:00Z&dateTo=2026-12-31T23:59:59Z&page=2&perPage=50"
 		w, resp := doJSON[api.AuditLogsResult](t, router, http.MethodGet, url, nil)
@@ -129,7 +129,7 @@ func TestServer_ListAuditLogs(t *testing.T) {
 		audit.EXPECT().List(mock.Anything, domain.AuditFilter{}, 1, 20).
 			Return([]*domain.AuditLog{}, int64(0), nil)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, audit, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, nil, authz, audit, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.AuditLogsResult](t, router, http.MethodGet, "/audit-logs", nil)
 		require.Equal(t, http.StatusOK, w.Code)
 		require.Equal(t, api.AuditLogsResult{
@@ -152,7 +152,7 @@ func TestServer_ListAuditLogs(t *testing.T) {
 		log := logmocks.NewMockLogger(t)
 		expectHandlerUnexpectedErrorLog(log, "/audit-logs")
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, audit, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, log))
+		router := newTestRouter(t, NewServer(nil, nil, authz, audit, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, log))
 		w, _ := doJSON[api.ErrorResponse](t, router, http.MethodGet, "/audit-logs", nil)
 		require.Equal(t, http.StatusInternalServerError, w.Code)
 	})
@@ -173,7 +173,7 @@ func TestHandleParamError(t *testing.T) {
 }
 
 func newServerForRawJSON(log *logmocks.MockLogger) *Server {
-	return NewServer(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, log)
+	return NewServer(nil, nil, nil, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, log)
 }
 
 func TestRawJSONToAny(t *testing.T) {

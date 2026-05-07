@@ -51,7 +51,7 @@ func validRequest() api.CreatorApplicationSubmitRequest {
 
 func serverWithCreator(t *testing.T, creator CreatorApplicationService, log *logmocks.MockLogger) *Server {
 	t.Helper()
-	return NewServer(nil, nil, nil, nil, creator, nil, nil, nil, nil, nil, ServerConfig{
+	return NewServer(nil, nil, nil, nil, creator, nil, nil, nil, nil, ServerConfig{
 		Version:               "test-version",
 		TelegramBotUsername:   "ugcboost_test_bot",
 		LegalAgreementVersion: "2026-04-20",
@@ -236,7 +236,7 @@ func TestServer_SubmitCreatorApplication(t *testing.T) {
 
 		// Simulate a misconfigured env: slashes and spaces should be escaped
 		// rather than corrupting the URL path.
-		server := NewServer(nil, nil, nil, nil, creator, nil, nil, nil, nil, nil, ServerConfig{
+		server := NewServer(nil, nil, nil, nil, creator, nil, nil, nil, nil, ServerConfig{
 			Version:               "test-version",
 			TelegramBotUsername:   "bad name/bot",
 			LegalAgreementVersion: "2026-04-20",
@@ -267,7 +267,7 @@ func newTestRouterWithClientIP(t *testing.T, s *Server) chi.Router {
 
 func serverWithAuthzAndCreatorAndDict(t *testing.T, authz AuthzService, creator CreatorApplicationService, dict DictionaryService, log *logmocks.MockLogger) *Server {
 	t.Helper()
-	return NewServer(nil, nil, authz, nil, creator, nil, nil, nil, nil, dict, ServerConfig{
+	return NewServer(nil, nil, authz, nil, creator, nil, nil, nil, dict, ServerConfig{
 		Version:             "test-version",
 		TelegramBotUsername: "ugcboost_test_bot",
 	}, log)
@@ -1675,7 +1675,7 @@ func TestServer_ApproveCreatorApplication(t *testing.T) {
 
 		authz := mocks.NewMockAuthzService(t)
 		authz.EXPECT().CanApproveCreatorApplication(mock.Anything).Return(nil)
-		campaign := mocks.NewMockCampaignActiveChecker(t)
+		campaign := mocks.NewMockCampaignService(t)
 		campaign.EXPECT().AssertActiveCampaigns(mock.Anything, []string{campA.String(), campB.String()}).Return(nil)
 		creator := mocks.NewMockCreatorApplicationService(t)
 		var capturedCampaignIDs []string
@@ -1727,7 +1727,7 @@ func TestServer_ApproveCreatorApplication(t *testing.T) {
 		campA := uuid.MustParse("44444444-4444-4444-4444-444444444444")
 		authz := mocks.NewMockAuthzService(t)
 		authz.EXPECT().CanApproveCreatorApplication(mock.Anything).Return(nil)
-		campaign := mocks.NewMockCampaignActiveChecker(t)
+		campaign := mocks.NewMockCampaignService(t)
 		campaign.EXPECT().AssertActiveCampaigns(mock.Anything, []string{campA.String()}).
 			Return(domain.ErrCampaignNotAvailableForAdd)
 		// creator mock omitted — handler must reject before calling it.
@@ -1736,15 +1736,17 @@ func TestServer_ApproveCreatorApplication(t *testing.T) {
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, path, body, withRole(adminUUID, api.Admin))
 		require.Equal(t, http.StatusUnprocessableEntity, w.Code)
 		require.Equal(t, domain.CodeCampaignNotAvailableForAdd, resp.Error.Code)
+		require.Equal(t, domain.ErrCampaignNotAvailableForAdd.Message, resp.Error.Message,
+			"422 message must be the actionable text from the domain sentinel — admin reads it inline in the dialog")
 	})
 }
 
-// serverWithApproveDeps wires authz + creator + campaignActiveChecker for the
+// serverWithApproveDeps wires authz + creator + campaignSvc for the
 // ApproveCreatorApplication tests that drive parseApproveCampaignIDs end-to-
 // end. Other server slots are nil — the route is the only thing exercised.
-func serverWithApproveDeps(t *testing.T, authz AuthzService, creator CreatorApplicationService, campaignActiveChecker CampaignActiveChecker, log *logmocks.MockLogger) *Server {
+func serverWithApproveDeps(t *testing.T, authz AuthzService, creator CreatorApplicationService, campaignSvc CampaignService, log *logmocks.MockLogger) *Server {
 	t.Helper()
-	return NewServer(nil, nil, authz, nil, creator, nil, nil, campaignActiveChecker, nil, nil, ServerConfig{
+	return NewServer(nil, nil, authz, nil, creator, nil, campaignSvc, nil, nil, ServerConfig{
 		Version:             "test-version",
 		TelegramBotUsername: "ugcboost_test_bot",
 	}, log)

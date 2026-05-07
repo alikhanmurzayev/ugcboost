@@ -48,9 +48,19 @@ import (
 )
 
 const (
-	auditActionCampaignCreatorAdd = "campaign_creator_add"
+	auditActionCampaignCreatorAdd  = "campaign_creator_add"
 	auditEntityTypeCampaignCreator = "campaign_creator"
 	approveCampaignsTmaURL         = "https://tma.ugcboost.kz/tz/approve-with-campaigns"
+)
+
+// Error codes mirror domain.Code* — backend/e2e is a separate Go module that
+// cannot import internal/, so the canonical strings live as package-local
+// constants. Sharing one definition per file lets the assertions point at the
+// constant rather than retyping the literal in every t.Run.
+const (
+	codeCampaignIdsTooMany         = "CAMPAIGN_IDS_TOO_MANY"
+	codeCampaignIdsDuplicates      = "CAMPAIGN_IDS_DUPLICATES"
+	codeCampaignNotAvailableForAdd = "CAMPAIGN_NOT_AVAILABLE_FOR_ADD"
 )
 
 // setupApproveCampaign creates a campaign owned by adminToken and registers
@@ -139,24 +149,15 @@ func TestApproveWithCampaigns(t *testing.T) {
 		require.Len(t, itemsB, 1)
 		require.Equal(t, apiclient.Planned, itemsB[0].Status)
 
-		// One campaign_creator_add audit per (campaign, creator) pair.
-		auditA := testutil.FindAuditEntry(t, c, fx.AdminToken,
-			auditEntityTypeCampaignCreator, itemsA[0].Id.String(),
-			auditActionCampaignCreatorAdd)
-		require.NotNil(t, auditA.NewValue)
-		payloadA, err := json.Marshal(auditA.NewValue)
-		require.NoError(t, err)
-		require.Contains(t, string(payloadA), creatorID.String())
-		require.Contains(t, string(payloadA), campA.String())
-
-		auditB := testutil.FindAuditEntry(t, c, fx.AdminToken,
-			auditEntityTypeCampaignCreator, itemsB[0].Id.String(),
-			auditActionCampaignCreatorAdd)
-		require.NotNil(t, auditB.NewValue)
-		payloadB, err := json.Marshal(auditB.NewValue)
-		require.NoError(t, err)
-		require.Contains(t, string(payloadB), creatorID.String())
-		require.Contains(t, string(payloadB), campB.String())
+		// One campaign_creator_add audit per (campaign, creator) pair. Parse
+		// new_value into a typed shape: substring matching would tolerate a
+		// regression where creatorId migrates into a differently-named field
+		// (e.g. "creator" or "creator_uuid") since the UUID still appears
+		// somewhere in the JSON.
+		assertCampaignCreatorAuditPayload(t, c, fx.AdminToken,
+			itemsA[0].Id.String(), campA, creatorID)
+		assertCampaignCreatorAuditPayload(t, c, fx.AdminToken,
+			itemsB[0].Id.String(), campB, creatorID)
 	})
 
 	t.Run("> 20 campaignIds returns 422 CAMPAIGN_IDS_TOO_MANY; application stays in moderation", func(t *testing.T) {
@@ -181,7 +182,7 @@ func TestApproveWithCampaigns(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, http.StatusUnprocessableEntity, resp.StatusCode())
 		require.NotNil(t, resp.JSON422)
-		require.Equal(t, "CAMPAIGN_IDS_TOO_MANY", resp.JSON422.Error.Code)
+		require.Equal(t, codeCampaignIdsTooMany, resp.JSON422.Error.Code)
 
 		stillModeration := getApplicationDetailForApprove(t, c, fx.AdminToken, fx.ApplicationID)
 		require.Equal(t, apiclient.Moderation, stillModeration.Status,
@@ -210,7 +211,7 @@ func TestApproveWithCampaigns(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, http.StatusUnprocessableEntity, resp.StatusCode())
 		require.NotNil(t, resp.JSON422)
-		require.Equal(t, "CAMPAIGN_IDS_DUPLICATES", resp.JSON422.Error.Code)
+		require.Equal(t, codeCampaignIdsDuplicates, resp.JSON422.Error.Code)
 
 		stillModeration := getApplicationDetailForApprove(t, c, fx.AdminToken, fx.ApplicationID)
 		require.Equal(t, apiclient.Moderation, stillModeration.Status)
@@ -240,7 +241,7 @@ func TestApproveWithCampaigns(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, http.StatusUnprocessableEntity, resp.StatusCode())
 		require.NotNil(t, resp.JSON422)
-		require.Equal(t, "CAMPAIGN_NOT_AVAILABLE_FOR_ADD", resp.JSON422.Error.Code)
+		require.Equal(t, codeCampaignNotAvailableForAdd, resp.JSON422.Error.Code)
 
 		stillModeration := getApplicationDetailForApprove(t, c, fx.AdminToken, fx.ApplicationID)
 		require.Equal(t, apiclient.Moderation, stillModeration.Status,
@@ -267,4 +268,36 @@ func filterRosterByCreator(items []apiclient.CampaignCreator, creatorID uuid.UUI
 		}
 	}
 	return out
+}
+
+// assertCampaignCreatorAuditPayload pulls the audit row matching the given
+// (campaign_creator id, action) pair, decodes new_value into a typed shape
+// (campaignId, creatorId, status — the rest of the row is dynamic and not
+// pinned here) and asserts the snake_case JSON contract.
+func assertCampaignCreatorAuditPayload(
+	t *testing.T,
+	c *apiclient.ClientWithResponses,
+	adminToken string,
+	campaignCreatorID string,
+	expectedCampaignID, expectedCreatorID uuid.UUID,
+) {
+	t.Helper()
+	audit := testutil.FindAuditEntry(t, c, adminToken,
+		auditEntityTypeCampaignCreator, campaignCreatorID,
+		auditActionCampaignCreatorAdd)
+	require.NotNil(t, audit.NewValue)
+
+	payload, err := json.Marshal(audit.NewValue)
+	require.NoError(t, err)
+	var typed struct {
+		ID         string `json:"id"`
+		CampaignID string `json:"campaign_id"`
+		CreatorID  string `json:"creator_id"`
+		Status     string `json:"status"`
+	}
+	require.NoError(t, json.Unmarshal(payload, &typed))
+	require.Equal(t, campaignCreatorID, typed.ID)
+	require.Equal(t, expectedCampaignID.String(), typed.CampaignID)
+	require.Equal(t, expectedCreatorID.String(), typed.CreatorID)
+	require.Equal(t, string(apiclient.Planned), typed.Status)
 }

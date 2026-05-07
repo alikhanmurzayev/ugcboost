@@ -81,7 +81,10 @@ func (s *CampaignCreatorService) Add(ctx context.Context, campaignID string, cre
 	if err != nil {
 		return nil, err
 	}
-	s.logger.Info(ctx, "campaign creators added",
+	// Debug, not Info: ApproveApplication invokes Add once per attached campaign,
+	// so a 20-campaign approve floods INFO with 20 near-identical lines while the
+	// audit_logs row inside the tx already authoritatively records each add.
+	s.logger.Debug(ctx, "campaign creators added",
 		"campaign_id", campaignID, "count", len(result))
 	return result, nil
 }

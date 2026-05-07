@@ -208,15 +208,14 @@ func TestCampaignRepository_ListByIDs(t *testing.T) {
 
 		got, err := repo.ListByIDs(context.Background(), []string{"c-1", "c-2", "c-3"})
 		require.NoError(t, err)
-		require.Len(t, got, 3)
-		require.Equal(t, "c-1", got[0].ID)
-		require.False(t, got[0].IsDeleted)
-		require.Equal(t, "c-2", got[1].ID)
-		require.True(t, got[1].IsDeleted, "ListByIDs returns soft-deleted rows untouched — caller decides what to do")
-		require.Equal(t, "c-3", got[2].ID)
+		require.Equal(t, []*CampaignRow{
+			{ID: "c-1", Name: "Promo A", TmaURL: "https://tma.ugcboost.kz/tz/a", IsDeleted: false, CreatedAt: createdAt, UpdatedAt: createdAt},
+			{ID: "c-2", Name: "Promo B", TmaURL: "https://tma.ugcboost.kz/tz/b", IsDeleted: true, CreatedAt: createdAt, UpdatedAt: createdAt},
+			{ID: "c-3", Name: "Promo C", TmaURL: "https://tma.ugcboost.kz/tz/c", IsDeleted: false, CreatedAt: createdAt, UpdatedAt: createdAt},
+		}, got)
 	})
 
-	t.Run("propagates query error", func(t *testing.T) {
+	t.Run("propagates query error wrapped with method context", func(t *testing.T) {
 		t.Parallel()
 		const sqlStmt = "SELECT created_at, id, is_deleted, name, tma_url, updated_at FROM campaigns WHERE id IN ($1,$2)"
 		mock := newPgxmock(t)
@@ -227,6 +226,7 @@ func TestCampaignRepository_ListByIDs(t *testing.T) {
 			WillReturnError(errors.New("db down"))
 
 		_, err := repo.ListByIDs(context.Background(), []string{"c-1", "c-2"})
+		require.ErrorContains(t, err, "campaign_repository.ListByIDs:")
 		require.ErrorContains(t, err, "db down")
 	})
 }

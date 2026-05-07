@@ -12,20 +12,13 @@ import {
 } from "@/shared/constants/queryKeys";
 import { getErrorMessage } from "@/shared/i18n/errors";
 import SearchableMultiselect from "@/shared/components/SearchableMultiselect";
+import { CAMPAIGNS_QUERY_PARAMS } from "./approveDialog.constants";
 
 interface ApproveApplicationDialogProps {
   applicationId: string;
   onApiError: (message: string) => void;
   onCloseDrawer: () => void;
 }
-
-const CAMPAIGNS_QUERY_PARAMS = {
-  page: 1,
-  perPage: 100,
-  sort: "name" as const,
-  order: "asc" as const,
-  isDeleted: false,
-};
 
 export default function ApproveApplicationDialog({
   applicationId,
@@ -61,8 +54,15 @@ export default function ApproveApplicationDialog({
     },
     onError: (err) => {
       const isApi = err instanceof ApiError;
+      // Empty-string code (degenerate backend response) collapses to the
+      // generic fallback so it does not slip past the INTERNAL_ERROR guard
+      // into the inline-dialog branch and confuse the admin.
       const isClient4xx =
-        isApi && err.status >= 400 && err.status < 500 && err.code !== "INTERNAL_ERROR";
+        isApi &&
+        err.status >= 400 &&
+        err.status < 500 &&
+        err.code !== "" &&
+        err.code !== "INTERNAL_ERROR";
 
       if (isApi && isClient4xx) {
         // Input-validation errors raised in the handler before any state
@@ -77,9 +77,20 @@ export default function ApproveApplicationDialog({
           err.code === "CAMPAIGN_ADD_AFTER_APPROVE_FAILED";
 
         if (isInlineDialogError) {
+          // CAMPAIGN_NOT_AVAILABLE_FOR_ADD means the cached campaign list is
+          // stale (one of the selected campaigns was just soft-deleted). Force
+          // a re-fetch so the multiselect reflects reality on the next retry.
+          if (err.code === "CAMPAIGN_NOT_AVAILABLE_FOR_ADD") {
+            queryClient.invalidateQueries({
+              queryKey: campaignKeys.list(CAMPAIGNS_QUERY_PARAMS),
+            });
+          }
           // For the post-approve failure, the creator is already created and
           // some campaigns may already be attached — invalidate downstream
-          // caches so the rest of the UI does not lie about state.
+          // caches so the rest of the UI does not lie about state, and clear
+          // the local selection so a follow-up submit cannot resubmit the
+          // already-approved application (which would surface the aggregate
+          // CREATOR_APPLICATION_NOT_APPROVABLE in the drawer).
           if (err.code === "CAMPAIGN_ADD_AFTER_APPROVE_FAILED") {
             queryClient.invalidateQueries({ queryKey: creatorApplicationKeys.all() });
             queryClient.invalidateQueries({ queryKey: creatorKeys.all() });
@@ -87,6 +98,7 @@ export default function ApproveApplicationDialog({
               queryClient.invalidateQueries({ queryKey: campaignKeys.detail(campaignId) });
               queryClient.invalidateQueries({ queryKey: campaignCreatorKeys.list(campaignId) });
             }
+            setSelectedCampaignIds([]);
           }
           setInlineError(err.serverMessage ?? getErrorMessage(err.code));
           return;
@@ -152,6 +164,8 @@ export default function ApproveApplicationDialog({
       })),
     [campaignsQuery.data],
   );
+  const campaignsLoaded = !isCampaignsLoading && !campaignsQuery.isError;
+  const showEmptyCampaignsHint = campaignsLoaded && campaignOptions.length === 0;
 
   return (
     <>
@@ -195,7 +209,7 @@ export default function ApproveApplicationDialog({
 
             <div className="mt-4">
               <label
-                htmlFor="approve-campaigns-multiselect"
+                htmlFor="approve-campaigns-multiselect-trigger"
                 className="block text-sm font-medium text-gray-800"
               >
                 {t("approveDialog.campaignsLabel")}
@@ -203,7 +217,7 @@ export default function ApproveApplicationDialog({
               <p className="mt-1 text-xs text-gray-500">
                 {t("approveDialog.campaignsHint")}
               </p>
-              <div className="mt-2" id="approve-campaigns-multiselect">
+              <div className="mt-2">
                 <SearchableMultiselect
                   options={campaignOptions}
                   selected={selectedCampaignIds}
@@ -216,6 +230,7 @@ export default function ApproveApplicationDialog({
                   searchPlaceholder={t("approveDialog.campaignsSearchPlaceholder")}
                   isLoading={isCampaignsLoading}
                   testid="approve-campaigns-multiselect"
+                  triggerId="approve-campaigns-multiselect-trigger"
                 />
               </div>
               {campaignsQuery.isError && (
@@ -225,6 +240,14 @@ export default function ApproveApplicationDialog({
                   data-testid="approve-dialog-campaigns-error"
                 >
                   {t("approveDialog.campaignsLoadError")}
+                </p>
+              )}
+              {showEmptyCampaignsHint && (
+                <p
+                  className="mt-2 text-xs text-gray-500"
+                  data-testid="approve-dialog-campaigns-empty"
+                >
+                  {t("approveDialog.campaignsEmpty")}
                 </p>
               )}
             </div>

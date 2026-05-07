@@ -120,7 +120,11 @@ func (r *campaignRepository) ListByIDs(ctx context.Context, ids []string) ([]*Ca
 	q := sq.Select(campaignSelectColumns...).
 		From(TableCampaigns).
 		Where(sq.Eq{CampaignColumnID: ids})
-	return dbutil.Many[CampaignRow](ctx, r.db, q)
+	rows, err := dbutil.Many[CampaignRow](ctx, r.db, q)
+	if err != nil {
+		return nil, fmt.Errorf("campaign_repository.ListByIDs: %w", err)
+	}
+	return rows, nil
 }
 
 // Update writes name/tma_url + updated_at=now() and RETURNINGs the row.

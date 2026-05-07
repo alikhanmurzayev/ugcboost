@@ -74,6 +74,7 @@ type creatorServiceRig struct {
 	creatorRepo          *repomocks.MockCreatorRepo
 	creatorSocialRepo    *repomocks.MockCreatorSocialRepo
 	creatorCategoryRepo  *repomocks.MockCreatorCategoryRepo
+	campaignRepo         *repomocks.MockCampaignRepo
 	notifier             *svcmocks.MockcreatorAppNotifier
 	campaignCreatorAdder *svcmocks.MockcampaignCreatorAdder
 	logger               *logmocks.MockLogger
@@ -95,6 +96,7 @@ func newCreatorServiceRig(t *testing.T) creatorServiceRig {
 		creatorRepo:          repomocks.NewMockCreatorRepo(t),
 		creatorSocialRepo:    repomocks.NewMockCreatorSocialRepo(t),
 		creatorCategoryRepo:  repomocks.NewMockCreatorCategoryRepo(t),
+		campaignRepo:         repomocks.NewMockCampaignRepo(t),
 		notifier:             svcmocks.NewMockcreatorAppNotifier(t),
 		campaignCreatorAdder: svcmocks.NewMockcampaignCreatorAdder(t),
 		logger:               logmocks.NewMockLogger(t),
@@ -2713,7 +2715,7 @@ func TestCreatorApplicationService_ApproveApplication(t *testing.T) {
 		require.Equal(t, approveCreatorID, creatorID)
 	})
 
-	t.Run("happy path with campaignIDs adds creator to each campaign sequentially in input order", func(t *testing.T) {
+	t.Run("happy path with campaignIDs adds creator to each campaign sequentially in input order, after notify", func(t *testing.T) {
 		t.Parallel()
 		rig := newCreatorServiceRig(t)
 		expectApproveTxBegin(rig)
@@ -2730,14 +2732,18 @@ func TestCreatorApplicationService_ApproveApplication(t *testing.T) {
 		rig.creatorSocialRepo.EXPECT().InsertMany(mock.Anything, mock.Anything).Return(nil)
 		rig.creatorCategoryRepo.EXPECT().InsertMany(mock.Anything, mock.Anything).Return(nil)
 		rig.auditRepo.EXPECT().Create(mock.Anything, mock.Anything).Return(nil)
-		rig.notifier.EXPECT().NotifyApplicationApproved(mock.Anything, approveChatID).Once()
 
-		// Capture call order across all three Add invocations through a slice
-		// the closure appends to. Without ordering capture a future refactor
-		// that parallelises the loop would silently pass the count assertion.
+		// Sequential ordering invariant: Telegram-notify must fire before any
+		// Add in the loop. Without this guard a future refactor that parallels
+		// notify and add would silently pass the count assertion below.
+		var notifyFired bool
+		rig.notifier.EXPECT().NotifyApplicationApproved(mock.Anything, approveChatID).
+			Run(func(context.Context, int64) { notifyFired = true }).Once()
+
 		var addCalls []string
 		rig.campaignCreatorAdder.EXPECT().Add(mock.Anything, mock.AnythingOfType("string"), []string{approveCreatorID}).
 			Run(func(_ context.Context, campaignID string, _ []string) {
+				require.True(t, notifyFired, "NotifyApplicationApproved must fire before the add-loop starts")
 				addCalls = append(addCalls, campaignID)
 			}).
 			Return(nil, nil).Times(3)
@@ -2777,17 +2783,78 @@ func TestCreatorApplicationService_ApproveApplication(t *testing.T) {
 			Return(nil, nil).Once()
 		rig.campaignCreatorAdder.EXPECT().Add(mock.Anything, "camp-b", []string{approveCreatorID}).
 			Return(nil, domain.ErrCampaignNotFound).Once()
+		// Failure-path display lookup for the actionable message — service falls
+		// back to the campaign's display name so the admin reads "Promo B" in
+		// the dialog instead of a UUID.
+		rig.factory.EXPECT().NewCampaignRepo(rig.pool).Return(rig.campaignRepo).Once()
+		rig.campaignRepo.EXPECT().GetByID(mock.Anything, "camp-b").
+			Return(&repository.CampaignRow{ID: "camp-b", Name: "Promo B"}, nil).Once()
+		// Precise structured-log args: error_code = "non_domain" because
+		// ErrCampaignNotFound is a sentinel without ValidationError/BusinessError
+		// wrapping. The matcher locks every key in domain order so a future
+		// refactor cannot silently drop creator_id / campaign_id / counts.
 		rig.logger.EXPECT().Error(mock.Anything,
 			"approve application: add-loop partial commit",
-			mock.Anything).Once()
+			mock.MatchedBy(func(args []any) bool {
+				return len(args) == 10 &&
+					args[0] == "creator_id" && args[1] == approveCreatorID &&
+					args[2] == "committed_count" && args[3] == 1 &&
+					args[4] == "failed_campaign_id" && args[5] == "camp-b" &&
+					args[6] == "remaining_count" && args[7] == 1 &&
+					args[8] == "error_code" && args[9] == "non_domain"
+			})).Once()
 
 		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.notifier, rig.campaignCreatorAdder, rig.logger)
 		_, err := svc.ApproveApplication(context.Background(), approveAppID, approveAdminID, []string{"camp-a", "camp-b", "camp-c"})
 		var ve *domain.ValidationError
 		require.ErrorAs(t, err, &ve)
 		require.Equal(t, domain.CodeCampaignAddAfterApproveFailed, ve.Code)
-		require.Contains(t, ve.Message, "camp-b")
-		require.Contains(t, ve.Message, "Креатор уже создан")
+		require.Equal(t,
+			"Не удалось добавить креатора (id "+approveCreatorID+") в кампанию «Promo B». "+
+				"Креатор уже создан — найдите его в разделе «Креаторы» по id и добавьте в кампанию вручную.",
+			ve.Message)
+	})
+
+	t.Run("first-fail-stop falls back to UUID when display-lookup itself fails", func(t *testing.T) {
+		t.Parallel()
+		rig := newCreatorServiceRig(t)
+		expectApproveTxBegin(rig)
+		expectApproveFactoryWiring(rig)
+		rig.factory.EXPECT().NewCreatorApplicationStatusTransitionRepo(mock.Anything).Return(rig.transitionRepo)
+
+		rig.appRepo.EXPECT().GetByIDForUpdate(mock.Anything, approveAppID).Return(approveApplicationRow(), nil)
+		rig.appTelegramLinkRepo.EXPECT().GetByApplicationID(mock.Anything, approveAppID).Return(approveLinkRow(), nil).Times(2)
+		rig.appSocialRepo.EXPECT().ListByApplicationID(mock.Anything, approveAppID).Return(approveSocialRows(), nil)
+		rig.appCategoryRepo.EXPECT().ListByApplicationID(mock.Anything, approveAppID).Return(approveCategories(), nil)
+		rig.appRepo.EXPECT().UpdateStatus(mock.Anything, approveAppID, domain.CreatorApplicationStatusApproved).Return(nil)
+		rig.transitionRepo.EXPECT().Insert(mock.Anything, mock.Anything).Return(nil)
+		rig.creatorRepo.EXPECT().Create(mock.Anything, mock.Anything).Return(&repository.CreatorRow{ID: approveCreatorID}, nil)
+		rig.creatorSocialRepo.EXPECT().InsertMany(mock.Anything, mock.Anything).Return(nil)
+		rig.creatorCategoryRepo.EXPECT().InsertMany(mock.Anything, mock.Anything).Return(nil)
+		rig.auditRepo.EXPECT().Create(mock.Anything, mock.Anything).Return(nil)
+		rig.notifier.EXPECT().NotifyApplicationApproved(mock.Anything, approveChatID).Once()
+
+		rig.campaignCreatorAdder.EXPECT().Add(mock.Anything, "camp-z", []string{approveCreatorID}).
+			Return(nil, domain.ErrCampaignNotFound).Once()
+		// Display lookup itself fails (e.g. campaign just hard-deleted in a
+		// race) — service must NOT panic and must surface the UUID in the
+		// actionable message instead of a name.
+		rig.factory.EXPECT().NewCampaignRepo(rig.pool).Return(rig.campaignRepo).Once()
+		rig.campaignRepo.EXPECT().GetByID(mock.Anything, "camp-z").
+			Return(nil, errors.New("connection reset")).Once()
+		rig.logger.EXPECT().Error(mock.Anything,
+			"approve application: add-loop partial commit",
+			mock.Anything).Once()
+
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.notifier, rig.campaignCreatorAdder, rig.logger)
+		_, err := svc.ApproveApplication(context.Background(), approveAppID, approveAdminID, []string{"camp-z"})
+		var ve *domain.ValidationError
+		require.ErrorAs(t, err, &ve)
+		require.Equal(t, domain.CodeCampaignAddAfterApproveFailed, ve.Code)
+		require.Equal(t,
+			"Не удалось добавить креатора (id "+approveCreatorID+") в кампанию «camp-z». "+
+				"Креатор уже создан — найдите его в разделе «Креаторы» по id и добавьте в кампанию вручную.",
+			ve.Message)
 	})
 }
 

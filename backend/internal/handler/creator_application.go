@@ -403,7 +403,7 @@ func (s *Server) parseApproveCampaignIDs(ctx context.Context, body *api.ApproveC
 		seen[id] = struct{}{}
 		out = append(out, id.String())
 	}
-	if err := s.campaignActiveChecker.AssertActiveCampaigns(ctx, out); err != nil {
+	if err := s.campaignService.AssertActiveCampaigns(ctx, out); err != nil {
 		return nil, err
 	}
 	return out, nil

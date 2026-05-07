@@ -111,6 +111,7 @@
     "campaignsPlaceholder": "Кампании не выбраны",
     "campaignsSearchPlaceholder": "Поиск по названию",
     "campaignsLoading": "Загрузка кампаний...",
-    "campaignsLoadError": "Не удалось загрузить кампании"
+    "campaignsLoadError": "Не удалось загрузить кампании",
+    "campaignsEmpty": "Активных кампаний нет. Создайте кампанию в разделе «Кампании», чтобы добавить креатора."
   }
 }

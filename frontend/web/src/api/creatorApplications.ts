@@ -9,14 +9,23 @@ export type SortOrder = components["schemas"]["SortOrder"];
 export type CreatorApplicationsListInput = components["schemas"]["CreatorApplicationsListRequest"];
 export type CreatorApplicationsListData = components["schemas"]["CreatorApplicationsListData"];
 export type CreatorApplicationStatusCount = components["schemas"]["CreatorApplicationStatusCount"];
+export type CreatorApprovalInput = components["schemas"]["CreatorApprovalInput"];
+
+// Loosened structural shape of ErrorResponse: the generated type marks
+// `error` as required, but tests cover degenerate runtime payloads where the
+// envelope is malformed — optional chaining keeps the fallback working
+// without `as any` / `as ErrorResponse`.
+type MalformedErrorResponse = {
+  error?: Partial<components["schemas"]["ErrorResponse"]["error"]>;
+};
 
 function extractErrorCode(error: unknown): string {
-  const e = error as { error?: { code?: string } };
+  const e = error as MalformedErrorResponse | undefined;
   return e?.error?.code ?? "INTERNAL_ERROR";
 }
 
 function extractErrorMessage(error: unknown): string | undefined {
-  const e = error as { error?: { message?: string } };
+  const e = error as MalformedErrorResponse | undefined;
   return e?.error?.message;
 }
 
@@ -76,7 +85,7 @@ export async function rejectApplication(applicationId: string) {
 }
 
 export async function approveApplication(applicationId: string, campaignIds?: string[]) {
-  const body =
+  const body: CreatorApprovalInput | undefined =
     campaignIds && campaignIds.length > 0 ? { campaignIds } : undefined;
   const { data, error, response } = await client.POST(
     "/creators/applications/{id}/approve",
