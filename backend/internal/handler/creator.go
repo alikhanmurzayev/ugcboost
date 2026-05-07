@@ -164,8 +164,13 @@ func (s *Server) ListCreators(ctx context.Context, request api.ListCreatorsReque
 	if err != nil {
 		return nil, err
 	}
+	ids, err := validateCreatorIDs(body.Ids)
+	if err != nil {
+		return nil, err
+	}
 
 	in := domain.CreatorListInput{
+		IDs:        ids,
 		Cities:     cities,
 		Categories: categories,
 		DateFrom:   body.DateFrom,
@@ -252,6 +257,40 @@ func validateCreatorSearch(p *string) (string, error) {
 				domain.CreatorListSearchMaxLen))
 	}
 	return trimmed, nil
+}
+
+// validateCreatorIDs enforces the OpenAPI maxItems on the optional ids filter
+// and normalises the input before it leaves the handler. oapi-codegen does
+// not surface maxItems as a runtime check, so an unenforced array would let
+// a caller balloon the IN-clause arbitrarily. Three further failure modes
+// matter beyond the cap: JSON `null` decodes into a zero UUID (not an error
+// from the json package), uppercase and lowercase spellings of the same UUID
+// would silently bloat the SQL placeholder list, and bare duplicates do the
+// same. Reject zero, dedupe canonical (lowercase) strings, return nil for
+// empty/nil — same shape as validateCreatorCodeArray.
+func validateCreatorIDs(p *[]openapi_types.UUID) ([]string, error) {
+	if p == nil || len(*p) == 0 {
+		return nil, nil
+	}
+	if len(*p) > domain.CreatorListIDsMax {
+		return nil, domain.NewValidationError(domain.CodeValidation,
+			fmt.Sprintf("Параметр ids не должен содержать более %d элементов. Сократите запрос.",
+				domain.CreatorListIDsMax))
+	}
+	out := make([]string, 0, len(*p))
+	seen := make(map[uuid.UUID]struct{}, len(*p))
+	for _, id := range *p {
+		if id == uuid.Nil {
+			return nil, domain.NewValidationError(domain.CodeValidation,
+				"Параметр ids содержит нулевой UUID")
+		}
+		if _, dup := seen[id]; dup {
+			continue
+		}
+		seen[id] = struct{}{}
+		out = append(out, id.String())
+	}
+	return out, nil
 }
 
 // validateCreatorCodeArray enforces the openapi maxLength + minLength on each

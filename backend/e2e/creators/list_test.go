@@ -3,9 +3,11 @@
 // которым admin будет выдавать кампании. Сценарии покрывают всю I/O-матрицу:
 // 401 (нет Bearer'а), 403 для brand_manager (без leak'а существования
 // креаторов), 422 для невалидной body (неподдерживаемые sort/order,
-// page/perPage вне диапазона), happy-path с полным кросс-продуктом
-// фильтров (city, categories, dateFrom/To, age, search), сортировки по
-// каждому полю в обоих направлениях, пагинация (page=2, beyond-last) и
+// page/perPage вне диапазона, ids[] свыше maxItems=200 — runtime-cap, который
+// oapi-codegen не enforce'ит сам), happy-path с полным кросс-продуктом
+// фильтров (city, categories, dateFrom/To, age, search, ids — admin-curated
+// lookup для chunk 11 campaign-creator hydration), сортировки по каждому
+// полю в обоих направлениях, пагинация (page=2, beyond-last) и
 // item-shape (hydrated city/categories, lean PII set без address /
 // category_other_text / full Telegram block).
 //
@@ -25,6 +27,8 @@ import (
 	"time"
 
 	"github.com/AlekSi/pointer"
+	"github.com/google/uuid"
+	openapi_types "github.com/oapi-codegen/runtime/types"
 	"github.com/stretchr/testify/require"
 
 	"github.com/alikhanmurzayev/ugcboost/backend/e2e/apiclient"
@@ -162,6 +166,99 @@ func TestCreatorsList(t *testing.T) {
 		resp, err := c.ListCreatorsWithResponse(context.Background(), body, testutil.WithAuth(adminToken))
 		require.NoError(t, err)
 		require.Equal(t, http.StatusUnprocessableEntity, resp.StatusCode())
+	})
+
+	t.Run("validation: ids[] over max returns 422", func(t *testing.T) {
+		t.Parallel()
+		_, adminToken, _ := testutil.SetupAdminClient(t)
+		body := validCreatorListBody()
+		// 201 — один сверх задекларированного maxItems=200; backend должен
+		// отбить это runtime-проверкой ещё до обращения к сервису.
+		ids := make([]openapi_types.UUID, 201)
+		for i := range ids {
+			ids[i] = uuid.New()
+		}
+		body.Ids = &ids
+		c := testutil.NewAPIClient(t)
+		resp, err := c.ListCreatorsWithResponse(context.Background(), body, testutil.WithAuth(adminToken))
+		require.NoError(t, err)
+		require.Equal(t, http.StatusUnprocessableEntity, resp.StatusCode())
+		require.NotNil(t, resp.JSON422)
+		require.Equal(t, "VALIDATION_ERROR", resp.JSON422.Error.Code)
+		require.Contains(t, resp.JSON422.Error.Message, "ids")
+	})
+
+	t.Run("happy: ids filter narrows to subset of approved creators", func(t *testing.T) {
+		t.Parallel()
+		marker := newMarker()
+		c1 := testutil.SetupApprovedCreator(t, defaultCreatorOptsScoped(marker, "c1"))
+		c2 := testutil.SetupApprovedCreator(t, defaultCreatorOptsScoped(marker, "c2"))
+		c3 := testutil.SetupApprovedCreator(t, defaultCreatorOptsScoped(marker, "c3"))
+
+		body := validCreatorListBody()
+		ids := []openapi_types.UUID{
+			uuid.MustParse(c1.CreatorID),
+			uuid.MustParse(c3.CreatorID),
+		}
+		body.Ids = &ids
+		body.PerPage = 200
+
+		c := testutil.NewAPIClient(t)
+		resp, err := c.ListCreatorsWithResponse(context.Background(), body, testutil.WithAuth(c1.AdminToken))
+		require.NoError(t, err)
+		require.Equal(t, http.StatusOK, resp.StatusCode())
+		require.NotNil(t, resp.JSON200)
+
+		gotIDs := collectCreatorIDs(resp.JSON200.Data.Items)
+		require.ElementsMatch(t, []string{c1.CreatorID, c3.CreatorID}, gotIDs,
+			"ids filter must return exactly the requested subset")
+		require.NotContains(t, gotIDs, c2.CreatorID, "creator c2 must be excluded by ids filter")
+		require.Equal(t, int64(2), resp.JSON200.Data.Total)
+	})
+
+	t.Run("happy: ids filter with unknown UUID returns empty page", func(t *testing.T) {
+		t.Parallel()
+		// Сеем реального approved-креатора, чтобы пустой ответ был
+		// результатом работы фильтра, а не пустого scope БД (без seed'а
+		// тест мог бы пройти и при полностью игнорируемом ids-фильтре).
+		seeded := testutil.SetupApprovedCreator(t, defaultCreatorOptsScoped(newMarker(), "seed"))
+		body := validCreatorListBody()
+		ids := []openapi_types.UUID{uuid.New()}
+		body.Ids = &ids
+		body.PerPage = 200
+
+		c := testutil.NewAPIClient(t)
+		resp, err := c.ListCreatorsWithResponse(context.Background(), body, testutil.WithAuth(seeded.AdminToken))
+		require.NoError(t, err)
+		require.Equal(t, http.StatusOK, resp.StatusCode())
+		require.NotNil(t, resp.JSON200)
+		require.Equal(t, int64(0), resp.JSON200.Data.Total)
+		require.Empty(t, resp.JSON200.Data.Items)
+	})
+
+	t.Run("happy: ids AND cities returns empty when no overlap", func(t *testing.T) {
+		t.Parallel()
+		// AC5 spec'и: ids=[c_almaty] + cities=[astana] должны дать пусто
+		// — пересечение по AND. Закрывает контракт «filters AND'ятся».
+		marker := newMarker()
+		almatyOpts := defaultCreatorOptsScoped(marker, "ala")
+		almatyOpts.CityCode = "almaty"
+		almaty := testutil.SetupApprovedCreator(t, almatyOpts)
+
+		body := validCreatorListBody()
+		ids := []openapi_types.UUID{uuid.MustParse(almaty.CreatorID)}
+		cities := []string{"astana"}
+		body.Ids = &ids
+		body.Cities = &cities
+		body.PerPage = 200
+
+		c := testutil.NewAPIClient(t)
+		resp, err := c.ListCreatorsWithResponse(context.Background(), body, testutil.WithAuth(almaty.AdminToken))
+		require.NoError(t, err)
+		require.Equal(t, http.StatusOK, resp.StatusCode())
+		require.NotNil(t, resp.JSON200)
+		require.Equal(t, int64(0), resp.JSON200.Data.Total)
+		require.Empty(t, resp.JSON200.Data.Items)
 	})
 
 	t.Run("happy: cities filter narrows to single city", func(t *testing.T) {

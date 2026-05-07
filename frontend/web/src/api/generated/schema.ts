@@ -1362,6 +1362,15 @@ export interface components {
          *     is ignored.
          */
         CreatorsListRequest: components["schemas"]["PaginationInput"] & {
+            /**
+             * @description Match only creators whose id is in this list. Combined with
+             *     other filters via AND. Empty array — filter disabled (NO-OP).
+             *     Backed by an admin-curated lookup, e.g. hydrating profile rows
+             *     for the campaign_creators many-to-many returned by
+             *     `GET /campaigns/{id}/creators`. Over-sized arrays return 422
+             *     VALIDATION_ERROR; nil/duplicate elements are normalised away.
+             */
+            ids?: string[];
             /** @description Match any of these city codes (from the cities dictionary). */
             cities?: string[];
             /** @description Match creators that include any of these category codes. */

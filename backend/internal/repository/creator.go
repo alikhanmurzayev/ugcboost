@@ -98,9 +98,10 @@ type CreatorRepo interface {
 
 // CreatorListParams carries the validated filter/sort/search/pagination inputs
 // the service hands to the repo. The repo trusts these values (sort/order
-// whitelisted, page/perPage bounded) and builds the SQL query directly —
-// without re-validation.
+// whitelisted, page/perPage bounded, ids count capped) and builds the SQL
+// query directly — without re-validation.
 type CreatorListParams struct {
+	IDs        []string
 	Cities     []string
 	Categories []string
 	DateFrom   *time.Time
@@ -271,6 +272,9 @@ func applyCreatorListFilters(q sq.SelectBuilder, p CreatorListParams) sq.SelectB
 	crBirthDate := creatorListAlias + "." + CreatorColumnBirthDate
 	crID := creatorListAlias + "." + CreatorColumnID
 
+	if len(p.IDs) > 0 {
+		q = q.Where(sq.Eq{crID: p.IDs})
+	}
 	if len(p.Cities) > 0 {
 		q = q.Where(sq.Eq{crCity: p.Cities})
 	}
