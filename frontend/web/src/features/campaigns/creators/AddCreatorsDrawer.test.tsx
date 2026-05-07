@@ -264,18 +264,20 @@ describe("AddCreatorsDrawer — submit happy", () => {
       expect(onClose).toHaveBeenCalledTimes(1);
     });
     expect(onAdded).toHaveBeenCalledTimes(1);
-    // Invalidate the whole prefix so both `list` and `profiles` (keyed on
-    // creator-ids tuple) refetch after add.
+    // Spec B requires the narrow .list(campaignId) prefix — refreshing only
+    // this campaign's roster, not every campaign cached on the page. Profiles
+    // refetch automatically because `creatorIds` (and thus their queryKey)
+    // shifts after the list refreshes.
     expect(invalidateSpy).toHaveBeenCalledWith(
       expect.objectContaining({
-        queryKey: campaignCreatorKeys.all(),
+        queryKey: campaignCreatorKeys.list(CAMPAIGN_ID),
       }),
     );
   });
 });
 
 describe("AddCreatorsDrawer — submit errors", () => {
-  it("422 CREATOR_ALREADY_IN_CAMPAIGN keeps drawer open, shows alert, invalidates list, clears selection so the user can retry behind the cap", async () => {
+  it("422 CREATOR_ALREADY_IN_CAMPAIGN keeps drawer open, shows alert, invalidates list; selection survives so conflicting ids drop out via the «Добавлен» badge", async () => {
     vi.mocked(listCreators).mockResolvedValueOnce({
       data: {
         items: [
@@ -319,20 +321,21 @@ describe("AddCreatorsDrawer — submit errors", () => {
     expect(onClose).not.toHaveBeenCalled();
     expect(invalidateSpy).toHaveBeenCalledWith(
       expect.objectContaining({
-        queryKey: campaignCreatorKeys.all(),
+        queryKey: campaignCreatorKeys.list(CAMPAIGN_ID),
       }),
     );
-    // Selection is cleared so the user is not stuck behind the cap with stale
-    // checkboxes after parent refetch marks some rows as «Добавлен».
+    // Selection MUST survive — Spec B repeats it five times. Conflicting ids
+    // become disabled («Добавлен») on the next render after the list refetch
+    // refreshes existingCreatorIds. The user keeps the rest of their picks.
     expect(screen.getByTestId("add-creators-drawer-counter")).toHaveTextContent(
-      "Выбрано: 0 / 200",
+      "Выбрано: 3 / 200",
     );
     expect(
       screen.getByTestId(`drawer-row-checkbox-${CREATOR_A}`),
-    ).not.toBeChecked();
+    ).toBeChecked();
     expect(
       screen.getByTestId(`drawer-row-checkbox-${CREATOR_B}`),
-    ).not.toBeChecked();
+    ).toBeChecked();
   });
 
   it("404 invalidates campaign detail and closes drawer silently (no inline alert)", async () => {
@@ -582,6 +585,28 @@ describe("AddCreatorsDrawer — cap (cap=2 to exercise the visual)", () => {
     expect(
       screen.queryByTestId("add-creators-drawer-cap-hint"),
     ).not.toBeInTheDocument();
+  });
+});
+
+describe("AddCreatorsDrawer — search input keeps focus across keystrokes", () => {
+  // Regression: a single useEffect inside Drawer used to re-focus the <aside>
+  // every time `onClose` changed identity. AddCreatorsDrawer constructs a new
+  // handleCancel on each render, so each keystroke in the search input caused
+  // setFilters → re-render → new onClose → effect → focus stolen from the
+  // input. Users observed «несколько букв вбивается, потом фокус уходит».
+  it("typing a multi-char query into search keeps focus and forwards every keystroke", async () => {
+    vi.mocked(listCreators).mockImplementation(async () => ({
+      data: { items: [], total: 0, page: 1, perPage: 50 },
+    }));
+
+    renderDrawer();
+
+    const search = await screen.findByTestId("drawer-filters-search");
+    search.focus();
+    await userEvent.type(search, "иванов");
+
+    expect(search).toHaveValue("иванов");
+    expect(document.activeElement).toBe(search);
   });
 });
 

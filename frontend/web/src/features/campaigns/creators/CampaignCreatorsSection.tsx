@@ -53,7 +53,7 @@ export default function CampaignCreatorsSection({
     }) => removeCampaignCreator(campaignId, creatorId),
     onSuccess: () => {
       void queryClient.invalidateQueries({
-        queryKey: campaignCreatorKeys.all(),
+        queryKey: campaignCreatorKeys.list(campaign.id),
       });
       setRemoveTarget(null);
       setRemoveError(null);
@@ -174,12 +174,14 @@ export default function CampaignCreatorsSection({
         />
       )}
 
-      <AddCreatorsDrawer
-        open={isAddOpen}
-        campaignId={campaign.id}
-        existingCreatorIds={existingCreatorIds}
-        onClose={handleAddClose}
-      />
+      {isAddOpen && (
+        <AddCreatorsDrawer
+          open={isAddOpen}
+          campaignId={campaign.id}
+          existingCreatorIds={existingCreatorIds}
+          onClose={handleAddClose}
+        />
+      )}
 
       <RemoveCreatorConfirm
         open={!!removeTarget}

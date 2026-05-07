@@ -22,6 +22,7 @@
  * вместе с originating application; `admin.cleanup` дропает admin-аккаунт.
  * Уважается `E2E_CLEANUP=false` для дебаг-прогонов.
  */
+import { randomUUID } from "node:crypto";
 import { test, expect, type Page } from "@playwright/test";
 import {
   loginAsAdmin,
@@ -65,11 +66,24 @@ test.describe("Admin campaign creators — mutations (slice 2/2)", () => {
       admin.password,
     );
 
-    const creatorA = await seedApprovedCreator(request, API_URL, adminToken);
+    // Per-run prefix: drawer sort is created_at desc, and the global creators
+    // table is shared with parallel test workers — without a unique slug
+    // baked into lastName, other tests' fresh seeds out-rank ours in the
+    // first-page slice and break our checkbox / badge assertions. Filtering
+    // the drawer by `runId` later in the test scopes the visible rows to
+    // ones we own.
+    const runId = `e2e-${randomUUID().slice(0, 8)}`;
+    const creatorA = await seedApprovedCreator(request, API_URL, adminToken, {
+      lastName: `${runId}-A-Иванов`,
+    });
     cleanupStack.push(creatorA.cleanup);
-    const creatorB = await seedApprovedCreator(request, API_URL, adminToken);
+    const creatorB = await seedApprovedCreator(request, API_URL, adminToken, {
+      lastName: `${runId}-B-Иванов`,
+    });
     cleanupStack.push(creatorB.cleanup);
-    const creatorC = await seedApprovedCreator(request, API_URL, adminToken);
+    const creatorC = await seedApprovedCreator(request, API_URL, adminToken, {
+      lastName: `${runId}-C-Иванов`,
+    });
     cleanupStack.push(creatorC.cleanup);
 
     const campaign = await seedCampaign(request, API_URL, adminToken);
@@ -106,6 +120,13 @@ test.describe("Admin campaign creators — mutations (slice 2/2)", () => {
     await expect(page.getByTestId("add-creators-drawer-cancel")).toHaveText(
       "Отмена",
     );
+
+    // Scope drawer rows to our own seeds; without this, parallel workers'
+    // fresher creators bump ours past page 1 and the checkbox lookups race.
+    await page.getByTestId("drawer-filters-search").fill(runId);
+    await expect(
+      page.getByTestId(`drawer-row-checkbox-${creatorA.creatorId}`),
+    ).toBeVisible();
 
     await page
       .getByTestId(`drawer-row-checkbox-${creatorA.creatorId}`)
@@ -152,6 +173,10 @@ test.describe("Admin campaign creators — mutations (slice 2/2)", () => {
     // the «Добавлен» badge — read directly out of A3 via existingCreatorIds.
     await page.getByTestId("campaign-creators-add-button").click();
     await expect(page.getByTestId("add-creators-drawer-body")).toBeVisible();
+    await page.getByTestId("drawer-filters-search").fill(runId);
+    await expect(
+      page.getByTestId(`drawer-row-checkbox-${creatorA.creatorId}`),
+    ).toBeVisible();
     for (const member of [creatorA, creatorB]) {
       await expect(
         page.getByTestId(`drawer-row-checkbox-${member.creatorId}`),
@@ -222,7 +247,10 @@ test.describe("Admin campaign creators — mutations (slice 2/2)", () => {
       admin.password,
     );
 
-    const creator = await seedApprovedCreator(request, API_URL, adminToken);
+    const runId = `e2e-${randomUUID().slice(0, 8)}`;
+    const creator = await seedApprovedCreator(request, API_URL, adminToken, {
+      lastName: `${runId}-Иванов`,
+    });
     cleanupStack.push(creator.cleanup);
 
     const campaign = await seedCampaign(request, API_URL, adminToken);
@@ -240,6 +268,10 @@ test.describe("Admin campaign creators — mutations (slice 2/2)", () => {
     await loginAs(page, admin.email, admin.password);
     await page.goto(`/campaigns/${campaign.campaignId}`);
     await page.getByTestId("campaign-creators-add-button").click();
+    await page.getByTestId("drawer-filters-search").fill(runId);
+    await expect(
+      page.getByTestId(`drawer-row-checkbox-${creator.creatorId}`),
+    ).toBeVisible();
     await page.getByTestId(`drawer-row-checkbox-${creator.creatorId}`).check();
     await page.getByTestId("add-creators-drawer-submit").click();
 

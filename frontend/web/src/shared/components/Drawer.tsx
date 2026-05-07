@@ -16,17 +16,27 @@ export default function Drawer({
   widthClassName = "w-[480px]",
 }: DrawerProps) {
   const dialogRef = useRef<HTMLElement>(null);
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
 
+  // Focus the dialog only on open transitions. Re-running on every onClose
+  // identity change steals focus from descendants (e.g. the search input)
+  // because parents typically pass an inline arrow / fresh closure.
   useEffect(() => {
     if (!open) return;
     dialogRef.current?.focus();
+  }, [open]);
 
+  useEffect(() => {
+    if (!open) return;
     function handleKey(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") onCloseRef.current();
     }
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open) return null;
 

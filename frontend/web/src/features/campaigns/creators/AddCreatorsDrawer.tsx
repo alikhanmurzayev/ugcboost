@@ -107,12 +107,18 @@ export default function AddCreatorsDrawer({
   const items = listQuery.data?.data?.items ?? [];
   const total = listQuery.data?.data?.total ?? 0;
   const totalPages = Math.max(1, Math.ceil(total / PER_PAGE));
+  // External changes (other tab added creators, filter shrank result) can
+  // leave `page` past `totalPages`. We can't clamp via setState in an effect
+  // (forbidden by react-hooks/set-state-in-effect), so we display and click-
+  // gate against this clamped value; the next prev/next click rolls state
+  // back into range.
+  const displayPage = Math.min(page, totalPages);
 
   const addMutation = useMutation({
     mutationFn: () => addCampaignCreators(campaignId, [...selected]),
     onSuccess: (added) => {
       void queryClient.invalidateQueries({
-        queryKey: campaignCreatorKeys.all(),
+        queryKey: campaignCreatorKeys.list(campaignId),
       });
       onAdded?.(added);
       if (!isMountedRef.current) return;
@@ -126,13 +132,12 @@ export default function AddCreatorsDrawer({
         apiErr?.status === 422 &&
         apiErr.code === "CREATOR_ALREADY_IN_CAMPAIGN"
       ) {
+        // Spec: invalidate + alert; selection survives. Conflicting ids will
+        // surface as «Добавлен» (disabled checkbox) on the next render once
+        // existingCreatorIds refreshes — no need to clear all picks.
         void queryClient.invalidateQueries({
-          queryKey: campaignCreatorKeys.all(),
+          queryKey: campaignCreatorKeys.list(campaignId),
         });
-        // Drop the selection so the user is not stuck behind the cap with a
-        // half-stale checkbox state — the alert tells them to re-pick, the
-        // refreshed table will mark conflicts as "Добавлен".
-        clear();
         setErrorMessage(t("campaignCreators.errors.alreadyInCampaign"));
         return;
       }
@@ -247,8 +252,10 @@ export default function AddCreatorsDrawer({
               >
                 <button
                   type="button"
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                  disabled={page <= 1}
+                  onClick={() =>
+                    setPage(Math.max(1, Math.min(totalPages, page) - 1))
+                  }
+                  disabled={displayPage <= 1}
                   className="rounded-button border border-surface-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 transition hover:bg-surface-100 disabled:cursor-not-allowed disabled:opacity-50"
                   data-testid="add-creators-drawer-pagination-prev"
                 >
@@ -258,14 +265,17 @@ export default function AddCreatorsDrawer({
                   className="text-sm text-gray-500"
                   data-testid="add-creators-drawer-pagination-info"
                 >
-                  {tCreators("pagination.page", { page, total: totalPages })}
+                  {tCreators("pagination.page", {
+                    page: displayPage,
+                    total: totalPages,
+                  })}
                 </span>
                 <button
                   type="button"
                   onClick={() =>
-                    setPage((p) => Math.min(totalPages, p + 1))
+                    setPage(Math.min(totalPages, Math.min(totalPages, page) + 1))
                   }
-                  disabled={page >= totalPages}
+                  disabled={displayPage >= totalPages}
                   className="rounded-button border border-surface-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 transition hover:bg-surface-100 disabled:cursor-not-allowed disabled:opacity-50"
                   data-testid="add-creators-drawer-pagination-next"
                 >
