@@ -36,6 +36,11 @@ const API_URL = process.env.API_URL || "http://localhost:8080";
 const CLEANUP_TIMEOUT_MS = 5_000;
 
 test.describe("Admin campaign creators — mutations (slice 2/2)", () => {
+  // Happy add/remove on localhost finishes in ~10s, but staging adds real
+  // network latency to every drawer open / search-filter / mutation /
+  // confirm round-trip and the same test brushes against the 30s default.
+  // 2 min ceiling absorbs the staging round-trips with a 10× headroom.
+  test.describe.configure({ timeout: 120_000 });
   test.use({ timezoneId: "UTC" });
 
   let cleanupStack: Array<() => Promise<void>>;

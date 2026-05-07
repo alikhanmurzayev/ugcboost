@@ -47,11 +47,16 @@ const SEED_BATCH = 15;
 const CLEANUP_BATCH = 20;
 
 test.describe("Admin campaign creators — large-scale (cap-cycle, 200+ members)", () => {
+  // Seeding 210 approved creators (×4 HTTP hops each, parallelized in batches
+  // of 15) plus the cleanup of those 210 rows dominates per-test time and
+  // never fits Playwright's 30s default. Against staging (real network, not
+  // a localhost container) the same test stretches further. 10 min ceiling
+  // covers both. `test.setTimeout()` only takes effect inside test/hook
+  // bodies, so it has to live on `describe.configure` to bind to the suite —
+  // doing it the wrong way silently kept us on the 30s default and tripped
+  // the staging-only timeout.
+  test.describe.configure({ timeout: 600_000 });
   test.use({ timezoneId: "UTC" });
-  // Seeding 210 approved creators serially through 4 HTTP hops each is slow;
-  // even parallelized in batches the run dominates per-test time. The plain
-  // Playwright default (30s) blows up in seed phase alone.
-  test.setTimeout(600_000);
 
   let cleanupStack: Array<() => Promise<void>>;
 
