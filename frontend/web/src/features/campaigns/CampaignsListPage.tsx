@@ -249,9 +249,11 @@ function buildColumns(t: (key: string) => string): Column<Campaign>[] {
     {
       key: "createdAt",
       header: t("columns.createdAt"),
-      render: (row) => formatShortDate(row.createdAt),
+      render: (row) => (
+        <span className="whitespace-nowrap">{formatShortDate(row.createdAt)}</span>
+      ),
       sortable: true,
-      width: "w-28",
+      width: "w-36",
     },
     {
       key: "actions",

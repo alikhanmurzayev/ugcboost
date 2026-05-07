@@ -81,16 +81,12 @@ export default function DashboardLayout() {
           ],
         },
         {
-          items: [{ to: ROUTES.CREATORS, label: t("common:navCreators") }],
-        },
-        {
-          items: [{ to: ROUTES.CAMPAIGNS, label: t("common:navCampaigns") }],
-        },
-        {
-          items: [{ to: ROUTES.BRANDS, label: t("brands:title") }],
-        },
-        {
-          items: [{ to: ROUTES.AUDIT, label: t("audit:title") }],
+          items: [
+            { to: ROUTES.CREATORS, label: t("common:navCreators") },
+            { to: ROUTES.CAMPAIGNS, label: t("common:navCampaigns") },
+            { to: ROUTES.BRANDS, label: t("brands:title") },
+            { to: ROUTES.AUDIT, label: t("audit:title") },
+          ],
         },
       ]
     : [
