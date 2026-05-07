@@ -595,4 +595,25 @@ func TestCreatorService_List(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, "aidana", captured.Search)
 	})
+
+	t.Run("forwards ids verbatim to repo", func(t *testing.T) {
+		t.Parallel()
+		rig := newCreatorReadRig(t)
+		rig.factory.EXPECT().NewCreatorRepo(rig.pool).Return(rig.creatorRepo)
+		var captured repository.CreatorListParams
+		rig.creatorRepo.EXPECT().List(mock.Anything, mock.Anything).
+			Run(func(_ context.Context, p repository.CreatorListParams) {
+				captured = p
+			}).
+			Return(nil, int64(0), nil)
+
+		svc := NewCreatorService(rig.pool, rig.factory, rig.logger)
+		ids := []string{creatorA, creatorB}
+		_, err := svc.List(context.Background(), domain.CreatorListInput{
+			IDs:  ids,
+			Sort: domain.CreatorSortCreatedAt, Order: domain.SortOrderAsc, Page: 1, PerPage: 20,
+		})
+		require.NoError(t, err)
+		require.Equal(t, ids, captured.IDs)
+	})
 }

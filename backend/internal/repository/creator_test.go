@@ -128,6 +128,54 @@ func TestCreatorRepository_List(t *testing.T) {
 		}}, rows)
 	})
 
+	t.Run("filter: ids empty does not add WHERE", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &creatorRepository{db: mock}
+
+		mock.ExpectQuery(countSQLNoFilters).
+			WillReturnRows(pgxmock.NewRows([]string{"count"}).AddRow(int64(0)))
+
+		_, _, err := repo.List(context.Background(), CreatorListParams{
+			IDs:  []string{},
+			Sort: domain.CreatorSortCreatedAt, Order: domain.SortOrderAsc, Page: 1, PerPage: 10,
+		})
+		require.NoError(t, err)
+	})
+
+	t.Run("filter: ids array adds IN clause", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &creatorRepository{db: mock}
+
+		mock.ExpectQuery(countSQLNoFilters+" WHERE cr.id IN ($1,$2)").
+			WithArgs("11111111-1111-1111-1111-111111111111", "22222222-2222-2222-2222-222222222222").
+			WillReturnRows(pgxmock.NewRows([]string{"count"}).AddRow(int64(0)))
+
+		_, _, err := repo.List(context.Background(), CreatorListParams{
+			IDs:  []string{"11111111-1111-1111-1111-111111111111", "22222222-2222-2222-2222-222222222222"},
+			Sort: domain.CreatorSortCreatedAt, Order: domain.SortOrderAsc, Page: 1, PerPage: 10,
+		})
+		require.NoError(t, err)
+	})
+
+	t.Run("filter: ids combined with cities ANDs both clauses", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &creatorRepository{db: mock}
+
+		mock.ExpectQuery(countSQLNoFilters+" WHERE cr.id IN ($1) AND cr.city_code IN ($2)").
+			WithArgs("11111111-1111-1111-1111-111111111111", "almaty").
+			WillReturnRows(pgxmock.NewRows([]string{"count"}).AddRow(int64(0)))
+
+		_, _, err := repo.List(context.Background(), CreatorListParams{
+			IDs:    []string{"11111111-1111-1111-1111-111111111111"},
+			Cities: []string{"almaty"},
+			Sort:   domain.CreatorSortCreatedAt, Order: domain.SortOrderAsc, Page: 1, PerPage: 10,
+		})
+		require.NoError(t, err)
+	})
+
 	t.Run("filter: cities array adds IN clause", func(t *testing.T) {
 		t.Parallel()
 		mock := newPgxmock(t)

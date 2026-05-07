@@ -939,6 +939,14 @@ type CreatorsListRequest struct {
 	// DateTo Inclusive upper bound for `created_at`.
 	DateTo *time.Time `json:"dateTo,omitempty"`
 
+	// Ids Match only creators whose id is in this list. Combined with
+	// other filters via AND. Empty array — filter disabled (NO-OP).
+	// Backed by an admin-curated lookup, e.g. hydrating profile rows
+	// for the campaign_creators many-to-many returned by
+	// `GET /campaigns/{id}/creators`. Over-sized arrays return 422
+	// VALIDATION_ERROR; nil/duplicate elements are normalised away.
+	Ids *[]openapi_types.UUID `json:"ids,omitempty"`
+
 	// Order Sort direction.
 	Order SortOrder `json:"order"`
 

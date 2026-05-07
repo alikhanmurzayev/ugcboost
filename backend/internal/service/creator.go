@@ -235,6 +235,7 @@ func (s *CreatorService) List(ctx context.Context, in domain.CreatorListInput) (
 // trimmed by validateCreatorSearch); this mapping is a pure shape change.
 func creatorListInputToRepo(in domain.CreatorListInput) repository.CreatorListParams {
 	return repository.CreatorListParams{
+		IDs:        in.IDs,
 		Cities:     in.Cities,
 		Categories: in.Categories,
 		DateFrom:   in.DateFrom,

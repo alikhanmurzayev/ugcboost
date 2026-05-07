@@ -228,12 +228,14 @@ const (
 	CreatorListCityCodeMaxLen     = 64
 	CreatorListCategoryCodeMaxLen = 64
 	CreatorListFilterArrayMax     = 50
+	CreatorListIDsMax             = 200
 )
 
 // CreatorListInput is the validated read aggregate the service receives from
 // the handler. Pointers / nullable types denote optional filters — nil/empty
-// means "do not apply this filter". Cities/Categories are any-of arrays.
+// means "do not apply this filter". Cities/Categories/IDs are any-of arrays.
 type CreatorListInput struct {
+	IDs        []string
 	Cities     []string
 	Categories []string
 	DateFrom   *time.Time

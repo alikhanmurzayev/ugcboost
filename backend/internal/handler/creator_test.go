@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -352,6 +353,13 @@ func TestServer_ListCreators(t *testing.T) {
 			}
 			b.Categories = &bad
 		}, "categories"},
+		{"validation: ids[] over max returns 422 without service call", func(b *api.CreatorsListRequest) {
+			bad := make([]openapi_types.UUID, domain.CreatorListIDsMax+1)
+			for i := range bad {
+				bad[i] = uuid.New()
+			}
+			b.Ids = &bad
+		}, "ids"},
 	}
 	for _, tc := range validationCases {
 		tc := tc
@@ -579,6 +587,30 @@ func TestServer_ListCreators(t *testing.T) {
 		require.Equal(t, []string{"almaty", "astana"}, captured.Cities)
 	})
 
+	t.Run("forwards ids verbatim to service as []string", func(t *testing.T) {
+		t.Parallel()
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanViewCreators(mock.Anything).Return(nil)
+		creator := mocks.NewMockCreatorService(t)
+		var captured domain.CreatorListInput
+		creator.EXPECT().List(mock.Anything, mock.Anything).
+			Run(func(_ context.Context, in domain.CreatorListInput) {
+				captured = in
+			}).Return(&domain.CreatorListPage{Total: 0, Page: 1, PerPage: 20}, nil)
+		dict := mocks.NewMockDictionaryService(t)
+		router := newTestRouter(t, serverWithAuthzCreatorAndDict(t, authz, creator, dict, logmocks.NewMockLogger(t)))
+
+		u1 := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+		u2 := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+		body := validCreatorListBody()
+		ids := []openapi_types.UUID{u1, u2}
+		body.Ids = &ids
+
+		w, _ := doJSON[api.CreatorsListResult](t, router, http.MethodPost, listPath, body)
+		require.Equal(t, http.StatusOK, w.Code)
+		require.Equal(t, []string{u1.String(), u2.String()}, captured.IDs)
+	})
+
 	t.Run("happy: deactivated city falls back to (code, code, 0)", func(t *testing.T) {
 		t.Parallel()
 		creatorID := uuid.MustParse("22222222-3333-4444-5555-666666666666")
@@ -682,6 +714,74 @@ func TestValidateCreatorSearch(t *testing.T) {
 		_, err := validateCreatorSearch(&s)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "search")
+	})
+}
+
+func TestValidateCreatorIDs(t *testing.T) {
+	t.Parallel()
+	t.Run("nil returns nil", func(t *testing.T) {
+		t.Parallel()
+		out, err := validateCreatorIDs(nil)
+		require.NoError(t, err)
+		require.Nil(t, out)
+	})
+	t.Run("empty returns nil", func(t *testing.T) {
+		t.Parallel()
+		empty := []openapi_types.UUID{}
+		out, err := validateCreatorIDs(&empty)
+		require.NoError(t, err)
+		require.Nil(t, out)
+	})
+	t.Run("converts UUIDs to canonical lowercase strings", func(t *testing.T) {
+		t.Parallel()
+		// Hardcoded lowercase vs. dynamic .String() — the former pins the
+		// canonical-form contract that the repo relies on for matches against
+		// uuid columns.
+		u1 := uuid.MustParse("AAAAAAAA-1111-1111-1111-111111111111")
+		u2 := uuid.MustParse("22222222-bbbb-2222-2222-222222222222")
+		in := []openapi_types.UUID{u1, u2}
+		out, err := validateCreatorIDs(&in)
+		require.NoError(t, err)
+		require.Equal(t, []string{
+			"aaaaaaaa-1111-1111-1111-111111111111",
+			"22222222-bbbb-2222-2222-222222222222",
+		}, out)
+	})
+	t.Run("dedups duplicate UUIDs preserving first-seen order", func(t *testing.T) {
+		t.Parallel()
+		u1 := uuid.MustParse("11111111-1111-1111-1111-111111111111")
+		u2 := uuid.MustParse("22222222-2222-2222-2222-222222222222")
+		in := []openapi_types.UUID{u1, u2, u1, u2, u1}
+		out, err := validateCreatorIDs(&in)
+		require.NoError(t, err)
+		require.Equal(t, []string{u1.String(), u2.String()}, out)
+	})
+	t.Run("rejects nil UUID element", func(t *testing.T) {
+		t.Parallel()
+		in := []openapi_types.UUID{uuid.New(), uuid.Nil}
+		_, err := validateCreatorIDs(&in)
+		require.ErrorContains(t, err, "ids")
+		require.ErrorContains(t, err, "нулевой")
+	})
+	t.Run("rejects oversize array", func(t *testing.T) {
+		t.Parallel()
+		bad := make([]openapi_types.UUID, domain.CreatorListIDsMax+1)
+		for i := range bad {
+			bad[i] = uuid.New()
+		}
+		_, err := validateCreatorIDs(&bad)
+		require.ErrorContains(t, err, "ids")
+		require.ErrorContains(t, err, fmt.Sprintf("%d", domain.CreatorListIDsMax))
+	})
+	t.Run("accepts exactly max-sized array", func(t *testing.T) {
+		t.Parallel()
+		ok := make([]openapi_types.UUID, domain.CreatorListIDsMax)
+		for i := range ok {
+			ok[i] = uuid.New()
+		}
+		out, err := validateCreatorIDs(&ok)
+		require.NoError(t, err)
+		require.Len(t, out, domain.CreatorListIDsMax)
 	})
 }
 

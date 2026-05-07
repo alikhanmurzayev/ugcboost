@@ -2516,6 +2516,19 @@ components:
         - type: object
           required: [sort, order]
           properties:
+            ids:
+              type: array
+              maxItems: 200
+              description: |
+                Match only creators whose id is in this list. Combined with
+                other filters via AND. Empty array — filter disabled (NO-OP).
+                Backed by an admin-curated lookup, e.g. hydrating profile rows
+                for the campaign_creators many-to-many returned by
+                `GET /campaigns/{id}/creators`. Over-sized arrays return 422
+                VALIDATION_ERROR; nil/duplicate elements are normalised away.
+              items:
+                type: string
+                format: uuid
             cities:
               type: array
               description: Match any of these city codes (from the cities dictionary).
