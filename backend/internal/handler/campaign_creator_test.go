@@ -167,14 +167,32 @@ func TestServer_AddCampaignCreators(t *testing.T) {
 			}})
 		require.Equal(t, http.StatusCreated, w.Code)
 		require.Len(t, resp.Data.Items, 2)
-		require.Equal(t, uuid.MustParse("44444444-4444-4444-4444-444444444444"), resp.Data.Items[0].Id)
-		require.Equal(t, api.Planned, resp.Data.Items[0].Status)
-		require.Equal(t, 0, resp.Data.Items[0].InvitedCount)
-		require.Equal(t, 0, resp.Data.Items[0].RemindedCount)
-		require.Nil(t, resp.Data.Items[0].InvitedAt)
-		require.Nil(t, resp.Data.Items[0].DecidedAt)
-		require.Equal(t, uuid.MustParse(creatorAUUID), resp.Data.Items[0].CreatorId)
-		require.Equal(t, uuid.MustParse(creatorBUUID), resp.Data.Items[1].CreatorId)
+		require.Equal(t, api.CampaignCreator{
+			Id:            uuid.MustParse("44444444-4444-4444-4444-444444444444"),
+			CampaignId:    uuid.MustParse(campaignUUID),
+			CreatorId:     uuid.MustParse(creatorAUUID),
+			Status:        api.Planned,
+			InvitedAt:     nil,
+			InvitedCount:  0,
+			RemindedAt:    nil,
+			RemindedCount: 0,
+			DecidedAt:     nil,
+			CreatedAt:     created,
+			UpdatedAt:     created,
+		}, resp.Data.Items[0])
+		require.Equal(t, api.CampaignCreator{
+			Id:            uuid.MustParse("55555555-5555-5555-5555-555555555555"),
+			CampaignId:    uuid.MustParse(campaignUUID),
+			CreatorId:     uuid.MustParse(creatorBUUID),
+			Status:        api.Planned,
+			InvitedAt:     nil,
+			InvitedCount:  0,
+			RemindedAt:    nil,
+			RemindedCount: 0,
+			DecidedAt:     nil,
+			CreatedAt:     created,
+			UpdatedAt:     created,
+		}, resp.Data.Items[1])
 	})
 
 	t.Run("corrupted ID from service surfaces as 500", func(t *testing.T) {
@@ -186,6 +204,46 @@ func TestServer_AddCampaignCreators(t *testing.T) {
 		ccSvc.EXPECT().Add(mock.Anything, campaignUUID, []string{creatorAUUID}).
 			Return([]*domain.CampaignCreator{
 				{ID: "not-a-uuid", CampaignID: campaignUUID, CreatorID: creatorAUUID,
+					Status: domain.CampaignCreatorStatusPlanned, CreatedAt: created, UpdatedAt: created},
+			}, nil)
+		log := logmocks.NewMockLogger(t)
+		expectHandlerUnexpectedErrorLog(log, campaignCreatorsPath)
+
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, ccSvc, nil, ServerConfig{Version: "test-version"}, log))
+		w, _ := doJSON[api.ErrorResponse](t, router, http.MethodPost, campaignCreatorsPath,
+			api.AddCampaignCreatorsInput{CreatorIds: []openapi_types.UUID{uuid.MustParse(creatorAUUID)}})
+		require.Equal(t, http.StatusInternalServerError, w.Code)
+	})
+
+	t.Run("corrupted CampaignID from service surfaces as 500", func(t *testing.T) {
+		t.Parallel()
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanAddCampaignCreators(mock.Anything).Return(nil)
+		ccSvc := mocks.NewMockCampaignCreatorService(t)
+		created := time.Date(2026, 5, 7, 12, 0, 0, 0, time.UTC)
+		ccSvc.EXPECT().Add(mock.Anything, campaignUUID, []string{creatorAUUID}).
+			Return([]*domain.CampaignCreator{
+				{ID: "44444444-4444-4444-4444-444444444444", CampaignID: "not-a-uuid", CreatorID: creatorAUUID,
+					Status: domain.CampaignCreatorStatusPlanned, CreatedAt: created, UpdatedAt: created},
+			}, nil)
+		log := logmocks.NewMockLogger(t)
+		expectHandlerUnexpectedErrorLog(log, campaignCreatorsPath)
+
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, ccSvc, nil, ServerConfig{Version: "test-version"}, log))
+		w, _ := doJSON[api.ErrorResponse](t, router, http.MethodPost, campaignCreatorsPath,
+			api.AddCampaignCreatorsInput{CreatorIds: []openapi_types.UUID{uuid.MustParse(creatorAUUID)}})
+		require.Equal(t, http.StatusInternalServerError, w.Code)
+	})
+
+	t.Run("corrupted CreatorID from service surfaces as 500", func(t *testing.T) {
+		t.Parallel()
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanAddCampaignCreators(mock.Anything).Return(nil)
+		ccSvc := mocks.NewMockCampaignCreatorService(t)
+		created := time.Date(2026, 5, 7, 12, 0, 0, 0, time.UTC)
+		ccSvc.EXPECT().Add(mock.Anything, campaignUUID, []string{creatorAUUID}).
+			Return([]*domain.CampaignCreator{
+				{ID: "44444444-4444-4444-4444-444444444444", CampaignID: campaignUUID, CreatorID: "not-a-uuid",
 					Status: domain.CampaignCreatorStatusPlanned, CreatedAt: created, UpdatedAt: created},
 			}, nil)
 		log := logmocks.NewMockLogger(t)
@@ -356,9 +414,19 @@ func TestServer_ListCampaignCreators(t *testing.T) {
 		w, resp := doJSON[api.ListCampaignCreatorsResult](t, router, http.MethodGet, campaignCreatorsPath, nil)
 		require.Equal(t, http.StatusOK, w.Code)
 		require.Len(t, resp.Data.Items, 1)
-		require.Equal(t, api.Planned, resp.Data.Items[0].Status)
-		require.Equal(t, uuid.MustParse(campaignUUID), resp.Data.Items[0].CampaignId)
-		require.Equal(t, uuid.MustParse(creatorAUUID), resp.Data.Items[0].CreatorId)
+		require.Equal(t, api.CampaignCreator{
+			Id:            uuid.MustParse("44444444-4444-4444-4444-444444444444"),
+			CampaignId:    uuid.MustParse(campaignUUID),
+			CreatorId:     uuid.MustParse(creatorAUUID),
+			Status:        api.Planned,
+			InvitedAt:     nil,
+			InvitedCount:  0,
+			RemindedAt:    nil,
+			RemindedCount: 0,
+			DecidedAt:     nil,
+			CreatedAt:     created,
+			UpdatedAt:     created,
+		}, resp.Data.Items[0])
 	})
 
 	t.Run("corrupted ID from service surfaces as 500", func(t *testing.T) {
