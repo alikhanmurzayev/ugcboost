@@ -14,16 +14,23 @@ vi.mock("./client", () => {
     default: {
       GET: vi.fn(),
       POST: vi.fn(),
+      PATCH: vi.fn(),
     },
     ApiError,
   };
 });
 
 import client, { ApiError } from "./client";
-import { listCampaigns, createCampaign } from "./campaigns";
+import {
+  listCampaigns,
+  createCampaign,
+  getCampaign,
+  updateCampaign,
+} from "./campaigns";
 
 const mockedGet = vi.mocked(client.GET);
 const mockedPost = vi.mocked(client.POST);
+const mockedPatch = vi.mocked(client.PATCH);
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -193,6 +200,113 @@ describe("createCampaign", () => {
 
     await expect(
       createCampaign({ name: "Any", tmaUrl: "https://t.me/x" }),
+    ).rejects.toMatchObject({ status: 500, code: "INTERNAL_ERROR" });
+  });
+});
+
+describe("getCampaign", () => {
+  const id = "11111111-2222-3333-4444-555555555555";
+
+  it("calls GET /campaigns/{id} with path param and returns data on 200", async () => {
+    const data = {
+      data: {
+        id,
+        name: "Spring promo",
+        tmaUrl: "https://t.me/foo",
+        isDeleted: false,
+        createdAt: "2026-05-01T00:00:00Z",
+        updatedAt: "2026-05-01T00:00:00Z",
+      },
+    };
+    mockedGet.mockResolvedValueOnce({
+      data,
+      response: { status: 200 } as Response,
+    });
+
+    const result = await getCampaign(id);
+
+    expect(mockedGet).toHaveBeenCalledTimes(1);
+    expect(mockedGet).toHaveBeenCalledWith("/campaigns/{id}", {
+      params: { path: { id } },
+    });
+    expect(result).toEqual(data);
+  });
+
+  it("throws ApiError on 404 with code from error body", async () => {
+    mockedGet.mockResolvedValueOnce({
+      error: { error: { code: "CAMPAIGN_NOT_FOUND", message: "missing" } },
+      response: { status: 404 } as Response,
+    });
+
+    await expect(getCampaign(id)).rejects.toMatchObject({
+      status: 404,
+      code: "CAMPAIGN_NOT_FOUND",
+    });
+  });
+
+  it("falls back to INTERNAL_ERROR on malformed error body", async () => {
+    mockedGet.mockResolvedValueOnce({
+      error: {},
+      response: { status: 500 } as Response,
+    });
+
+    await expect(getCampaign(id)).rejects.toBeInstanceOf(ApiError);
+  });
+});
+
+describe("updateCampaign", () => {
+  const id = "11111111-2222-3333-4444-555555555555";
+
+  it("calls PATCH /campaigns/{id} with path param and body, resolves on 204", async () => {
+    mockedPatch.mockResolvedValueOnce({
+      response: { status: 204 } as Response,
+    });
+
+    const input = { name: "Renamed", tmaUrl: "https://t.me/foo" };
+    await expect(updateCampaign(id, input)).resolves.toBeUndefined();
+
+    expect(mockedPatch).toHaveBeenCalledTimes(1);
+    expect(mockedPatch).toHaveBeenCalledWith("/campaigns/{id}", {
+      params: { path: { id } },
+      body: input,
+    });
+  });
+
+  it("throws ApiError on 409 with code from error body", async () => {
+    mockedPatch.mockResolvedValueOnce({
+      error: { error: { code: "CAMPAIGN_NAME_TAKEN", message: "taken" } },
+      response: { status: 409 } as Response,
+    });
+
+    await expect(
+      updateCampaign(id, { name: "Existing", tmaUrl: "https://t.me/x" }),
+    ).rejects.toMatchObject({ status: 409, code: "CAMPAIGN_NAME_TAKEN" });
+  });
+
+  it("throws ApiError on 422 with code from error body", async () => {
+    mockedPatch.mockResolvedValueOnce({
+      error: {
+        error: { code: "CAMPAIGN_NAME_TOO_LONG", message: "too long" },
+      },
+      response: { status: 422 } as Response,
+    });
+
+    await expect(
+      updateCampaign(id, { name: "x".repeat(300), tmaUrl: "https://t.me/x" }),
+    ).rejects.toMatchObject({
+      status: 422,
+      code: "CAMPAIGN_NAME_TOO_LONG",
+    });
+  });
+
+  it("falls back to INTERNAL_ERROR on malformed error body", async () => {
+    mockedPatch.mockResolvedValueOnce({
+      error: {},
+      response: { status: 500 } as Response,
+    });
+
+    await expect(
+      updateCampaign(id, { name: "Any", tmaUrl: "https://t.me/x" }),
     ).rejects.toMatchObject({ status: 500, code: "INTERNAL_ERROR" });
   });
 });

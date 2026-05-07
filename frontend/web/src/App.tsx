@@ -2,7 +2,6 @@ import "@/shared/i18n/config";
 import { lazy, Suspense } from "react";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { useTranslation } from "react-i18next";
 import LoginPage from "@/features/auth/LoginPage";
 import AuthGuard from "@/features/auth/AuthGuard";
 import DashboardLayout from "@/shared/layouts/DashboardLayout";
@@ -16,6 +15,7 @@ import RejectedPage from "@/features/creatorApplications/stubs/RejectedPage";
 import CreatorsListPage from "@/features/creators/CreatorsListPage";
 import CampaignsListPage from "@/features/campaigns/CampaignsListPage";
 import CampaignCreatePage from "@/features/campaigns/CampaignCreatePage";
+import CampaignDetailPage from "@/features/campaigns/CampaignDetailPage";
 import RoleGuard from "@/features/auth/RoleGuard";
 import ErrorBoundary from "@/shared/components/ErrorBoundary";
 import Spinner from "@/shared/components/Spinner";
@@ -85,7 +85,7 @@ function App() {
                   />
                   <Route
                     path={ROUTES.CAMPAIGN_DETAIL_PATTERN}
-                    element={<ComingSoonPage testid="campaign-detail-stub" />}
+                    element={<CampaignDetailPage />}
                   />
                 </Route>
               </Route>
@@ -94,15 +94,6 @@ function App() {
         </BrowserRouter>
       </QueryClientProvider>
     </ErrorBoundary>
-  );
-}
-
-function ComingSoonPage({ testid }: { testid: string }) {
-  const { t } = useTranslation("common");
-  return (
-    <div data-testid={testid} className="text-sm text-gray-500">
-      {t("comingSoon")}
-    </div>
   );
 }
 

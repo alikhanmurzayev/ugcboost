@@ -11,11 +11,12 @@
  *
  * Happy path — admin с дашборда переходит на /campaigns, кликает CTA
  * «Создать кампанию», вводит непустой name (с trim'ом по краям) и tmaUrl
- * с uuid-маркером, нажимает submit. Ожидается редирект на /campaigns/:id
- * (стаб chunk 8b: data-testid `campaign-detail-stub`) и что вернувшись на
- * /campaigns?q=<uuid>, пользователь видит свежесозданную строку — так
- * закрывается AC «invalidate(campaignKeys.all()) + navigate /campaigns/{id}»
- * + sanity, что бэк действительно записал кампанию.
+ * с uuid-маркером, нажимает submit. Ожидается редирект на /campaigns/:id и
+ * рендер реальной страницы деталей (data-testid `campaign-detail-page` с
+ * h1 равным сохранённому имени), а вернувшись на /campaigns?q=<uuid>,
+ * пользователь видит свежесозданную строку — так закрывается AC
+ * «invalidate(campaignKeys.all()) + navigate /campaigns/{id}» + sanity,
+ * что бэк действительно записал кампанию.
  *
  * Validation empty — empty submit при пустых обоих полях рендерит inline
  * errors `campaign-name-error` и `campaign-tma-url-error`; запрос на
@@ -90,7 +91,8 @@ test.describe("Admin campaign create", () => {
     await page.getByTestId("create-campaign-submit").click();
 
     await page.waitForURL(/\/campaigns\/[0-9a-f-]{36}$/i);
-    await expect(page.getByTestId("campaign-detail-stub")).toBeVisible();
+    await expect(page.getByTestId("campaign-detail-page")).toBeVisible();
+    await expect(page.getByTestId("campaign-detail-title")).toHaveText(name);
 
     const detailUrl = new URL(page.url());
     const campaignId = detailUrl.pathname.split("/").pop()!;

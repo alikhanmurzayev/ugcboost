@@ -28,7 +28,7 @@
  * `campaign-create-page`). Закрывает AC «CTA-кнопка ведёт на /campaigns/new».
  *
  * Row click + disabled delete — клик по строке открывает /campaigns/:id
- * (стаб chunk 8: data-testid `campaign-detail-stub`). Кнопка «Удалить» в строке
+ * (реальная страница chunk 8b: data-testid `campaign-detail-page`). Кнопка «Удалить» в строке
  * `disabled` и имеет title «Появится позже» — placeholder для chunk 7. Закрывает
  * AC «disabled delete + tooltip». В тесте проверяем атрибуты + что row-click
  * по другой ячейке корректно ведёт на детальную (disabled-кнопка не глотает
@@ -197,7 +197,7 @@ test.describe("Admin campaigns list", () => {
     await expect(page.getByTestId("campaign-create-page")).toBeVisible();
   });
 
-  test("Row click → /campaigns/:id stub; disabled delete does not navigate", async ({
+  test("Row click → /campaigns/:id detail page; disabled delete does not navigate", async ({
     page,
     request,
   }) => {
@@ -224,11 +224,14 @@ test.describe("Admin campaigns list", () => {
     await expect(deleteBtn).toBeDisabled();
     await expect(deleteBtn).toHaveAttribute("title", "Появится позже");
 
-    // Click on the row body → goes to /campaigns/:id stub.
+    // Click on the row body → goes to /campaigns/:id detail page.
     const row = page.getByTestId(`row-${camp.campaignId}`);
     await row.locator("td").first().click();
     await expect(page).toHaveURL(`/campaigns/${camp.campaignId}`);
-    await expect(page.getByTestId("campaign-detail-stub")).toBeVisible();
+    await expect(page.getByTestId("campaign-detail-page")).toBeVisible();
+    await expect(page.getByTestId("campaign-detail-title")).toHaveText(
+      camp.name,
+    );
   });
 
   test("RoleGuard — brand_manager has no nav link, redirected from /campaigns", async ({

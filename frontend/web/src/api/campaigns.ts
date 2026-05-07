@@ -7,6 +7,7 @@ export type CampaignsListData = components["schemas"]["CampaignsListData"];
 export type CampaignsListInput = paths["/campaigns"]["get"]["parameters"]["query"];
 export type CampaignInput = components["schemas"]["CampaignInput"];
 export type CampaignCreatedResult = components["schemas"]["CampaignCreatedResult"];
+export type GetCampaignResult = components["schemas"]["GetCampaignResult"];
 
 function extractErrorCode(error: unknown): string {
   const e = error as { error?: { code?: string } };
@@ -33,4 +34,27 @@ export async function createCampaign(
     throw new ApiError(response.status, extractErrorCode(error));
   }
   return data;
+}
+
+export async function getCampaign(id: string): Promise<GetCampaignResult> {
+  const { data, error, response } = await client.GET("/campaigns/{id}", {
+    params: { path: { id } },
+  });
+  if (error || !data) {
+    throw new ApiError(response.status, extractErrorCode(error));
+  }
+  return data;
+}
+
+export async function updateCampaign(
+  id: string,
+  input: CampaignInput,
+): Promise<void> {
+  const { error, response } = await client.PATCH("/campaigns/{id}", {
+    params: { path: { id } },
+    body: input,
+  });
+  if (error) {
+    throw new ApiError(response.status, extractErrorCode(error));
+  }
 }
