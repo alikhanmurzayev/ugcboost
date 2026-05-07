@@ -150,12 +150,15 @@ test.describe("Admin campaign creators — large-scale (cap-cycle, 200+ members)
     // visible. The drawer's pagination thus walks only our seeds, eliminating
     // the cross-test race for `created_at desc` ordering.
     await page.getByTestId("drawer-filters-search").fill(runId);
-    await expect(page.getByTestId("add-creators-drawer-pagination-info")).toContainText(
-      String(Math.ceil(TOTAL_CREATORS / 50)),
-    );
+    const totalPagesExpected = Math.ceil(TOTAL_CREATORS / 50);
+    await waitForDrawerPage(page, 1, totalPagesExpected, 50);
 
     // perPage=50 → 5 pages for 210. Click all 50 checkboxes on pages 1..4,
     // then jump to page 5 to assert the cap hint locks remaining rows.
+    // Each page transition explicitly waits for 50 fresh checkboxes to
+    // render — without this, on a slow network (staging) the loop runs
+    // checkAllOnCurrentPage while the next page is still in Spinner state
+    // and 0 .check() calls fire (counter would stick at p × 50 ≡ 50).
     for (let p = 1; p <= 4; p++) {
       await checkAllOnCurrentPage(page);
       const expected = p * 50;
@@ -167,6 +170,7 @@ test.describe("Admin campaign creators — large-scale (cap-cycle, 200+ members)
       ).toContainText(`Выбрано: ${expected} / 200`);
       if (p < 4) {
         await page.getByTestId("add-creators-drawer-pagination-next").click();
+        await waitForDrawerPage(page, p + 1, totalPagesExpected, 50);
       }
     }
     await expect(page.getByTestId("add-creators-drawer-cap-hint")).toBeVisible();
@@ -176,15 +180,12 @@ test.describe("Admin campaign creators — large-scale (cap-cycle, 200+ members)
 
     // Page 5 — every checkbox must be disabled because the cap has been hit.
     await page.getByTestId("add-creators-drawer-pagination-next").click();
-    await expect(
-      page.getByTestId("add-creators-drawer-pagination-info"),
-    ).toContainText("5");
+    const page5Size = TOTAL_CREATORS - 4 * 50; // = 10
+    await waitForDrawerPage(page, 5, totalPagesExpected, page5Size);
     const page5Checkboxes = page.locator(
       '[data-testid^="drawer-row-checkbox-"]',
     );
-    const page5Count = await page5Checkboxes.count();
-    expect(page5Count).toBeGreaterThan(0);
-    for (let i = 0; i < page5Count; i++) {
+    for (let i = 0; i < page5Size; i++) {
       await expect(page5Checkboxes.nth(i)).toBeDisabled();
     }
 
@@ -219,16 +220,21 @@ test.describe("Admin campaign creators — large-scale (cap-cycle, 200+ members)
       "Выбрано: 0 / 200",
     );
     await page.getByTestId("drawer-filters-search").fill(runId);
-    await expect(page.getByTestId("add-creators-drawer-pagination-info")).toContainText(
-      String(Math.ceil(TOTAL_CREATORS / 50)),
-    );
+    await waitForDrawerPage(page, 1, totalPagesExpected, 50);
 
     // Walk pages until we find enabled checkboxes — the first 200 ids carry
     // the «Добавлен» badge; the remaining 10 are scattered after them in
     // sort=created_at desc order. Click whatever is enabled, up to 10.
+    // Each page transition awaits the new page render before reading the
+    // enabled-checkbox count, otherwise a slow staging fetch leaves the
+    // previous page's DOM in place and the loop overcounts/undercounts.
     let picked = 0;
-    let visitedPages = 0;
-    while (picked < 10 && visitedPages < 6) {
+    for (let p = 1; p <= totalPagesExpected && picked < 10; p++) {
+      const expectedRows = p < totalPagesExpected ? 50 : TOTAL_CREATORS - (p - 1) * 50;
+      if (p > 1) {
+        await page.getByTestId("add-creators-drawer-pagination-next").click();
+        await waitForDrawerPage(page, p, totalPagesExpected, expectedRows);
+      }
       const enabled = page.locator(
         '[data-testid^="drawer-row-checkbox-"]:not([disabled])',
       );
@@ -237,11 +243,6 @@ test.describe("Admin campaign creators — large-scale (cap-cycle, 200+ members)
         await enabled.nth(i).check();
         picked++;
       }
-      visitedPages++;
-      const nextBtn = page.getByTestId("add-creators-drawer-pagination-next");
-      const nextDisabled = await nextBtn.isDisabled();
-      if (picked >= 10 || nextDisabled) break;
-      await nextBtn.click();
     }
     expect(picked).toBe(10);
 
@@ -269,6 +270,29 @@ test.describe("Admin campaign creators — large-scale (cap-cycle, 200+ members)
     ).toHaveCount(0);
   });
 });
+
+// Waits until the drawer pagination block reads `<page> / <totalPages>` AND
+// the row count exactly matches `expectedRows`. Both signals are necessary:
+// pagination-info flips synchronously when `setPage(p)` runs, but the rows
+// only appear after the listCreators response lands. On a slow remote
+// (staging), the gap is large enough that running .check() in between fires
+// against zero matches and never actually toggles anything.
+async function waitForDrawerPage(
+  page: Page,
+  expectedPage: number,
+  totalPages: number,
+  expectedRows: number,
+): Promise<void> {
+  // i18n key `pagination.page` renders «Страница N из M». Asserting on the
+  // full string (instead of a literal "/") protects against silent locale
+  // changes too.
+  await expect(
+    page.getByTestId("add-creators-drawer-pagination-info"),
+  ).toHaveText(`Страница ${expectedPage} из ${totalPages}`);
+  await expect(
+    page.locator('[data-testid^="drawer-row-checkbox-"]'),
+  ).toHaveCount(expectedRows);
+}
 
 // Iterates through every checkbox on the visible drawer page and ticks it.
 // `userEvent`-style helper but at Playwright level.
