@@ -36,5 +36,24 @@
     "tmaUrlRequired": "Введите ссылку ТЗ",
     "submitButton": "Создать кампанию",
     "submittingButton": "Создаётся…"
+  },
+  "detail": {
+    "backToList": "← К списку кампаний",
+    "sectionTitle": "О кампании",
+    "nameLabel": "Название",
+    "tmaUrlLabel": "Ссылка ТЗ",
+    "createdAtLabel": "Создана",
+    "updatedAtLabel": "Обновлена",
+    "editButton": "Редактировать",
+    "editDisabledHint": "Удалённую кампанию редактировать нельзя",
+    "loadError": "Не удалось загрузить кампанию",
+    "notFoundTitle": "Кампания не найдена",
+    "notFoundMessage": "Возможно, ID устарел или кампанию удалили без следа."
+  },
+  "edit": {
+    "title": "Редактирование кампании",
+    "submitButton": "Сохранить",
+    "submittingButton": "Сохранение…",
+    "cancelButton": "Отмена"
   }
 }
