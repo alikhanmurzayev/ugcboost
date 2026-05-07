@@ -32,6 +32,28 @@ const (
 	CodeCampaignNotFound = "CAMPAIGN_NOT_FOUND"
 )
 
+// Campaign-creator (chunk 10) user-facing codes carried in 4xx responses by
+// the admin-only batch add / single remove / list endpoints.
+const (
+	// 422 — POST /campaigns/{id}/creators with empty creatorIds.
+	CodeCampaignCreatorIdsRequired = "CAMPAIGN_CREATOR_IDS_REQUIRED"
+	// 422 — POST /campaigns/{id}/creators with more creatorIds than the
+	// per-batch cap (matches OpenAPI maxItems=200; oapi-codegen does not
+	// enforce schema limits at runtime, so the handler guards explicitly).
+	CodeCampaignCreatorIdsTooMany = "CAMPAIGN_CREATOR_IDS_TOO_MANY"
+	// 422 — POST /campaigns/{id}/creators with duplicate creatorIds.
+	CodeCampaignCreatorIdsDuplicates = "CAMPAIGN_CREATOR_IDS_DUPLICATES"
+	// 404 — DELETE /campaigns/{id}/creators/{creatorId} when the (campaign,
+	// creator) pair is not in campaign_creators.
+	CodeCampaignCreatorNotFound = "CAMPAIGN_CREATOR_NOT_FOUND"
+	// 422 — POST /campaigns/{id}/creators when the (campaign, creator) pair
+	// already exists; the unique-index race translates here.
+	CodeCreatorAlreadyInCampaign = "CREATOR_ALREADY_IN_CAMPAIGN"
+	// 422 — DELETE /campaigns/{id}/creators/{creatorId} once the row has
+	// reached status=agreed; the row stays for the downstream TrustMe flow.
+	CodeCampaignCreatorRemoveAfterAgreed = "CAMPAIGN_CREATOR_REMOVE_AFTER_AGREED"
+)
+
 // Sentinel domain errors — handlers map these to HTTP status codes.
 var (
 	ErrNotFound      = errors.New("not found")

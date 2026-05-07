@@ -22,6 +22,30 @@ const (
 	BearerAuthScopes = "bearerAuth.Scopes"
 )
 
+// Defines values for CampaignCreatorStatus.
+const (
+	Agreed   CampaignCreatorStatus = "agreed"
+	Declined CampaignCreatorStatus = "declined"
+	Invited  CampaignCreatorStatus = "invited"
+	Planned  CampaignCreatorStatus = "planned"
+)
+
+// Valid indicates whether the value is a known member of the CampaignCreatorStatus enum.
+func (e CampaignCreatorStatus) Valid() bool {
+	switch e {
+	case Agreed:
+		return true
+	case Declined:
+		return true
+	case Invited:
+		return true
+	case Planned:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for CampaignListSortField.
 const (
 	CampaignListSortFieldCreatedAt CampaignListSortField = "created_at"
@@ -250,6 +274,21 @@ type APIError struct {
 	Message string `json:"message"`
 }
 
+// AddCampaignCreatorsInput Batch-add input for POST /campaigns/{id}/creators. Each creatorId
+// must reference an existing creator that is not yet attached to this
+// campaign — any violation rolls back the whole batch (strict-422).
+type AddCampaignCreatorsInput struct {
+	// CreatorIds UUIDs of the creators to attach to the campaign.
+	CreatorIds []openapi_types.UUID `json:"creatorIds"`
+}
+
+// AddCampaignCreatorsResult defines model for AddCampaignCreatorsResult.
+type AddCampaignCreatorsResult struct {
+	Data struct {
+		Items []CampaignCreator `json:"items"`
+	} `json:"data"`
+}
+
 // AssignManagerData defines model for AssignManagerData.
 type AssignManagerData struct {
 	Email        string  `json:"email"`
@@ -359,6 +398,46 @@ type CampaignCreatedData struct {
 type CampaignCreatedResult struct {
 	Data CampaignCreatedData `json:"data"`
 }
+
+// CampaignCreator One creator's attachment to a campaign — the `campaign_creators` row
+// as seen by the admin UI. `invited*`, `reminded*` and `decidedAt`
+// fields are populated by chunks 12+ (notify / remind / TMA flow); on
+// chunk 10 every row is `planned` with NULL timestamps and zero
+// counters.
+type CampaignCreator struct {
+	CampaignId openapi_types.UUID `json:"campaignId"`
+	CreatedAt  time.Time          `json:"createdAt"`
+	CreatorId  openapi_types.UUID `json:"creatorId"`
+
+	// DecidedAt Timestamp of the latest creator decision (agree / decline).
+	DecidedAt *time.Time         `json:"decidedAt,omitempty"`
+	Id        openapi_types.UUID `json:"id"`
+	InvitedAt *time.Time         `json:"invitedAt,omitempty"`
+
+	// InvitedCount Number of invitations sent for this creator (incremented by chunk 12).
+	InvitedCount int        `json:"invitedCount"`
+	RemindedAt   *time.Time `json:"remindedAt,omitempty"`
+
+	// RemindedCount Number of invitation-reminders sent for this creator (incremented by chunk 12).
+	RemindedCount int `json:"remindedCount"`
+
+	// Status Lifecycle state of a creator within a campaign.
+	//
+	// - `planned` — admin added the creator to the campaign (default on create).
+	// - `invited` — admin sent an invitation; awaiting creator response.
+	// - `declined` — creator declined via TMA.
+	// - `agreed` — creator accepted via TMA. Terminal for the current scope.
+	Status    CampaignCreatorStatus `json:"status"`
+	UpdatedAt time.Time             `json:"updatedAt"`
+}
+
+// CampaignCreatorStatus Lifecycle state of a creator within a campaign.
+//
+// - `planned` — admin added the creator to the campaign (default on create).
+// - `invited` — admin sent an invitation; awaiting creator response.
+// - `declined` — creator declined via TMA.
+// - `agreed` — creator accepted via TMA. Terminal for the current scope.
+type CampaignCreatorStatus string
 
 // CampaignInput Mutable subset of a campaign — used for create.
 type CampaignInput struct {
@@ -971,6 +1050,13 @@ type ListBrandsResult struct {
 	Data ListBrandsData `json:"data"`
 }
 
+// ListCampaignCreatorsResult defines model for ListCampaignCreatorsResult.
+type ListCampaignCreatorsResult struct {
+	Data struct {
+		Items []CampaignCreator `json:"items"`
+	} `json:"data"`
+}
+
 // ListDictionaryData defines model for ListDictionaryData.
 type ListDictionaryData struct {
 	Items []DictionaryItem `json:"items"`
@@ -1187,6 +1273,9 @@ type CreateCampaignJSONRequestBody = CampaignInput
 // UpdateCampaignJSONRequestBody defines body for UpdateCampaign for application/json ContentType.
 type UpdateCampaignJSONRequestBody = CampaignInput
 
+// AddCampaignCreatorsJSONRequestBody defines body for AddCampaignCreators for application/json ContentType.
+type AddCampaignCreatorsJSONRequestBody = AddCampaignCreatorsInput
+
 // SubmitCreatorApplicationJSONRequestBody defines body for SubmitCreatorApplication for application/json ContentType.
 type SubmitCreatorApplicationJSONRequestBody = CreatorApplicationSubmitRequest
 
@@ -1258,6 +1347,15 @@ type ServerInterface interface {
 	// Update a marketing campaign by id (admin-only)
 	// (PATCH /campaigns/{id})
 	UpdateCampaign(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+	// List creators attached to a campaign (admin-only)
+	// (GET /campaigns/{id}/creators)
+	ListCampaignCreators(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+	// Add creators to a campaign in batch (admin-only)
+	// (POST /campaigns/{id}/creators)
+	AddCampaignCreators(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+	// Remove a creator from a campaign (admin-only)
+	// (DELETE /campaigns/{id}/creators/{creatorId})
+	RemoveCampaignCreator(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, creatorId openapi_types.UUID)
 	// Submit a creator application from the public landing page
 	// (POST /creators/applications)
 	SubmitCreatorApplication(w http.ResponseWriter, r *http.Request)
@@ -1405,6 +1503,24 @@ func (_ Unimplemented) GetCampaign(w http.ResponseWriter, r *http.Request, id op
 // Update a marketing campaign by id (admin-only)
 // (PATCH /campaigns/{id})
 func (_ Unimplemented) UpdateCampaign(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// List creators attached to a campaign (admin-only)
+// (GET /campaigns/{id}/creators)
+func (_ Unimplemented) ListCampaignCreators(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Add creators to a campaign in batch (admin-only)
+// (POST /campaigns/{id}/creators)
+func (_ Unimplemented) AddCampaignCreators(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Remove a creator from a campaign (admin-only)
+// (DELETE /campaigns/{id}/creators/{creatorId})
+func (_ Unimplemented) RemoveCampaignCreator(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, creatorId openapi_types.UUID) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -2055,6 +2171,108 @@ func (siw *ServerInterfaceWrapper) UpdateCampaign(w http.ResponseWriter, r *http
 	handler.ServeHTTP(w, r)
 }
 
+// ListCampaignCreators operation middleware
+func (siw *ServerInterfaceWrapper) ListCampaignCreators(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListCampaignCreators(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// AddCampaignCreators operation middleware
+func (siw *ServerInterfaceWrapper) AddCampaignCreators(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.AddCampaignCreators(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RemoveCampaignCreator operation middleware
+func (siw *ServerInterfaceWrapper) RemoveCampaignCreator(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "creatorId" -------------
+	var creatorId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "creatorId", chi.URLParam(r, "creatorId"), &creatorId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "creatorId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RemoveCampaignCreator(w, r, id, creatorId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // SubmitCreatorApplication operation middleware
 func (siw *ServerInterfaceWrapper) SubmitCreatorApplication(w http.ResponseWriter, r *http.Request) {
 
@@ -2512,6 +2730,15 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Patch(options.BaseURL+"/campaigns/{id}", wrapper.UpdateCampaign)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/campaigns/{id}/creators", wrapper.ListCampaignCreators)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/campaigns/{id}/creators", wrapper.AddCampaignCreators)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/campaigns/{id}/creators/{creatorId}", wrapper.RemoveCampaignCreator)
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/creators/applications", wrapper.SubmitCreatorApplication)
@@ -3390,6 +3617,193 @@ func (response UpdateCampaigndefaultJSONResponse) VisitUpdateCampaignResponse(w 
 	return json.NewEncoder(w).Encode(response.Body)
 }
 
+type ListCampaignCreatorsRequestObject struct {
+	Id openapi_types.UUID `json:"id"`
+}
+
+type ListCampaignCreatorsResponseObject interface {
+	VisitListCampaignCreatorsResponse(w http.ResponseWriter) error
+}
+
+type ListCampaignCreators200JSONResponse ListCampaignCreatorsResult
+
+func (response ListCampaignCreators200JSONResponse) VisitListCampaignCreatorsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type ListCampaignCreators401JSONResponse ErrorResponse
+
+func (response ListCampaignCreators401JSONResponse) VisitListCampaignCreatorsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type ListCampaignCreators403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response ListCampaignCreators403JSONResponse) VisitListCampaignCreatorsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type ListCampaignCreators404JSONResponse ErrorResponse
+
+func (response ListCampaignCreators404JSONResponse) VisitListCampaignCreatorsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type ListCampaignCreatorsdefaultJSONResponse struct {
+	Body       ErrorResponse
+	StatusCode int
+}
+
+func (response ListCampaignCreatorsdefaultJSONResponse) VisitListCampaignCreatorsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+
+	return json.NewEncoder(w).Encode(response.Body)
+}
+
+type AddCampaignCreatorsRequestObject struct {
+	Id   openapi_types.UUID `json:"id"`
+	Body *AddCampaignCreatorsJSONRequestBody
+}
+
+type AddCampaignCreatorsResponseObject interface {
+	VisitAddCampaignCreatorsResponse(w http.ResponseWriter) error
+}
+
+type AddCampaignCreators201JSONResponse AddCampaignCreatorsResult
+
+func (response AddCampaignCreators201JSONResponse) VisitAddCampaignCreatorsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type AddCampaignCreators401JSONResponse ErrorResponse
+
+func (response AddCampaignCreators401JSONResponse) VisitAddCampaignCreatorsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type AddCampaignCreators403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response AddCampaignCreators403JSONResponse) VisitAddCampaignCreatorsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type AddCampaignCreators404JSONResponse ErrorResponse
+
+func (response AddCampaignCreators404JSONResponse) VisitAddCampaignCreatorsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type AddCampaignCreators422JSONResponse ErrorResponse
+
+func (response AddCampaignCreators422JSONResponse) VisitAddCampaignCreatorsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(422)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type AddCampaignCreatorsdefaultJSONResponse struct {
+	Body       ErrorResponse
+	StatusCode int
+}
+
+func (response AddCampaignCreatorsdefaultJSONResponse) VisitAddCampaignCreatorsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+
+	return json.NewEncoder(w).Encode(response.Body)
+}
+
+type RemoveCampaignCreatorRequestObject struct {
+	Id        openapi_types.UUID `json:"id"`
+	CreatorId openapi_types.UUID `json:"creatorId"`
+}
+
+type RemoveCampaignCreatorResponseObject interface {
+	VisitRemoveCampaignCreatorResponse(w http.ResponseWriter) error
+}
+
+type RemoveCampaignCreator204Response struct {
+}
+
+func (response RemoveCampaignCreator204Response) VisitRemoveCampaignCreatorResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type RemoveCampaignCreator401JSONResponse ErrorResponse
+
+func (response RemoveCampaignCreator401JSONResponse) VisitRemoveCampaignCreatorResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type RemoveCampaignCreator403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response RemoveCampaignCreator403JSONResponse) VisitRemoveCampaignCreatorResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type RemoveCampaignCreator404JSONResponse ErrorResponse
+
+func (response RemoveCampaignCreator404JSONResponse) VisitRemoveCampaignCreatorResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type RemoveCampaignCreator422JSONResponse ErrorResponse
+
+func (response RemoveCampaignCreator422JSONResponse) VisitRemoveCampaignCreatorResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(422)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type RemoveCampaignCreatordefaultJSONResponse struct {
+	Body       ErrorResponse
+	StatusCode int
+}
+
+func (response RemoveCampaignCreatordefaultJSONResponse) VisitRemoveCampaignCreatorResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+
+	return json.NewEncoder(w).Encode(response.Body)
+}
+
 type SubmitCreatorApplicationRequestObject struct {
 	Body *SubmitCreatorApplicationJSONRequestBody
 }
@@ -4073,6 +4487,15 @@ type StrictServerInterface interface {
 	// Update a marketing campaign by id (admin-only)
 	// (PATCH /campaigns/{id})
 	UpdateCampaign(ctx context.Context, request UpdateCampaignRequestObject) (UpdateCampaignResponseObject, error)
+	// List creators attached to a campaign (admin-only)
+	// (GET /campaigns/{id}/creators)
+	ListCampaignCreators(ctx context.Context, request ListCampaignCreatorsRequestObject) (ListCampaignCreatorsResponseObject, error)
+	// Add creators to a campaign in batch (admin-only)
+	// (POST /campaigns/{id}/creators)
+	AddCampaignCreators(ctx context.Context, request AddCampaignCreatorsRequestObject) (AddCampaignCreatorsResponseObject, error)
+	// Remove a creator from a campaign (admin-only)
+	// (DELETE /campaigns/{id}/creators/{creatorId})
+	RemoveCampaignCreator(ctx context.Context, request RemoveCampaignCreatorRequestObject) (RemoveCampaignCreatorResponseObject, error)
 	// Submit a creator application from the public landing page
 	// (POST /creators/applications)
 	SubmitCreatorApplication(ctx context.Context, request SubmitCreatorApplicationRequestObject) (SubmitCreatorApplicationResponseObject, error)
@@ -4640,6 +5063,92 @@ func (sh *strictHandler) UpdateCampaign(w http.ResponseWriter, r *http.Request, 
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(UpdateCampaignResponseObject); ok {
 		if err := validResponse.VisitUpdateCampaignResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListCampaignCreators operation middleware
+func (sh *strictHandler) ListCampaignCreators(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request ListCampaignCreatorsRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListCampaignCreators(ctx, request.(ListCampaignCreatorsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListCampaignCreators")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListCampaignCreatorsResponseObject); ok {
+		if err := validResponse.VisitListCampaignCreatorsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// AddCampaignCreators operation middleware
+func (sh *strictHandler) AddCampaignCreators(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request AddCampaignCreatorsRequestObject
+
+	request.Id = id
+
+	var body AddCampaignCreatorsJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.AddCampaignCreators(ctx, request.(AddCampaignCreatorsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "AddCampaignCreators")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(AddCampaignCreatorsResponseObject); ok {
+		if err := validResponse.VisitAddCampaignCreatorsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// RemoveCampaignCreator operation middleware
+func (sh *strictHandler) RemoveCampaignCreator(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, creatorId openapi_types.UUID) {
+	var request RemoveCampaignCreatorRequestObject
+
+	request.Id = id
+	request.CreatorId = creatorId
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.RemoveCampaignCreator(ctx, request.(RemoveCampaignCreatorRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RemoveCampaignCreator")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(RemoveCampaignCreatorResponseObject); ok {
+		if err := validResponse.VisitRemoveCampaignCreatorResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

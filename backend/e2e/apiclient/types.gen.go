@@ -13,6 +13,30 @@ const (
 	BearerAuthScopes = "bearerAuth.Scopes"
 )
 
+// Defines values for CampaignCreatorStatus.
+const (
+	Agreed   CampaignCreatorStatus = "agreed"
+	Declined CampaignCreatorStatus = "declined"
+	Invited  CampaignCreatorStatus = "invited"
+	Planned  CampaignCreatorStatus = "planned"
+)
+
+// Valid indicates whether the value is a known member of the CampaignCreatorStatus enum.
+func (e CampaignCreatorStatus) Valid() bool {
+	switch e {
+	case Agreed:
+		return true
+	case Declined:
+		return true
+	case Invited:
+		return true
+	case Planned:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for CampaignListSortField.
 const (
 	CampaignListSortFieldCreatedAt CampaignListSortField = "created_at"
@@ -241,6 +265,21 @@ type APIError struct {
 	Message string `json:"message"`
 }
 
+// AddCampaignCreatorsInput Batch-add input for POST /campaigns/{id}/creators. Each creatorId
+// must reference an existing creator that is not yet attached to this
+// campaign — any violation rolls back the whole batch (strict-422).
+type AddCampaignCreatorsInput struct {
+	// CreatorIds UUIDs of the creators to attach to the campaign.
+	CreatorIds []openapi_types.UUID `json:"creatorIds"`
+}
+
+// AddCampaignCreatorsResult defines model for AddCampaignCreatorsResult.
+type AddCampaignCreatorsResult struct {
+	Data struct {
+		Items []CampaignCreator `json:"items"`
+	} `json:"data"`
+}
+
 // AssignManagerData defines model for AssignManagerData.
 type AssignManagerData struct {
 	Email        string  `json:"email"`
@@ -350,6 +389,46 @@ type CampaignCreatedData struct {
 type CampaignCreatedResult struct {
 	Data CampaignCreatedData `json:"data"`
 }
+
+// CampaignCreator One creator's attachment to a campaign — the `campaign_creators` row
+// as seen by the admin UI. `invited*`, `reminded*` and `decidedAt`
+// fields are populated by chunks 12+ (notify / remind / TMA flow); on
+// chunk 10 every row is `planned` with NULL timestamps and zero
+// counters.
+type CampaignCreator struct {
+	CampaignId openapi_types.UUID `json:"campaignId"`
+	CreatedAt  time.Time          `json:"createdAt"`
+	CreatorId  openapi_types.UUID `json:"creatorId"`
+
+	// DecidedAt Timestamp of the latest creator decision (agree / decline).
+	DecidedAt *time.Time         `json:"decidedAt,omitempty"`
+	Id        openapi_types.UUID `json:"id"`
+	InvitedAt *time.Time         `json:"invitedAt,omitempty"`
+
+	// InvitedCount Number of invitations sent for this creator (incremented by chunk 12).
+	InvitedCount int        `json:"invitedCount"`
+	RemindedAt   *time.Time `json:"remindedAt,omitempty"`
+
+	// RemindedCount Number of invitation-reminders sent for this creator (incremented by chunk 12).
+	RemindedCount int `json:"remindedCount"`
+
+	// Status Lifecycle state of a creator within a campaign.
+	//
+	// - `planned` — admin added the creator to the campaign (default on create).
+	// - `invited` — admin sent an invitation; awaiting creator response.
+	// - `declined` — creator declined via TMA.
+	// - `agreed` — creator accepted via TMA. Terminal for the current scope.
+	Status    CampaignCreatorStatus `json:"status"`
+	UpdatedAt time.Time             `json:"updatedAt"`
+}
+
+// CampaignCreatorStatus Lifecycle state of a creator within a campaign.
+//
+// - `planned` — admin added the creator to the campaign (default on create).
+// - `invited` — admin sent an invitation; awaiting creator response.
+// - `declined` — creator declined via TMA.
+// - `agreed` — creator accepted via TMA. Terminal for the current scope.
+type CampaignCreatorStatus string
 
 // CampaignInput Mutable subset of a campaign — used for create.
 type CampaignInput struct {
@@ -962,6 +1041,13 @@ type ListBrandsResult struct {
 	Data ListBrandsData `json:"data"`
 }
 
+// ListCampaignCreatorsResult defines model for ListCampaignCreatorsResult.
+type ListCampaignCreatorsResult struct {
+	Data struct {
+		Items []CampaignCreator `json:"items"`
+	} `json:"data"`
+}
+
 // ListDictionaryData defines model for ListDictionaryData.
 type ListDictionaryData struct {
 	Items []DictionaryItem `json:"items"`
@@ -1177,6 +1263,9 @@ type CreateCampaignJSONRequestBody = CampaignInput
 
 // UpdateCampaignJSONRequestBody defines body for UpdateCampaign for application/json ContentType.
 type UpdateCampaignJSONRequestBody = CampaignInput
+
+// AddCampaignCreatorsJSONRequestBody defines body for AddCampaignCreators for application/json ContentType.
+type AddCampaignCreatorsJSONRequestBody = AddCampaignCreatorsInput
 
 // SubmitCreatorApplicationJSONRequestBody defines body for SubmitCreatorApplication for application/json ContentType.
 type SubmitCreatorApplicationJSONRequestBody = CreatorApplicationSubmitRequest
