@@ -19,6 +19,8 @@ const (
 	AuditActionCreatorApplicationApprove            = "creator_application_approve"
 	AuditActionCampaignCreate                       = "campaign_create"
 	AuditActionCampaignUpdate                       = "campaign_update"
+	AuditActionCampaignCreatorAdd                   = "campaign_creator_add"
+	AuditActionCampaignCreatorRemove                = "campaign_creator_remove"
 )
 
 // Audit entity types used alongside AuditAction* values.
@@ -27,4 +29,5 @@ const (
 	AuditEntityTypeBrand              = "brand"
 	AuditEntityTypeCreatorApplication = "creator_application"
 	AuditEntityTypeCampaign           = "campaign"
+	AuditEntityTypeCampaignCreator    = "campaign_creator"
 )

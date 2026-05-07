@@ -1196,6 +1196,155 @@ paths:
         default:
           $ref: "#/components/responses/UnexpectedError"
 
+  /campaigns/{id}/creators:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      operationId: addCampaignCreators
+      summary: Add creators to a campaign in batch (admin-only)
+      description: |
+        Batch-adds creators to a campaign in initial state `planned`. Per
+        creator one row is inserted into `campaign_creators` and one
+        `campaign_creator_add` audit-row is appended in the same transaction.
+        Strict-422: any invalid creatorId or conflict (already in this
+        campaign, creator does not exist) rolls back the whole batch — no
+        partial inserts.
+
+        Soft-deleted campaigns (`isDeleted=true`) are treated as not found
+        (404) for these endpoints, unlike GET /campaigns/{id} which
+        deliberately returns soft-deleted rows for audit / restore. State
+        machine transitions for invite / accept / decline are out of scope —
+        this chunk only covers `→ planned`.
+      tags: [campaigns]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddCampaignCreatorsInput"
+      responses:
+        "201":
+          description: Creators added.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AddCampaignCreatorsResult"
+        "401":
+          description: Unauthenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: Campaign not found (missing or soft-deleted).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Validation error (empty / more than 200 / duplicate creatorIds, creator does not exist, already in this campaign).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: "#/components/responses/UnexpectedError"
+    get:
+      operationId: listCampaignCreators
+      summary: List creators attached to a campaign (admin-only)
+      description: |
+        Returns the full list of `campaign_creators` rows for the campaign
+        ordered by created_at ASC, id ASC. No pagination is applied — the
+        admin UI shows the whole roster. Soft-deleted campaigns surface as
+        404 (see add endpoint description).
+      tags: [campaigns]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Creators list.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ListCampaignCreatorsResult"
+        "401":
+          description: Unauthenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: Campaign not found (missing or soft-deleted).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: "#/components/responses/UnexpectedError"
+
+  /campaigns/{id}/creators/{creatorId}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: creatorId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    delete:
+      operationId: removeCampaignCreator
+      summary: Remove a creator from a campaign (admin-only)
+      description: |
+        Hard-deletes the `campaign_creators` row for the given (campaignId,
+        creatorId) pair. Forbidden once the creator agreed (status=agreed)
+        — the row remains for the downstream TrustMe flow (out of scope).
+        Soft-deleted campaigns surface as 404 (see add endpoint description).
+        The success response is intentionally empty (204 No Content).
+      tags: [campaigns]
+      security:
+        - bearerAuth: []
+      responses:
+        "204":
+          description: Creator removed.
+        "401":
+          description: Unauthenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: Campaign not found, or creator not attached to this campaign.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: The creator already agreed and cannot be removed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: "#/components/responses/UnexpectedError"
+
   /webhooks/sendpulse/instagram:
     post:
       operationId: sendPulseInstagramWebhook
@@ -2603,6 +2752,115 @@ components:
       properties:
         data:
           $ref: "#/components/schemas/CampaignsListData"
+
+    CampaignCreatorStatus:
+      type: string
+      description: |
+        Lifecycle state of a creator within a campaign.
+
+        - `planned` — admin added the creator to the campaign (default on create).
+        - `invited` — admin sent an invitation; awaiting creator response.
+        - `declined` — creator declined via TMA.
+        - `agreed` — creator accepted via TMA. Terminal for the current scope.
+      enum: [planned, invited, declined, agreed]
+
+    CampaignCreator:
+      type: object
+      description: |
+        One creator's attachment to a campaign — the `campaign_creators` row
+        as seen by the admin UI. `invited*`, `reminded*` and `decidedAt`
+        fields are populated by chunks 12+ (notify / remind / TMA flow); on
+        chunk 10 every row is `planned` with NULL timestamps and zero
+        counters.
+      required:
+        - id
+        - campaignId
+        - creatorId
+        - status
+        - invitedCount
+        - remindedCount
+        - createdAt
+        - updatedAt
+      properties:
+        id:
+          type: string
+          format: uuid
+        campaignId:
+          type: string
+          format: uuid
+        creatorId:
+          type: string
+          format: uuid
+        status:
+          $ref: "#/components/schemas/CampaignCreatorStatus"
+        invitedAt:
+          type: string
+          format: date-time
+          nullable: true
+        invitedCount:
+          type: integer
+          description: Number of invitations sent for this creator (incremented by chunk 12).
+        remindedAt:
+          type: string
+          format: date-time
+          nullable: true
+        remindedCount:
+          type: integer
+          description: Number of invitation-reminders sent for this creator (incremented by chunk 12).
+        decidedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: Timestamp of the latest creator decision (agree / decline).
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    AddCampaignCreatorsInput:
+      type: object
+      description: |
+        Batch-add input for POST /campaigns/{id}/creators. Each creatorId
+        must reference an existing creator that is not yet attached to this
+        campaign — any violation rolls back the whole batch (strict-422).
+      required: [creatorIds]
+      properties:
+        creatorIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+          minItems: 1
+          maxItems: 200
+          description: UUIDs of the creators to attach to the campaign.
+
+    AddCampaignCreatorsResult:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [items]
+          properties:
+            items:
+              type: array
+              items:
+                $ref: "#/components/schemas/CampaignCreator"
+
+    ListCampaignCreatorsResult:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [items]
+          properties:
+            items:
+              type: array
+              items:
+                $ref: "#/components/schemas/CampaignCreator"
 
   securitySchemes:
     bearerAuth:

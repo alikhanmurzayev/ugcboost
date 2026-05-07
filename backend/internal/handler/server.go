@@ -56,6 +56,9 @@ type AuthzService interface {
 	CanGetCampaign(ctx context.Context) error
 	CanUpdateCampaign(ctx context.Context) error
 	CanListCampaigns(ctx context.Context) error
+	CanAddCampaignCreators(ctx context.Context) error
+	CanRemoveCampaignCreator(ctx context.Context) error
+	CanListCampaignCreators(ctx context.Context) error
 }
 
 // AuditLogService is the interface Server needs from the audit service.
@@ -102,6 +105,15 @@ type CampaignService interface {
 	List(ctx context.Context, in domain.CampaignListInput) (*domain.CampaignListPage, error)
 }
 
+// CampaignCreatorService is the interface Server needs from the campaign-
+// creator service — admin-only batch add (POST), single remove (DELETE) and
+// no-pagination list (GET) on /campaigns/{id}/creators.
+type CampaignCreatorService interface {
+	Add(ctx context.Context, campaignID string, creatorIDs []string) ([]*domain.CampaignCreator, error)
+	Remove(ctx context.Context, campaignID, creatorID string) error
+	List(ctx context.Context, campaignID string) ([]*domain.CampaignCreator, error)
+}
+
 // ServerConfig bundles configuration values the handler layer needs. Keeping
 // them in a struct lets NewServer grow without a long positional signature.
 type ServerConfig struct {
@@ -121,6 +133,7 @@ type Server struct {
 	creatorApplicationService CreatorApplicationService
 	creatorService            CreatorService
 	campaignService           CampaignService
+	campaignCreatorService    CampaignCreatorService
 	dictionaryService         DictionaryService
 	version                   string
 	cookieSecure              bool
@@ -141,6 +154,7 @@ func NewServer(
 	creatorApps CreatorApplicationService,
 	creators CreatorService,
 	campaigns CampaignService,
+	campaignCreators CampaignCreatorService,
 	dict DictionaryService,
 	cfg ServerConfig,
 	log logger.Logger,
@@ -153,6 +167,7 @@ func NewServer(
 		creatorApplicationService: creatorApps,
 		creatorService:            creators,
 		campaignService:           campaigns,
+		campaignCreatorService:    campaignCreators,
 		dictionaryService:         dict,
 		version:                   cfg.Version,
 		cookieSecure:              cfg.CookieSecure,

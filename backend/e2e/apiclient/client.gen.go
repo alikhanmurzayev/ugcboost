@@ -160,6 +160,17 @@ type ClientInterface interface {
 
 	UpdateCampaign(ctx context.Context, id openapi_types.UUID, body UpdateCampaignJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// ListCampaignCreators request
+	ListCampaignCreators(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// AddCampaignCreatorsWithBody request with any body
+	AddCampaignCreatorsWithBody(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	AddCampaignCreators(ctx context.Context, id openapi_types.UUID, body AddCampaignCreatorsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// RemoveCampaignCreator request
+	RemoveCampaignCreator(ctx context.Context, id openapi_types.UUID, creatorId openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// SubmitCreatorApplicationWithBody request with any body
 	SubmitCreatorApplicationWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -509,6 +520,54 @@ func (c *Client) UpdateCampaignWithBody(ctx context.Context, id openapi_types.UU
 
 func (c *Client) UpdateCampaign(ctx context.Context, id openapi_types.UUID, body UpdateCampaignJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewUpdateCampaignRequest(c.Server, id, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ListCampaignCreators(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListCampaignCreatorsRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) AddCampaignCreatorsWithBody(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAddCampaignCreatorsRequestWithBody(c.Server, id, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) AddCampaignCreators(ctx context.Context, id openapi_types.UUID, body AddCampaignCreatorsJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewAddCampaignCreatorsRequest(c.Server, id, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) RemoveCampaignCreator(ctx context.Context, id openapi_types.UUID, creatorId openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRemoveCampaignCreatorRequest(c.Server, id, creatorId)
 	if err != nil {
 		return nil, err
 	}
@@ -1589,6 +1648,128 @@ func NewUpdateCampaignRequestWithBody(server string, id openapi_types.UUID, cont
 	return req, nil
 }
 
+// NewListCampaignCreatorsRequest generates requests for ListCampaignCreators
+func NewListCampaignCreatorsRequest(server string, id openapi_types.UUID) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/campaigns/%s/creators", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewAddCampaignCreatorsRequest calls the generic AddCampaignCreators builder with application/json body
+func NewAddCampaignCreatorsRequest(server string, id openapi_types.UUID, body AddCampaignCreatorsJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewAddCampaignCreatorsRequestWithBody(server, id, "application/json", bodyReader)
+}
+
+// NewAddCampaignCreatorsRequestWithBody generates requests for AddCampaignCreators with any type of body
+func NewAddCampaignCreatorsRequestWithBody(server string, id openapi_types.UUID, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/campaigns/%s/creators", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewRemoveCampaignCreatorRequest generates requests for RemoveCampaignCreator
+func NewRemoveCampaignCreatorRequest(server string, id openapi_types.UUID, creatorId openapi_types.UUID) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	var pathParam1 string
+
+	pathParam1, err = runtime.StyleParamWithOptions("simple", false, "creatorId", creatorId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/campaigns/%s/creators/%s", pathParam0, pathParam1)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("DELETE", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewSubmitCreatorApplicationRequest calls the generic SubmitCreatorApplication builder with application/json body
 func NewSubmitCreatorApplicationRequest(server string, body SubmitCreatorApplicationJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
@@ -2140,6 +2321,17 @@ type ClientWithResponsesInterface interface {
 
 	UpdateCampaignWithResponse(ctx context.Context, id openapi_types.UUID, body UpdateCampaignJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateCampaignResponse, error)
 
+	// ListCampaignCreatorsWithResponse request
+	ListCampaignCreatorsWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*ListCampaignCreatorsResponse, error)
+
+	// AddCampaignCreatorsWithBodyWithResponse request with any body
+	AddCampaignCreatorsWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AddCampaignCreatorsResponse, error)
+
+	AddCampaignCreatorsWithResponse(ctx context.Context, id openapi_types.UUID, body AddCampaignCreatorsJSONRequestBody, reqEditors ...RequestEditorFn) (*AddCampaignCreatorsResponse, error)
+
+	// RemoveCampaignCreatorWithResponse request
+	RemoveCampaignCreatorWithResponse(ctx context.Context, id openapi_types.UUID, creatorId openapi_types.UUID, reqEditors ...RequestEditorFn) (*RemoveCampaignCreatorResponse, error)
+
 	// SubmitCreatorApplicationWithBodyWithResponse request with any body
 	SubmitCreatorApplicationWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SubmitCreatorApplicationResponse, error)
 
@@ -2626,6 +2818,85 @@ func (r UpdateCampaignResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r UpdateCampaignResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type ListCampaignCreatorsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *ListCampaignCreatorsResult
+	JSON401      *ErrorResponse
+	JSON403      *Forbidden
+	JSON404      *ErrorResponse
+	JSONDefault  *UnexpectedError
+}
+
+// Status returns HTTPResponse.Status
+func (r ListCampaignCreatorsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListCampaignCreatorsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type AddCampaignCreatorsResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON201      *AddCampaignCreatorsResult
+	JSON401      *ErrorResponse
+	JSON403      *Forbidden
+	JSON404      *ErrorResponse
+	JSON422      *ErrorResponse
+	JSONDefault  *UnexpectedError
+}
+
+// Status returns HTTPResponse.Status
+func (r AddCampaignCreatorsResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r AddCampaignCreatorsResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type RemoveCampaignCreatorResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON401      *ErrorResponse
+	JSON403      *Forbidden
+	JSON404      *ErrorResponse
+	JSON422      *ErrorResponse
+	JSONDefault  *UnexpectedError
+}
+
+// Status returns HTTPResponse.Status
+func (r RemoveCampaignCreatorResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r RemoveCampaignCreatorResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -3163,6 +3434,41 @@ func (c *ClientWithResponses) UpdateCampaignWithResponse(ctx context.Context, id
 		return nil, err
 	}
 	return ParseUpdateCampaignResponse(rsp)
+}
+
+// ListCampaignCreatorsWithResponse request returning *ListCampaignCreatorsResponse
+func (c *ClientWithResponses) ListCampaignCreatorsWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*ListCampaignCreatorsResponse, error) {
+	rsp, err := c.ListCampaignCreators(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListCampaignCreatorsResponse(rsp)
+}
+
+// AddCampaignCreatorsWithBodyWithResponse request with arbitrary body returning *AddCampaignCreatorsResponse
+func (c *ClientWithResponses) AddCampaignCreatorsWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*AddCampaignCreatorsResponse, error) {
+	rsp, err := c.AddCampaignCreatorsWithBody(ctx, id, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAddCampaignCreatorsResponse(rsp)
+}
+
+func (c *ClientWithResponses) AddCampaignCreatorsWithResponse(ctx context.Context, id openapi_types.UUID, body AddCampaignCreatorsJSONRequestBody, reqEditors ...RequestEditorFn) (*AddCampaignCreatorsResponse, error) {
+	rsp, err := c.AddCampaignCreators(ctx, id, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseAddCampaignCreatorsResponse(rsp)
+}
+
+// RemoveCampaignCreatorWithResponse request returning *RemoveCampaignCreatorResponse
+func (c *ClientWithResponses) RemoveCampaignCreatorWithResponse(ctx context.Context, id openapi_types.UUID, creatorId openapi_types.UUID, reqEditors ...RequestEditorFn) (*RemoveCampaignCreatorResponse, error) {
+	rsp, err := c.RemoveCampaignCreator(ctx, id, creatorId, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRemoveCampaignCreatorResponse(rsp)
 }
 
 // SubmitCreatorApplicationWithBodyWithResponse request with arbitrary body returning *SubmitCreatorApplicationResponse
@@ -4104,6 +4410,175 @@ func ParseUpdateCampaignResponse(rsp *http.Response) (*UpdateCampaignResponse, e
 			return nil, err
 		}
 		response.JSON409 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON422 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest UnexpectedError
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseListCampaignCreatorsResponse parses an HTTP response from a ListCampaignCreatorsWithResponse call
+func ParseListCampaignCreatorsResponse(rsp *http.Response) (*ListCampaignCreatorsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListCampaignCreatorsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest ListCampaignCreatorsResult
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest UnexpectedError
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseAddCampaignCreatorsResponse parses an HTTP response from a AddCampaignCreatorsWithResponse call
+func ParseAddCampaignCreatorsResponse(rsp *http.Response) (*AddCampaignCreatorsResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &AddCampaignCreatorsResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest AddCampaignCreatorsResult
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON422 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest UnexpectedError
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseRemoveCampaignCreatorResponse parses an HTTP response from a RemoveCampaignCreatorWithResponse call
+func ParseRemoveCampaignCreatorResponse(rsp *http.Response) (*RemoveCampaignCreatorResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &RemoveCampaignCreatorResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
 		var dest ErrorResponse

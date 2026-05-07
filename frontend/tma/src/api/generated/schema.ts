@@ -625,6 +625,73 @@ export interface paths {
         patch: operations["updateCampaign"];
         trace?: never;
     };
+    "/campaigns/{id}/creators": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * List creators attached to a campaign (admin-only)
+         * @description Returns the full list of `campaign_creators` rows for the campaign
+         *     ordered by created_at ASC, id ASC. No pagination is applied — the
+         *     admin UI shows the whole roster. Soft-deleted campaigns surface as
+         *     404 (see add endpoint description).
+         */
+        get: operations["listCampaignCreators"];
+        put?: never;
+        /**
+         * Add creators to a campaign in batch (admin-only)
+         * @description Batch-adds creators to a campaign in initial state `planned`. Per
+         *     creator one row is inserted into `campaign_creators` and one
+         *     `campaign_creator_add` audit-row is appended in the same transaction.
+         *     Strict-422: any invalid creatorId or conflict (already in this
+         *     campaign, creator does not exist) rolls back the whole batch — no
+         *     partial inserts.
+         *
+         *     Soft-deleted campaigns (`isDeleted=true`) are treated as not found
+         *     (404) for these endpoints, unlike GET /campaigns/{id} which
+         *     deliberately returns soft-deleted rows for audit / restore. State
+         *     machine transitions for invite / accept / decline are out of scope —
+         *     this chunk only covers `→ planned`.
+         */
+        post: operations["addCampaignCreators"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/campaigns/{id}/creators/{creatorId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                creatorId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove a creator from a campaign (admin-only)
+         * @description Hard-deletes the `campaign_creators` row for the given (campaignId,
+         *     creatorId) pair. Forbidden once the creator agreed (status=agreed)
+         *     — the row remains for the downstream TrustMe flow (out of scope).
+         *     Soft-deleted campaigns surface as 404 (see add endpoint description).
+         *     The success response is intentionally empty (204 No Content).
+         */
+        delete: operations["removeCampaignCreator"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/webhooks/sendpulse/instagram": {
         parameters: {
             query?: never;
@@ -1434,6 +1501,68 @@ export interface components {
         };
         CampaignsListResult: {
             data: components["schemas"]["CampaignsListData"];
+        };
+        /**
+         * @description Lifecycle state of a creator within a campaign.
+         *
+         *     - `planned` — admin added the creator to the campaign (default on create).
+         *     - `invited` — admin sent an invitation; awaiting creator response.
+         *     - `declined` — creator declined via TMA.
+         *     - `agreed` — creator accepted via TMA. Terminal for the current scope.
+         * @enum {string}
+         */
+        CampaignCreatorStatus: "planned" | "invited" | "declined" | "agreed";
+        /**
+         * @description One creator's attachment to a campaign — the `campaign_creators` row
+         *     as seen by the admin UI. `invited*`, `reminded*` and `decidedAt`
+         *     fields are populated by chunks 12+ (notify / remind / TMA flow); on
+         *     chunk 10 every row is `planned` with NULL timestamps and zero
+         *     counters.
+         */
+        CampaignCreator: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            campaignId: string;
+            /** Format: uuid */
+            creatorId: string;
+            status: components["schemas"]["CampaignCreatorStatus"];
+            /** Format: date-time */
+            invitedAt?: string | null;
+            /** @description Number of invitations sent for this creator (incremented by chunk 12). */
+            invitedCount: number;
+            /** Format: date-time */
+            remindedAt?: string | null;
+            /** @description Number of invitation-reminders sent for this creator (incremented by chunk 12). */
+            remindedCount: number;
+            /**
+             * Format: date-time
+             * @description Timestamp of the latest creator decision (agree / decline).
+             */
+            decidedAt?: string | null;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        /**
+         * @description Batch-add input for POST /campaigns/{id}/creators. Each creatorId
+         *     must reference an existing creator that is not yet attached to this
+         *     campaign — any violation rolls back the whole batch (strict-422).
+         */
+        AddCampaignCreatorsInput: {
+            /** @description UUIDs of the creators to attach to the campaign. */
+            creatorIds: string[];
+        };
+        AddCampaignCreatorsResult: {
+            data: {
+                items: components["schemas"]["CampaignCreator"][];
+            };
+        };
+        ListCampaignCreatorsResult: {
+            data: {
+                items: components["schemas"]["CampaignCreator"][];
+            };
         };
     };
     responses: {
@@ -2595,6 +2724,153 @@ export interface operations {
                 };
             };
             /** @description Validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            default: components["responses"]["UnexpectedError"];
+        };
+    };
+    listCampaignCreators: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Creators list. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ListCampaignCreatorsResult"];
+                };
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            /** @description Campaign not found (missing or soft-deleted). */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            default: components["responses"]["UnexpectedError"];
+        };
+    };
+    addCampaignCreators: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddCampaignCreatorsInput"];
+            };
+        };
+        responses: {
+            /** @description Creators added. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AddCampaignCreatorsResult"];
+                };
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            /** @description Campaign not found (missing or soft-deleted). */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Validation error (empty / more than 200 / duplicate creatorIds, creator does not exist, already in this campaign). */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            default: components["responses"]["UnexpectedError"];
+        };
+    };
+    removeCampaignCreator: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                creatorId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Creator removed. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            /** @description Campaign not found, or creator not attached to this campaign. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description The creator already agreed and cannot be removed. */
             422: {
                 headers: {
                     [name: string]: unknown;

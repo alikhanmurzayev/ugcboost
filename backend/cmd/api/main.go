@@ -100,6 +100,7 @@ func run() error {
 	creatorApplicationTelegramSvc := service.NewCreatorApplicationTelegramService(pool, repoFactory, tgRig.Notifier, appLogger)
 	creatorSvc := service.NewCreatorService(pool, repoFactory, appLogger)
 	campaignSvc := service.NewCampaignService(pool, repoFactory, appLogger)
+	campaignCreatorSvc := service.NewCampaignCreatorService(pool, repoFactory, appLogger)
 	dictionarySvc := service.NewDictionaryService(pool, repoFactory, appLogger)
 
 	tgHandler := telegram.NewHandler(creatorApplicationTelegramSvc, appLogger)
@@ -128,7 +129,7 @@ func run() error {
 	r.Use(middleware.SendPulseAuth(cfg.SendPulseWebhookSecret, appLogger))
 
 	// Create server implementing ServerInterface
-	server := handler.NewServer(authSvc, brandSvc, authzSvc, auditSvc, creatorApplicationSvc, creatorSvc, campaignSvc, dictionarySvc, handler.ServerConfig{
+	server := handler.NewServer(authSvc, brandSvc, authzSvc, auditSvc, creatorApplicationSvc, creatorSvc, campaignSvc, campaignCreatorSvc, dictionarySvc, handler.ServerConfig{
 		Version:               cfg.Version,
 		CookieSecure:          cfg.CookieSecure,
 		TelegramBotUsername:   cfg.TelegramBotUsername,
