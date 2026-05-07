@@ -32,8 +32,8 @@ export const campaignCreatorKeys = {
   all: () => ["campaignCreators"] as const,
   list: (campaignId: string) =>
     ["campaignCreators", "list", campaignId] as const,
-  profiles: (campaignId: string, ids: string[]) =>
-    ["campaignCreators", "profiles", campaignId, ids.join(",")] as const,
+  profiles: (campaignId: string, ids: readonly string[]) =>
+    ["campaignCreators", "profiles", campaignId, ids] as const,
 };
 
 export const dictionaryKeys = {

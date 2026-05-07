@@ -4,8 +4,18 @@ import client, { ApiError } from "./client";
 export type CampaignCreator = components["schemas"]["CampaignCreator"];
 
 function extractErrorCode(error: unknown): string {
-  const e = error as { error?: { code?: string } };
-  return e?.error?.code ?? "INTERNAL_ERROR";
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "error" in error &&
+    typeof (error as { error: unknown }).error === "object" &&
+    (error as { error: unknown }).error !== null &&
+    "code" in (error as { error: { code?: unknown } }).error
+  ) {
+    const code = (error as { error: { code?: unknown } }).error.code;
+    if (typeof code === "string") return code;
+  }
+  return "INTERNAL_ERROR";
 }
 
 export async function listCampaignCreators(

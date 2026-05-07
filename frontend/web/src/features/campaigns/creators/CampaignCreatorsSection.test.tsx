@@ -15,7 +15,10 @@ vi.mock("@/api/creators", () => ({
 }));
 
 import { listCampaignCreators } from "@/api/campaignCreators";
+import type { CampaignCreator } from "@/api/campaignCreators";
 import { listCreators } from "@/api/creators";
+import type { CreatorListItem } from "@/api/creators";
+import { ApiError } from "@/api/client";
 import CampaignCreatorsSection from "./CampaignCreatorsSection";
 
 const CAMPAIGN_ID = "11111111-1111-1111-1111-111111111111";
@@ -35,12 +38,12 @@ const FIXTURE_CAMPAIGN_DELETED = {
   isDeleted: true,
 } as const;
 
-function makeCC(creatorId: string) {
+function makeCC(creatorId: string): CampaignCreator {
   return {
     id: `cc-${creatorId}`,
     campaignId: CAMPAIGN_ID,
     creatorId,
-    status: "planned" as const,
+    status: "planned",
     invitedAt: null,
     invitedCount: 0,
     remindedAt: null,
@@ -51,7 +54,7 @@ function makeCC(creatorId: string) {
   };
 }
 
-function makeCreator(id: string, lastName: string) {
+function makeCreator(id: string, lastName: string): CreatorListItem {
   return {
     id,
     lastName,
@@ -62,7 +65,7 @@ function makeCreator(id: string, lastName: string) {
     phone: "+77001112255",
     city: { code: "ALA", name: "Алматы", sortOrder: 10 },
     categories: [{ code: "fashion", name: "Мода", sortOrder: 1 }],
-    socials: [{ platform: "instagram" as const, handle: lastName.toLowerCase() }],
+    socials: [{ platform: "instagram", handle: lastName.toLowerCase() }],
     telegramUsername: lastName.toLowerCase(),
     createdAt: "2026-04-30T12:00:00Z",
     updatedAt: "2026-04-30T12:00:00Z",
@@ -101,7 +104,7 @@ describe("CampaignCreatorsSection — visibility gate", () => {
 });
 
 describe("CampaignCreatorsSection — loading & error", () => {
-  it("renders Spinner while A3 pending", () => {
+  it("renders Spinner with testid while A3 pending", () => {
     vi.mocked(listCampaignCreators).mockImplementation(
       () => new Promise(() => {}),
     );
@@ -110,17 +113,24 @@ describe("CampaignCreatorsSection — loading & error", () => {
 
     expect(screen.getByTestId("campaign-creators-section")).toBeInTheDocument();
     expect(
+      screen.getByTestId("campaign-creators-loading"),
+    ).toBeInTheDocument();
+    expect(
       screen.queryByTestId("campaign-creators-table"),
     ).not.toBeInTheDocument();
   });
 
-  it("renders ErrorState with retry on A3 failure; retry refires A3", async () => {
-    vi.mocked(listCampaignCreators).mockRejectedValueOnce(new Error("boom"));
+  it("renders ErrorState with retry on A3 ApiError; retry refires A3 and re-counts the call", async () => {
+    vi.mocked(listCampaignCreators).mockRejectedValueOnce(
+      new ApiError(500, "INTERNAL_ERROR"),
+    );
     vi.mocked(listCampaignCreators).mockResolvedValueOnce([]);
 
     renderSection(FIXTURE_CAMPAIGN_LIVE);
 
-    expect(await screen.findByTestId("error-state")).toBeInTheDocument();
+    expect(await screen.findByTestId("error-state")).toHaveTextContent(
+      "Не удалось загрузить креаторов",
+    );
     await userEvent.click(screen.getByTestId("error-retry-button"));
 
     await waitFor(() => {
@@ -128,6 +138,7 @@ describe("CampaignCreatorsSection — loading & error", () => {
         screen.getByTestId("campaign-creators-table-empty"),
       ).toHaveTextContent("Креаторов пока нет");
     });
+    expect(listCampaignCreators).toHaveBeenCalledTimes(2);
   });
 });
 

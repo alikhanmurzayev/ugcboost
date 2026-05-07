@@ -19,7 +19,7 @@ vi.mock("./client", () => {
   };
 });
 
-import client, { ApiError } from "./client";
+import client from "./client";
 import { listCampaignCreators } from "./campaignCreators";
 
 const mockedGet = vi.mocked(client.GET);
@@ -95,14 +95,28 @@ describe("listCampaignCreators", () => {
     });
   });
 
-  it("falls back to INTERNAL_ERROR on malformed error body", async () => {
+  it("falls back to status=500 + code=INTERNAL_ERROR on malformed error body", async () => {
     mockedGet.mockResolvedValueOnce({
       error: {},
       response: { status: 500 } as Response,
     });
 
-    await expect(listCampaignCreators(CAMPAIGN_ID)).rejects.toBeInstanceOf(
-      ApiError,
-    );
+    await expect(listCampaignCreators(CAMPAIGN_ID)).rejects.toMatchObject({
+      status: 500,
+      code: "INTERNAL_ERROR",
+    });
+  });
+
+  it("falls back to status=500 + code=INTERNAL_ERROR when error.code is non-string", async () => {
+    mockedGet.mockResolvedValueOnce({
+      error: { error: { code: 42 } },
+      response: { status: 500 } as Response,
+    });
+
+    await expect(listCampaignCreators(CAMPAIGN_ID)).rejects.toMatchObject({
+      status: 500,
+      code: "INTERNAL_ERROR",
+    });
   });
 });
+

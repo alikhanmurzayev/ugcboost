@@ -35,8 +35,7 @@ export function useCampaignCreators(
 
   const creatorIds = useMemo(() => {
     const ids = (ccQuery.data ?? []).map((cc) => cc.creatorId);
-    ids.sort();
-    return ids;
+    return [...ids].sort();
   }, [ccQuery.data]);
 
   const profilesEnabled = enabled && creatorIds.length > 0;

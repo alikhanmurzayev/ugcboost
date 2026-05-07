@@ -4,7 +4,36 @@ Findings, surfaced by reviews/work, that we consciously kicked down the road. Ea
 
 ---
 
-## 2026-05-07 — chunk 11 slice 1/2 review (campaign-creators-frontend-read)
+## 2026-05-07 — chunk 11 slice 1/2 review round 2 (6 субагентов)
+
+### Дублирующийся `extractErrorCode` в каждом `frontend/web/src/api/*.ts`
+**Что:** одна и та же функция `extractErrorCode` живёт в 8 модулях (auth, audit, brands, campaigns, creators, creatorApplications, dictionaries, campaignCreators).
+**Почему отложено:** out-of-scope для frontend-read PR. Разрешается одним отдельным рефакторингом (вынос в `api/client.ts`).
+**Когда возвращаться:** следующий PR, трогающий несколько `api/*.ts`.
+
+### `formatShortDate` дубликат — 7 копий по фичам
+**Что:** идентичная утилита `formatShortDate(iso)` живёт в `CreatorsListPage.tsx`, `CampaignsListPage.tsx`, `Verification/Moderation*Page.tsx`, теперь и в `CampaignCreatorsTable.tsx`. Rule of three превышено более чем вдвое.
+**Почему отложено:** wholesale refactor через `shared/utils/formatDate.ts` касается 7 файлов — отдельный PR.
+**Когда возвращаться:** при следующей правке формата короткой даты или новой таблицы со short date.
+
+### `<tr role="button" onClick>` в shared `<Table>` вместо `<Link>` per cell
+**Что:** Accessibility-правило `frontend-quality.md`: «Кликабельные строки таблиц — через `<Link>` внутри ячейки, не `onClick` на `<tr>`». Shared Table использует onClick на tr для всех страниц.
+**Почему отложено:** трогать `Table.tsx` с `<Link>` API меняет 5+ потребителей одновременно. Самостоятельный PR.
+**Когда возвращаться:** при WCAG-аудите либо при первой жалобе на keyboard UX.
+
+### `data-selected` атрибут теперь на ВСЕХ строках всех таблиц проекта
+**Что:** изменение `Table.tsx` ставит `data-selected="true|false"` на каждый `<tr>` — расширяет публичный «контракт» компонента, без записи в `docs/standards/frontend-*`.
+**Почему отложено:** атрибут не содержит CSS-стилей и не ломает существующих потребителей (e2e/unit тесты на /creators, /campaigns, /brands не ассертят `data-selected`). Отдельный документационный PR — слишком мелко.
+**Когда возвращаться:** если кто-то добавит глобальный CSS-селектор `[data-selected]` или появится PR обновляющий `docs/standards/frontend-components.md`.
+
+### e2e cleanup-стек обрывается на первом упавшем cleanup
+**Что:** в `admin-campaign-creators-read.spec.ts` (и других spec'ах) `while(cleanupStack.length>0) { await withTimeout(fn(), 5000) }` без try-catch. Один сбой → остаток стека не отрабатывает → утечка строк.
+**Почему отложено:** pre-existing pattern. Решение — обернуть `withTimeout` в try-catch + warn — изменение паттерна 5+ файлов.
+**Когда возвращаться:** при flaky cleanup в CI.
+
+---
+
+## 2026-05-07 — chunk 11 slice 1/2 review round 1
 
 ### `useCampaignCreators`: hard-cap 200 без chunking
 **Что:** `listCreators({ids: creatorIds, perPage: 200, ...})` не chunkает `creatorIds`. Если кампания накопит >200 креаторов, listCreators отдаст 422.
@@ -16,10 +45,10 @@ Findings, surfaced by reviews/work, that we consciously kicked down the road. Ea
 **Почему отложено:** spec буквально фиксирует `sort: "created_at"` для listCreators — текущая реализация не отклоняется. Spec gap: какой порядок ожидает PM/UX. Нужно согласовать.
 **Когда возвращаться:** после first user feedback на staging — Aidana подскажет, какой порядок ей удобнее. Если cc.created_at desc — добавить sort на стороне фронта (или в backend listCampaignCreators).
 
-### Хардкод символа `№` в заголовках колонок (table)
-**Что:** `header: "№"` в `CreatorsListPage.buildColumns` и в `CampaignCreatorsTable.buildColumns` — литерал в JSX без `t(...)`.
-**Почему отложено:** паттерн pre-existing в `CreatorsListPage.tsx:229`. Символ `№` — language-neutral для русскоязычного MVP. Локализация сейчас single-language (ru), нет английских ассетов. Когда будет — фиксим везде вместе.
-**Когда возвращаться:** при добавлении второй локали (EN/KZ).
+### Хардкод символа `№` в `CreatorsListPage.buildColumns`
+**Что:** `header: "№"` в `CreatorsListPage.tsx:229` — литерал в JSX без `t(...)`. В `CampaignCreatorsTable.tsx` round 2 уже фикснут на `t('creators:columns.index')`, ключ добавлен в `creators.json`.
+**Почему отложено:** правка `CreatorsListPage.tsx` out-of-scope для slice 1/2 PR. Ключ `creators:columns.index` уже доступен — заменить за один лайн в следующий касательный PR.
+**Когда возвращаться:** ближайший PR трогающий `CreatorsListPage`.
 
 ### `formatShortDate` дублируется в каждом feature-таблице
 **Что:** одинаковая функция `formatShortDate` живёт в `CreatorsListPage.tsx` и `CampaignCreatorsTable.tsx`.

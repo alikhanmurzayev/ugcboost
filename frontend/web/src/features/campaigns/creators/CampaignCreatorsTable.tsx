@@ -50,7 +50,7 @@ function buildColumns(
   return [
     {
       key: "index",
-      header: "№",
+      header: t("columns.index"),
       render: (_row, index) => (
         <span className="text-gray-400">{index + 1}</span>
       ),
@@ -83,13 +83,16 @@ function buildColumns(
       header: t("columns.socials"),
       render: (row) => {
         if (!row.creator) {
-          return <span className="text-gray-400">{placeholder}</span>;
+          return (
+            <span className="text-gray-400" title={deletedTitle}>
+              {placeholder}
+            </span>
+          );
         }
         return (
           <div
             className="flex flex-col gap-1"
             onClick={(e) => e.stopPropagation()}
-            onKeyDown={(e) => e.stopPropagation()}
             role="presentation"
           >
             {row.creator.socials.map((s) => (
@@ -110,7 +113,11 @@ function buildColumns(
       header: t("columns.categories"),
       render: (row) => {
         if (!row.creator) {
-          return <span className="text-gray-400">{placeholder}</span>;
+          return (
+            <span className="text-gray-400" title={deletedTitle}>
+              {placeholder}
+            </span>
+          );
         }
         return <CategoryChips categories={row.creator.categories} />;
       },
@@ -119,7 +126,13 @@ function buildColumns(
       key: "age",
       header: t("columns.age"),
       render: (row) => {
-        if (!row.creator) return placeholder;
+        if (!row.creator) {
+          return (
+            <span className="text-gray-400" title={deletedTitle}>
+              {placeholder}
+            </span>
+          );
+        }
         return calcAge(row.creator.birthDate);
       },
       align: "right",
@@ -130,7 +143,11 @@ function buildColumns(
       header: t("columns.city"),
       render: (row) => {
         if (!row.creator) {
-          return <span className="text-gray-400">{placeholder}</span>;
+          return (
+            <span className="text-gray-400" title={deletedTitle}>
+              {placeholder}
+            </span>
+          );
         }
         return <span className="text-gray-700">{row.creator.city.name}</span>;
       },
@@ -140,7 +157,13 @@ function buildColumns(
       key: "createdAt",
       header: t("columns.createdAt"),
       render: (row) => {
-        if (!row.creator) return placeholder;
+        if (!row.creator) {
+          return (
+            <span className="text-gray-400" title={deletedTitle}>
+              {placeholder}
+            </span>
+          );
+        }
         return formatShortDate(row.creator.createdAt);
       },
       width: "w-24",

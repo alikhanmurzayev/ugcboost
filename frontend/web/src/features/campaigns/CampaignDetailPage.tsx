@@ -12,6 +12,7 @@ import ErrorState from "@/shared/components/ErrorState";
 import CreatorDrawer from "@/features/creators/CreatorDrawer";
 import CampaignEditSection from "./CampaignEditSection";
 import CampaignCreatorsSection from "./creators/CampaignCreatorsSection";
+import { useCampaignCreators } from "./creators/hooks/useCampaignCreators";
 
 const SAFE_LINK_SCHEMES = new Set(["http:", "https:", "tg:"]);
 
@@ -86,12 +87,24 @@ function CampaignDetailContent({ campaign }: { campaign: Campaign }) {
 
   const selectedCreatorId = searchParams.get(SEARCH_PARAMS.CREATOR_ID);
 
+  // Reuses the same React Query key as <CampaignCreatorsSection>; both
+  // subscriptions share one network round-trip via TanStack's request
+  // dedup, so the prefill comes for free on cold-load with ?creatorId=X.
+  const { rows } = useCampaignCreators(campaign.id, {
+    enabled: !campaign.isDeleted,
+  });
+
   const detailQuery = useQuery({
     queryKey: creatorKeys.detail(selectedCreatorId ?? ""),
     queryFn: () => getCreator(selectedCreatorId ?? ""),
     enabled: !!selectedCreatorId,
     retry: false,
   });
+
+  const prefill = selectedCreatorId
+    ? rows.find((r) => r.campaignCreator.creatorId === selectedCreatorId)
+        ?.creator
+    : undefined;
 
   function closeCreator() {
     setSearchParams((prev) => {
@@ -169,7 +182,7 @@ function CampaignDetailContent({ campaign }: { campaign: Campaign }) {
       <CampaignCreatorsSection campaign={campaign} />
 
       <CreatorDrawer
-        prefill={undefined}
+        prefill={prefill}
         detail={detailQuery.data?.data}
         isLoading={detailQuery.isLoading}
         isError={detailQuery.isError}

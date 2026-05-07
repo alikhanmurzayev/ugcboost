@@ -36,11 +36,12 @@
  * `drawer-close` закрывает drawer и убирает creatorId из URL — закрывает
  * AC про click row → URL → existing CreatorDrawer.
  *
- * Soft-deleted campaign — секция `campaign-creators-section` не
- * рендерится вообще: чтобы это симулировать, переходим прямо в БД-режим
- * через флаг soft-delete нет (эта ручка ещё не зарелизена в slice 7),
- * поэтому здесь сценарий покрыт unit-тестом CampaignDetailPage. В e2e
- * проверяем только живой happy-path и empty-state.
+ * Soft-deleted campaign — секция `campaign-creators-section` не должна
+ * рендериться вовсе. Production-эндпоинта soft-delete'а кампании в main
+ * пока нет, поэтому путь закрыт unit-тестом `CampaignDetailPage.test.tsx`
+ * (проверяет, что при `campaign.isDeleted === true` секция отсутствует
+ * в DOM, а A3 не вызывается). В e2e оставлены только happy-state'ы и
+ * один user-flow перехода через drawer.
  */
 import { test, expect, type Page } from "@playwright/test";
 import {
@@ -134,6 +135,27 @@ test.describe("Admin campaign creators — read-only section (slice 1/2)", () =>
     await expect(rowA).toContainText(
       `${creatorA.application.lastName} ${creatorA.application.firstName}`,
     );
+    // Default seed plants city=almaty (label: «Алматы») and category=beauty
+    // (label: «Бьюти (макияж, уход)») — assert both rows render hydrated
+    // dictionary labels alongside the social handle so all 7 columns are
+    // proven to wire through, not just the name.
+    await expect(rowA).toContainText("Алматы");
+    await expect(rowA).toContainText("Бьюти (макияж, уход)");
+    const socialA = rowA.getByTestId("social-instagram");
+    await expect(socialA).toHaveAttribute(
+      "href",
+      `https://instagram.com/${creatorA.application.socials[0]?.handle ?? ""}`,
+    );
+    await expect(socialA).toContainText(
+      `@${creatorA.application.socials[0]?.handle ?? ""}`,
+    );
+
+    const rowB = page.getByTestId(`row-${creatorB.creatorId}`);
+    await expect(rowB).toContainText(
+      `${creatorB.application.lastName} ${creatorB.application.firstName}`,
+    );
+    await expect(rowB).toContainText("Алматы");
+    await expect(rowB).toContainText("Бьюти (макияж, уход)");
 
     const addBtn = page.getByTestId("campaign-creators-add-button");
     await expect(addBtn).toBeDisabled();

@@ -12,19 +12,21 @@ vi.mock("@/api/creators", () => ({
 }));
 
 import { listCampaignCreators } from "@/api/campaignCreators";
+import type { CampaignCreator } from "@/api/campaignCreators";
 import { listCreators } from "@/api/creators";
+import type { CreatorListItem } from "@/api/creators";
 import { useCampaignCreators } from "./useCampaignCreators";
 
 const CAMPAIGN_ID = "11111111-1111-1111-1111-111111111111";
 const CREATOR_A = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
 const CREATOR_B = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb";
 
-function makeCC(creatorId: string) {
+function makeCC(creatorId: string): CampaignCreator {
   return {
     id: `cc-${creatorId}`,
     campaignId: CAMPAIGN_ID,
     creatorId,
-    status: "planned" as const,
+    status: "planned",
     invitedAt: null,
     invitedCount: 0,
     remindedAt: null,
@@ -35,7 +37,7 @@ function makeCC(creatorId: string) {
   };
 }
 
-function makeCreator(id: string, lastName: string) {
+function makeCreator(id: string, lastName: string): CreatorListItem {
   return {
     id,
     lastName,
@@ -46,7 +48,7 @@ function makeCreator(id: string, lastName: string) {
     phone: "+77001112255",
     city: { code: "ALA", name: "Алматы", sortOrder: 10 },
     categories: [{ code: "fashion", name: "Мода", sortOrder: 1 }],
-    socials: [{ platform: "instagram" as const, handle: lastName.toLowerCase() }],
+    socials: [{ platform: "instagram", handle: lastName.toLowerCase() }],
     telegramUsername: lastName.toLowerCase(),
     createdAt: "2026-04-30T12:00:00Z",
     updatedAt: "2026-04-30T12:00:00Z",

@@ -33,6 +33,9 @@ export default function CampaignCreatorsSection({
     // drawer. Skip the click; the placeholder + tooltip already communicate
     // that the row is inert.
     if (!row.creator) return;
+    // Re-clicking the already-selected row would push a duplicate history
+    // entry — the user would have to press Back twice to leave the URL.
+    if (selectedCreatorId === row.campaignCreator.creatorId) return;
     setSearchParams((prev) => {
       const np = new URLSearchParams(prev);
       np.set(SEARCH_PARAMS.CREATOR_ID, row.campaignCreator.creatorId);
@@ -69,7 +72,9 @@ export default function CampaignCreatorsSection({
       </div>
 
       {isLoading ? (
-        <Spinner className="mt-6" />
+        <div data-testid="campaign-creators-loading">
+          <Spinner className="mt-6" />
+        </div>
       ) : isError ? (
         <ErrorState
           message={t("campaignCreators.loadError")}

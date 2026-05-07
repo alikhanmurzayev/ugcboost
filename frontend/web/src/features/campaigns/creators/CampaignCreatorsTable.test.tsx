@@ -1,7 +1,9 @@
 import { describe, it, expect, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import "@/shared/i18n/config";
+import type { CampaignCreator } from "@/api/campaignCreators";
+import type { CreatorListItem } from "@/api/creators";
 import CampaignCreatorsTable from "./CampaignCreatorsTable";
 import type { CampaignCreatorRow } from "./hooks/useCampaignCreators";
 
@@ -9,12 +11,12 @@ const CAMPAIGN_ID = "11111111-1111-1111-1111-111111111111";
 const CREATOR_A = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
 const CREATOR_B = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb";
 
-function makeCC(creatorId: string) {
+function makeCC(creatorId: string): CampaignCreator {
   return {
     id: `cc-${creatorId}`,
     campaignId: CAMPAIGN_ID,
     creatorId,
-    status: "planned" as const,
+    status: "planned",
     invitedAt: null,
     invitedCount: 0,
     remindedAt: null,
@@ -25,7 +27,7 @@ function makeCC(creatorId: string) {
   };
 }
 
-function makeCreator(id: string, lastName: string) {
+function makeCreator(id: string, lastName: string): CreatorListItem {
   return {
     id,
     lastName,
@@ -36,7 +38,7 @@ function makeCreator(id: string, lastName: string) {
     phone: "+77001112255",
     city: { code: "ALA", name: "Алматы", sortOrder: 10 },
     categories: [{ code: "fashion", name: "Мода", sortOrder: 1 }],
-    socials: [{ platform: "instagram" as const, handle: lastName.toLowerCase() }],
+    socials: [{ platform: "instagram", handle: lastName.toLowerCase() }],
     telegramUsername: lastName.toLowerCase(),
     createdAt: "2026-04-30T12:00:00Z",
     updatedAt: "2026-04-30T12:00:00Z",
@@ -134,7 +136,7 @@ describe("CampaignCreatorsTable", () => {
     expect(fullName).toHaveAttribute("title", "Креатор удалён из системы");
   });
 
-  it("renders fullName and city for present creator", () => {
+  it("renders concrete values in every column for a present creator", () => {
     const rows: CampaignCreatorRow[] = [
       { campaignCreator: makeCC(CREATOR_A), creator: makeCreator(CREATOR_A, "Иванова") },
     ];
@@ -144,7 +146,61 @@ describe("CampaignCreatorsTable", () => {
     );
 
     const row = screen.getByTestId(`row-${CREATOR_A}`);
-    expect(row).toHaveTextContent("Иванова Анна");
-    expect(row).toHaveTextContent("Алматы");
+    const cells = within(row).getAllByRole("cell");
+    expect(cells).toHaveLength(7);
+
+    // index column
+    expect(cells[0]).toHaveTextContent("1");
+    // fullName column
+    expect(cells[1]).toHaveTextContent("Иванова Анна");
+    // socials column — link to instagram with @-handle
+    const social = within(cells[2] as HTMLElement).getByTestId(
+      "social-instagram",
+    );
+    expect(social).toHaveAttribute("href", "https://instagram.com/иванова");
+    expect(social).toHaveTextContent("@иванова");
+    // categories column — single chip "Мода"
+    expect(cells[3]).toHaveTextContent("Мода");
+    // age column — calcAge from birthDate "2007-01-01" relative to today
+    const expectedAge = String(calcAgeAtToday("2007-01-01"));
+    expect(cells[4]).toHaveTextContent(expectedAge);
+    // city column
+    expect(cells[5]).toHaveTextContent("Алматы");
+    // createdAt column — "30 апр." for "2026-04-30T12:00:00Z"
+    expect(cells[6]).toHaveTextContent("30 апр.");
+  });
+
+  it("renders placeholder + tooltip in every column when creator profile is missing", () => {
+    const rows: CampaignCreatorRow[] = [
+      { campaignCreator: makeCC(CREATOR_A) },
+    ];
+
+    render(
+      <CampaignCreatorsTable rows={rows} onRowClick={() => {}} emptyMessage="" />,
+    );
+
+    const row = screen.getByTestId(`row-${CREATOR_A}`);
+    const cells = within(row).getAllByRole("cell");
+    // index renders normally; cells 1..6 should each contain the placeholder
+    expect(cells[0]).toHaveTextContent("1");
+    for (const cell of cells.slice(1)) {
+      expect(cell).toHaveTextContent("—");
+      // Each placeholder span carries the deletion tooltip.
+      const placeholderSpan = within(cell as HTMLElement).getByTitle(
+        "Креатор удалён из системы",
+      );
+      expect(placeholderSpan).toBeInTheDocument();
+    }
   });
 });
+
+// calcAgeAtToday mirrors `@/shared/utils/age` to avoid leaking timezone-
+// sensitive year-arithmetic into the assertion string.
+function calcAgeAtToday(birthDate: string): number {
+  const birth = new Date(birthDate);
+  const now = new Date();
+  let age = now.getFullYear() - birth.getFullYear();
+  const m = now.getMonth() - birth.getMonth();
+  if (m < 0 || (m === 0 && now.getDate() < birth.getDate())) age--;
+  return age;
+}

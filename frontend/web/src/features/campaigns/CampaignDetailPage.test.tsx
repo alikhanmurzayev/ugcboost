@@ -472,11 +472,11 @@ describe("CampaignDetailPage — submit guard", () => {
 
 const CREATOR_ID = "33333333-3333-3333-3333-333333333333";
 
-const FIXTURE_CC = {
+const FIXTURE_CC: import("@/api/campaignCreators").CampaignCreator = {
   id: "cc-1",
   campaignId: ID,
   creatorId: CREATOR_ID,
-  status: "planned" as const,
+  status: "planned",
   invitedAt: null,
   invitedCount: 0,
   remindedAt: null,
@@ -486,7 +486,7 @@ const FIXTURE_CC = {
   updatedAt: "2026-05-07T12:00:00Z",
 };
 
-const FIXTURE_CREATOR_LIST_ITEM = {
+const FIXTURE_CREATOR_LIST_ITEM: import("@/api/creators").CreatorListItem = {
   id: CREATOR_ID,
   lastName: "Иванова",
   firstName: "Анна",
@@ -496,13 +496,13 @@ const FIXTURE_CREATOR_LIST_ITEM = {
   phone: "+77001112255",
   city: { code: "ALA", name: "Алматы", sortOrder: 10 },
   categories: [{ code: "fashion", name: "Мода", sortOrder: 1 }],
-  socials: [{ platform: "instagram" as const, handle: "anna" }],
+  socials: [{ platform: "instagram", handle: "anna" }],
   telegramUsername: "anna",
   createdAt: "2026-04-30T12:00:00Z",
   updatedAt: "2026-04-30T12:00:00Z",
 };
 
-const FIXTURE_CREATOR_DETAIL = {
+const FIXTURE_CREATOR_DETAIL: import("@/api/creators").CreatorAggregate = {
   id: CREATOR_ID,
   iin: FIXTURE_CREATOR_LIST_ITEM.iin,
   sourceApplicationId: "44444444-4444-4444-4444-444444444444",
@@ -522,7 +522,7 @@ const FIXTURE_CREATOR_DETAIL = {
   socials: [
     {
       id: "s1",
-      platform: "instagram" as const,
+      platform: "instagram",
       handle: "anna",
       verified: true,
       createdAt: "2026-04-30T12:00:00Z",
