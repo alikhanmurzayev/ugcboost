@@ -337,21 +337,36 @@ func (s *Server) RejectCreatorApplication(ctx context.Context, request api.Rejec
 	return api.RejectCreatorApplication200JSONResponse{}, nil
 }
 
+// approveCampaignsMax mirrors the OpenAPI maxItems=20 constraint on
+// CreatorApprovalInput.campaignIds — kept as a server-side cap because
+// oapi-codegen does not enforce schema limits at runtime.
+const approveCampaignsMax = 20
+
 // ApproveCreatorApplication handles POST /creators/applications/{id}/approve
 // (admin-only). It promotes an application from `moderation` to the terminal
 // `approved` status, materialising the snapshot creator + socials + categories
 // in the same transaction. Authorisation runs first so non-admin callers see
 // 403 without the service being asked. The actor uuid comes from the bearer
-// token via middleware.UserIDFromContext; no body is accepted (the approve
-// has no fields). The service returns the freshly-created creator id which
-// the handler echoes back so callers can immediately follow up with the
-// (forthcoming) creator-aggregate read endpoint.
+// token via middleware.UserIDFromContext.
+//
+// The optional body carries `campaignIds`: when present and non-empty, the
+// handler enforces len ≤ approveCampaignsMax and dedupe locally, then asks
+// CampaignService.AssertActiveCampaigns whether every id refers to an
+// existing, non-soft-deleted campaign. Only post-validated ids reach the
+// service approve, which attaches the freshly-created creator to each
+// campaign sequentially after the approve transaction commits and the
+// Telegram congratulation fires (first failure stops the loop). Empty / nil /
+// missing `campaignIds` keeps the original approve-only behaviour.
 func (s *Server) ApproveCreatorApplication(ctx context.Context, request api.ApproveCreatorApplicationRequestObject) (api.ApproveCreatorApplicationResponseObject, error) {
 	if err := s.authzService.CanApproveCreatorApplication(ctx); err != nil {
 		return nil, err
 	}
+	campaignIDs, err := s.parseApproveCampaignIDs(ctx, request.Body)
+	if err != nil {
+		return nil, err
+	}
 	actorUserID := middleware.UserIDFromContext(ctx)
-	creatorIDStr, err := s.creatorApplicationService.ApproveApplication(ctx, request.Id.String(), actorUserID)
+	creatorIDStr, err := s.creatorApplicationService.ApproveApplication(ctx, request.Id.String(), actorUserID, campaignIDs)
 	if err != nil {
 		return nil, err
 	}
@@ -362,6 +377,36 @@ func (s *Server) ApproveCreatorApplication(ctx context.Context, request api.Appr
 	return api.ApproveCreatorApplication200JSONResponse{
 		Data: api.CreatorApprovalData{CreatorId: creatorID},
 	}, nil
+}
+
+// parseApproveCampaignIDs normalizes and validates the optional `campaignIds`
+// payload of POST /creators/applications/{id}/approve. nil body, nil pointer
+// and empty slice all collapse to nil — the approve runs in plain mode and
+// no add-loop happens. A non-empty slice is bounded by approveCampaignsMax,
+// dedupe-checked, then handed to CampaignService.AssertActiveCampaigns; any
+// validation error short-circuits ApproveApplication so neither the creator
+// row nor the audit row is written.
+func (s *Server) parseApproveCampaignIDs(ctx context.Context, body *api.ApproveCreatorApplicationJSONRequestBody) ([]string, error) {
+	if body == nil || body.CampaignIds == nil || len(*body.CampaignIds) == 0 {
+		return nil, nil
+	}
+	ids := *body.CampaignIds
+	if len(ids) > approveCampaignsMax {
+		return nil, domain.ErrCampaignIdsTooMany
+	}
+	seen := make(map[uuid.UUID]struct{}, len(ids))
+	out := make([]string, 0, len(ids))
+	for _, id := range ids {
+		if _, dup := seen[id]; dup {
+			return nil, domain.ErrCampaignIdsDuplicates
+		}
+		seen[id] = struct{}{}
+		out = append(out, id.String())
+	}
+	if err := s.campaignActiveChecker.AssertActiveCampaigns(ctx, out); err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 // GetCreatorApplicationsCounts handles GET /creators/applications/counts

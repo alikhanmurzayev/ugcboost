@@ -4,6 +4,25 @@ Findings, surfaced by reviews/work, that we consciously kicked down the road. Ea
 
 ---
 
+## creator approve with campaigns — review round 1 (2026-05-07)
+
+### `CampaignRepo.ListByIDs` без internal cap на размер ids
+**Что:** хендлер уже cap'ает к 20 (`approveCampaignsMax`), но публичный `repository.CampaignRepo.ListByIDs` не валидирует `len(ids)`. Будущий caller с десятками тысяч UUID сгенерирует `WHERE id IN (...)` за пределами Postgres limits (`max_prepared_params ≈ 65k`), pgx упадёт.
+**Почему отложено:** для текущей feature защита есть на handler-уровне; для других callsites (если появятся) фикс — внутренний cap или chunking. Не блокер.
+**Когда возвращаться:** при появлении нового потребителя `ListByIDs` вне approve-flow.
+
+### `listCampaigns({ perPage: 100 })` в ApproveApplicationDialog без server-search
+**Что:** multiselect загружает первую сотню кампаний. Пока admin'у их меньше 100 — это полностью покрывает UX. При росте каталога multiselect молча обрежет хвост (search фильтрует только подгруженный массив).
+**Почему отложено:** для MVP-сцены 100 кампаний — заведомо запас. Server-search потребует поднять `SearchableMultiselect` до debounce-инициированного query — отдельный PR, общий для всех будущих больших списков.
+**Когда возвращаться:** при появлении кампаний 100+ или при миграции SearchableMultiselect на server-side filtering.
+
+### Дублирующийся `extractErrorCode` / `extractErrorMessage` в `frontend/web/src/api/*.ts`
+**Что:** `extractErrorMessage` добавлен только в `creatorApplications.ts`. Те же helpers (с `code` и без `message`) повторяются в 8+ модулях. После общего рефакторинга `extractError` должен стать shared в `api/client.ts`.
+**Почему отложено:** ortho-задача, ранее уже зафиксирована в deferred (chunk 11 slice 1/2 review round 2).
+**Когда возвращаться:** объединить с тем deferred-entry в один PR.
+
+---
+
 ## chunk 11 slice 2/2 — campaign_creators frontend mutations (PR #?)
 
 ### Search input в drawer'е без debounce — запрос на каждое нажатие клавиши

@@ -30,6 +30,24 @@ const (
 	CodeCampaignNameTaken = "CAMPAIGN_NAME_TAKEN"
 	// 404 — GET /campaigns/{id} could not find a campaign with this id.
 	CodeCampaignNotFound = "CAMPAIGN_NOT_FOUND"
+	// 422 — POST /creators/applications/{id}/approve received `campaignIds`
+	// with more entries than the per-call cap (matches OpenAPI maxItems=20;
+	// oapi-codegen does not enforce schema limits at runtime).
+	CodeCampaignIdsTooMany = "CAMPAIGN_IDS_TOO_MANY"
+	// 422 — POST /creators/applications/{id}/approve received `campaignIds`
+	// with duplicate UUIDs.
+	CodeCampaignIdsDuplicates = "CAMPAIGN_IDS_DUPLICATES"
+	// 422 — POST /creators/applications/{id}/approve received `campaignIds`
+	// where at least one campaign is missing or soft-deleted at pre-validation
+	// time. Single code for both cases — admin re-fetches the campaign list and
+	// retries.
+	CodeCampaignNotAvailableForAdd = "CAMPAIGN_NOT_AVAILABLE_FOR_ADD"
+	// 422 — POST /creators/applications/{id}/approve transactional approve
+	// committed and Telegram-notify already fired, but the per-campaign add
+	// loop hit a failure on the N-th campaign (mid-cycle race, e.g. campaign
+	// soft-deleted between pre-validation and the add). Earlier campaigns
+	// remain attached; admin must finish the rest manually.
+	CodeCampaignAddAfterApproveFailed = "CAMPAIGN_ADD_AFTER_APPROVE_FAILED"
 )
 
 // Campaign-creator (chunk 10) user-facing codes carried in 4xx responses by

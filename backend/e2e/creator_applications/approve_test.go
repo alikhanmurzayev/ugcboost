@@ -93,7 +93,7 @@ func TestApproveCreatorApplication(t *testing.T) {
 	t.Run("auth: missing bearer returns 401", func(t *testing.T) {
 		t.Parallel()
 		c := testutil.NewAPIClient(t)
-		resp, err := c.ApproveCreatorApplicationWithResponse(context.Background(), uuid.New())
+		resp, err := c.ApproveCreatorApplicationWithResponse(context.Background(), uuid.New(), apiclient.CreatorApprovalInput{})
 		require.NoError(t, err)
 		require.Equal(t, http.StatusUnauthorized, resp.StatusCode())
 	})
@@ -107,7 +107,7 @@ func TestApproveCreatorApplication(t *testing.T) {
 
 		c := testutil.NewAPIClient(t)
 		resp, err := c.ApproveCreatorApplicationWithResponse(context.Background(), uuid.New(),
-			testutil.WithAuth(mgrToken))
+			apiclient.CreatorApprovalInput{}, testutil.WithAuth(mgrToken))
 		require.NoError(t, err)
 		require.Equal(t, http.StatusForbidden, resp.StatusCode())
 		require.NotNil(t, resp.JSON403)
@@ -119,7 +119,7 @@ func TestApproveCreatorApplication(t *testing.T) {
 		_, adminToken, _ := testutil.SetupAdminClient(t)
 		c := testutil.NewAPIClient(t)
 		resp, err := c.ApproveCreatorApplicationWithResponse(context.Background(), uuid.New(),
-			testutil.WithAuth(adminToken))
+			apiclient.CreatorApprovalInput{}, testutil.WithAuth(adminToken))
 		require.NoError(t, err)
 		require.Equal(t, http.StatusNotFound, resp.StatusCode())
 		require.NotNil(t, resp.JSON404)
@@ -133,7 +133,7 @@ func TestApproveCreatorApplication(t *testing.T) {
 
 		appUUID := uuid.MustParse(setup.ApplicationID)
 		resp, err := c.ApproveCreatorApplicationWithResponse(context.Background(), appUUID,
-			testutil.WithAuth(adminToken))
+			apiclient.CreatorApprovalInput{}, testutil.WithAuth(adminToken))
 		require.NoError(t, err)
 		require.Equal(t, http.StatusUnprocessableEntity, resp.StatusCode())
 		require.NotNil(t, resp.JSON422)
@@ -167,7 +167,7 @@ func TestApproveCreatorApplication(t *testing.T) {
 
 		appUUID := uuid.MustParse(appID)
 		resp, err := c.ApproveCreatorApplicationWithResponse(context.Background(), appUUID,
-			testutil.WithAuth(adminToken))
+			apiclient.CreatorApprovalInput{}, testutil.WithAuth(adminToken))
 		require.NoError(t, err)
 		require.Equal(t, http.StatusUnprocessableEntity, resp.StatusCode())
 		require.NotNil(t, resp.JSON422)
@@ -196,7 +196,7 @@ func TestApproveCreatorApplication(t *testing.T) {
 		appUUID := uuid.MustParse(fx.ApplicationID)
 		since := time.Now().UTC()
 		approveResp, err := c.ApproveCreatorApplicationWithResponse(context.Background(), appUUID,
-			testutil.WithAuth(fx.AdminToken))
+			apiclient.CreatorApprovalInput{}, testutil.WithAuth(fx.AdminToken))
 		require.NoError(t, err)
 		require.Equal(t, http.StatusOK, approveResp.StatusCode())
 		require.NotNil(t, approveResp.JSON200)
@@ -243,7 +243,7 @@ func TestApproveCreatorApplication(t *testing.T) {
 		appUUID := uuid.MustParse(fx.ApplicationID)
 		since := time.Now().UTC()
 		approveResp, err := c.ApproveCreatorApplicationWithResponse(context.Background(), appUUID,
-			testutil.WithAuth(fx.AdminToken))
+			apiclient.CreatorApprovalInput{}, testutil.WithAuth(fx.AdminToken))
 		require.NoError(t, err)
 		require.Equal(t, http.StatusOK, approveResp.StatusCode())
 		require.NotNil(t, approveResp.JSON200)
@@ -278,7 +278,7 @@ func TestApproveCreatorApplication(t *testing.T) {
 		appUUID := uuid.MustParse(fx.ApplicationID)
 		firstSince := time.Now().UTC()
 		first, err := c.ApproveCreatorApplicationWithResponse(context.Background(), appUUID,
-			testutil.WithAuth(fx.AdminToken))
+			apiclient.CreatorApprovalInput{}, testutil.WithAuth(fx.AdminToken))
 		require.NoError(t, err)
 		require.Equal(t, http.StatusOK, first.StatusCode())
 		require.NotNil(t, first.JSON200)
@@ -294,7 +294,7 @@ func TestApproveCreatorApplication(t *testing.T) {
 
 		afterFirst := time.Now().UTC()
 		second, err := c.ApproveCreatorApplicationWithResponse(context.Background(), appUUID,
-			testutil.WithAuth(fx.AdminToken))
+			apiclient.CreatorApprovalInput{}, testutil.WithAuth(fx.AdminToken))
 		require.NoError(t, err)
 		require.Equal(t, http.StatusUnprocessableEntity, second.StatusCode())
 		require.NotNil(t, second.JSON422)
@@ -331,7 +331,7 @@ func TestApproveCreatorApplication(t *testing.T) {
 			go func() {
 				defer wg.Done()
 				resp, err := c.ApproveCreatorApplicationWithResponse(context.Background(), appUUID,
-					testutil.WithAuth(fx.AdminToken))
+					apiclient.CreatorApprovalInput{}, testutil.WithAuth(fx.AdminToken))
 				require.NoError(t, err)
 				switch resp.StatusCode() {
 				case http.StatusOK:

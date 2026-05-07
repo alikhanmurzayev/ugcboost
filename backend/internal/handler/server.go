@@ -78,7 +78,7 @@ type CreatorApplicationService interface {
 	VerifyInstagramByCode(ctx context.Context, code, igHandle string) (domain.VerifyInstagramStatus, error)
 	VerifyApplicationSocialManually(ctx context.Context, applicationID, socialID, actorUserID string) error
 	RejectApplication(ctx context.Context, applicationID, actorUserID string) error
-	ApproveApplication(ctx context.Context, applicationID, actorUserID string) (string, error)
+	ApproveApplication(ctx context.Context, applicationID, actorUserID string, campaignIDs []string) (string, error)
 }
 
 // DictionaryService is the interface Server needs to serve public dictionaries
@@ -103,6 +103,14 @@ type CampaignService interface {
 	GetByID(ctx context.Context, id string) (*domain.Campaign, error)
 	UpdateCampaign(ctx context.Context, id string, in domain.CampaignInput) error
 	List(ctx context.Context, in domain.CampaignListInput) (*domain.CampaignListPage, error)
+}
+
+// CampaignActiveChecker gates the optional `campaignIds` payload on the
+// approve-creator-application endpoint with a single-method consumer-side
+// interface (handler-level pre-validation; service approve only sees
+// post-validated ids). *CampaignService satisfies it.
+type CampaignActiveChecker interface {
+	AssertActiveCampaigns(ctx context.Context, ids []string) error
 }
 
 // CampaignCreatorService is the interface Server needs from the campaign-
@@ -133,6 +141,7 @@ type Server struct {
 	creatorApplicationService CreatorApplicationService
 	creatorService            CreatorService
 	campaignService           CampaignService
+	campaignActiveChecker     CampaignActiveChecker
 	campaignCreatorService    CampaignCreatorService
 	dictionaryService         DictionaryService
 	version                   string
@@ -154,6 +163,7 @@ func NewServer(
 	creatorApps CreatorApplicationService,
 	creators CreatorService,
 	campaigns CampaignService,
+	campaignActiveChecker CampaignActiveChecker,
 	campaignCreators CampaignCreatorService,
 	dict DictionaryService,
 	cfg ServerConfig,
@@ -167,6 +177,7 @@ func NewServer(
 		creatorApplicationService: creatorApps,
 		creatorService:            creators,
 		campaignService:           campaigns,
+		campaignActiveChecker:     campaignActiveChecker,
 		campaignCreatorService:    campaignCreators,
 		dictionaryService:         dict,
 		version:                   cfg.Version,

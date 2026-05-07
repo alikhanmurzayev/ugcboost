@@ -88,7 +88,7 @@ func TestGetCreator(t *testing.T) {
 		c := testutil.NewAPIClient(t)
 		appUUID := uuid.MustParse(fx.ApplicationID)
 		approveResp, err := c.ApproveCreatorApplicationWithResponse(context.Background(), appUUID,
-			testutil.WithAuth(fx.AdminToken))
+			apiclient.CreatorApprovalInput{}, testutil.WithAuth(fx.AdminToken))
 		require.NoError(t, err)
 		require.Equal(t, http.StatusOK, approveResp.StatusCode())
 		require.NotNil(t, approveResp.JSON200)

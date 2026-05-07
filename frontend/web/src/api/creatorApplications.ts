@@ -15,6 +15,11 @@ function extractErrorCode(error: unknown): string {
   return e?.error?.code ?? "INTERNAL_ERROR";
 }
 
+function extractErrorMessage(error: unknown): string | undefined {
+  const e = error as { error?: { message?: string } };
+  return e?.error?.message;
+}
+
 export async function listCreatorApplications(input: CreatorApplicationsListInput) {
   const { data, error, response } = await client.POST("/creators/applications/list", {
     body: input,
@@ -70,15 +75,22 @@ export async function rejectApplication(applicationId: string) {
   return data;
 }
 
-export async function approveApplication(applicationId: string) {
+export async function approveApplication(applicationId: string, campaignIds?: string[]) {
+  const body =
+    campaignIds && campaignIds.length > 0 ? { campaignIds } : undefined;
   const { data, error, response } = await client.POST(
     "/creators/applications/{id}/approve",
     {
       params: { path: { id: applicationId } },
+      body,
     },
   );
   if (error) {
-    throw new ApiError(response.status, extractErrorCode(error));
+    throw new ApiError(
+      response.status,
+      extractErrorCode(error),
+      extractErrorMessage(error),
+    );
   }
   return data;
 }

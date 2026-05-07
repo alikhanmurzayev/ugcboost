@@ -39,8 +39,8 @@ func (_m *MockCreatorApplicationService) EXPECT() *MockCreatorApplicationService
 }
 
 // ApproveApplication provides a mock function for the type MockCreatorApplicationService
-func (_mock *MockCreatorApplicationService) ApproveApplication(ctx context.Context, applicationID string, actorUserID string) (string, error) {
-	ret := _mock.Called(ctx, applicationID, actorUserID)
+func (_mock *MockCreatorApplicationService) ApproveApplication(ctx context.Context, applicationID string, actorUserID string, campaignIDs []string) (string, error) {
+	ret := _mock.Called(ctx, applicationID, actorUserID, campaignIDs)
 
 	if len(ret) == 0 {
 		panic("no return value specified for ApproveApplication")
@@ -48,16 +48,16 @@ func (_mock *MockCreatorApplicationService) ApproveApplication(ctx context.Conte
 
 	var r0 string
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) (string, error)); ok {
-		return returnFunc(ctx, applicationID, actorUserID)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, []string) (string, error)); ok {
+		return returnFunc(ctx, applicationID, actorUserID, campaignIDs)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) string); ok {
-		r0 = returnFunc(ctx, applicationID, actorUserID)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, []string) string); ok {
+		r0 = returnFunc(ctx, applicationID, actorUserID, campaignIDs)
 	} else {
 		r0 = ret.Get(0).(string)
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string) error); ok {
-		r1 = returnFunc(ctx, applicationID, actorUserID)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string, []string) error); ok {
+		r1 = returnFunc(ctx, applicationID, actorUserID, campaignIDs)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -73,11 +73,12 @@ type MockCreatorApplicationService_ApproveApplication_Call struct {
 //   - ctx context.Context
 //   - applicationID string
 //   - actorUserID string
-func (_e *MockCreatorApplicationService_Expecter) ApproveApplication(ctx interface{}, applicationID interface{}, actorUserID interface{}) *MockCreatorApplicationService_ApproveApplication_Call {
-	return &MockCreatorApplicationService_ApproveApplication_Call{Call: _e.mock.On("ApproveApplication", ctx, applicationID, actorUserID)}
+//   - campaignIDs []string
+func (_e *MockCreatorApplicationService_Expecter) ApproveApplication(ctx interface{}, applicationID interface{}, actorUserID interface{}, campaignIDs interface{}) *MockCreatorApplicationService_ApproveApplication_Call {
+	return &MockCreatorApplicationService_ApproveApplication_Call{Call: _e.mock.On("ApproveApplication", ctx, applicationID, actorUserID, campaignIDs)}
 }
 
-func (_c *MockCreatorApplicationService_ApproveApplication_Call) Run(run func(ctx context.Context, applicationID string, actorUserID string)) *MockCreatorApplicationService_ApproveApplication_Call {
+func (_c *MockCreatorApplicationService_ApproveApplication_Call) Run(run func(ctx context.Context, applicationID string, actorUserID string, campaignIDs []string)) *MockCreatorApplicationService_ApproveApplication_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -91,10 +92,15 @@ func (_c *MockCreatorApplicationService_ApproveApplication_Call) Run(run func(ct
 		if args[2] != nil {
 			arg2 = args[2].(string)
 		}
+		var arg3 []string
+		if args[3] != nil {
+			arg3 = args[3].([]string)
+		}
 		run(
 			arg0,
 			arg1,
 			arg2,
+			arg3,
 		)
 	})
 	return _c
@@ -105,7 +111,7 @@ func (_c *MockCreatorApplicationService_ApproveApplication_Call) Return(s string
 	return _c
 }
 
-func (_c *MockCreatorApplicationService_ApproveApplication_Call) RunAndReturn(run func(ctx context.Context, applicationID string, actorUserID string) (string, error)) *MockCreatorApplicationService_ApproveApplication_Call {
+func (_c *MockCreatorApplicationService_ApproveApplication_Call) RunAndReturn(run func(ctx context.Context, applicationID string, actorUserID string, campaignIDs []string) (string, error)) *MockCreatorApplicationService_ApproveApplication_Call {
 	_c.Call.Return(run)
 	return _c
 }

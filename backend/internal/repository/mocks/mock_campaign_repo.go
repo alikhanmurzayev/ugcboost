@@ -311,6 +311,74 @@ func (_c *MockCampaignRepo_List_Call) RunAndReturn(run func(ctx context.Context,
 	return _c
 }
 
+// ListByIDs provides a mock function for the type MockCampaignRepo
+func (_mock *MockCampaignRepo) ListByIDs(ctx context.Context, ids []string) ([]*repository.CampaignRow, error) {
+	ret := _mock.Called(ctx, ids)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ListByIDs")
+	}
+
+	var r0 []*repository.CampaignRow
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, []string) ([]*repository.CampaignRow, error)); ok {
+		return returnFunc(ctx, ids)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, []string) []*repository.CampaignRow); ok {
+		r0 = returnFunc(ctx, ids)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]*repository.CampaignRow)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, []string) error); ok {
+		r1 = returnFunc(ctx, ids)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockCampaignRepo_ListByIDs_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ListByIDs'
+type MockCampaignRepo_ListByIDs_Call struct {
+	*mock.Call
+}
+
+// ListByIDs is a helper method to define mock.On call
+//   - ctx context.Context
+//   - ids []string
+func (_e *MockCampaignRepo_Expecter) ListByIDs(ctx interface{}, ids interface{}) *MockCampaignRepo_ListByIDs_Call {
+	return &MockCampaignRepo_ListByIDs_Call{Call: _e.mock.On("ListByIDs", ctx, ids)}
+}
+
+func (_c *MockCampaignRepo_ListByIDs_Call) Run(run func(ctx context.Context, ids []string)) *MockCampaignRepo_ListByIDs_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 []string
+		if args[1] != nil {
+			arg1 = args[1].([]string)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockCampaignRepo_ListByIDs_Call) Return(campaignRows []*repository.CampaignRow, err error) *MockCampaignRepo_ListByIDs_Call {
+	_c.Call.Return(campaignRows, err)
+	return _c
+}
+
+func (_c *MockCampaignRepo_ListByIDs_Call) RunAndReturn(run func(ctx context.Context, ids []string) ([]*repository.CampaignRow, error)) *MockCampaignRepo_ListByIDs_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Update provides a mock function for the type MockCampaignRepo
 func (_mock *MockCampaignRepo) Update(ctx context.Context, id string, name string, tmaURL string) (*repository.CampaignRow, error) {
 	ret := _mock.Called(ctx, id, name, tmaURL)

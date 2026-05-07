@@ -857,6 +857,19 @@ type CreatorApprovalData struct {
 	CreatorId openapi_types.UUID `json:"creatorId"`
 }
 
+// CreatorApprovalInput Optional body for POST /creators/applications/{id}/approve. When
+// omitted (or both fields omitted) the endpoint behaves exactly like
+// before — only the application is approved. When `campaignIds` is
+// present and non-empty, the freshly-created creator is also added to
+// the listed campaigns (`planned` status) sequentially after the
+// approve transaction commits.
+type CreatorApprovalInput struct {
+	// CampaignIds Optional UUIDs of campaigns to attach the new creator to. Empty
+	// array, `null` or omitted field all mean "approve only — do not
+	// attach".
+	CampaignIds *[]openapi_types.UUID `json:"campaignIds,omitempty"`
+}
+
 // CreatorApprovalResult defines model for CreatorApprovalResult.
 type CreatorApprovalResult struct {
 	// Data Payload returned by POST /creators/applications/{id}/approve.
@@ -1289,6 +1302,9 @@ type SubmitCreatorApplicationJSONRequestBody = CreatorApplicationSubmitRequest
 
 // ListCreatorApplicationsJSONRequestBody defines body for ListCreatorApplications for application/json ContentType.
 type ListCreatorApplicationsJSONRequestBody = CreatorApplicationsListRequest
+
+// ApproveCreatorApplicationJSONRequestBody defines body for ApproveCreatorApplication for application/json ContentType.
+type ApproveCreatorApplicationJSONRequestBody = CreatorApprovalInput
 
 // VerifyCreatorApplicationSocialJSONRequestBody defines body for VerifyCreatorApplicationSocial for application/json ContentType.
 type VerifyCreatorApplicationSocialJSONRequestBody = VerifyCreatorApplicationSocialJSONBody
@@ -4018,7 +4034,8 @@ func (response GetCreatorApplicationdefaultJSONResponse) VisitGetCreatorApplicat
 }
 
 type ApproveCreatorApplicationRequestObject struct {
-	Id openapi_types.UUID `json:"id"`
+	Id   openapi_types.UUID `json:"id"`
+	Body *ApproveCreatorApplicationJSONRequestBody
 }
 
 type ApproveCreatorApplicationResponseObject interface {
@@ -5281,6 +5298,16 @@ func (sh *strictHandler) ApproveCreatorApplication(w http.ResponseWriter, r *htt
 	var request ApproveCreatorApplicationRequestObject
 
 	request.Id = id
+
+	var body ApproveCreatorApplicationJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		if !errors.Is(err, io.EOF) {
+			sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+			return
+		}
+	} else {
+		request.Body = &body
+	}
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
 		return sh.ssi.ApproveCreatorApplication(ctx, request.(ApproveCreatorApplicationRequestObject))

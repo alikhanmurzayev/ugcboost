@@ -66,7 +66,7 @@ func SetupApprovedCreator(t *testing.T, opts CreatorApplicationFixture) Approved
 	appUUID, err := uuid.Parse(app.ApplicationID)
 	require.NoError(t, err)
 	approveResp, err := c.ApproveCreatorApplicationWithResponse(context.Background(), appUUID,
-		WithAuth(app.AdminToken))
+		apiclient.CreatorApprovalInput{}, WithAuth(app.AdminToken))
 	require.NoError(t, err)
 	require.Equalf(t, http.StatusOK, approveResp.StatusCode(),
 		"SetupApprovedCreator: approve must return 200, got %d", approveResp.StatusCode())

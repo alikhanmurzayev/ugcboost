@@ -461,15 +461,28 @@ export interface paths {
          *     is the bound chat. After commit, the bot sends a static congratulation
          *     message — updates to that copy ship via separate PRs.
          *
-         *     No body is accepted; the response carries the freshly-created
-         *     `creatorId` so callers can immediately navigate to the creator
-         *     aggregate (read endpoint ships in a follow-up chunk).
+         *     The body is optional. When omitted (or `campaignIds` is empty/null),
+         *     the response carries the freshly-created `creatorId` so callers can
+         *     navigate to the creator aggregate (read endpoint ships separately).
          *
          *     Repeated approve of an already-approved application returns 422
          *     `CREATOR_APPLICATION_NOT_APPROVABLE`. Concurrent approves on the same
          *     application produce exactly one 200 (winner) and exactly one 422; the
          *     UNIQUE constraint on `creators.source_application_id` aborts the loser
          *     atomically along with the entire transaction it tried to run.
+         *
+         *     The optional `campaignIds` array attaches the freshly-created creator
+         *     to the listed campaigns right after approve (`planned` status, one
+         *     `campaign_creator_add` audit-row per campaign). Validation runs in
+         *     the handler before any state change: more than 20 ids → 422
+         *     `CAMPAIGN_IDS_TOO_MANY`, duplicates → 422 `CAMPAIGN_IDS_DUPLICATES`,
+         *     any non-existent or soft-deleted campaign → 422
+         *     `CAMPAIGN_NOT_AVAILABLE_FOR_ADD`. Adds run sequentially after the
+         *     approve transaction commits and the Telegram congratulation fires;
+         *     a mid-cycle failure on the N-th campaign returns 422
+         *     `CAMPAIGN_ADD_AFTER_APPROVE_FAILED` — the creator is already
+         *     materialised and earlier campaigns remain attached, so the admin
+         *     finishes the rest manually through the campaign UI.
          */
         post: operations["approveCreatorApplication"];
         delete?: never;
@@ -1252,6 +1265,22 @@ export interface components {
              * @description ID of the creator row created by the approve action.
              */
             creatorId: string;
+        };
+        /**
+         * @description Optional body for POST /creators/applications/{id}/approve. When
+         *     omitted (or both fields omitted) the endpoint behaves exactly like
+         *     before — only the application is approved. When `campaignIds` is
+         *     present and non-empty, the freshly-created creator is also added to
+         *     the listed campaigns (`planned` status) sequentially after the
+         *     approve transaction commits.
+         */
+        CreatorApprovalInput: {
+            /**
+             * @description Optional UUIDs of campaigns to attach the new creator to. Empty
+             *     array, `null` or omitted field all mean "approve only — do not
+             *     attach".
+             */
+            campaignIds?: string[];
         };
         CreatorApprovalResult: {
             data: components["schemas"]["CreatorApprovalData"];
@@ -2395,7 +2424,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["CreatorApprovalInput"];
+            };
+        };
         responses: {
             /** @description Application moved to `approved`; `creatorId` returned. */
             200: {
@@ -2428,8 +2461,12 @@ export interface operations {
             /**
              * @description Application is not in a status from which `approved` is reachable
              *     (only `moderation`), the application has no Telegram link, the
-             *     corresponding creator row already exists or the Telegram account
-             *     is already taken by another creator.
+             *     corresponding creator row already exists, the Telegram account
+             *     is already taken by another creator, the optional `campaignIds`
+             *     array fails validation (`CAMPAIGN_IDS_TOO_MANY`,
+             *     `CAMPAIGN_IDS_DUPLICATES`, `CAMPAIGN_NOT_AVAILABLE_FOR_ADD`),
+             *     or the post-approve add-loop failed mid-cycle
+             *     (`CAMPAIGN_ADD_AFTER_APPROVE_FAILED`).
              */
             422: {
                 headers: {

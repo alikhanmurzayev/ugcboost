@@ -51,7 +51,7 @@ func validRequest() api.CreatorApplicationSubmitRequest {
 
 func serverWithCreator(t *testing.T, creator CreatorApplicationService, log *logmocks.MockLogger) *Server {
 	t.Helper()
-	return NewServer(nil, nil, nil, nil, creator, nil, nil, nil, nil, ServerConfig{
+	return NewServer(nil, nil, nil, nil, creator, nil, nil, nil, nil, nil, ServerConfig{
 		Version:               "test-version",
 		TelegramBotUsername:   "ugcboost_test_bot",
 		LegalAgreementVersion: "2026-04-20",
@@ -236,7 +236,7 @@ func TestServer_SubmitCreatorApplication(t *testing.T) {
 
 		// Simulate a misconfigured env: slashes and spaces should be escaped
 		// rather than corrupting the URL path.
-		server := NewServer(nil, nil, nil, nil, creator, nil, nil, nil, nil, ServerConfig{
+		server := NewServer(nil, nil, nil, nil, creator, nil, nil, nil, nil, nil, ServerConfig{
 			Version:               "test-version",
 			TelegramBotUsername:   "bad name/bot",
 			LegalAgreementVersion: "2026-04-20",
@@ -267,7 +267,7 @@ func newTestRouterWithClientIP(t *testing.T, s *Server) chi.Router {
 
 func serverWithAuthzAndCreatorAndDict(t *testing.T, authz AuthzService, creator CreatorApplicationService, dict DictionaryService, log *logmocks.MockLogger) *Server {
 	t.Helper()
-	return NewServer(nil, nil, authz, nil, creator, nil, nil, nil, dict, ServerConfig{
+	return NewServer(nil, nil, authz, nil, creator, nil, nil, nil, nil, dict, ServerConfig{
 		Version:             "test-version",
 		TelegramBotUsername: "ugcboost_test_bot",
 	}, log)
@@ -1559,7 +1559,7 @@ func TestServer_ApproveCreatorApplication(t *testing.T) {
 		authz := mocks.NewMockAuthzService(t)
 		authz.EXPECT().CanApproveCreatorApplication(mock.Anything).Return(nil)
 		creator := mocks.NewMockCreatorApplicationService(t)
-		creator.EXPECT().ApproveApplication(mock.Anything, appUUID, adminUUID).
+		creator.EXPECT().ApproveApplication(mock.Anything, appUUID, adminUUID, []string(nil)).
 			Return("", domain.ErrCreatorApplicationNotFound)
 
 		router := newTestRouter(t, serverWithAuthzAndCreatorAndDict(t, authz, creator, nil, logmocks.NewMockLogger(t)))
@@ -1573,7 +1573,7 @@ func TestServer_ApproveCreatorApplication(t *testing.T) {
 		authz := mocks.NewMockAuthzService(t)
 		authz.EXPECT().CanApproveCreatorApplication(mock.Anything).Return(nil)
 		creator := mocks.NewMockCreatorApplicationService(t)
-		creator.EXPECT().ApproveApplication(mock.Anything, appUUID, adminUUID).
+		creator.EXPECT().ApproveApplication(mock.Anything, appUUID, adminUUID, []string(nil)).
 			Return("", domain.ErrCreatorApplicationNotApprovable)
 
 		router := newTestRouter(t, serverWithAuthzAndCreatorAndDict(t, authz, creator, nil, logmocks.NewMockLogger(t)))
@@ -1587,7 +1587,7 @@ func TestServer_ApproveCreatorApplication(t *testing.T) {
 		authz := mocks.NewMockAuthzService(t)
 		authz.EXPECT().CanApproveCreatorApplication(mock.Anything).Return(nil)
 		creator := mocks.NewMockCreatorApplicationService(t)
-		creator.EXPECT().ApproveApplication(mock.Anything, appUUID, adminUUID).
+		creator.EXPECT().ApproveApplication(mock.Anything, appUUID, adminUUID, []string(nil)).
 			Return("", domain.ErrCreatorApplicationTelegramNotLinked)
 
 		router := newTestRouter(t, serverWithAuthzAndCreatorAndDict(t, authz, creator, nil, logmocks.NewMockLogger(t)))
@@ -1601,7 +1601,7 @@ func TestServer_ApproveCreatorApplication(t *testing.T) {
 		authz := mocks.NewMockAuthzService(t)
 		authz.EXPECT().CanApproveCreatorApplication(mock.Anything).Return(nil)
 		creator := mocks.NewMockCreatorApplicationService(t)
-		creator.EXPECT().ApproveApplication(mock.Anything, appUUID, adminUUID).
+		creator.EXPECT().ApproveApplication(mock.Anything, appUUID, adminUUID, []string(nil)).
 			Return("", domain.ErrCreatorAlreadyExists)
 
 		router := newTestRouter(t, serverWithAuthzAndCreatorAndDict(t, authz, creator, nil, logmocks.NewMockLogger(t)))
@@ -1615,7 +1615,7 @@ func TestServer_ApproveCreatorApplication(t *testing.T) {
 		authz := mocks.NewMockAuthzService(t)
 		authz.EXPECT().CanApproveCreatorApplication(mock.Anything).Return(nil)
 		creator := mocks.NewMockCreatorApplicationService(t)
-		creator.EXPECT().ApproveApplication(mock.Anything, appUUID, adminUUID).
+		creator.EXPECT().ApproveApplication(mock.Anything, appUUID, adminUUID, []string(nil)).
 			Return("", domain.ErrCreatorTelegramAlreadyTaken)
 
 		router := newTestRouter(t, serverWithAuthzAndCreatorAndDict(t, authz, creator, nil, logmocks.NewMockLogger(t)))
@@ -1630,10 +1630,12 @@ func TestServer_ApproveCreatorApplication(t *testing.T) {
 		authz.EXPECT().CanApproveCreatorApplication(mock.Anything).Return(nil)
 		creator := mocks.NewMockCreatorApplicationService(t)
 		var capturedAppID, capturedActor string
-		creator.EXPECT().ApproveApplication(mock.Anything, mock.Anything, mock.Anything).
-			Run(func(_ context.Context, applicationID, actorUserID string) {
+		var capturedCampaignIDs []string
+		creator.EXPECT().ApproveApplication(mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+			Run(func(_ context.Context, applicationID, actorUserID string, campaignIDs []string) {
 				capturedAppID = applicationID
 				capturedActor = actorUserID
+				capturedCampaignIDs = campaignIDs
 			}).
 			Return(creatorUUID, nil)
 
@@ -1644,7 +1646,108 @@ func TestServer_ApproveCreatorApplication(t *testing.T) {
 
 		require.Equal(t, appUUID, capturedAppID)
 		require.Equal(t, adminUUID, capturedActor)
+		require.Nil(t, capturedCampaignIDs, "no body → campaignIDs forwarded as nil")
 	})
+
+	t.Run("happy path: empty campaignIds in body forwards as nil — old behaviour", func(t *testing.T) {
+		t.Parallel()
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanApproveCreatorApplication(mock.Anything).Return(nil)
+		creator := mocks.NewMockCreatorApplicationService(t)
+		var capturedCampaignIDs []string
+		creator.EXPECT().ApproveApplication(mock.Anything, appUUID, adminUUID, mock.Anything).
+			Run(func(_ context.Context, _, _ string, campaignIDs []string) {
+				capturedCampaignIDs = campaignIDs
+			}).
+			Return(creatorUUID, nil)
+
+		body := api.CreatorApprovalInput{CampaignIds: pointer.To([]openapi_types.UUID{})}
+		router := newTestRouter(t, serverWithAuthzAndCreatorAndDict(t, authz, creator, nil, logmocks.NewMockLogger(t)))
+		w, _ := doJSON[api.CreatorApprovalResult](t, router, http.MethodPost, path, body, withRole(adminUUID, api.Admin))
+		require.Equal(t, http.StatusOK, w.Code)
+		require.Nil(t, capturedCampaignIDs)
+	})
+
+	t.Run("happy path: valid campaignIds pre-validated and forwarded to service", func(t *testing.T) {
+		t.Parallel()
+		campA := uuid.MustParse("44444444-4444-4444-4444-444444444444")
+		campB := uuid.MustParse("55555555-5555-5555-5555-555555555555")
+
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanApproveCreatorApplication(mock.Anything).Return(nil)
+		campaign := mocks.NewMockCampaignActiveChecker(t)
+		campaign.EXPECT().AssertActiveCampaigns(mock.Anything, []string{campA.String(), campB.String()}).Return(nil)
+		creator := mocks.NewMockCreatorApplicationService(t)
+		var capturedCampaignIDs []string
+		creator.EXPECT().ApproveApplication(mock.Anything, appUUID, adminUUID, mock.Anything).
+			Run(func(_ context.Context, _, _ string, campaignIDs []string) {
+				capturedCampaignIDs = campaignIDs
+			}).
+			Return(creatorUUID, nil)
+
+		body := api.CreatorApprovalInput{CampaignIds: pointer.To([]openapi_types.UUID{campA, campB})}
+		router := newTestRouter(t, serverWithApproveDeps(t, authz, creator, campaign, logmocks.NewMockLogger(t)))
+		w, _ := doJSON[api.CreatorApprovalResult](t, router, http.MethodPost, path, body, withRole(adminUUID, api.Admin))
+		require.Equal(t, http.StatusOK, w.Code)
+		require.Equal(t, []string{campA.String(), campB.String()}, capturedCampaignIDs,
+			"normalized campaignIDs forwarded to service in input order")
+	})
+
+	t.Run("> 20 campaignIds → 422 CAMPAIGN_IDS_TOO_MANY, service not called", func(t *testing.T) {
+		t.Parallel()
+		ids := make([]openapi_types.UUID, 21)
+		for i := range ids {
+			ids[i] = uuid.New()
+		}
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanApproveCreatorApplication(mock.Anything).Return(nil)
+		// creator/campaign mocks omitted — handler must reject before calling them.
+		body := api.CreatorApprovalInput{CampaignIds: &ids}
+		router := newTestRouter(t, serverWithApproveDeps(t, authz, nil, nil, logmocks.NewMockLogger(t)))
+		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, path, body, withRole(adminUUID, api.Admin))
+		require.Equal(t, http.StatusUnprocessableEntity, w.Code)
+		require.Equal(t, domain.CodeCampaignIdsTooMany, resp.Error.Code)
+	})
+
+	t.Run("duplicate campaignIds → 422 CAMPAIGN_IDS_DUPLICATES, service not called", func(t *testing.T) {
+		t.Parallel()
+		dup := uuid.MustParse("44444444-4444-4444-4444-444444444444")
+		other := uuid.MustParse("55555555-5555-5555-5555-555555555555")
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanApproveCreatorApplication(mock.Anything).Return(nil)
+		body := api.CreatorApprovalInput{CampaignIds: pointer.To([]openapi_types.UUID{dup, other, dup})}
+		router := newTestRouter(t, serverWithApproveDeps(t, authz, nil, nil, logmocks.NewMockLogger(t)))
+		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, path, body, withRole(adminUUID, api.Admin))
+		require.Equal(t, http.StatusUnprocessableEntity, w.Code)
+		require.Equal(t, domain.CodeCampaignIdsDuplicates, resp.Error.Code)
+	})
+
+	t.Run("pre-validation fail → 422 CAMPAIGN_NOT_AVAILABLE_FOR_ADD, approve service not called", func(t *testing.T) {
+		t.Parallel()
+		campA := uuid.MustParse("44444444-4444-4444-4444-444444444444")
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanApproveCreatorApplication(mock.Anything).Return(nil)
+		campaign := mocks.NewMockCampaignActiveChecker(t)
+		campaign.EXPECT().AssertActiveCampaigns(mock.Anything, []string{campA.String()}).
+			Return(domain.ErrCampaignNotAvailableForAdd)
+		// creator mock omitted — handler must reject before calling it.
+		body := api.CreatorApprovalInput{CampaignIds: pointer.To([]openapi_types.UUID{campA})}
+		router := newTestRouter(t, serverWithApproveDeps(t, authz, nil, campaign, logmocks.NewMockLogger(t)))
+		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, path, body, withRole(adminUUID, api.Admin))
+		require.Equal(t, http.StatusUnprocessableEntity, w.Code)
+		require.Equal(t, domain.CodeCampaignNotAvailableForAdd, resp.Error.Code)
+	})
+}
+
+// serverWithApproveDeps wires authz + creator + campaignActiveChecker for the
+// ApproveCreatorApplication tests that drive parseApproveCampaignIDs end-to-
+// end. Other server slots are nil — the route is the only thing exercised.
+func serverWithApproveDeps(t *testing.T, authz AuthzService, creator CreatorApplicationService, campaignActiveChecker CampaignActiveChecker, log *logmocks.MockLogger) *Server {
+	t.Helper()
+	return NewServer(nil, nil, authz, nil, creator, nil, nil, campaignActiveChecker, nil, nil, ServerConfig{
+		Version:             "test-version",
+		TelegramBotUsername: "ugcboost_test_bot",
+	}, log)
 }
 
 func TestServer_GetCreatorApplicationsCounts(t *testing.T) {
