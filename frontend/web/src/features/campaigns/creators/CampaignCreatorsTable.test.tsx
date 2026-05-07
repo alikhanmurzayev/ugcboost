@@ -136,6 +136,95 @@ describe("CampaignCreatorsTable", () => {
     expect(fullName).toHaveAttribute("title", "Креатор удалён из системы");
   });
 
+  it("does not render the actions column when onRemove is not provided", () => {
+    const rows: CampaignCreatorRow[] = [
+      { campaignCreator: makeCC(CREATOR_A), creator: makeCreator(CREATOR_A, "Иванова") },
+    ];
+
+    render(
+      <CampaignCreatorsTable rows={rows} onRowClick={() => {}} emptyMessage="" />,
+    );
+
+    expect(
+      screen.queryByTestId(`campaign-creator-remove-${CREATOR_A}`),
+    ).not.toBeInTheDocument();
+  });
+
+  it("renders trash button per row when onRemove is provided", () => {
+    const rows: CampaignCreatorRow[] = [
+      { campaignCreator: makeCC(CREATOR_A), creator: makeCreator(CREATOR_A, "Иванова") },
+      { campaignCreator: makeCC(CREATOR_B), creator: makeCreator(CREATOR_B, "Петрова") },
+    ];
+
+    render(
+      <CampaignCreatorsTable
+        rows={rows}
+        onRowClick={() => {}}
+        onRemove={() => {}}
+        emptyMessage=""
+      />,
+    );
+
+    const trashA = screen.getByTestId(`campaign-creator-remove-${CREATOR_A}`);
+    expect(trashA).toBeInTheDocument();
+    expect(trashA).toHaveAttribute(
+      "aria-label",
+      "Удалить креатора из кампании",
+    );
+    expect(
+      screen.getByTestId(`campaign-creator-remove-${CREATOR_B}`),
+    ).toBeInTheDocument();
+  });
+
+  it("clicking trash invokes onRemove with row and stops propagation (no row click)", async () => {
+    const onRemove = vi.fn();
+    const onRowClick = vi.fn();
+    const row: CampaignCreatorRow = {
+      campaignCreator: makeCC(CREATOR_A),
+      creator: makeCreator(CREATOR_A, "Иванова"),
+    };
+
+    render(
+      <CampaignCreatorsTable
+        rows={[row]}
+        onRowClick={onRowClick}
+        onRemove={onRemove}
+        emptyMessage=""
+      />,
+    );
+
+    await userEvent.click(
+      screen.getByTestId(`campaign-creator-remove-${CREATOR_A}`),
+    );
+
+    expect(onRemove).toHaveBeenCalledTimes(1);
+    expect(onRemove).toHaveBeenCalledWith(row);
+    expect(onRowClick).not.toHaveBeenCalled();
+  });
+
+  it("clicking the row outside the trash still fires onRowClick when onRemove is provided", async () => {
+    const onRemove = vi.fn();
+    const onRowClick = vi.fn();
+    const row: CampaignCreatorRow = {
+      campaignCreator: makeCC(CREATOR_A),
+      creator: makeCreator(CREATOR_A, "Иванова"),
+    };
+
+    render(
+      <CampaignCreatorsTable
+        rows={[row]}
+        onRowClick={onRowClick}
+        onRemove={onRemove}
+        emptyMessage=""
+      />,
+    );
+
+    await userEvent.click(screen.getByTestId(`row-${CREATOR_A}`));
+
+    expect(onRowClick).toHaveBeenCalledTimes(1);
+    expect(onRemove).not.toHaveBeenCalled();
+  });
+
   it("renders concrete values in every column for a present creator", () => {
     const rows: CampaignCreatorRow[] = [
       { campaignCreator: makeCC(CREATOR_A), creator: makeCreator(CREATOR_A, "Иванова") },

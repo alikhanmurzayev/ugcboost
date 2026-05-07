@@ -2,7 +2,8 @@
 title: 'campaign_creators frontend — mutations Add/Remove (chunk 11, slice 2/2)'
 type: feature
 created: '2026-05-07'
-status: ready-for-dev
+status: done
+baseline_commit: 13e2fa9d4aafd7aa1bbdecbed5dc785760729d30
 context:
   - docs/standards/
   - _bmad-output/planning-artifacts/design-campaign-creator-flow.md
@@ -119,17 +120,17 @@ context:
 ## Tasks & Acceptance
 
 **Execution (предполагается, что Spec A в main, Spec B в main):**
-- [ ] `frontend/web/src/api/campaignCreators.ts` -- добавить `addCampaignCreators(campaignId, creatorIds: string[]): Promise<CampaignCreator[]>` (POST A1) и `removeCampaignCreator(campaignId, creatorId: string): Promise<void>` (DELETE A2). Через generated openapi-fetch client; на non-2xx → throw `ApiError`.
-- [ ] `frontend/web/src/features/campaigns/creators/RemoveCreatorConfirm.tsx` -- local inline dialog (НЕ в shared/). `role="dialog"` + `aria-modal="true"`. Esc/backdrop/cancel → onClose. Кнопки disabled при isLoading.
-- [ ] `frontend/web/src/features/campaigns/creators/hooks/useDrawerSelection.ts` -- + unit-тест на toggle/clear/cap.
-- [ ] `frontend/web/src/features/campaigns/creators/AddCreatorsDrawerTable.tsx` -- shared `<Table>` с колонкой чек-бокса. disabled-row + badge для уже-добавленных. checkbox disabled при cap.
-- [ ] `frontend/web/src/features/campaigns/creators/AddCreatorsDrawer.tsx` -- composition: `<Drawer>` + `<CreatorFilters>` (или эквивалент с controlled state — см. Notes) + `<AddCreatorsDrawerTable>` + footer counter + Cancel/Submit. Submit calls `addCampaignCreators(campaignId, [...selection])`. Error handlers: 422 (`CREATOR_ALREADY_IN_CAMPAIGN`) → `invalidateQueries(campaignCreatorKeys.list)` + alert; drawer открыт; selection сохраняется. 404 → `invalidateQueries(campaignKeys.detail)` + alert + onClose. 5xx → alert; drawer открыт. Double-submit guard через external `isSubmitting` flag сбрасываемый в `onSettled`.
-- [ ] `frontend/web/src/features/campaigns/creators/CampaignCreatorsTable.tsx` -- добавить колонку «Действия». Кнопка trash: `aria-label`, `data-testid`, `onClick={e => { e.stopPropagation(); onRemove(row); }}`.
-- [ ] `frontend/web/src/features/campaigns/creators/CampaignCreatorsSection.tsx` -- активировать Add-кнопку (`disabled={false}`, убрать tooltip). State для drawer/removeTarget. `useMutation(removeCampaignCreator)` с onSuccess → invalidate + close + onError → передать в RemoveCreatorConfirm. Рендерить `<AddCreatorsDrawer>` + `<RemoveCreatorConfirm>`.
-- [ ] `frontend/web/src/features/campaigns/creators/hooks/useCampaignCreators.ts` -- **аддитивно** экспортировать `existingCreatorIds: Set<string>` (`useMemo`).
-- [ ] `frontend/web/src/locales/ru/campaigns.json` -- расширить блок `campaignCreators.*` mutation-ключами (см. Code Map).
-- [ ] Unit-тесты: `AddCreatorsDrawer.test.tsx`, `AddCreatorsDrawerTable.test.tsx`, `RemoveCreatorConfirm.test.tsx`, `hooks/useDrawerSelection.test.ts`. Расширить `CampaignCreatorsSection.test.tsx` (add open/submit/remove flow), `CampaignCreatorsTable.test.tsx` (колонка trash, stopPropagation), `hooks/useCampaignCreators.test.tsx` (`existingCreatorIds`). Coverage ≥80%.
-- [ ] E2E `frontend/e2e/web/admin-campaign-creators-mutations.spec.ts` -- Russian narrative header, full flow (см. Code Map). Cleanup defer-stack.
+- [x] `frontend/web/src/api/campaignCreators.ts` -- добавить `addCampaignCreators(campaignId, creatorIds: string[]): Promise<CampaignCreator[]>` (POST A1) и `removeCampaignCreator(campaignId, creatorId: string): Promise<void>` (DELETE A2). Через generated openapi-fetch client; на non-2xx → throw `ApiError`.
+- [x] `frontend/web/src/features/campaigns/creators/RemoveCreatorConfirm.tsx` -- local inline dialog (НЕ в shared/). `role="dialog"` + `aria-modal="true"`. Esc/backdrop/cancel → onClose. Кнопки disabled при isLoading.
+- [x] `frontend/web/src/features/campaigns/creators/hooks/useDrawerSelection.ts` -- + unit-тест на toggle/clear/cap.
+- [x] `frontend/web/src/features/campaigns/creators/AddCreatorsDrawerTable.tsx` -- shared `<Table>` с колонкой чек-бокса. disabled-row + badge для уже-добавленных. checkbox disabled при cap.
+- [x] `frontend/web/src/features/campaigns/creators/AddCreatorsDrawer.tsx` -- composition: `<Drawer>` + `<CreatorFilters>` (или эквивалент с controlled state — см. Notes) + `<AddCreatorsDrawerTable>` + footer counter + Cancel/Submit. Submit calls `addCampaignCreators(campaignId, [...selection])`. Error handlers: 422 (`CREATOR_ALREADY_IN_CAMPAIGN`) → `invalidateQueries(campaignCreatorKeys.list)` + alert; drawer открыт; selection сохраняется. 404 → `invalidateQueries(campaignKeys.detail)` + alert + onClose. 5xx → alert; drawer открыт. Double-submit guard через external `isSubmitting` flag сбрасываемый в `onSettled`.
+- [x] `frontend/web/src/features/campaigns/creators/CampaignCreatorsTable.tsx` -- добавить колонку «Действия». Кнопка trash: `aria-label`, `data-testid`, `onClick={e => { e.stopPropagation(); onRemove(row); }}`.
+- [x] `frontend/web/src/features/campaigns/creators/CampaignCreatorsSection.tsx` -- активировать Add-кнопку (`disabled={false}`, убрать tooltip). State для drawer/removeTarget. `useMutation(removeCampaignCreator)` с onSuccess → invalidate + close + onError → передать в RemoveCreatorConfirm. Рендерить `<AddCreatorsDrawer>` + `<RemoveCreatorConfirm>`.
+- [x] `frontend/web/src/features/campaigns/creators/hooks/useCampaignCreators.ts` -- **аддитивно** экспортировать `existingCreatorIds: Set<string>` (`useMemo`).
+- [x] `frontend/web/src/locales/ru/campaigns.json` -- расширить блок `campaignCreators.*` mutation-ключами (см. Code Map).
+- [x] Unit-тесты: `AddCreatorsDrawer.test.tsx`, `AddCreatorsDrawerTable.test.tsx`, `RemoveCreatorConfirm.test.tsx`, `hooks/useDrawerSelection.test.ts`. Расширить `CampaignCreatorsSection.test.tsx` (add open/submit/remove flow), `CampaignCreatorsTable.test.tsx` (колонка trash, stopPropagation), `hooks/useCampaignCreators.test.tsx` (`existingCreatorIds`). Coverage ≥80%.
+- [x] E2E `frontend/e2e/web/admin-campaign-creators-mutations.spec.ts` -- Russian narrative header, full flow (см. Code Map). Cleanup defer-stack.
 
 **Acceptance Criteria:**
 - Given Spec B в main + 3 approved креатора в БД + admin auth, when admin открывает `/campaigns/:id` и кликает Add, then drawer открывается с полным `CreatorsListPage`-форматом (фильтры, чек-боксы первой колонкой, sort `created_at desc`, page 50).
@@ -164,3 +165,74 @@ context:
 11. Click trash → click Cancel → dialog закрыт, mutation не вызывалась.
 12. Click row (НЕ корзина) → URL `?creatorId=...` → CreatorDrawer открыт.
 13. Расхождение со спекой = баг → агент сам фиксит, перезапускает self-check, переходит к e2e.
+
+## Suggested Review Order
+
+**Точка входа — оркестрация секции**
+
+- Куда подключаются drawer и confirm-dialog; где живёт removeMutation с granular-422 веткой.
+  [`CampaignCreatorsSection.tsx:42`](../../frontend/web/src/features/campaigns/creators/CampaignCreatorsSection.tsx#L42)
+
+**API-слой (новые мутации)**
+
+- Batch-add через openapi-fetch; ApiError для unwrap'а server codes.
+  [`campaignCreators.ts:36`](../../frontend/web/src/api/campaignCreators.ts#L36)
+
+- DELETE по compound path-params `(campaignId, creatorId)`.
+  [`campaignCreators.ts:53`](../../frontend/web/src/api/campaignCreators.ts#L53)
+
+**Drawer для добавления — error-flows и selection cap**
+
+- useMutation: 422 race очищает selection, 404 silent close, 5xx alert + drawer открыт.
+  [`AddCreatorsDrawer.tsx:104`](../../frontend/web/src/features/campaigns/creators/AddCreatorsDrawer.tsx#L104)
+
+- Set-based selection с injectable cap для тестов и hard-cap-200 в проде.
+  [`useDrawerSelection.ts:1`](../../frontend/web/src/features/campaigns/creators/hooks/useDrawerSelection.ts#L1)
+
+- Checkbox column: disabled-row для members, capReached блокирует unchecked.
+  [`AddCreatorsDrawerTable.tsx:81`](../../frontend/web/src/features/campaigns/creators/AddCreatorsDrawerTable.tsx#L81)
+
+- Controlled-двойник CreatorFilters — изоляция blast radius (см. Notes для feature-агента).
+  [`DrawerCreatorFilters.tsx:1`](../../frontend/web/src/features/campaigns/creators/DrawerCreatorFilters.tsx#L1)
+
+**Removal — local inline confirm (rule of three)**
+
+- Modal с role=dialog, Esc/backdrop/Cancel — disabled при isLoading.
+  [`RemoveCreatorConfirm.tsx:1`](../../frontend/web/src/features/campaigns/creators/RemoveCreatorConfirm.tsx#L1)
+
+- Trash-колонка с stopPropagation чтобы row-click не пересекался с remove.
+  [`CampaignCreatorsTable.tsx:181`](../../frontend/web/src/features/campaigns/creators/CampaignCreatorsTable.tsx#L181)
+
+**Аддитивная правка hook'а Spec B**
+
+- existingCreatorIds: Set<UUID> — мемоизация для drawer'а disabled-row.
+  [`useCampaignCreators.ts:80`](../../frontend/web/src/features/campaigns/creators/hooks/useCampaignCreators.ts#L80)
+
+**i18n — расширение namespace campaigns.campaignCreators**
+
+- Все строки UI mutations + selectAria/removeAria для screen-readers.
+  [`campaigns.json:60`](../../frontend/web/src/shared/i18n/locales/ru/campaigns.json#L60)
+
+**E2E — полный happy + cancel flow**
+
+- Russian-narrative JSDoc; reload-проверка persistence; reopen → existing badges.
+  [`admin-campaign-creators-mutations.spec.ts:1`](../../frontend/e2e/web/admin-campaign-creators-mutations.spec.ts#L1)
+
+**Tests — peripheral (расширения после ревью)**
+
+- 422 race с N>1 selection clear; cap=2 visual проверка hint+disabled; pagination persistence.
+  [`AddCreatorsDrawer.test.tsx:1`](../../frontend/web/src/features/campaigns/creators/AddCreatorsDrawer.test.tsx#L1)
+
+- 422 unknown code → fallback removeFailed; soft-deleted creator confirm placeholder.
+  [`CampaignCreatorsSection.test.tsx:1`](../../frontend/web/src/features/campaigns/creators/CampaignCreatorsSection.test.tsx#L1)
+
+- Cap-edge коробка: размер, canSelect, off-by-one на cap.
+  [`useDrawerSelection.test.ts:1`](../../frontend/web/src/features/campaigns/creators/hooks/useDrawerSelection.test.ts#L1)
+
+- Минимальный smoke на controlled-popover (open/escape/reset/age input).
+  [`DrawerCreatorFilters.test.tsx:1`](../../frontend/web/src/features/campaigns/creators/DrawerCreatorFilters.test.tsx#L1)
+
+- Trash column add/stopPropagation; api-client add/remove с 422/404/5xx.
+  [`CampaignCreatorsTable.test.tsx:1`](../../frontend/web/src/features/campaigns/creators/CampaignCreatorsTable.test.tsx#L1)
+  [`campaignCreators.test.ts:1`](../../frontend/web/src/api/campaignCreators.test.ts#L1)
+

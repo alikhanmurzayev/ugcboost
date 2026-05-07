@@ -4,6 +4,80 @@ Findings, surfaced by reviews/work, that we consciously kicked down the road. Ea
 
 ---
 
+## chunk 11 slice 2/2 — campaign_creators frontend mutations (PR #?)
+
+### Search input в drawer'е без debounce — запрос на каждое нажатие клавиши
+**Что:** `DrawerCreatorFilters` пишет в `filters.search` на каждое onChange → `creatorKeys.list(listInput)` → новый key → fetch. Идентично существующему `CreatorsListPage` без debounce.
+**Почему отложено:** общий паттерн с `CreatorsListPage`; единый рефактор должен быть отдельным PR (debounce 300ms через хук + замена в обоих компонентах).
+**Когда возвращаться:** когда заметим заметную нагрузку на /creators/list или жалобы UX.
+
+### `loginAs` / `withTimeout` дублируются в 4-х e2e specs — нет `helpers/ui-web.ts`
+**Что:** `frontend/e2e/helpers/` имеет только `api.ts` и `telegram.ts`. Спека `frontend-testing-e2e.md` § Хелперы предписывает `helpers/ui-web.ts`. Сейчас `loginAs(page, email, password)` и `withTimeout` — приватные копии в `admin-campaign-creators-mutations.spec.ts`, `admin-campaign-creators-read.spec.ts`, `admin-campaigns-list.spec.ts`, `admin-campaign-detail.spec.ts`.
+**Почему отложено:** существующий паттерн в 4-х файлах; рефактор в `helpers/ui-web.ts` требует обновления всех specs одним PR.
+**Когда возвращаться:** при следующем добавлении 5-го spec'а с тем же `loginAs` либо при изменении login-flow.
+
+### Partial-success при add игнорируется (если backend когда-нибудь начнёт возвращать `data.items.length < creatorIds.length` без 422)
+**Что:** Сейчас спека backend'а строгая — strict-422 на любой conflict. Frontend не сравнивает `added.length` с `selected.size`. Если контракт изменится на partial-success — silent UX-баг (drawer закроется, юзер думает что добавлены все).
+**Почему отложено:** контракт чёткий (strict-422), вероятность изменения — низкая.
+**Когда возвращаться:** при изменении API-контракта на batch-add (см. `backend/api/openapi.yaml#addCampaignCreators`).
+
+### Reopen drawer после close сохраняет stale `creatorKeys.list` cache
+**Что:** Drawer закрылся, не unmount'ится parent'ом — `listQuery` остаётся в cache. При reopen с теми же filters/sort/page стейл-данные используются (default staleTime). Если другой admin успел изменить creators-table в этот промежуток, юзер видит старые данные.
+**Почему отложено:** UX-минор; staleTime tuning или `refetchOnMount` — отдельная задача.
+**Когда возвращаться:** при появлении симптомов (репорт «выбрал креатора, который уже soft-deleted»).
+
+### Page > totalPages при concurrent shrink — нет clamp
+**Что:** Если в drawer'е admin на page=N, а параллельный admin удалил много креаторов — totalPages мог уменьшиться, page=N покажет пустую страницу (хотя на page=1 данные есть).
+**Почему отложено:** edge редкий; happy path после submit reset'ит page=1; для остальных случаев общий patch с `useEffect`-clamp нужен на всех paginated UI (creators-list, audit и т.п.).
+**Когда возвращаться:** одним общим PR clamp'а во всех paginated-компонентах.
+
+### Focus restore после закрытия RemoveCreatorConfirm
+**Что:** После Esc / Cancel / Submit фокус идёт в `<body>`, не возвращается на trash-кнопку, которая открыла confirm. Стандартный a11y.
+**Почему отложено:** требует ref-pattern на `document.activeElement` при open=true→false; такой же gap у других modals в проекте.
+**Когда возвращаться:** общим PR a11y-улучшений с focus-trap'ом и focus-restore (после Drawer/Modal лиц-стандартизации).
+
+### `formatShortDate` дублируется в 3 файлах
+**Что:** `formatShortDate` копи-пастится в `CampaignCreatorsTable.tsx`, `CreatorsListPage.tsx`, `AddCreatorsDrawerTable.tsx`. Кандидат на `shared/utils/formatDate.ts`.
+**Почему отложено:** rule of three exactly; вынос — отдельный refactor PR без функциональных изменений.
+**Когда возвращаться:** при следующем (4-м) появлении.
+
+### `mapColumnToSortField` / `mapSortFieldToColumn` в drawer'е дублируют логику из `features/creators/sort.ts`
+**Что:** В `AddCreatorsDrawer.tsx` есть две локальные функции маппинга column↔sort field. В `features/creators/sort.ts` уже есть `fieldForColumn` / `activeColumnForSort` через `ColumnFieldMap`. Можно переиспользовать.
+**Почему отложено:** существующий map в `sort.ts` — sub-set нужных полей; миграция требует расширения `DEFAULT_COLUMN_TO_FIELD` и аккуратной проверки CreatorsListPage. Не в scope round 2.
+**Когда возвращаться:** при следующем feature-добавлении column'а с sort.
+
+### Number(NaN) валидация в age input в DrawerCreatorFilters / CreatorFilters
+**Что:** `onChange={(e) => onChange({ ...filters, ageFrom: e.target.value ? Number(e.target.value) : undefined })}` — для `"abc"` даст `NaN`, для `"1e10"` пройдёт; нет cross-validation `ageFrom > ageTo`. Backend ловит это 422-валидацией.
+**Почему отложено:** существующая проблема в `features/creators/CreatorFilters.tsx` (Spec B); фикс должен быть единым в обоих компонентах. Не блокер для slice 2/2 mutations.
+**Когда возвращаться:** одним PR на оба компонента с `Number.isFinite`, clamp 14..100, cross-проверкой.
+
+### Двойной Escape handler popover + Drawer в AddCreatorsDrawer
+**Что:** `Drawer` вешает window-level keydown на `Escape`; `DrawerCreatorFilters` тоже. Когда popover открыт внутри drawer'а — Escape закроет ОБА сразу.
+**Почему отложено:** UX-минор; `e.stopImmediatePropagation()` через capture-phase решит, но требует продумывания приоритетов keydown.
+**Когда возвращаться:** при первой жалобе пользователя.
+
+### AddCreatorsDrawer.tsx 326 строк > 150-строкового сигнала
+**Что:** Spec'овское требование `frontend-components.md`: компонент >150 строк — сигнал к декомпозиции.
+**Почему отложено:** компонент cohesive; rule of three для shared hook ещё не выполнен.
+**Когда возвращаться:** при появлении следующего mutate-drawer'а (chunks 12/13).
+
+### Outside-click handler в DrawerCreatorFilters при portal-popovers
+**Что:** `useEffect(handlePointer)` закроет popover на клик «вне containerRef». Если SearchableMultiselect/DateRangePicker отрендерит popover через portal — клик внутри их popover'а будет outside.
+**Почему отложено:** существующий `features/creators/CreatorFilters.tsx` имеет ту же логику; popovers рендерятся inline сейчас.
+**Когда возвращаться:** если SearchableMultiselect/DateRangePicker мигрирует на portal-rendering.
+
+### CapCounter без pluralization (deviation от Code Map)
+**Что:** Spec Code Map обещал `capCounter_*` с pluralization для 0/1/N; реально использован один ключ `capCounter`. Pluralization rules для русского в i18next не настроены в проекте.
+**Почему отложено:** текст работает (счётчик числовой); добавление i18next plurals — отдельная задача (config + тесты на all forms).
+**Когда возвращаться:** при глобальной настройке i18next plural rules.
+
+### Pagination overflow в AddCreatorsDrawer (page > totalPages)
+**Что:** Если в drawer'е admin на page=N, а потом backend total уменьшился (concurrent admin удалил много креаторов) — drawer покажет пустую страницу, хотя данные есть на page=1.
+**Почему отложено:** успешный submit закрывает drawer (fresh state на reopen). Concurrent-shrinking-without-close — узкий race, для chunk 11 не критичен.
+**Когда возвращаться:** одним общим патчем со всеми pages в проекте (creators list, audit и т.п.) через `useEffect`-clamp `setPage(min(page, totalPages))`.
+
+---
+
 ## 2026-05-07 — chunk 11 slice 1/2 review round 2 (6 субагентов)
 
 ### Дублирующийся `extractErrorCode` в каждом `frontend/web/src/api/*.ts`

@@ -108,7 +108,7 @@ describe("useCampaignCreators", () => {
     expect(listCreators).toHaveBeenCalledWith({
       ids: [CREATOR_A, CREATOR_B].sort(),
       page: 1,
-      perPage: 200,
+      perPage: 2,
       sort: "created_at",
       order: "desc",
     });
@@ -185,6 +185,117 @@ describe("useCampaignCreators", () => {
 
     expect(listCampaignCreators).not.toHaveBeenCalled();
     expect(listCreators).not.toHaveBeenCalled();
+  });
+
+  it("exposes existingCreatorIds as a Set built from A3 creator ids", async () => {
+    vi.mocked(listCampaignCreators).mockResolvedValueOnce([
+      makeCC(CREATOR_A),
+      makeCC(CREATOR_B),
+    ]);
+    vi.mocked(listCreators).mockResolvedValueOnce({
+      data: {
+        items: [
+          makeCreator(CREATOR_A, "Aлексей"),
+          makeCreator(CREATOR_B, "Борис"),
+        ],
+        total: 2,
+        page: 1,
+        perPage: 200,
+      },
+    });
+
+    const { result } = renderHook(() => useCampaignCreators(CAMPAIGN_ID), {
+      wrapper: wrap(),
+    });
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+    });
+
+    expect(result.current.existingCreatorIds).toBeInstanceOf(Set);
+    expect(result.current.existingCreatorIds.size).toBe(2);
+    expect(result.current.existingCreatorIds.has(CREATOR_A)).toBe(true);
+    expect(result.current.existingCreatorIds.has(CREATOR_B)).toBe(true);
+  });
+
+  it("existingCreatorIds is empty when no creators are attached to the campaign", async () => {
+    vi.mocked(listCampaignCreators).mockResolvedValueOnce([]);
+
+    const { result } = renderHook(() => useCampaignCreators(CAMPAIGN_ID), {
+      wrapper: wrap(),
+    });
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+    });
+
+    expect(result.current.existingCreatorIds.size).toBe(0);
+  });
+
+  it("existingCreatorIds includes ids whose creator profile is missing (soft-deleted)", async () => {
+    vi.mocked(listCampaignCreators).mockResolvedValueOnce([
+      makeCC(CREATOR_A),
+      makeCC(CREATOR_B),
+    ]);
+    vi.mocked(listCreators).mockResolvedValueOnce({
+      data: {
+        items: [makeCreator(CREATOR_A, "Aлексей")],
+        total: 1,
+        page: 1,
+        perPage: 200,
+      },
+    });
+
+    const { result } = renderHook(() => useCampaignCreators(CAMPAIGN_ID), {
+      wrapper: wrap(),
+    });
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+    });
+
+    expect(result.current.existingCreatorIds.has(CREATOR_A)).toBe(true);
+    expect(result.current.existingCreatorIds.has(CREATOR_B)).toBe(true);
+  });
+
+  it("chunks profile fetch into 200-id batches when a campaign has 200+ members (backend caps `ids` at 200)", async () => {
+    const ids = Array.from(
+      { length: 250 },
+      (_, i) =>
+        `${i.toString(16).padStart(8, "0")}-aaaa-aaaa-aaaa-aaaaaaaaaaaa`,
+    );
+    const ccs = ids.map((id) => makeCC(id));
+    const profiles = ids.map((id, i) => makeCreator(id, `Last${i}`));
+
+    vi.mocked(listCampaignCreators).mockResolvedValueOnce(ccs);
+    vi.mocked(listCreators).mockImplementation(async (input) => ({
+      data: {
+        items: profiles.filter((p) => input.ids?.includes(p.id)),
+        total: input.ids?.length ?? 0,
+        page: 1,
+        perPage: input.perPage,
+      },
+    }));
+
+    const { result } = renderHook(() => useCampaignCreators(CAMPAIGN_ID), {
+      wrapper: wrap(),
+    });
+
+    await waitFor(() => {
+      expect(result.current.isLoading).toBe(false);
+      expect(result.current.rows).toHaveLength(250);
+    });
+
+    // 250 / 200 → 2 chunks (200 + 50). Without chunking the backend would
+    // return 422 «не более 200 элементов» and the section would land in
+    // ErrorState — this is the bug the manual subagent caught against PR #86.
+    expect(listCreators).toHaveBeenCalledTimes(2);
+    const calls = vi.mocked(listCreators).mock.calls;
+    const firstChunkSize = calls[0]?.[0].ids?.length ?? 0;
+    const secondChunkSize = calls[1]?.[0].ids?.length ?? 0;
+    expect([firstChunkSize, secondChunkSize].sort((a, b) => a - b)).toEqual([
+      50, 200,
+    ]);
   });
 
   it("refetch retries A3 and listCreators", async () => {

@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { listCampaignCreators } from "@/api/campaignCreators";
 import type { CampaignCreator } from "@/api/campaignCreators";
 import { listCreators } from "@/api/creators";
-import type { CreatorListItem, CreatorsListInput } from "@/api/creators";
+import type { CreatorListItem } from "@/api/creators";
 import { campaignCreatorKeys } from "@/shared/constants/queryKeys";
 
 export interface CampaignCreatorRow {
@@ -14,12 +14,37 @@ export interface CampaignCreatorRow {
 export interface UseCampaignCreatorsResult {
   rows: CampaignCreatorRow[];
   total: number;
+  existingCreatorIds: Set<string>;
   isLoading: boolean;
   isError: boolean;
   refetch: () => void;
 }
 
-const PER_PAGE = 200;
+// Backend caps `ids` at 200 per /creators/list call (CreatorListIDsMax).
+// A campaign with 200+ members fans out into parallel chunked fetches.
+const IDS_PER_CHUNK = 200;
+
+async function fetchProfilesByIds(
+  ids: readonly string[],
+): Promise<CreatorListItem[]> {
+  if (ids.length === 0) return [];
+  const chunks: string[][] = [];
+  for (let i = 0; i < ids.length; i += IDS_PER_CHUNK) {
+    chunks.push(ids.slice(i, i + IDS_PER_CHUNK));
+  }
+  const responses = await Promise.all(
+    chunks.map((chunk) =>
+      listCreators({
+        ids: chunk,
+        page: 1,
+        perPage: chunk.length,
+        sort: "created_at",
+        order: "desc",
+      }),
+    ),
+  );
+  return responses.flatMap((r) => r.data?.items ?? []);
+}
 
 export function useCampaignCreators(
   campaignId: string,
@@ -40,24 +65,16 @@ export function useCampaignCreators(
 
   const profilesEnabled = enabled && creatorIds.length > 0;
 
-  const profilesInput: CreatorsListInput = {
-    ids: creatorIds,
-    page: 1,
-    perPage: PER_PAGE,
-    sort: "created_at",
-    order: "desc",
-  };
-
   const profilesQuery = useQuery({
     queryKey: campaignCreatorKeys.profiles(campaignId, creatorIds),
-    queryFn: () => listCreators(profilesInput),
+    queryFn: () => fetchProfilesByIds(creatorIds),
     enabled: profilesEnabled,
   });
 
   const rows = useMemo<CampaignCreatorRow[]>(() => {
     const ccs = ccQuery.data ?? [];
     if (ccs.length === 0) return [];
-    const profiles = profilesQuery.data?.data?.items ?? [];
+    const profiles = profilesQuery.data ?? [];
     const ccByCreatorId = new Map<string, CampaignCreator>(
       ccs.map((cc) => [cc.creatorId, cc]),
     );
@@ -76,6 +93,10 @@ export function useCampaignCreators(
     return [...known, ...missing];
   }, [ccQuery.data, profilesQuery.data]);
 
+  const existingCreatorIds = useMemo(() => {
+    return new Set((ccQuery.data ?? []).map((cc) => cc.creatorId));
+  }, [ccQuery.data]);
+
   const total = ccQuery.data?.length ?? 0;
   const isLoading =
     ccQuery.isLoading || (profilesEnabled && profilesQuery.isLoading);
@@ -86,5 +107,5 @@ export function useCampaignCreators(
     if (profilesEnabled) void profilesQuery.refetch();
   }
 
-  return { rows, total, isLoading, isError, refetch };
+  return { rows, total, existingCreatorIds, isLoading, isError, refetch };
 }

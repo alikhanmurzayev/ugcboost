@@ -1,47 +1,44 @@
 /**
- * Browser e2e — admin-секция «Креаторы кампании» в read-only-режиме на
- * `/campaigns/:campaignId`.
+ * Browser e2e — admin-секция «Креаторы кампании» на `/campaigns/:campaignId`,
+ * read-only-аспекты chunk 11.
  *
- * Закрывает chunk 11 slice 1/2 campaign-roadmap: на странице деталей
- * кампании появилась новая секция, которая показывает, какие креаторы уже
- * прикреплены к кампании (через A3 + listCreators({ids})), но управлять
- * составом ещё нельзя — кнопка «Добавить креаторов» disabled с tooltip
- * «Появится в следующем PR» (это slice 2/2). UI добавления в slice 2/2;
- * пока его нет, тест стоит на A1 (`POST /campaigns/{id}/creators`),
- * вызванном напрямую под admin-токеном через testutil-хелпер
- * `addCampaignCreators`. Каждый тест сеет своего admin'а, кампанию и
- * нужное число одобренных креаторов через composable-хелперы api.ts;
- * cleanup идёт LIFO через cleanupCampaign / SeededApprovedCreator.cleanup
- * / SeededUser.cleanup и уважает E2E_CLEANUP=false для дебаг-прогонов.
+ * Закрывает наблюдаемое поведение секции, которое осталось read-only после
+ * slice 2/2: отрисовка таблицы с двумя добавленными креаторами через A3 +
+ * `listCreators({ids})`, empty-state, переход в `CreatorDrawer` по клику
+ * по строке. Mutations Add/Remove живут в `admin-campaign-creators-mutations.spec.ts`
+ * (slice 2/2). После slice 2/2 кнопка «Добавить креаторов» — enabled, и
+ * её активация проверяется здесь только как факт «не disabled, без
+ * tooltip-заглушки»; полный flow открытия drawer'а покрыт mutations spec'ом.
+ *
+ * Тесты сеют admin'а, кампанию и нужное число одобренных креаторов через
+ * composable-хелперы api.ts; рядом с UI-flow остаются прямые вызовы
+ * `addCampaignCreators` под admin-токеном, чтобы быстро довести кампанию
+ * до состояния «N креаторов уже добавлены». Cleanup идёт LIFO через
+ * cleanupCampaign / SeededApprovedCreator.cleanup / SeededUser.cleanup и
+ * уважает `E2E_CLEANUP=false` для дебаг-прогонов.
  *
  * Happy live + 2 креатора — admin переходит на /campaigns/:id живой
  * кампании, в которую через API уже добавили двух одобренных креаторов.
  * Ожидается секция `campaign-creators-section` с заголовком, счётчиком
  * «2 в кампании» и таблицей `campaign-creators-table` из двух строк
  * (`row-<creatorId>`), в которых видны фактические ФИО (`<lastName> <firstName>`)
- * и город «Алматы» — это закрывает AC «таблица показывает N строк с
- * подтянутыми profile-данными через listCreators({ids})». Кнопка
- * `campaign-creators-add-button` disabled с title `Появится в следующем
- * PR` — закрывает AC про disabled-Add+tooltip в slice 1/2.
+ * и город «Алматы». Кнопка `campaign-creators-add-button` enabled —
+ * закрывает AC «после slice 2/2 управление активно».
  *
  * Live + 0 креаторов — admin переходит на /campaigns/:id живой кампании
  * без добавленных. Ожидается empty-state `campaign-creators-table-empty`
  * с текстом «Креаторов пока нет», счётчик отсутствует, кнопка
- * `campaign-creators-add-button` disabled с тем же tooltip'ом.
+ * `campaign-creators-add-button` enabled.
  *
  * Click row → drawer — admin кликает строку креатора в секции; ожидается,
  * что URL обновляется до `?creatorId=<uuid>` и открывается существующий
  * `CreatorDrawer` с подтянутыми detail-полями (имя в заголовке) — то есть
  * страница успешно вызвала getCreator под admin-токеном. Кнопка
- * `drawer-close` закрывает drawer и убирает creatorId из URL — закрывает
- * AC про click row → URL → existing CreatorDrawer.
+ * `drawer-close` закрывает drawer и убирает creatorId из URL.
  *
  * Soft-deleted campaign — секция `campaign-creators-section` не должна
  * рендериться вовсе. Production-эндпоинта soft-delete'а кампании в main
- * пока нет, поэтому путь закрыт unit-тестом `CampaignDetailPage.test.tsx`
- * (проверяет, что при `campaign.isDeleted === true` секция отсутствует
- * в DOM, а A3 не вызывается). В e2e оставлены только happy-state'ы и
- * один user-flow перехода через drawer.
+ * пока нет, поэтому путь закрыт unit-тестом `CampaignDetailPage.test.tsx`.
  */
 import { test, expect, type Page } from "@playwright/test";
 import {
@@ -56,7 +53,7 @@ import {
 const API_URL = process.env.API_URL || "http://localhost:8080";
 const CLEANUP_TIMEOUT_MS = 5_000;
 
-test.describe("Admin campaign creators — read-only section (slice 1/2)", () => {
+test.describe("Admin campaign creators — read-only section behavior", () => {
   test.use({ timezoneId: "UTC" });
 
   let cleanupStack: Array<() => Promise<void>>;
@@ -142,13 +139,13 @@ test.describe("Admin campaign creators — read-only section (slice 1/2)", () =>
     await expect(rowA).toContainText("Алматы");
     await expect(rowA).toContainText("Бьюти (макияж, уход)");
     const socialA = rowA.getByTestId("social-instagram");
+    const socialAHandle = creatorA.application.socials[0]?.handle;
+    expect(socialAHandle, "seedApprovedCreator must seed at least one social").toBeDefined();
     await expect(socialA).toHaveAttribute(
       "href",
-      `https://instagram.com/${creatorA.application.socials[0]?.handle ?? ""}`,
+      `https://instagram.com/${socialAHandle}`,
     );
-    await expect(socialA).toContainText(
-      `@${creatorA.application.socials[0]?.handle ?? ""}`,
-    );
+    await expect(socialA).toContainText(`@${socialAHandle}`);
 
     const rowB = page.getByTestId(`row-${creatorB.creatorId}`);
     await expect(rowB).toContainText(
@@ -158,11 +155,10 @@ test.describe("Admin campaign creators — read-only section (slice 1/2)", () =>
     await expect(rowB).toContainText("Бьюти (макияж, уход)");
 
     const addBtn = page.getByTestId("campaign-creators-add-button");
-    await expect(addBtn).toBeDisabled();
-    await expect(addBtn).toHaveAttribute("title", "Появится в следующем PR");
+    await expect(addBtn).toBeEnabled();
   });
 
-  test("Live campaign + 0 creators — empty state, counter absent, Add button disabled", async ({
+  test("Live campaign + 0 creators — empty state, counter absent, Add button enabled", async ({
     page,
     request,
   }) => {
@@ -188,8 +184,7 @@ test.describe("Admin campaign creators — read-only section (slice 1/2)", () =>
     await expect(page.getByTestId("campaign-creators-counter")).toHaveCount(0);
 
     const addBtn = page.getByTestId("campaign-creators-add-button");
-    await expect(addBtn).toBeDisabled();
-    await expect(addBtn).toHaveAttribute("title", "Появится в следующем PR");
+    await expect(addBtn).toBeEnabled();
   });
 
   test("Click row opens CreatorDrawer with detail; close removes creatorId from URL", async ({
