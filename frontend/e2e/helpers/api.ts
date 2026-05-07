@@ -25,6 +25,8 @@ type CreatorApplicationSubmitResult =
   components["schemas"]["CreatorApplicationSubmitResult"];
 type CampaignInput = components["schemas"]["CampaignInput"];
 type CampaignCreatedResult = components["schemas"]["CampaignCreatedResult"];
+type AddCampaignCreatorsInput =
+  components["schemas"]["AddCampaignCreatorsInput"];
 type SeedUserRequest = testComponents["schemas"]["SeedUserRequest"];
 type SeedUserResult = testComponents["schemas"]["SeedUserResult"];
 type SeedUserRole = SeedUserRequest["role"];
@@ -644,6 +646,55 @@ export interface SeededCampaign {
   name: string;
   tmaUrl: string;
   cleanup: () => Promise<void>;
+}
+
+// addCampaignCreators drives admin POST /campaigns/{id}/creators (A1) which
+// the campaign-creators-frontend slice 1/2 spec relies on to seed rows the
+// read-only section then renders. Add-via-UI ships in slice 2/2; until then
+// the smoke test stands in by hitting the API directly with the admin
+// bearer. The campaigns FK on campaign_creators is not ON DELETE CASCADE,
+// so callers must detach the rows (via `removeCampaignCreator`) before
+// `cleanupCampaign` runs.
+export async function addCampaignCreators(
+  request: APIRequestContext,
+  apiUrl: string,
+  campaignId: string,
+  adminToken: string,
+  creatorIds: string[],
+): Promise<void> {
+  const body: AddCampaignCreatorsInput = { creatorIds };
+  const resp = await request.post(`${apiUrl}/campaigns/${campaignId}/creators`, {
+    headers: { Authorization: `Bearer ${adminToken}` },
+    data: body,
+  });
+  if (resp.status() !== 201) {
+    throw new Error(
+      `addCampaignCreators ${campaignId}: ${resp.status()} ${await resp.text()}`,
+    );
+  }
+}
+
+// removeCampaignCreator drives admin DELETE /campaigns/{id}/creators/{creatorId}
+// (A2) — used as a cleanup step that releases the campaign_creators FK
+// before the campaign / creator cleanup helpers fire. 204 = removed,
+// 404 = already gone (idempotent against cascading orders).
+export async function removeCampaignCreator(
+  request: APIRequestContext,
+  apiUrl: string,
+  campaignId: string,
+  creatorId: string,
+  adminToken: string,
+): Promise<void> {
+  if (process.env.E2E_CLEANUP === "false") return;
+  const resp = await request.delete(
+    `${apiUrl}/campaigns/${campaignId}/creators/${creatorId}`,
+    { headers: { Authorization: `Bearer ${adminToken}` } },
+  );
+  if (resp.status() !== 204 && resp.status() !== 404) {
+    throw new Error(
+      `removeCampaignCreator ${campaignId}/${creatorId}: ${resp.status()} ${await resp.text()}`,
+    );
+  }
 }
 
 // seedCampaign drives the production POST /campaigns endpoint with an admin

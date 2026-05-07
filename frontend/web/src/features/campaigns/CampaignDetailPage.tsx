@@ -1,14 +1,17 @@
 import { useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
 import { getCampaign, type Campaign } from "@/api/campaigns";
+import { getCreator } from "@/api/creators";
 import { ApiError } from "@/api/client";
-import { ROUTES } from "@/shared/constants/routes";
-import { campaignKeys } from "@/shared/constants/queryKeys";
+import { ROUTES, SEARCH_PARAMS } from "@/shared/constants/routes";
+import { campaignKeys, creatorKeys } from "@/shared/constants/queryKeys";
 import Spinner from "@/shared/components/Spinner";
 import ErrorState from "@/shared/components/ErrorState";
+import CreatorDrawer from "@/features/creators/CreatorDrawer";
 import CampaignEditSection from "./CampaignEditSection";
+import CampaignCreatorsSection from "./creators/CampaignCreatorsSection";
 
 const SAFE_LINK_SCHEMES = new Set(["http:", "https:", "tg:"]);
 
@@ -79,69 +82,100 @@ function NotFoundState() {
 function CampaignDetailContent({ campaign }: { campaign: Campaign }) {
   const { t } = useTranslation("campaigns");
   const [isEditing, setIsEditing] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const selectedCreatorId = searchParams.get(SEARCH_PARAMS.CREATOR_ID);
+
+  const detailQuery = useQuery({
+    queryKey: creatorKeys.detail(selectedCreatorId ?? ""),
+    queryFn: () => getCreator(selectedCreatorId ?? ""),
+    enabled: !!selectedCreatorId,
+    retry: false,
+  });
+
+  function closeCreator() {
+    setSearchParams((prev) => {
+      const np = new URLSearchParams(prev);
+      np.delete(SEARCH_PARAMS.CREATOR_ID);
+      return np;
+    });
+  }
 
   return (
-    <div data-testid="campaign-detail-page" className="max-w-2xl">
-      <Link
-        to={`/${ROUTES.CAMPAIGNS}`}
-        className="text-sm text-gray-500 hover:text-gray-700"
-        data-testid="campaign-detail-back"
-      >
-        {t("detail.backToList")}
-      </Link>
-      <div className="mt-2 flex items-center gap-3">
-        <h1
-          className="text-2xl font-bold text-gray-900"
-          data-testid="campaign-detail-title"
+    <div data-testid="campaign-detail-page" className="max-w-7xl">
+      <div className="max-w-2xl">
+        <Link
+          to={`/${ROUTES.CAMPAIGNS}`}
+          className="text-sm text-gray-500 hover:text-gray-700"
+          data-testid="campaign-detail-back"
         >
-          {campaign.name}
-        </h1>
-        {campaign.isDeleted && (
-          <span
-            className="inline-flex items-center rounded-full bg-surface-200 px-2 py-0.5 text-xs font-medium text-gray-500"
-            data-testid="campaign-detail-deleted-badge"
+          {t("detail.backToList")}
+        </Link>
+        <div className="mt-2 flex items-center gap-3">
+          <h1
+            className="text-2xl font-bold text-gray-900"
+            data-testid="campaign-detail-title"
           >
-            {t("labels.deletedBadge")}
-          </span>
-        )}
-      </div>
-
-      <section
-        className="mt-6 rounded-card border border-surface-300 bg-white p-6"
-        data-testid="campaign-section-about"
-      >
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-bold text-gray-900">
-            {isEditing ? t("edit.title") : t("detail.sectionTitle")}
-          </h2>
-          {!isEditing && (
-            <button
-              type="button"
-              onClick={() => setIsEditing(true)}
-              disabled={campaign.isDeleted}
-              title={
-                campaign.isDeleted
-                  ? t("detail.editDisabledHint")
-                  : undefined
-              }
-              className="rounded-button border border-surface-300 px-3 py-1.5 text-sm text-gray-700 transition hover:bg-surface-200 disabled:cursor-not-allowed disabled:opacity-50"
-              data-testid="campaign-edit-button"
+            {campaign.name}
+          </h1>
+          {campaign.isDeleted && (
+            <span
+              className="inline-flex items-center rounded-full bg-surface-200 px-2 py-0.5 text-xs font-medium text-gray-500"
+              data-testid="campaign-detail-deleted-badge"
             >
-              {t("detail.editButton")}
-            </button>
+              {t("labels.deletedBadge")}
+            </span>
           )}
         </div>
 
-        {isEditing ? (
-          <CampaignEditSection
-            campaign={campaign}
-            onCancel={() => setIsEditing(false)}
-            onSaved={() => setIsEditing(false)}
-          />
-        ) : (
-          <ViewSection campaign={campaign} />
-        )}
-      </section>
+        <section
+          className="mt-6 rounded-card border border-surface-300 bg-white p-6"
+          data-testid="campaign-section-about"
+        >
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-bold text-gray-900">
+              {isEditing ? t("edit.title") : t("detail.sectionTitle")}
+            </h2>
+            {!isEditing && (
+              <button
+                type="button"
+                onClick={() => setIsEditing(true)}
+                disabled={campaign.isDeleted}
+                title={
+                  campaign.isDeleted
+                    ? t("detail.editDisabledHint")
+                    : undefined
+                }
+                className="rounded-button border border-surface-300 px-3 py-1.5 text-sm text-gray-700 transition hover:bg-surface-200 disabled:cursor-not-allowed disabled:opacity-50"
+                data-testid="campaign-edit-button"
+              >
+                {t("detail.editButton")}
+              </button>
+            )}
+          </div>
+
+          {isEditing ? (
+            <CampaignEditSection
+              campaign={campaign}
+              onCancel={() => setIsEditing(false)}
+              onSaved={() => setIsEditing(false)}
+            />
+          ) : (
+            <ViewSection campaign={campaign} />
+          )}
+        </section>
+      </div>
+
+      <CampaignCreatorsSection campaign={campaign} />
+
+      <CreatorDrawer
+        prefill={undefined}
+        detail={detailQuery.data?.data}
+        isLoading={detailQuery.isLoading}
+        isError={detailQuery.isError}
+        open={!!selectedCreatorId}
+        onClose={closeCreator}
+      />
     </div>
   );
 }

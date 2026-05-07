@@ -11,7 +11,18 @@ vi.mock("@/api/campaigns", () => ({
   updateCampaign: vi.fn(),
 }));
 
+vi.mock("@/api/campaignCreators", () => ({
+  listCampaignCreators: vi.fn(),
+}));
+
+vi.mock("@/api/creators", () => ({
+  listCreators: vi.fn(),
+  getCreator: vi.fn(),
+}));
+
 import { getCampaign, updateCampaign } from "@/api/campaigns";
+import { listCampaignCreators } from "@/api/campaignCreators";
+import { listCreators, getCreator } from "@/api/creators";
 
 const ID = "11111111-1111-1111-1111-111111111111";
 const ID_OTHER = "22222222-2222-2222-2222-222222222222";
@@ -32,13 +43,13 @@ const FIXTURE_DELETED = {
   isDeleted: true,
 } as const;
 
-function renderPage(id: string = ID) {
+function renderPage(id: string = ID, search = "") {
   const queryClient = new QueryClient({
     defaultOptions: { mutations: { retry: false }, queries: { retry: false } },
   });
   const utils = render(
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter initialEntries={[`/campaigns/${id}`]}>
+      <MemoryRouter initialEntries={[`/campaigns/${id}${search}`]}>
         <Routes>
           <Route
             path="/campaigns"
@@ -57,6 +68,10 @@ function renderPage(id: string = ID) {
 
 beforeEach(() => {
   vi.resetAllMocks();
+  vi.mocked(listCampaignCreators).mockResolvedValue([]);
+  vi.mocked(listCreators).mockResolvedValue({
+    data: { items: [], total: 0, page: 1, perPage: 200 },
+  });
 });
 
 describe("CampaignDetailPage — loading & error", () => {
@@ -452,5 +467,203 @@ describe("CampaignDetailPage — submit guard", () => {
     // against any race where the button briefly appears clickable.
     await userEvent.click(screen.getByTestId("campaign-edit-submit"));
     expect(updateCampaign).toHaveBeenCalledTimes(1);
+  });
+});
+
+const CREATOR_ID = "33333333-3333-3333-3333-333333333333";
+
+const FIXTURE_CC = {
+  id: "cc-1",
+  campaignId: ID,
+  creatorId: CREATOR_ID,
+  status: "planned" as const,
+  invitedAt: null,
+  invitedCount: 0,
+  remindedAt: null,
+  remindedCount: 0,
+  decidedAt: null,
+  createdAt: "2026-05-07T12:00:00Z",
+  updatedAt: "2026-05-07T12:00:00Z",
+};
+
+const FIXTURE_CREATOR_LIST_ITEM = {
+  id: CREATOR_ID,
+  lastName: "Иванова",
+  firstName: "Анна",
+  middleName: null,
+  iin: "070101400001",
+  birthDate: "2007-01-01",
+  phone: "+77001112255",
+  city: { code: "ALA", name: "Алматы", sortOrder: 10 },
+  categories: [{ code: "fashion", name: "Мода", sortOrder: 1 }],
+  socials: [{ platform: "instagram" as const, handle: "anna" }],
+  telegramUsername: "anna",
+  createdAt: "2026-04-30T12:00:00Z",
+  updatedAt: "2026-04-30T12:00:00Z",
+};
+
+const FIXTURE_CREATOR_DETAIL = {
+  id: CREATOR_ID,
+  iin: FIXTURE_CREATOR_LIST_ITEM.iin,
+  sourceApplicationId: "44444444-4444-4444-4444-444444444444",
+  lastName: FIXTURE_CREATOR_LIST_ITEM.lastName,
+  firstName: FIXTURE_CREATOR_LIST_ITEM.firstName,
+  middleName: null,
+  birthDate: FIXTURE_CREATOR_LIST_ITEM.birthDate,
+  phone: FIXTURE_CREATOR_LIST_ITEM.phone,
+  cityCode: "ALA",
+  cityName: "Алматы",
+  address: "ул. Абая 1",
+  categoryOtherText: null,
+  telegramUserId: 42,
+  telegramUsername: FIXTURE_CREATOR_LIST_ITEM.telegramUsername,
+  telegramFirstName: null,
+  telegramLastName: null,
+  socials: [
+    {
+      id: "s1",
+      platform: "instagram" as const,
+      handle: "anna",
+      verified: true,
+      createdAt: "2026-04-30T12:00:00Z",
+    },
+  ],
+  categories: [{ code: "fashion", name: "Мода" }],
+  createdAt: FIXTURE_CREATOR_LIST_ITEM.createdAt,
+  updatedAt: FIXTURE_CREATOR_LIST_ITEM.updatedAt,
+};
+
+describe("CampaignDetailPage — campaign creators section", () => {
+  it("renders the section on a live campaign and fires A3", async () => {
+    vi.mocked(getCampaign).mockResolvedValueOnce({ data: FIXTURE_LIVE });
+
+    renderPage();
+
+    await screen.findByTestId("campaign-creators-section");
+    await waitFor(() => {
+      expect(listCampaignCreators).toHaveBeenCalledWith(ID);
+    });
+  });
+
+  it("does not render the section on a soft-deleted campaign and does not fire A3", async () => {
+    vi.mocked(getCampaign).mockResolvedValueOnce({ data: FIXTURE_DELETED });
+
+    renderPage(FIXTURE_DELETED.id);
+
+    await screen.findByTestId("campaign-detail-deleted-badge");
+    expect(
+      screen.queryByTestId("campaign-creators-section"),
+    ).not.toBeInTheDocument();
+    expect(listCampaignCreators).not.toHaveBeenCalled();
+  });
+
+  it("renders rows when A3 + listCreators succeed and skips listCreators on empty A3", async () => {
+    vi.mocked(getCampaign).mockResolvedValueOnce({ data: FIXTURE_LIVE });
+    vi.mocked(listCampaignCreators).mockResolvedValueOnce([FIXTURE_CC]);
+    vi.mocked(listCreators).mockResolvedValueOnce({
+      data: {
+        items: [FIXTURE_CREATOR_LIST_ITEM],
+        total: 1,
+        page: 1,
+        perPage: 200,
+      },
+    });
+
+    renderPage();
+
+    expect(await screen.findByTestId(`row-${CREATOR_ID}`)).toBeInTheDocument();
+    expect(screen.getByTestId("campaign-creators-counter")).toHaveTextContent(
+      "1 в кампании",
+    );
+  });
+
+  it("disables the Add button with tooltip", async () => {
+    vi.mocked(getCampaign).mockResolvedValueOnce({ data: FIXTURE_LIVE });
+
+    renderPage();
+
+    const btn = await screen.findByTestId("campaign-creators-add-button");
+    expect(btn).toBeDisabled();
+    expect(btn).toHaveAttribute("title", "Появится в следующем PR");
+  });
+});
+
+describe("CampaignDetailPage — creator drawer via URL", () => {
+  it("opens drawer when ?creatorId is present on mount and fetches detail", async () => {
+    vi.mocked(getCampaign).mockResolvedValueOnce({ data: FIXTURE_LIVE });
+    vi.mocked(listCampaignCreators).mockResolvedValueOnce([FIXTURE_CC]);
+    vi.mocked(listCreators).mockResolvedValueOnce({
+      data: {
+        items: [FIXTURE_CREATOR_LIST_ITEM],
+        total: 1,
+        page: 1,
+        perPage: 200,
+      },
+    });
+    vi.mocked(getCreator).mockResolvedValueOnce({
+      data: FIXTURE_CREATOR_DETAIL,
+    });
+
+    renderPage(ID, `?creatorId=${CREATOR_ID}`);
+
+    expect(await screen.findByTestId("drawer")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(getCreator).toHaveBeenCalledWith(CREATOR_ID);
+    });
+    await waitFor(() =>
+      expect(screen.getByTestId("drawer-full-name")).toHaveTextContent(
+        "Иванова Анна",
+      ),
+    );
+  });
+
+  it("opens drawer on row click and writes creatorId to URL", async () => {
+    vi.mocked(getCampaign).mockResolvedValueOnce({ data: FIXTURE_LIVE });
+    vi.mocked(listCampaignCreators).mockResolvedValueOnce([FIXTURE_CC]);
+    vi.mocked(listCreators).mockResolvedValueOnce({
+      data: {
+        items: [FIXTURE_CREATOR_LIST_ITEM],
+        total: 1,
+        page: 1,
+        perPage: 200,
+      },
+    });
+    vi.mocked(getCreator).mockResolvedValueOnce({
+      data: FIXTURE_CREATOR_DETAIL,
+    });
+
+    renderPage();
+
+    await userEvent.click(await screen.findByTestId(`row-${CREATOR_ID}`));
+
+    expect(await screen.findByTestId("drawer")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(getCreator).toHaveBeenCalledWith(CREATOR_ID);
+    });
+  });
+
+  it("closes drawer when close button clicked", async () => {
+    vi.mocked(getCampaign).mockResolvedValueOnce({ data: FIXTURE_LIVE });
+    vi.mocked(listCampaignCreators).mockResolvedValueOnce([FIXTURE_CC]);
+    vi.mocked(listCreators).mockResolvedValueOnce({
+      data: {
+        items: [FIXTURE_CREATOR_LIST_ITEM],
+        total: 1,
+        page: 1,
+        perPage: 200,
+      },
+    });
+    vi.mocked(getCreator).mockResolvedValueOnce({
+      data: FIXTURE_CREATOR_DETAIL,
+    });
+
+    renderPage(ID, `?creatorId=${CREATOR_ID}`);
+
+    const close = await screen.findByTestId("drawer-close");
+    await userEvent.click(close);
+
+    await waitFor(() => {
+      expect(screen.queryByTestId("drawer")).not.toBeInTheDocument();
+    });
   });
 });
