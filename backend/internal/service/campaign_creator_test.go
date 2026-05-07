@@ -273,7 +273,7 @@ func TestCampaignCreatorService_Add(t *testing.T) {
 				auditCalls++
 			}).Return(nil).Times(2)
 
-		log.EXPECT().Info(mock.Anything, "campaign creators added",
+		log.EXPECT().Debug(mock.Anything, "campaign creators added",
 			[]any{"campaign_id", "camp-1", "count", 2}).Once()
 
 		svc := NewCampaignCreatorService(pool, factory, log)

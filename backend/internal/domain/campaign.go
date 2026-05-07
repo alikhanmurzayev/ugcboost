@@ -43,6 +43,43 @@ var ErrCampaignNameTaken = NewBusinessError(
 // hits sql.ErrNoRows. respondError maps it to 404 CAMPAIGN_NOT_FOUND.
 var ErrCampaignNotFound = errors.New("campaign not found")
 
+// ErrCampaignIdsTooMany is raised by ApproveCreatorApplication when the
+// optional `campaignIds` payload exceeds the per-call cap.
+var ErrCampaignIdsTooMany = NewValidationError(
+	CodeCampaignIdsTooMany,
+	"Слишком много кампаний. За один approve можно добавить креатора не более чем в 20 кампаний.",
+)
+
+// ErrCampaignIdsDuplicates is raised by ApproveCreatorApplication when the
+// `campaignIds` payload contains duplicate UUIDs.
+var ErrCampaignIdsDuplicates = NewValidationError(
+	CodeCampaignIdsDuplicates,
+	"В списке кампаний есть дубликаты. Уберите повторы и повторите.",
+)
+
+// ErrCampaignNotAvailableForAdd is raised by CampaignService.AssertActiveCampaigns
+// when at least one of the requested campaigns is missing or soft-deleted.
+// Single code for both cases — admin's expected reaction is the same: refresh
+// the campaign list and retry.
+var ErrCampaignNotAvailableForAdd = NewValidationError(
+	CodeCampaignNotAvailableForAdd,
+	"Одна или несколько выбранных кампаний недоступны. Обновите список и попробуйте снова.",
+)
+
+// NewErrCampaignAddAfterApproveFailed is constructed by ApproveApplication
+// when the post-tx1 add-loop fails on a specific campaign. The text spells
+// out that the creator is already created so the admin does not retry the
+// approve and includes both the new creator id (so the admin can find them
+// in /creators without searching by IIN) and the campaign display label
+// (name when the post-fail lookup succeeds, UUID fallback when it fails).
+func NewErrCampaignAddAfterApproveFailed(creatorID, campaignDisplay string) *ValidationError {
+	return NewValidationError(
+		CodeCampaignAddAfterApproveFailed,
+		"Не удалось добавить креатора (id "+creatorID+") в кампанию «"+campaignDisplay+
+			"». Креатор уже создан — найдите его в разделе «Креаторы» по id и добавьте в кампанию вручную.",
+	)
+}
+
 // ValidateCampaignName enforces the trim + non-empty + ≤255 contract on the
 // campaign display name. Returns the trimmed value so callers don't have to
 // re-trim before passing the name downstream — single source of truth for

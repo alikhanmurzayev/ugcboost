@@ -90,6 +90,59 @@ func (_c *MockCreatorApplicationRepoFactory_NewAuditRepo_Call) RunAndReturn(run 
 	return _c
 }
 
+// NewCampaignRepo provides a mock function for the type MockCreatorApplicationRepoFactory
+func (_mock *MockCreatorApplicationRepoFactory) NewCampaignRepo(db dbutil.DB) repository.CampaignRepo {
+	ret := _mock.Called(db)
+
+	if len(ret) == 0 {
+		panic("no return value specified for NewCampaignRepo")
+	}
+
+	var r0 repository.CampaignRepo
+	if returnFunc, ok := ret.Get(0).(func(dbutil.DB) repository.CampaignRepo); ok {
+		r0 = returnFunc(db)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(repository.CampaignRepo)
+		}
+	}
+	return r0
+}
+
+// MockCreatorApplicationRepoFactory_NewCampaignRepo_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'NewCampaignRepo'
+type MockCreatorApplicationRepoFactory_NewCampaignRepo_Call struct {
+	*mock.Call
+}
+
+// NewCampaignRepo is a helper method to define mock.On call
+//   - db dbutil.DB
+func (_e *MockCreatorApplicationRepoFactory_Expecter) NewCampaignRepo(db interface{}) *MockCreatorApplicationRepoFactory_NewCampaignRepo_Call {
+	return &MockCreatorApplicationRepoFactory_NewCampaignRepo_Call{Call: _e.mock.On("NewCampaignRepo", db)}
+}
+
+func (_c *MockCreatorApplicationRepoFactory_NewCampaignRepo_Call) Run(run func(db dbutil.DB)) *MockCreatorApplicationRepoFactory_NewCampaignRepo_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 dbutil.DB
+		if args[0] != nil {
+			arg0 = args[0].(dbutil.DB)
+		}
+		run(
+			arg0,
+		)
+	})
+	return _c
+}
+
+func (_c *MockCreatorApplicationRepoFactory_NewCampaignRepo_Call) Return(campaignRepo repository.CampaignRepo) *MockCreatorApplicationRepoFactory_NewCampaignRepo_Call {
+	_c.Call.Return(campaignRepo)
+	return _c
+}
+
+func (_c *MockCreatorApplicationRepoFactory_NewCampaignRepo_Call) RunAndReturn(run func(db dbutil.DB) repository.CampaignRepo) *MockCreatorApplicationRepoFactory_NewCampaignRepo_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // NewCreatorApplicationCategoryRepo provides a mock function for the type MockCreatorApplicationRepoFactory
 func (_mock *MockCreatorApplicationRepoFactory) NewCreatorApplicationCategoryRepo(db dbutil.DB) repository.CreatorApplicationCategoryRepo {
 	ret := _mock.Called(db)

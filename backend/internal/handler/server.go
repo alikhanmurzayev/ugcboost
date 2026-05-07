@@ -78,7 +78,7 @@ type CreatorApplicationService interface {
 	VerifyInstagramByCode(ctx context.Context, code, igHandle string) (domain.VerifyInstagramStatus, error)
 	VerifyApplicationSocialManually(ctx context.Context, applicationID, socialID, actorUserID string) error
 	RejectApplication(ctx context.Context, applicationID, actorUserID string) error
-	ApproveApplication(ctx context.Context, applicationID, actorUserID string) (string, error)
+	ApproveApplication(ctx context.Context, applicationID, actorUserID string, campaignIDs []string) (string, error)
 }
 
 // DictionaryService is the interface Server needs to serve public dictionaries
@@ -97,12 +97,15 @@ type CreatorService interface {
 
 // CampaignService is the interface Server needs from the campaign service —
 // admin-only POST /campaigns plus per-id read and patch; subsequent chunks
-// (#6–#7) extend it with list / soft-delete.
+// (#6–#7) extend it with list / soft-delete. AssertActiveCampaigns is the
+// pre-validation hook for the optional `campaignIds` payload of POST
+// /creators/applications/{id}/approve.
 type CampaignService interface {
 	CreateCampaign(ctx context.Context, in domain.CampaignInput) (*domain.Campaign, error)
 	GetByID(ctx context.Context, id string) (*domain.Campaign, error)
 	UpdateCampaign(ctx context.Context, id string, in domain.CampaignInput) error
 	List(ctx context.Context, in domain.CampaignListInput) (*domain.CampaignListPage, error)
+	AssertActiveCampaigns(ctx context.Context, ids []string) error
 }
 
 // CampaignCreatorService is the interface Server needs from the campaign-

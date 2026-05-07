@@ -155,6 +155,82 @@ func TestCampaignRepository_GetByID(t *testing.T) {
 	})
 }
 
+func TestCampaignRepository_ListByIDs(t *testing.T) {
+	t.Parallel()
+
+	t.Run("empty ids short-circuits without query", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &campaignRepository{db: mock}
+
+		rows, err := repo.ListByIDs(context.Background(), nil)
+		require.NoError(t, err)
+		require.Nil(t, rows)
+	})
+
+	t.Run("success maps single row", func(t *testing.T) {
+		t.Parallel()
+		const sqlStmt = "SELECT created_at, id, is_deleted, name, tma_url, updated_at FROM campaigns WHERE id IN ($1)"
+		mock := newPgxmock(t)
+		repo := &campaignRepository{db: mock}
+		createdAt := time.Date(2026, 5, 6, 12, 0, 0, 0, time.UTC)
+
+		mock.ExpectQuery(sqlStmt).
+			WithArgs("c-1").
+			WillReturnRows(pgxmock.NewRows([]string{"created_at", "id", "is_deleted", "name", "tma_url", "updated_at"}).
+				AddRow(createdAt, "c-1", false, "Promo X", "https://tma.ugcboost.kz/tz/abc", createdAt))
+
+		got, err := repo.ListByIDs(context.Background(), []string{"c-1"})
+		require.NoError(t, err)
+		require.Equal(t, []*CampaignRow{{
+			ID:        "c-1",
+			Name:      "Promo X",
+			TmaURL:    "https://tma.ugcboost.kz/tz/abc",
+			IsDeleted: false,
+			CreatedAt: createdAt,
+			UpdatedAt: createdAt,
+		}}, got)
+	})
+
+	t.Run("success maps N rows", func(t *testing.T) {
+		t.Parallel()
+		const sqlStmt = "SELECT created_at, id, is_deleted, name, tma_url, updated_at FROM campaigns WHERE id IN ($1,$2,$3)"
+		mock := newPgxmock(t)
+		repo := &campaignRepository{db: mock}
+		createdAt := time.Date(2026, 5, 6, 12, 0, 0, 0, time.UTC)
+
+		mock.ExpectQuery(sqlStmt).
+			WithArgs("c-1", "c-2", "c-3").
+			WillReturnRows(pgxmock.NewRows([]string{"created_at", "id", "is_deleted", "name", "tma_url", "updated_at"}).
+				AddRow(createdAt, "c-1", false, "Promo A", "https://tma.ugcboost.kz/tz/a", createdAt).
+				AddRow(createdAt, "c-2", true, "Promo B", "https://tma.ugcboost.kz/tz/b", createdAt).
+				AddRow(createdAt, "c-3", false, "Promo C", "https://tma.ugcboost.kz/tz/c", createdAt))
+
+		got, err := repo.ListByIDs(context.Background(), []string{"c-1", "c-2", "c-3"})
+		require.NoError(t, err)
+		require.Equal(t, []*CampaignRow{
+			{ID: "c-1", Name: "Promo A", TmaURL: "https://tma.ugcboost.kz/tz/a", IsDeleted: false, CreatedAt: createdAt, UpdatedAt: createdAt},
+			{ID: "c-2", Name: "Promo B", TmaURL: "https://tma.ugcboost.kz/tz/b", IsDeleted: true, CreatedAt: createdAt, UpdatedAt: createdAt},
+			{ID: "c-3", Name: "Promo C", TmaURL: "https://tma.ugcboost.kz/tz/c", IsDeleted: false, CreatedAt: createdAt, UpdatedAt: createdAt},
+		}, got)
+	})
+
+	t.Run("propagates query error wrapped with method context", func(t *testing.T) {
+		t.Parallel()
+		const sqlStmt = "SELECT created_at, id, is_deleted, name, tma_url, updated_at FROM campaigns WHERE id IN ($1,$2)"
+		mock := newPgxmock(t)
+		repo := &campaignRepository{db: mock}
+
+		mock.ExpectQuery(sqlStmt).
+			WithArgs("c-1", "c-2").
+			WillReturnError(errors.New("db down"))
+
+		_, err := repo.ListByIDs(context.Background(), []string{"c-1", "c-2"})
+		require.ErrorContains(t, err, "campaign_repository.ListByIDs:")
+		require.ErrorContains(t, err, "db down")
+	})
+}
+
 func TestCampaignRepository_Update(t *testing.T) {
 	t.Parallel()
 

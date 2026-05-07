@@ -53,6 +53,7 @@ var (
 type CampaignRepo interface {
 	Create(ctx context.Context, name, tmaURL string) (*CampaignRow, error)
 	GetByID(ctx context.Context, id string) (*CampaignRow, error)
+	ListByIDs(ctx context.Context, ids []string) ([]*CampaignRow, error)
 	Update(ctx context.Context, id, name, tmaURL string) (*CampaignRow, error)
 	List(ctx context.Context, params CampaignListParams) ([]*CampaignRow, int64, error)
 	DeleteForTests(ctx context.Context, id string) error
@@ -105,6 +106,25 @@ func (r *campaignRepository) GetByID(ctx context.Context, id string) (*CampaignR
 		From(TableCampaigns).
 		Where(sq.Eq{CampaignColumnID: id})
 	return dbutil.One[CampaignRow](ctx, r.db, q)
+}
+
+// ListByIDs returns every campaign row whose id is in the given set, with no
+// is_deleted filter — the caller decides what to do with soft-deleted rows.
+// Empty input yields an empty result without hitting the database. Missing
+// ids are simply absent from the result; the caller compares counts to
+// surface a typed error when something is unknown or soft-deleted.
+func (r *campaignRepository) ListByIDs(ctx context.Context, ids []string) ([]*CampaignRow, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	q := sq.Select(campaignSelectColumns...).
+		From(TableCampaigns).
+		Where(sq.Eq{CampaignColumnID: ids})
+	rows, err := dbutil.Many[CampaignRow](ctx, r.db, q)
+	if err != nil {
+		return nil, fmt.Errorf("campaign_repository.ListByIDs: %w", err)
+	}
+	return rows, nil
 }
 
 // Update writes name/tma_url + updated_at=now() and RETURNINGs the row.

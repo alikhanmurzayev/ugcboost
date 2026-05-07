@@ -848,6 +848,19 @@ type CreatorApprovalData struct {
 	CreatorId openapi_types.UUID `json:"creatorId"`
 }
 
+// CreatorApprovalInput Optional body for POST /creators/applications/{id}/approve. When
+// omitted (or both fields omitted) the endpoint behaves exactly like
+// before — only the application is approved. When `campaignIds` is
+// present and non-empty, the freshly-created creator is also added to
+// the listed campaigns (`planned` status) sequentially after the
+// approve transaction commits.
+type CreatorApprovalInput struct {
+	// CampaignIds Optional UUIDs of campaigns to attach the new creator to. Empty
+	// array, `null` or omitted field all mean "approve only — do not
+	// attach".
+	CampaignIds *[]openapi_types.UUID `json:"campaignIds,omitempty"`
+}
+
 // CreatorApprovalResult defines model for CreatorApprovalResult.
 type CreatorApprovalResult struct {
 	// Data Payload returned by POST /creators/applications/{id}/approve.
@@ -1280,6 +1293,9 @@ type SubmitCreatorApplicationJSONRequestBody = CreatorApplicationSubmitRequest
 
 // ListCreatorApplicationsJSONRequestBody defines body for ListCreatorApplications for application/json ContentType.
 type ListCreatorApplicationsJSONRequestBody = CreatorApplicationsListRequest
+
+// ApproveCreatorApplicationJSONRequestBody defines body for ApproveCreatorApplication for application/json ContentType.
+type ApproveCreatorApplicationJSONRequestBody = CreatorApprovalInput
 
 // VerifyCreatorApplicationSocialJSONRequestBody defines body for VerifyCreatorApplicationSocial for application/json ContentType.
 type VerifyCreatorApplicationSocialJSONRequestBody = VerifyCreatorApplicationSocialJSONBody

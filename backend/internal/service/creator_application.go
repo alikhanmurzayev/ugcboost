@@ -32,6 +32,7 @@ type CreatorApplicationRepoFactory interface {
 	NewCreatorRepo(db dbutil.DB) repository.CreatorRepo
 	NewCreatorSocialRepo(db dbutil.DB) repository.CreatorSocialRepo
 	NewCreatorCategoryRepo(db dbutil.DB) repository.CreatorCategoryRepo
+	NewCampaignRepo(db dbutil.DB) repository.CampaignRepo
 }
 
 // creatorApplicationListInputToRepo translates the validated handler input
@@ -66,22 +67,35 @@ type creatorAppNotifier interface {
 	NotifyApplicationApproved(ctx context.Context, chatID int64)
 }
 
+// campaignCreatorAdder is the consumer-side contract for the per-campaign
+// add loop in ApproveApplication. *CampaignCreatorService satisfies it. Kept
+// unexported per Go convention "accept interfaces"; mockery generates a mock
+// (`all: true` covers unexported interfaces too — see MockcreatorAppNotifier).
+type campaignCreatorAdder interface {
+	Add(ctx context.Context, campaignID string, creatorIDs []string) ([]*domain.CampaignCreator, error)
+}
+
 type CreatorApplicationService struct {
-	pool        dbutil.Pool
-	repoFactory CreatorApplicationRepoFactory
-	notifier    creatorAppNotifier
-	logger      logger.Logger
+	pool                   dbutil.Pool
+	repoFactory            CreatorApplicationRepoFactory
+	notifier               creatorAppNotifier
+	campaignCreatorService campaignCreatorAdder
+	logger                 logger.Logger
 }
 
 // NewCreatorApplicationService wires the service. The notifier owns its own
 // WaitGroup and timeout so the closer talks to the Notifier rather than this
-// service for notify-drain semantics.
-func NewCreatorApplicationService(pool dbutil.Pool, repoFactory CreatorApplicationRepoFactory, notifier creatorAppNotifier, log logger.Logger) *CreatorApplicationService {
+// service for notify-drain semantics. campaignCreatorService is invoked from
+// ApproveApplication to optionally attach the freshly-created creator to a
+// caller-supplied list of campaigns; each Add call runs in its own
+// transaction with first-fail-stop semantics.
+func NewCreatorApplicationService(pool dbutil.Pool, repoFactory CreatorApplicationRepoFactory, notifier creatorAppNotifier, campaignCreatorService campaignCreatorAdder, log logger.Logger) *CreatorApplicationService {
 	return &CreatorApplicationService{
-		pool:        pool,
-		repoFactory: repoFactory,
-		notifier:    notifier,
-		logger:      log,
+		pool:                   pool,
+		repoFactory:            repoFactory,
+		notifier:               notifier,
+		campaignCreatorService: campaignCreatorService,
+		logger:                 log,
 	}
 }
 
@@ -1156,7 +1170,18 @@ func (s *CreatorApplicationService) notifyApplicationRejected(ctx context.Contex
 // Telegram message fire-and-forget. Lookup / send failures degrade to a log
 // — the approve itself never reverts and the HTTP caller still sees the
 // new creator id.
-func (s *CreatorApplicationService) ApproveApplication(ctx context.Context, applicationID, actorUserID string) (string, error) {
+//
+// When campaignIDs is non-empty, after notifyApplicationApproved the service
+// attaches the freshly-created creator to each campaign via
+// campaignCreatorService.Add, sequentially, in input order. Each Add runs in
+// its own transaction (sequential transactions, not one atomic block per
+// design). First failure stops the loop and propagates wrapped — earlier
+// successful adds remain committed (best-effort partial-success is allowed
+// only for already-committed prefix; later campaigns are not attempted).
+// Pre-validation of campaign existence + is_deleted=false is done by the
+// handler via CampaignService.AssertActiveCampaigns; the loop relies on it
+// and only catches mid-cycle races as ErrCampaignNotFound.
+func (s *CreatorApplicationService) ApproveApplication(ctx context.Context, applicationID, actorUserID string, campaignIDs []string) (string, error) {
 	var createdCreatorID string
 	if err := dbutil.WithTx(ctx, s.pool, func(tx dbutil.DB) error {
 		appRepo := s.repoFactory.NewCreatorApplicationRepo(tx)
@@ -1293,7 +1318,44 @@ func (s *CreatorApplicationService) ApproveApplication(ctx context.Context, appl
 	}
 
 	s.notifyApplicationApproved(ctx, applicationID)
+
+	if len(campaignIDs) > 0 {
+		// approveCtx detaches the loop from the request lifecycle: client
+		// cancellation after tx1 commit must not strand a freshly-approved
+		// creator with a partial set of campaigns. Mirrors notifyApplication*
+		// (also using WithoutCancel-equivalent fire-and-forget semantics).
+		approveCtx := context.WithoutCancel(ctx)
+		for i, campaignID := range campaignIDs {
+			if _, addErr := s.campaignCreatorService.Add(approveCtx, campaignID, []string{createdCreatorID}); addErr != nil {
+				errCode := domain.ErrorCode(addErr)
+				if errCode == "" {
+					errCode = "non_domain"
+				}
+				s.logger.Error(approveCtx, "approve application: add-loop partial commit",
+					"creator_id", createdCreatorID,
+					"committed_count", i,
+					"failed_campaign_id", campaignID,
+					"remaining_count", len(campaignIDs)-i-1,
+					"error_code", errCode,
+				)
+				return "", domain.NewErrCampaignAddAfterApproveFailed(createdCreatorID, s.campaignDisplay(approveCtx, campaignID))
+			}
+		}
+	}
+
 	return createdCreatorID, nil
+}
+
+// campaignDisplay returns the campaign name for actionable error messages,
+// falling back to the UUID when the lookup itself fails. Called only on the
+// add-loop failure path so the extra repo round-trip is paid only when the
+// admin already needs to switch context to fix things manually.
+func (s *CreatorApplicationService) campaignDisplay(ctx context.Context, campaignID string) string {
+	row, err := s.repoFactory.NewCampaignRepo(s.pool).GetByID(ctx, campaignID)
+	if err != nil {
+		return campaignID
+	}
+	return row.Name
 }
 
 // notifyApplicationApproved runs after ApproveApplication's tx commits.

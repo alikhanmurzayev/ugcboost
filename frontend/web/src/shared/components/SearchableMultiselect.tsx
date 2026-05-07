@@ -13,6 +13,7 @@ interface Props {
   searchPlaceholder: string;
   isLoading?: boolean;
   testid?: string;
+  triggerId?: string;
 }
 
 export default function SearchableMultiselect({
@@ -23,6 +24,7 @@ export default function SearchableMultiselect({
   searchPlaceholder,
   isLoading,
   testid = "multiselect",
+  triggerId,
 }: Props) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -74,6 +76,7 @@ export default function SearchableMultiselect({
     <div ref={ref} className="relative inline-block">
       <button
         type="button"
+        id={triggerId}
         onClick={() => setOpen((p) => !p)}
         aria-haspopup="listbox"
         aria-expanded={open}

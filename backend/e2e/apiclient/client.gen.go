@@ -187,8 +187,10 @@ type ClientInterface interface {
 	// GetCreatorApplication request
 	GetCreatorApplication(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// ApproveCreatorApplication request
-	ApproveCreatorApplication(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
+	// ApproveCreatorApplicationWithBody request with any body
+	ApproveCreatorApplicationWithBody(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	ApproveCreatorApplication(ctx context.Context, id openapi_types.UUID, body ApproveCreatorApplicationJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// RejectCreatorApplication request
 	RejectCreatorApplication(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -650,8 +652,20 @@ func (c *Client) GetCreatorApplication(ctx context.Context, id openapi_types.UUI
 	return c.Client.Do(req)
 }
 
-func (c *Client) ApproveCreatorApplication(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewApproveCreatorApplicationRequest(c.Server, id)
+func (c *Client) ApproveCreatorApplicationWithBody(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewApproveCreatorApplicationRequestWithBody(c.Server, id, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ApproveCreatorApplication(ctx context.Context, id openapi_types.UUID, body ApproveCreatorApplicationJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewApproveCreatorApplicationRequest(c.Server, id, body)
 	if err != nil {
 		return nil, err
 	}
@@ -1911,8 +1925,19 @@ func NewGetCreatorApplicationRequest(server string, id openapi_types.UUID) (*htt
 	return req, nil
 }
 
-// NewApproveCreatorApplicationRequest generates requests for ApproveCreatorApplication
-func NewApproveCreatorApplicationRequest(server string, id openapi_types.UUID) (*http.Request, error) {
+// NewApproveCreatorApplicationRequest calls the generic ApproveCreatorApplication builder with application/json body
+func NewApproveCreatorApplicationRequest(server string, id openapi_types.UUID, body ApproveCreatorApplicationJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewApproveCreatorApplicationRequestWithBody(server, id, "application/json", bodyReader)
+}
+
+// NewApproveCreatorApplicationRequestWithBody generates requests for ApproveCreatorApplication with any type of body
+func NewApproveCreatorApplicationRequestWithBody(server string, id openapi_types.UUID, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	var pathParam0 string
@@ -1937,10 +1962,12 @@ func NewApproveCreatorApplicationRequest(server string, id openapi_types.UUID) (
 		return nil, err
 	}
 
-	req, err := http.NewRequest("POST", queryURL.String(), nil)
+	req, err := http.NewRequest("POST", queryURL.String(), body)
 	if err != nil {
 		return nil, err
 	}
+
+	req.Header.Add("Content-Type", contentType)
 
 	return req, nil
 }
@@ -2348,8 +2375,10 @@ type ClientWithResponsesInterface interface {
 	// GetCreatorApplicationWithResponse request
 	GetCreatorApplicationWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetCreatorApplicationResponse, error)
 
-	// ApproveCreatorApplicationWithResponse request
-	ApproveCreatorApplicationWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*ApproveCreatorApplicationResponse, error)
+	// ApproveCreatorApplicationWithBodyWithResponse request with any body
+	ApproveCreatorApplicationWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ApproveCreatorApplicationResponse, error)
+
+	ApproveCreatorApplicationWithResponse(ctx context.Context, id openapi_types.UUID, body ApproveCreatorApplicationJSONRequestBody, reqEditors ...RequestEditorFn) (*ApproveCreatorApplicationResponse, error)
 
 	// RejectCreatorApplicationWithResponse request
 	RejectCreatorApplicationWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*RejectCreatorApplicationResponse, error)
@@ -3523,9 +3552,17 @@ func (c *ClientWithResponses) GetCreatorApplicationWithResponse(ctx context.Cont
 	return ParseGetCreatorApplicationResponse(rsp)
 }
 
-// ApproveCreatorApplicationWithResponse request returning *ApproveCreatorApplicationResponse
-func (c *ClientWithResponses) ApproveCreatorApplicationWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*ApproveCreatorApplicationResponse, error) {
-	rsp, err := c.ApproveCreatorApplication(ctx, id, reqEditors...)
+// ApproveCreatorApplicationWithBodyWithResponse request with arbitrary body returning *ApproveCreatorApplicationResponse
+func (c *ClientWithResponses) ApproveCreatorApplicationWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ApproveCreatorApplicationResponse, error) {
+	rsp, err := c.ApproveCreatorApplicationWithBody(ctx, id, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseApproveCreatorApplicationResponse(rsp)
+}
+
+func (c *ClientWithResponses) ApproveCreatorApplicationWithResponse(ctx context.Context, id openapi_types.UUID, body ApproveCreatorApplicationJSONRequestBody, reqEditors ...RequestEditorFn) (*ApproveCreatorApplicationResponse, error) {
+	rsp, err := c.ApproveCreatorApplication(ctx, id, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}

@@ -585,3 +585,88 @@ func TestCampaignService_List(t *testing.T) {
 		}, got)
 	})
 }
+
+func TestCampaignService_AssertActiveCampaigns(t *testing.T) {
+	t.Parallel()
+
+	t.Run("empty slice is noop, no repo call", func(t *testing.T) {
+		t.Parallel()
+		pool := dbmocks.NewMockPool(t)
+		factory := svcmocks.NewMockCampaignRepoFactory(t)
+
+		svc := NewCampaignService(pool, factory, logmocks.NewMockLogger(t))
+		require.NoError(t, svc.AssertActiveCampaigns(context.Background(), nil))
+		require.NoError(t, svc.AssertActiveCampaigns(context.Background(), []string{}))
+	})
+
+	t.Run("repo error is wrapped", func(t *testing.T) {
+		t.Parallel()
+		pool := dbmocks.NewMockPool(t)
+		factory := svcmocks.NewMockCampaignRepoFactory(t)
+		campaigns := repomocks.NewMockCampaignRepo(t)
+
+		factory.EXPECT().NewCampaignRepo(pool).Return(campaigns)
+		campaigns.EXPECT().ListByIDs(mock.Anything, []string{"c-1"}).
+			Return(nil, errors.New("db unavailable"))
+
+		svc := NewCampaignService(pool, factory, logmocks.NewMockLogger(t))
+		err := svc.AssertActiveCampaigns(context.Background(), []string{"c-1"})
+		require.ErrorContains(t, err, "list campaigns by ids")
+		require.ErrorContains(t, err, "db unavailable")
+	})
+
+	t.Run("all active returns nil", func(t *testing.T) {
+		t.Parallel()
+		pool := dbmocks.NewMockPool(t)
+		factory := svcmocks.NewMockCampaignRepoFactory(t)
+		campaigns := repomocks.NewMockCampaignRepo(t)
+		created := time.Date(2026, 5, 6, 12, 0, 0, 0, time.UTC)
+
+		factory.EXPECT().NewCampaignRepo(pool).Return(campaigns)
+		campaigns.EXPECT().ListByIDs(mock.Anything, []string{"c-1", "c-2"}).
+			Return([]*repository.CampaignRow{
+				{ID: "c-1", Name: "A", TmaURL: "u-a", IsDeleted: false, CreatedAt: created, UpdatedAt: created},
+				{ID: "c-2", Name: "B", TmaURL: "u-b", IsDeleted: false, CreatedAt: created, UpdatedAt: created},
+			}, nil)
+
+		svc := NewCampaignService(pool, factory, logmocks.NewMockLogger(t))
+		require.NoError(t, svc.AssertActiveCampaigns(context.Background(), []string{"c-1", "c-2"}))
+	})
+
+	t.Run("missing id returns ErrCampaignNotAvailableForAdd", func(t *testing.T) {
+		t.Parallel()
+		pool := dbmocks.NewMockPool(t)
+		factory := svcmocks.NewMockCampaignRepoFactory(t)
+		campaigns := repomocks.NewMockCampaignRepo(t)
+		created := time.Date(2026, 5, 6, 12, 0, 0, 0, time.UTC)
+
+		factory.EXPECT().NewCampaignRepo(pool).Return(campaigns)
+		campaigns.EXPECT().ListByIDs(mock.Anything, []string{"c-1", "c-missing"}).
+			Return([]*repository.CampaignRow{
+				{ID: "c-1", Name: "A", TmaURL: "u-a", IsDeleted: false, CreatedAt: created, UpdatedAt: created},
+			}, nil)
+
+		svc := NewCampaignService(pool, factory, logmocks.NewMockLogger(t))
+		err := svc.AssertActiveCampaigns(context.Background(), []string{"c-1", "c-missing"})
+		require.ErrorIs(t, err, domain.ErrCampaignNotAvailableForAdd)
+	})
+
+	t.Run("soft-deleted id returns ErrCampaignNotAvailableForAdd", func(t *testing.T) {
+		t.Parallel()
+		pool := dbmocks.NewMockPool(t)
+		factory := svcmocks.NewMockCampaignRepoFactory(t)
+		campaigns := repomocks.NewMockCampaignRepo(t)
+		created := time.Date(2026, 5, 6, 12, 0, 0, 0, time.UTC)
+
+		factory.EXPECT().NewCampaignRepo(pool).Return(campaigns)
+		campaigns.EXPECT().ListByIDs(mock.Anything, []string{"c-1", "c-deleted"}).
+			Return([]*repository.CampaignRow{
+				{ID: "c-1", Name: "A", TmaURL: "u-a", IsDeleted: false, CreatedAt: created, UpdatedAt: created},
+				{ID: "c-deleted", Name: "B", TmaURL: "u-b", IsDeleted: true, CreatedAt: created, UpdatedAt: created},
+			}, nil)
+
+		svc := NewCampaignService(pool, factory, logmocks.NewMockLogger(t))
+		err := svc.AssertActiveCampaigns(context.Background(), []string{"c-1", "c-deleted"})
+		require.ErrorIs(t, err, domain.ErrCampaignNotAvailableForAdd)
+	})
+}

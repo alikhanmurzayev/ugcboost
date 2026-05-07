@@ -30,6 +30,24 @@ const (
 	CodeCampaignNameTaken = "CAMPAIGN_NAME_TAKEN"
 	// 404 — GET /campaigns/{id} could not find a campaign with this id.
 	CodeCampaignNotFound = "CAMPAIGN_NOT_FOUND"
+	// 422 — POST /creators/applications/{id}/approve received `campaignIds`
+	// with more entries than the per-call cap (matches OpenAPI maxItems=20;
+	// oapi-codegen does not enforce schema limits at runtime).
+	CodeCampaignIdsTooMany = "CAMPAIGN_IDS_TOO_MANY"
+	// 422 — POST /creators/applications/{id}/approve received `campaignIds`
+	// with duplicate UUIDs.
+	CodeCampaignIdsDuplicates = "CAMPAIGN_IDS_DUPLICATES"
+	// 422 — POST /creators/applications/{id}/approve received `campaignIds`
+	// where at least one campaign is missing or soft-deleted at pre-validation
+	// time. Single code for both cases — admin re-fetches the campaign list and
+	// retries.
+	CodeCampaignNotAvailableForAdd = "CAMPAIGN_NOT_AVAILABLE_FOR_ADD"
+	// 422 — POST /creators/applications/{id}/approve transactional approve
+	// committed and Telegram-notify already fired, but the per-campaign add
+	// loop hit a failure on the N-th campaign (mid-cycle race, e.g. campaign
+	// soft-deleted between pre-validation and the add). Earlier campaigns
+	// remain attached; admin must finish the rest manually.
+	CodeCampaignAddAfterApproveFailed = "CAMPAIGN_ADD_AFTER_APPROVE_FAILED"
 )
 
 // Campaign-creator (chunk 10) user-facing codes carried in 4xx responses by
@@ -99,4 +117,24 @@ func (e *BusinessError) Unwrap() error {
 // NewBusinessError creates a domain business error (e.g. CAMPAIGN_FULL).
 func NewBusinessError(code, message string) *BusinessError {
 	return &BusinessError{Code: code, Message: message}
+}
+
+// ErrorCode extracts the user-facing code from a wrapped error chain. Returns
+// empty string when the error does not carry a domain code — caller picks a
+// sentinel like "non_domain". Used by structured logging where leaking the raw
+// error string risks PII contamination (security.md § PII в логах) but the
+// code itself is enum-safe.
+func ErrorCode(err error) string {
+	if err == nil {
+		return ""
+	}
+	var ve *ValidationError
+	if errors.As(err, &ve) {
+		return ve.Code
+	}
+	var be *BusinessError
+	if errors.As(err, &be) {
+		return be.Code
+	}
+	return ""
 }

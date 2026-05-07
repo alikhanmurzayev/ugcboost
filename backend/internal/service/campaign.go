@@ -122,6 +122,41 @@ func (s *CampaignService) GetByID(ctx context.Context, id string) (*domain.Campa
 	return campaignRowToDomain(row), nil
 }
 
+// AssertActiveCampaigns checks that every id refers to an existing,
+// non-soft-deleted campaign. Empty input is a noop — handler short-circuits
+// the optional `campaignIds` payload before calling. The check runs against
+// the pool (no tx) before ApproveApplication opens its own transaction, so a
+// missing or soft-deleted campaign aborts the approve before any creator row
+// or audit row is written. Race between this check and the per-campaign add
+// loop is caught by ErrCampaignNotFound from CampaignCreatorService.Add
+// (defense in depth).
+//
+// Membership uses an explicit set so duplicate or phantom rows (in theory
+// impossible behind the campaigns PK, but defensive against a future relaxed
+// query) cannot inflate len(rows) past len(ids) and silently pass the gate.
+func (s *CampaignService) AssertActiveCampaigns(ctx context.Context, ids []string) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	rows, err := s.repoFactory.NewCampaignRepo(s.pool).ListByIDs(ctx, ids)
+	if err != nil {
+		return fmt.Errorf("list campaigns by ids: %w", err)
+	}
+	active := make(map[string]struct{}, len(rows))
+	for _, row := range rows {
+		if row.IsDeleted {
+			return domain.ErrCampaignNotAvailableForAdd
+		}
+		active[row.ID] = struct{}{}
+	}
+	for _, id := range ids {
+		if _, ok := active[id]; !ok {
+			return domain.ErrCampaignNotAvailableForAdd
+		}
+	}
+	return nil
+}
+
 // List returns a page of campaigns matching the validated filter set. The
 // handler enforces sort/order whitelists and page/perPage bounds; this
 // method trusts those invariants, trims the optional search and runs the
