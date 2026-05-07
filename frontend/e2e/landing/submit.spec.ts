@@ -14,10 +14,12 @@
  * каждое required-поле валидными данными, чекает одну социалку, одну
  * не-other категорию и единственный чекбокс согласий, нажимает submit. После
  * успешного запроса лендинг показывает success-screen с CTA-кнопкой, ссылка
- * которой ведёт в Telegram-бот с application_id в start-параметре. Тест
- * проверяет, что справочники не пустые (форма не повисла на состоянии
- * "Загрузка…"), что URL CTA соответствует ожидаемому формату, и регистрирует
- * id для cleanup.
+ * которой ведёт в Telegram-бот с application_id в start-параметре, и тут же
+ * автоматически открывает этот же URL в новой вкладке (`window.open`)
+ * — авто-handoff в Telegram, чтобы креатор не успел уйти со страницы, не
+ * нажав CTA. Тест проверяет, что справочники не пустые (форма не повисла на
+ * состоянии "Загрузка…"), что URL CTA соответствует ожидаемому формату, что
+ * `window.open` был вызван с тем же URL, и регистрирует id для cleanup.
  *
  * "Other category" закрывает уникальную UI-ветку: при выборе категории
  * "Другое" появляется отдельный input для пользовательского описания ниши, и
@@ -126,9 +128,23 @@ test.describe("Landing submission flow", () => {
     expect(categoryCount).toBeGreaterThan(0);
   });
 
-  test("Golden path — fills the form, sees success screen with telegram CTA", async ({
+  test("Golden path — fills the form, sees success screen, auto-opens Telegram", async ({
     page,
   }) => {
+    // Instrument window.open BEFORE the first navigation so we can assert the
+    // auto-handoff fired exactly once with the bot URL. We avoid noopener
+    // intercept oddities by recording the requested URL synchronously.
+    await page.addInitScript(() => {
+      type W = Window & { __opened?: string[] };
+      const w = window as W;
+      w.__opened = [];
+      const orig = window.open.bind(window);
+      window.open = (url, target, features) => {
+        w.__opened?.push(typeof url === "string" ? url : "");
+        return orig(url, target, features);
+      };
+    });
+
     await page.goto("/", { waitUntil: "domcontentloaded" });
     await waitForDictionaries(page);
 
@@ -148,6 +164,13 @@ test.describe("Landing submission flow", () => {
     const href = await cta.getAttribute("href");
     expect(href).not.toBeNull();
     expect(href ?? "").toMatch(/^https:\/\/t\.me\/[^?]+\?start=[0-9a-f-]{36}$/);
+
+    // Auto-handoff: the same Telegram URL the CTA points at was opened in a
+    // new tab via window.open right after the success screen rendered.
+    const opened = await page.evaluate(
+      () => (window as Window & { __opened?: string[] }).__opened ?? [],
+    );
+    expect(opened).toEqual([href]);
 
     if (href) created.push(extractApplicationIdFromBotUrl(href));
   });

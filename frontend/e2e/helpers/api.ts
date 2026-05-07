@@ -624,7 +624,7 @@ export async function seedApprovedCreator(
   }
 }
 
-async function cleanupCampaign(
+export async function cleanupCampaign(
   request: APIRequestContext,
   apiUrl: string,
   campaignId: string,

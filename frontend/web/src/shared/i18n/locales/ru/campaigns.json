@@ -23,5 +23,18 @@
   },
   "pagination": {
     "page": "Страница {{page}} из {{total}}"
+  },
+  "create": {
+    "title": "Новая кампания",
+    "description": "Заполните название и ссылку на ТЗ — кампания появится в списке и будет доступна для отправки приглашений креаторам.",
+    "backToList": "← К списку кампаний",
+    "nameLabel": "Название",
+    "namePlaceholder": "Например, «Весенний промо»",
+    "tmaUrlLabel": "Ссылка ТЗ",
+    "tmaUrlPlaceholder": "https://t.me/...",
+    "nameRequired": "Введите название кампании",
+    "tmaUrlRequired": "Введите ссылку ТЗ",
+    "submitButton": "Создать кампанию",
+    "submittingButton": "Создаётся…"
   }
 }
