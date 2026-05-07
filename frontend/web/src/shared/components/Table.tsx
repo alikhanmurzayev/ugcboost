@@ -117,6 +117,7 @@ export default function Table<T>({
                       : ""
                 }`}
                 data-testid={`row-${key}`}
+                data-selected={isSelected ? "true" : "false"}
               >
                 {columns.map((col) => (
                   <td

@@ -55,5 +55,15 @@
     "submitButton": "Сохранить",
     "submittingButton": "Сохранение…",
     "cancelButton": "Отмена"
+  },
+  "campaignCreators": {
+    "title": "Креаторы кампании",
+    "count": "{{count}} в кампании",
+    "empty": "Креаторов пока нет",
+    "addButton": "Добавить креаторов",
+    "addDisabledTooltip": "Появится в следующем PR",
+    "loadError": "Не удалось загрузить креаторов",
+    "creatorDeleted": "Креатор удалён из системы",
+    "deletedPlaceholder": "—"
   }
 }

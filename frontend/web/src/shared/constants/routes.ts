@@ -14,3 +14,7 @@ export const ROUTES = {
   CAMPAIGN_DETAIL: (id: string) => `campaigns/${id}`,
   CAMPAIGN_DETAIL_PATTERN: "campaigns/:campaignId",
 } as const;
+
+export const SEARCH_PARAMS = {
+  CREATOR_ID: "creatorId",
+} as const;

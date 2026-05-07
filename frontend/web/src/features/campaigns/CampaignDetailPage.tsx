@@ -1,14 +1,18 @@
 import { useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { useQuery } from "@tanstack/react-query";
 import { getCampaign, type Campaign } from "@/api/campaigns";
+import { getCreator } from "@/api/creators";
 import { ApiError } from "@/api/client";
-import { ROUTES } from "@/shared/constants/routes";
-import { campaignKeys } from "@/shared/constants/queryKeys";
+import { ROUTES, SEARCH_PARAMS } from "@/shared/constants/routes";
+import { campaignKeys, creatorKeys } from "@/shared/constants/queryKeys";
 import Spinner from "@/shared/components/Spinner";
 import ErrorState from "@/shared/components/ErrorState";
+import CreatorDrawer from "@/features/creators/CreatorDrawer";
 import CampaignEditSection from "./CampaignEditSection";
+import CampaignCreatorsSection from "./creators/CampaignCreatorsSection";
+import { useCampaignCreators } from "./creators/hooks/useCampaignCreators";
 
 const SAFE_LINK_SCHEMES = new Set(["http:", "https:", "tg:"]);
 
@@ -79,9 +83,39 @@ function NotFoundState() {
 function CampaignDetailContent({ campaign }: { campaign: Campaign }) {
   const { t } = useTranslation("campaigns");
   const [isEditing, setIsEditing] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const selectedCreatorId = searchParams.get(SEARCH_PARAMS.CREATOR_ID);
+
+  // Reuses the same React Query key as <CampaignCreatorsSection>; both
+  // subscriptions share one network round-trip via TanStack's request
+  // dedup, so the prefill comes for free on cold-load with ?creatorId=X.
+  const { rows } = useCampaignCreators(campaign.id, {
+    enabled: !campaign.isDeleted,
+  });
+
+  const detailQuery = useQuery({
+    queryKey: creatorKeys.detail(selectedCreatorId ?? ""),
+    queryFn: () => getCreator(selectedCreatorId ?? ""),
+    enabled: !!selectedCreatorId,
+    retry: false,
+  });
+
+  const prefill = selectedCreatorId
+    ? rows.find((r) => r.campaignCreator.creatorId === selectedCreatorId)
+        ?.creator
+    : undefined;
+
+  function closeCreator() {
+    setSearchParams((prev) => {
+      const np = new URLSearchParams(prev);
+      np.delete(SEARCH_PARAMS.CREATOR_ID);
+      return np;
+    });
+  }
 
   return (
-    <div data-testid="campaign-detail-page" className="max-w-2xl">
+    <div data-testid="campaign-detail-page" className="max-w-7xl">
       <Link
         to={`/${ROUTES.CAMPAIGNS}`}
         className="text-sm text-gray-500 hover:text-gray-700"
@@ -120,9 +154,7 @@ function CampaignDetailContent({ campaign }: { campaign: Campaign }) {
               onClick={() => setIsEditing(true)}
               disabled={campaign.isDeleted}
               title={
-                campaign.isDeleted
-                  ? t("detail.editDisabledHint")
-                  : undefined
+                campaign.isDeleted ? t("detail.editDisabledHint") : undefined
               }
               className="rounded-button border border-surface-300 px-3 py-1.5 text-sm text-gray-700 transition hover:bg-surface-200 disabled:cursor-not-allowed disabled:opacity-50"
               data-testid="campaign-edit-button"
@@ -142,6 +174,17 @@ function CampaignDetailContent({ campaign }: { campaign: Campaign }) {
           <ViewSection campaign={campaign} />
         )}
       </section>
+
+      <CampaignCreatorsSection campaign={campaign} />
+
+      <CreatorDrawer
+        prefill={prefill}
+        detail={detailQuery.data?.data}
+        isLoading={detailQuery.isLoading}
+        isError={detailQuery.isError}
+        open={!!selectedCreatorId}
+        onClose={closeCreator}
+      />
     </div>
   );
 }
@@ -150,7 +193,7 @@ function ViewSection({ campaign }: { campaign: Campaign }) {
   const { t } = useTranslation("campaigns");
   const safeUrl = safeHref(campaign.tmaUrl);
   return (
-    <dl className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
+    <dl className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
       <Field label={t("detail.nameLabel")}>
         <span data-testid="campaign-detail-name">{campaign.name}</span>
       </Field>

@@ -1,122 +1,90 @@
+# Deferred Work
+
+Findings, surfaced by reviews/work, that we consciously kicked down the road. Each entry: what, why deferred, where it surfaced.
+
 ---
-title: Deferred work — bmad-quick-dev review findings backlog
-type: backlog
-status: living
-created: '2026-05-07'
+
+## 2026-05-07 — chunk 11 slice 1/2 review round 2 (6 субагентов)
+
+### Дублирующийся `extractErrorCode` в каждом `frontend/web/src/api/*.ts`
+**Что:** одна и та же функция `extractErrorCode` живёт в 8 модулях (auth, audit, brands, campaigns, creators, creatorApplications, dictionaries, campaignCreators).
+**Почему отложено:** out-of-scope для frontend-read PR. Разрешается одним отдельным рефакторингом (вынос в `api/client.ts`).
+**Когда возвращаться:** следующий PR, трогающий несколько `api/*.ts`.
+
+### `formatShortDate` дубликат — 7 копий по фичам
+**Что:** идентичная утилита `formatShortDate(iso)` живёт в `CreatorsListPage.tsx`, `CampaignsListPage.tsx`, `Verification/Moderation*Page.tsx`, теперь и в `CampaignCreatorsTable.tsx`. Rule of three превышено более чем вдвое.
+**Почему отложено:** wholesale refactor через `shared/utils/formatDate.ts` касается 7 файлов — отдельный PR.
+**Когда возвращаться:** при следующей правке формата короткой даты или новой таблицы со short date.
+
+### `<tr role="button" onClick>` в shared `<Table>` вместо `<Link>` per cell
+**Что:** Accessibility-правило `frontend-quality.md`: «Кликабельные строки таблиц — через `<Link>` внутри ячейки, не `onClick` на `<tr>`». Shared Table использует onClick на tr для всех страниц.
+**Почему отложено:** трогать `Table.tsx` с `<Link>` API меняет 5+ потребителей одновременно. Самостоятельный PR.
+**Когда возвращаться:** при WCAG-аудите либо при первой жалобе на keyboard UX.
+
+### `data-selected` атрибут теперь на ВСЕХ строках всех таблиц проекта
+**Что:** изменение `Table.tsx` ставит `data-selected="true|false"` на каждый `<tr>` — расширяет публичный «контракт» компонента, без записи в `docs/standards/frontend-*`.
+**Почему отложено:** атрибут не содержит CSS-стилей и не ломает существующих потребителей (e2e/unit тесты на /creators, /campaigns, /brands не ассертят `data-selected`). Отдельный документационный PR — слишком мелко.
+**Когда возвращаться:** если кто-то добавит глобальный CSS-селектор `[data-selected]` или появится PR обновляющий `docs/standards/frontend-components.md`.
+
+### e2e cleanup-стек обрывается на первом упавшем cleanup
+**Что:** в `admin-campaign-creators-read.spec.ts` (и других spec'ах) `while(cleanupStack.length>0) { await withTimeout(fn(), 5000) }` без try-catch. Один сбой → остаток стека не отрабатывает → утечка строк.
+**Почему отложено:** pre-existing pattern. Решение — обернуть `withTimeout` в try-catch + warn — изменение паттерна 5+ файлов.
+**Когда возвращаться:** при flaky cleanup в CI.
+
 ---
 
-# Deferred work
+## 2026-05-07 — chunk 11 slice 1/2 review round 1
 
-Findings из агентских review-сессий, которые не блокирующие для текущего PR'а, но требуют отдельного внимания. По мере того как чанки доходят до main — собирается список технических долгов и рисков, которые стоит обсудить и адресовать в будущих итерациях.
+### `useCampaignCreators`: hard-cap 200 без chunking
+**Что:** `listCreators({ids: creatorIds, perPage: 200, ...})` не chunkает `creatorIds`. Если кампания накопит >200 креаторов, listCreators отдаст 422.
+**Почему отложено:** spec явно говорит «`perPage=200` покрывает chunk-creator-cap из chunk 10». Backend chunk 10 ограничивает добавление 200 креаторами на кампанию суммарно. Слайс 2/2 (Add drawer) добавит UI hard-cap 200. До тех пор upper bound гарантирован контрактом.
+**Когда возвращаться:** если бизнес попросит снять кэп креаторов на кампанию.
 
-## chunk 10 (campaign_creators backend) — review 2026-05-07
+### Row ordering: creator.created_at vs campaign_creator.created_at
+**Что:** строки сортируются по `creator.created_at desc` (порядок listCreators), а не по `campaign_creator.created_at` (порядок добавления в кампанию). Креатор, добавленный сегодня, но created_at год назад, попадёт в конец.
+**Почему отложено:** spec буквально фиксирует `sort: "created_at"` для listCreators — текущая реализация не отклоняется. Spec gap: какой порядок ожидает PM/UX. Нужно согласовать.
+**Когда возвращаться:** после first user feedback на staging — Aidana подскажет, какой порядок ей удобнее. Если cc.created_at desc — добавить sort на стороне фронта (или в backend listCampaignCreators).
 
-### TOCTOU `assertCampaignActive` вне `WithTx`
+### Хардкод символа `№` в `CreatorsListPage.buildColumns`
+**Что:** `header: "№"` в `CreatorsListPage.tsx:229` — литерал в JSX без `t(...)`. В `CampaignCreatorsTable.tsx` round 2 уже фикснут на `t('creators:columns.index')`, ключ добавлен в `creators.json`.
+**Почему отложено:** правка `CreatorsListPage.tsx` out-of-scope для slice 1/2 PR. Ключ `creators:columns.index` уже доступен — заменить за один лайн в следующий касательный PR.
+**Когда возвращаться:** ближайший PR трогающий `CreatorsListPage`.
 
-**Источник:** edge-case-hunter (blocker), blind-hunter (minor) — `backend/internal/service/campaign_creator.go:48-50, 88-90, 132-134`.
+### `formatShortDate` дублируется в каждом feature-таблице
+**Что:** одинаковая функция `formatShortDate` живёт в `CreatorsListPage.tsx` и `CampaignCreatorsTable.tsx`.
+**Почему отложено:** rule of three — пока 2 копии, выносить в `shared/utils/formatDate.ts` рано. Появится третья — выносим.
+**Когда возвращаться:** при появлении третьей таблицы со short date.
 
-**Суть:** Pre-fetch кампании выполняется через `s.pool` ДО открытия транзакции. Параллельный admin может soft-delete'нуть кампанию между gate'ом и mutate-операцией → строки попадут в campaign_creators под soft-deleted кампанией. Спека (Boundaries → Always) **явно требует** «Pre-fetch ДО `WithTx`», так что текущая реализация ей соответствует. Но смежный сервис `CampaignService.UpdateCampaign` делает gate ВНУТРИ tx — это разъезжающаяся практика. Правильный подход — `SELECT ... FOR UPDATE` внутри tx или single-statement conditional mutate.
+### `<SocialLink>`-cell блокирует пропагацию click — keyboard nav через cell не открывает drawer
+**Что:** `<div onClick={(e) => e.stopPropagation()} role="presentation">` вокруг SocialLink стопит bubble. Keyboard-юзер на cell не откроет строку через Enter.
+**Почему отложено:** pre-existing pattern в `CreatorsListPage`. E2E тесты обходят, кликая `td:first-child`. Не критично для MVP админ-инструмента.
+**Когда возвращаться:** при первом WCAG-аудите или жалобе админа на keyboard UX.
 
-**Когда фиксить:** когда появится handler soft-delete (chunk 7+) и race-window станет реальным. Параллельно — обсудить со spec'ом, нужно ли менять boundary «pre-fetch ДО WithTx» на «внутри WithTx с FOR UPDATE».
+### `getCreator` detailQuery без `retry: false` (старые потребители)
+**Что:** в `CreatorsListPage.tsx` detailQuery не имеет `retry: false` — на transient 5xx делает дефолтные 3 ретрая (~30 сек spinner).
+**Почему отложено:** в `CampaignDetailPage` я уже добавил `retry: false` в detailQuery; в `CreatorsListPage` патч из-вне scope (другой файл, другой PR).
+**Когда возвращаться:** следующий PR, трогающий CreatorsListPage.
 
-### `Remove` без `FOR UPDATE` на pre-fetch
+### `formatShortDate` зависит от browser timezone
+**Что:** `new Date(iso).toLocaleDateString("ru", {day:"numeric", month:"short"})` рендерит дату в локальном TZ. Backend отдаёт UTC. В Алматы (UTC+5) дата `2026-05-07T20:00:00Z` отрендерится как «8 мая».
+**Почему отложено:** pre-existing pattern. E2E пины `timezoneId: "UTC"`. Реальные admins в Казахстане видят свою TZ — в большинстве случаев это правильное поведение для UI «когда событие произошло локально».
+**Когда возвращаться:** если бизнес попросит UTC display, или будет инцидент с расхождением в audit.
 
-**Источник:** edge-case-hunter (major) — `backend/internal/service/campaign_creator.go:103-105`.
+### E2E cleanup-стек обрывается на первом failed cleanup
+**Что:** в `frontend/e2e/web/admin-campaign-creators-read.spec.ts` (и существующих spec'ах) `while(cleanupStack.length>0) { await withTimeout(fn(), 5000) }` — если один cleanup кинет, цикл оборвётся, остальные элементы останутся в БД.
+**Почему отложено:** pre-existing pattern (`admin-campaign-detail.spec.ts` etc). Существующие тесты не страдают, потому что cleanup правильно упорядочен через FK. Изменение паттерна затрагивает 5+ файлов.
+**Когда возвращаться:** если flaky cleanup начнёт оставлять рассыпанные данные между прогонами. Решение: try-catch вокруг `withTimeout` + `console.warn`.
 
-**Суть:** `GetByCampaignAndCreator` + LBYL-проверка `status == agreed` + `DeleteByID` — три шага без row-lock. Под READ COMMITTED concurrent транзакция (chunk 14, TMA-flow) может перевести row в `agreed` после нашего SELECT и до нашего DELETE, и мы удалим уже-согласованного. В chunk 10 writer'ов в `agreed` нет, race'а физически нет.
+### `rowKey={creator.creatorId}` collision risk при дубликатах в campaign_creators
+**Что:** Table key — creator_id. Если backend race-condition обойдёт UNIQUE-constraint и вернёт 2 строки на (campaign, creator), React выкинет warning.
+**Почему отложено:** UNIQUE-constraint `campaign_creators_campaign_creator_unique` (см. миграцию `20260507044135_campaign_creators.sql`) гарантирует, что 2 строки невозможны. Repo race-handling трансформирует 23505 в `ErrCreatorAlreadyInCampaign`.
+**Когда возвращаться:** если такая race всё-таки появится в проде (мониторинг pgErr 23505 в audit).
 
-**Когда фиксить:** в chunk 14 (TMA agree/decline), когда появится альтернативный writer. Варианты: добавить `Suffix("FOR UPDATE")` в `GetByCampaignAndCreator` ИЛИ переписать на conditional DELETE: `DELETE ... WHERE id = $1 AND status != 'agreed' RETURNING *`. Прецедент `FOR UPDATE` уже есть в `creator_application.go:240`.
+### `if (error || !data)` в API client throws ApiError со status=200 при пустом 200 OK
+**Что:** в `campaignCreators.ts`: `if (error || !data) { throw new ApiError(response.status, extractErrorCode(error)) }` — если backend вернёт 200 без data, будет `ApiError(200, "INTERNAL_ERROR")` — нелогичный status.
+**Почему отложено:** паттерн идентичен `campaigns.ts`, `creators.ts`. Backend никогда не возвращает 200 без data (контракт OpenAPI). Защита от phantom-edge case.
+**Когда возвращаться:** если когда-то введётся 204 No Content на read-эндпоинте — нужна осмысленная обработка.
 
-### `ctx.Err()` check в batch-loop `Add`
+---
 
-**Источник:** edge-case-hunter (major) — `backend/internal/service/campaign_creator.go:47-79`.
-
-**Суть:** Если клиент разорвёт соединение в середине батча, pgx упадёт на ближайшем `Add`/`writeAudit` с `context canceled`, что транслируется в default-branch `respondError` → 500 `INTERNAL_ERROR` с записью в Error-log как «unexpected». Rollback и так произойдёт через `WithTx`, но логи генерируют ложные 500.
-
-**Когда фиксить:** при ближайшем рефакторинге `respondError`/middleware — добавить branch на `errors.Is(err, context.Canceled)` → suppressed log / 499 Client Closed Request. Применимо к ВСЕМ mutate-сервисам, не только chunk 10.
-
-### E2e cleanup ломается на `agreed`-row
-
-**Источник:** blind-hunter (minor) — `backend/e2e/testutil/campaign_creator.go:21-43`.
-
-**Суть:** `RegisterCampaignCreatorCleanup` использует production-A2 (DELETE), который имеет 422 guard на `status == agreed`. В chunk 10 status у всех строк = `planned`, всё ок. После chunk 14 тесты, продвигающие row в `agreed`, не смогут убрать через cleanup — `unexpected status 422`.
-
-**Когда фиксить:** в chunk 14. Варианты: принимать 422 как success в cleanup-helper'е, либо мапить через `/test/cleanup-entity` с типом `campaign_creator` (расширить testapi).
-
-### E2e не покрывает soft-deleted campaign на 3 ручках
-
-**Источник:** acceptance-auditor (minor) — спека I/O Matrix lines 54, 59, 62.
-
-**Суть:** Спека требует «Add/Remove/List к soft-deleted campaign → 404 CAMPAIGN_NOT_FOUND». Unit-тесты сервиса покрывают, e2e — нет. Сейчас физически нет способа создать soft-deleted кампанию через публичные API: handler `DELETE /campaigns/{id}` ещё не реализован (chunk 7+ из roadmap).
-
-**Когда фиксить:** в чанке, который добавит DELETE /campaigns/{id} (soft-delete handler). Параллельно добавить 3 subtest'а в `campaign_creator_test.go`.
-
-## chunk 10 — round-2 review (2026-05-07)
-
-### FK без `ON DELETE CASCADE` — cleanup footgun
-
-**Источник:** blind-hunter (major) — `backend/migrations/20260507044135_campaign_creators.sql:30-31`.
-
-**Суть:** `creator_id_fk` и `campaign_id_fk` используют default `NO ACTION`. TestApi `/test/cleanup-entity` делает HARD DELETE на creators и campaigns. Если e2e-тест забывает `RegisterCampaignCreatorCleanup` (или порядок LIFO нарушен) — parent cleanup упадёт с PG 23503, грязное состояние накапливается. Сравни `creator_socials` / `creator_categories` — они С `ON DELETE CASCADE` именно для этой причины.
-
-**Дизайн trade-off:** Хотя CASCADE упростил бы cleanup, может оказаться нежелательным для prod-сценариев (если когда-нибудь появится hard-delete creator/campaign). Стоит обсудить — оставлять как есть или добавлять CASCADE.
-
-**Когда фиксить:** при появлении первой реальной поломки cleanup в CI или при принятии решения о CASCADE policy для prod.
-
-### 23502/23514 не транслируются в repo `Add`
-
-**Источник:** edge-case-hunter (major) — `backend/internal/repository/campaign_creator.go:90-114`.
-
-**Суть:** Repo ловит 23505/23503, но НЕ ловит 23502 (`NOT NULL violation`) и 23514 (`campaign_creators_status_check` violation). Сейчас сервис всегда передаёт `domain.CampaignCreatorStatusPlanned` — branch недостижим. Но в chunks 12/14 появятся новые writers (notify, agreed, declined). Если кто-то ошибётся с константой — получит сырой 500 без диагностики.
-
-**Когда фиксить:** в chunk 12 при добавлении новых writers — сразу добавить defensive translation.
-
-### Content-Type / max-body → 413 vs 422
-
-**Источник:** edge-case-hunter (major) — middleware-level, не chunk 10.
-
-**Суть:** Strict-server `json.Decode` принимает любой body как long as он валидный JSON, не сверяет Content-Type. BodyLimit middleware при превышении возвращает 422 «Invalid request body» через RequestErrorHandlerFunc вместо 413 — admin не понимает, что лимит превышен.
-
-**Когда фиксить:** общий рефактор middleware — отдельный кросскат-task. Применимо ко всем endpoint'ам.
-
-### Индекс на `creator_id` для chunk 12+
-
-**Источник:** edge-case-hunter (minor) — `backend/migrations/20260507044135_campaign_creators.sql:42`.
-
-**Суть:** UNIQUE `(campaign_id, creator_id)` создаёт композитный btree с leading `campaign_id`. Запрос `WHERE campaign_id = ?` оптимально покрывается. Но `WHERE creator_id = ?` (например, "найти все кампании, в которых участвует креатор X") fallback'ится в seq scan. Сейчас такого запроса нет — но он точно появится в chunk 12+ (notify) и/или в TMA flow.
-
-**Когда фиксить:** в чанке, где появится первый запрос по `creator_id` — добавить `CREATE INDEX campaign_creators_creator_id_idx ON campaign_creators(creator_id);` отдельной forward-миграцией.
-
-## Кандидаты в стандарты (review)
-
-Перед добавлением в `docs/standards/` стоит обсудить с командой и проверить, что паттерн уже плодится по нескольким сервисам, а не рождается в этом PR.
-
-### OpenAPI minItems/maxItems требуют дублирующего runtime-check'а в handler'е
-
-**Источник:** edge-case-hunter, blind-hunter.
-
-**Обоснование:** oapi-codegen без явных валидаторов не применяет schema-level limits. В chunk 10 `maxItems=200` декларирован, но не enforced — открытый DoS. В этом PR пофиксили, но паттерн всплывёт ещё (POST /creators/list, batch-endpoints в creator_application и т.п.). Добавить hard-rule в `security.md` или `backend-codegen.md`.
-
-### Soft-delete gate должен быть внутри той же транзакции, что и mutate
-
-**Источник:** blind-hunter, edge-case-hunter.
-
-**Обоснование:** `CampaignService.UpdateCampaign` делает gate внутри tx (правильно). `CampaignCreatorService` делает gate через pool ДО tx (по требованию текущей спеки, но создаёт TOCTOU). Нужно решить какой паттерн каноничный, и зафиксировать в `backend-transactions.md`.
-
-### Strict-422 batch rollback assertion: e2e обязан включать valid+invalid сущности
-
-**Источник:** acceptance-auditor.
-
-**Обоснование:** Тест с `[bogus]`-only не доказывает rollback — empty list был бы и без rollback'а. Нужен mixed batch `[valid, invalid]`. Применимо к ВСЕМ strict-422 batch-операциям. Добавить в `backend-testing-e2e.md` § Сценарии.
-
-### Детерминистический lock-order при batch INSERT/UPDATE (round-2)
-
-**Источник:** edge-case-hunter (round 2, blocker).
-
-**Обоснование:** Concurrent admin'ы могут отправить `Add(camp1, [A, B])` и `Add(camp1, [B, A])` — Postgres ловит deadlock 40P01, один tx убивается, admin видит 500 на легитимный input. В chunk 10 пофиксили сортировкой `creatorIDs` ASC перед циклом. Любой будущий batch endpoint (POST /creators/list с upsert'ами, batch reset для notify в chunk 12) повторит ошибку, пока правила нет. Добавить в `backend-transactions.md` § Concurrency.
-
-### Регистрация e2e cleanup ДО `require`-ассертов
-
-**Источник:** edge-case-hunter (round 2, major).
-
-**Обоснование:** Если cleanup регистрируется после require'ов и любой из них fail'нет — строки в campaign_creators остаются → cleanup creator (LIFO) попытается hard-delete creator → FK 23503 → row leak. В chunk 10 пофиксили перенесением. Применимо ко всем e2e тестам с child-rows. Добавить в `backend-testing-e2e.md` § Cleanup.
+## (older entries below; trimmed)
