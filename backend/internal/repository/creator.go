@@ -186,8 +186,8 @@ func (r *creatorRepository) GetByID(ctx context.Context, id string) (*CreatorRow
 
 // GetTelegramUserIDsByIDs returns a creator-id → telegram_user_id map for
 // the requested ids. Missing ids are simply absent from the result; the
-// caller (chunk 12 notify / remind-invitation) compares against the input
-// batch to decide. Empty input yields an empty map without hitting the DB.
+// caller compares against the input batch to decide. Empty input yields
+// an empty map without hitting the DB.
 func (r *creatorRepository) GetTelegramUserIDsByIDs(ctx context.Context, ids []string) (map[string]int64, error) {
 	if len(ids) == 0 {
 		return map[string]int64{}, nil

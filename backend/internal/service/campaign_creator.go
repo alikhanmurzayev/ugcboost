@@ -15,9 +15,7 @@ import (
 )
 
 // CampaignCreatorRepoFactory creates the repositories CampaignCreatorService
-// needs. The campaign repo is here for the soft-delete pre-fetch and to
-// resolve tma_url for chunk-12 outbound messages; the creator repo resolves
-// telegram_user_id chat ids for the same flow.
+// needs.
 type CampaignCreatorRepoFactory interface {
 	NewCampaignRepo(db dbutil.DB) repository.CampaignRepo
 	NewCampaignCreatorRepo(db dbutil.DB) repository.CampaignCreatorRepo
@@ -26,17 +24,14 @@ type CampaignCreatorRepoFactory interface {
 }
 
 // CampaignInviteNotifier abstracts the synchronous Telegram send used by the
-// chunk-12 notify / remind-invitation flow. *telegram.Notifier satisfies it
-// directly; tests inject a spy that records args and forces controlled
-// errors for partial-success scenarios.
+// notify / remind-invitation flow.
 type CampaignInviteNotifier interface {
 	SendCampaignInvite(ctx context.Context, chatID int64, text, tmaURL string) error
 }
 
-// CampaignCreatorService owns the admin-only attachment lifecycle: chunk-10
-// batch add (→ planned), single remove (forbidden once agreed), no-pagination
-// list, and chunk-12 notify (→ invited) / remind-invitation (counter bump).
-// TMA-side agree / decline land in chunk 14.
+// CampaignCreatorService owns the admin-only attachment lifecycle: batch
+// add (→ planned), single remove (forbidden once agreed), no-pagination
+// list, and notify (→ invited) / remind-invitation (counter bump).
 type CampaignCreatorService struct {
 	pool        dbutil.Pool
 	repoFactory CampaignCreatorRepoFactory
@@ -176,11 +171,11 @@ func (s *CampaignCreatorService) List(ctx context.Context, campaignID string) ([
 	return items, nil
 }
 
-// batchOp distinguishes the two chunk-12 flows that share the
-// dispatchBatch pipeline. Each branch carries its allowed source statuses,
-// the audit action label, the bot copy, and the repo method that advances
-// the campaign_creators row — all stored in batchOpSpecs to avoid
-// unreachable default arms in the dispatch path.
+// batchOp distinguishes the two flows that share the dispatchBatch
+// pipeline. Each branch carries its allowed source statuses, the audit
+// action label, the bot copy, and the repo method that advances the
+// campaign_creators row — all stored in batchOpSpecs to avoid unreachable
+// default arms in the dispatch path.
 type batchOp string
 
 const (
@@ -380,17 +375,16 @@ func (s *CampaignCreatorService) applyDelivered(
 }
 
 // assertCampaignActive resolves the soft-deleted / missing campaign gate via
-// pool (no tx). Mirrors UpdateCampaign's behaviour but returns
-// ErrCampaignNotFound for both cases since the chunk-10 endpoints never
-// expose soft-deleted rows to the admin UI.
+// pool (no tx). Mirrors UpdateCampaign's behaviour but collapses both cases
+// into ErrCampaignNotFound — the admin UI never exposes soft-deleted rows.
 func (s *CampaignCreatorService) assertCampaignActive(ctx context.Context, campaignID string) error {
 	_, err := s.getActiveCampaign(ctx, campaignID)
 	return err
 }
 
-// getActiveCampaign returns the campaign row for chunk-12 flows that need
-// tma_url alongside the soft-delete gate. Mirrors assertCampaignActive's
-// failure semantics: missing or soft-deleted → ErrCampaignNotFound.
+// getActiveCampaign returns the campaign row for flows that need tma_url
+// alongside the soft-delete gate. Failure semantics: missing or
+// soft-deleted → ErrCampaignNotFound.
 func (s *CampaignCreatorService) getActiveCampaign(ctx context.Context, campaignID string) (*repository.CampaignRow, error) {
 	campaign, err := s.repoFactory.NewCampaignRepo(s.pool).GetByID(ctx, campaignID)
 	if err != nil {

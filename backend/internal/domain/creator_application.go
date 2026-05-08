@@ -509,8 +509,7 @@ func NormalizeInstagramHandle(h string) string {
 // creatorApplicationAllowedTransitions is the declarative state machine for
 // creator applications. Only transitions explicitly mapped to true here are
 // legal; everything else fails IsCreatorApplicationTransitionAllowed and the
-// service helper returns ErrInvalidStatusTransition. Each future flow (manual
-// verify, reject, withdraw, signing) extends the map in its own chunk.
+// service helper returns ErrInvalidStatusTransition.
 var creatorApplicationAllowedTransitions = map[string]map[string]bool{
 	CreatorApplicationStatusVerification: {
 		CreatorApplicationStatusModeration: true,

@@ -41,7 +41,8 @@ const (
 
 // CampaignCreatorRow maps to the campaign_creators table. Insert tags cover
 // only the three fields the service supplies — id / counters / timestamps
-// are DB-defaulted, nullable timestamps stay NULL until chunks 12+ flip them.
+// are DB-defaulted, nullable timestamps stay NULL until notify / remind /
+// TMA-side flows flip them.
 type CampaignCreatorRow struct {
 	ID            string     `db:"id"`
 	CampaignID    string     `db:"campaign_id"     insert:"campaign_id"`
@@ -132,7 +133,7 @@ func (r *campaignCreatorRepository) GetByCampaignAndCreator(ctx context.Context,
 
 // ListByCampaign returns every row for the campaign ordered by created_at
 // ASC, id ASC so the admin UI sees a stable order across requests. There is
-// no pagination — the roster fits one screen by design (chunk 10 spec).
+// no pagination — the roster fits one screen by design.
 func (r *campaignCreatorRepository) ListByCampaign(ctx context.Context, campaignID string) ([]*CampaignCreatorRow, error) {
 	q := sq.Select(campaignCreatorSelectColumns...).
 		From(TableCampaignCreators).
@@ -157,11 +158,11 @@ func (r *campaignCreatorRepository) DeleteByID(ctx context.Context, id string) e
 }
 
 // ListByCampaignAndCreators returns every campaign_creators row that matches
-// the (campaign, creator IN ($creatorIds)) pair. Used by chunk 12 notify /
-// remind-invitation as the read-only validation pre-pass: the service
-// compares the result against the input batch to surface
-// not_in_campaign / wrong_status details. Empty creatorIds returns an empty
-// result without hitting the database.
+// the (campaign, creator IN ($creatorIds)) pair. Backs the read-only
+// validation pre-pass for the notify / remind-invitation flows: the
+// service compares the result against the input batch to surface
+// not_in_campaign / wrong_status details. Empty creatorIds returns an
+// empty result without hitting the database.
 func (r *campaignCreatorRepository) ListByCampaignAndCreators(ctx context.Context, campaignID string, creatorIDs []string) ([]*CampaignCreatorRow, error) {
 	if len(creatorIDs) == 0 {
 		return nil, nil

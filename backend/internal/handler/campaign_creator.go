@@ -64,8 +64,8 @@ func (s *Server) RemoveCampaignCreator(ctx context.Context, request api.RemoveCa
 }
 
 // ListCampaignCreators handles GET /campaigns/{id}/creators (admin-only). No
-// pagination — chunk 10 spec returns the whole roster. Soft-deleted /
-// missing campaigns surface as 404 from the service.
+// pagination — the whole roster is returned. Soft-deleted / missing
+// campaigns surface as 404 from the service.
 func (s *Server) ListCampaignCreators(ctx context.Context, request api.ListCampaignCreatorsRequestObject) (api.ListCampaignCreatorsResponseObject, error) {
 	if err := s.authzService.CanListCampaignCreators(ctx); err != nil {
 		return nil, err

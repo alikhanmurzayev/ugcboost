@@ -256,8 +256,8 @@ func webAppURLFrom(markup any) string {
 	kb, ok := markup.(tgmodels.InlineKeyboardMarkup)
 	if !ok {
 		// Pointer-shaped markup is what NewInlineKeyboardMarkup helpers produce;
-		// flat-value comes from the chunk-12 SendCampaignInvite path. Try both
-		// before giving up.
+		// flat-value comes from the SendCampaignInvite path. Try both before
+		// giving up.
 		kbPtr, okPtr := markup.(*tgmodels.InlineKeyboardMarkup)
 		if !okPtr || kbPtr == nil {
 			return ""
@@ -278,8 +278,7 @@ func webAppURLFrom(markup any) string {
 // a one-shot synthetic Telegram failure for the given chat_id; the next
 // SendMessage call returns the registered reason string (defaulting to the
 // canonical "Forbidden: bot was blocked by the user" so
-// MapTelegramErrorToReason classifies it as bot_blocked). Used by chunk-12
-// e2e to exercise partial-success delivery without a real blocked user.
+// MapTelegramErrorToReason classifies it as bot_blocked).
 func (h *TestAPIHandler) TelegramSpyFailNext(_ context.Context, request testapi.TelegramSpyFailNextRequestObject) (testapi.TelegramSpyFailNextResponseObject, error) {
 	if request.Body == nil {
 		return nil, domain.NewValidationError(domain.CodeValidation, "body is required")
@@ -294,8 +293,7 @@ func (h *TestAPIHandler) TelegramSpyFailNext(_ context.Context, request testapi.
 
 // TelegramSpyFakeChat handles POST /test/telegram/spy/fake-chat. Marks
 // chatId as test-synthetic so TeeSender bypasses the real upstream bot
-// for that chat — chunk-12 e2e calls this for every test creator's
-// telegram_user_id since synthetic ids cannot be reached by a live bot.
+// for that chat — synthetic test chat_ids cannot be reached by a live bot.
 // Strict-server enforces non-nil body upstream; no defensive check here.
 func (h *TestAPIHandler) TelegramSpyFakeChat(_ context.Context, request testapi.TelegramSpyFakeChatRequestObject) (testapi.TelegramSpyFakeChatResponseObject, error) {
 	h.telegramSpy.RegisterFakeChat(request.Body.ChatId)

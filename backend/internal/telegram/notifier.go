@@ -57,13 +57,13 @@ const welcomeWithIGTemplate = "Здравствуйте! 👋\n\n" +
 const welcomeNoIGText = "Здравствуйте! 👋\n\n" +
 	"Мы получили вашу заявку. Скоро сообщим здесь результаты отбора ✅"
 
-// verificationApprovedText replaces the chunk-8 placeholder. No inline
-// keyboard — TMA is out of the onboarding flow per roadmap v2.
+// verificationApprovedText is the static post-verification message. No
+// inline keyboard — TMA is out of the onboarding flow.
 const verificationApprovedText = "Вы успешно подтвердили свой аккаунт ✅\n\n" +
 	"Скоро сообщим здесь результаты отбора 🖤"
 
-// applicationRejectedText is the static reject message (chunk 13). The wording
-// is time-bound (mentions fashion-кампаний) and is rotated by replacing this
+// applicationRejectedText is the static reject message. The wording is
+// time-bound (mentions fashion-кампаний) and is rotated by replacing this
 // constant in a separate PR — no Config switch, no template fan-out.
 const applicationRejectedText = "Здравствуйте! Благодарим вас за интерес к платформе UGC boost.\n\n" +
 	"Мы внимательно рассмотрели вашу заявку, профиль, контент и текущие показатели аккаунта. К сожалению, на данном этапе ваша заявка не прошла модерацию платформы.\n\n" +
@@ -81,11 +81,11 @@ const applicationApprovedText = "Здравствуйте!\n\n" +
 	"Оставайтесь с нами — впереди много масштабных проектов!"
 
 // campaignInviteText / campaignRemindInvitationText carry the universal copy
-// for chunk 12 outbound bot messages. Generic by design — the message body
-// must not leak campaign details (name, brand, deadlines) because A4 covers
-// re-invites after declines as well, and stale text from a previous round
-// would mislead. The accompanying inline web_app button drops the creator
-// straight into the TMA where chunk 14 will surface the actual offer.
+// for outbound invite / remind messages. Generic by design — the message
+// body must not leak campaign details (name, brand, deadlines) because
+// notify covers re-invites after declines as well, and stale text from a
+// previous round would mislead. The accompanying inline web_app button
+// drops the creator straight into the TMA.
 //
 // These literals are mirrored in `backend/e2e/campaign_creator/
 // campaign_notify_test.go` (the e2e module cannot import internal/telegram
@@ -328,17 +328,17 @@ func buildWelcomeText(p ApplicationLinkedPayload) string {
 	return fmt.Sprintf(welcomeWithIGTemplate, html.EscapeString(p.VerificationCode))
 }
 
-// SendCampaignInvite delivers a chunk-12 invite or remind-invitation message
+// SendCampaignInvite delivers an invite or remind-invitation message
 // synchronously. Unlike the fire-and-forget Notify* family, this method
 // returns the underlying SendMessage error so the campaign-creator service
 // can map per-creator failures into the partial-success `undelivered` list.
 // No retry — the admin re-invokes the endpoint with the unanswered subset.
 //
 // The message embeds an inline `web_app` button pointing at the campaign's
-// TMA URL. Chunk 14 relies on this delivery surface: Telegram only attaches
-// initData (HMAC-signed user payload) when the TMA is opened via a
-// `web_app` button, so a plain-text URL would leave the creator
-// unauthenticated on the TMA agree/decline endpoints.
+// TMA URL. The TMA agree/decline endpoints rely on this delivery surface:
+// Telegram only attaches initData (HMAC-signed user payload) when the TMA
+// is opened via a `web_app` button, so a plain-text URL would leave the
+// creator unauthenticated.
 func (n *Notifier) SendCampaignInvite(ctx context.Context, chatID int64, text, tmaURL string) error {
 	callCtx, cancel := context.WithTimeout(ctx, n.timeout)
 	defer cancel()

@@ -26,9 +26,9 @@ func NewSpyOnlySender(store *SentSpyStore) *SpyOnlySender {
 
 // SendMessage records the params and returns a synthetic Message{ID: 1} so
 // callers that read the ID for follow-up flows do not get a nil panic.
-// When chunk-12 e2e has registered a one-shot synthetic failure for the
-// chat_id via RegisterFailNext, the call returns the canonical error and
-// records the attempt with Err set so the spy log still captures it.
+// When a one-shot synthetic failure is registered for the chat_id via
+// RegisterFailNext, the call returns the canonical error and records the
+// attempt with Err set so the spy log still captures it.
 func (s *SpyOnlySender) SendMessage(_ context.Context, params *bot.SendMessageParams) (*models.Message, error) {
 	if reason, ok := consumeFailNextFromParams(s.store, params); ok {
 		err := newSyntheticTGErr(reason)
@@ -64,9 +64,8 @@ func NewTeeSender(real Sender, store *SentSpyStore) *TeeSender {
 // error handling stays identical to the production-without-spy path. Two
 // test-only escape hatches short-circuit the real call before it fires:
 // (1) a one-shot fail-next registration returns the synthetic Telegram
-// error; (2) a fake-chat registration returns success — needed for
-// chunk-12 e2e where the synthetic chat_id has no live chat for staging
-// Telegram to reach.
+// error; (2) a fake-chat registration returns success — needed when the
+// synthetic chat_id has no live chat for staging Telegram to reach.
 func (t *TeeSender) SendMessage(ctx context.Context, params *bot.SendMessageParams) (*models.Message, error) {
 	if reason, ok := consumeFailNextFromParams(t.store, params); ok {
 		err := newSyntheticTGErr(reason)

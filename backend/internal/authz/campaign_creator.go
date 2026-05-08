@@ -10,8 +10,7 @@ import (
 
 // CanAddCampaignCreators gates POST /campaigns/{id}/creators to admins. Brand
 // managers and any future non-admin role receive domain.ErrForbidden — the
-// composition of a campaign roster is an admin-curated decision in the
-// current MVP (see campaign-roadmap.md chunk 10).
+// composition of a campaign roster is an admin-curated decision.
 func (a *AuthzService) CanAddCampaignCreators(ctx context.Context) error {
 	if middleware.RoleFromContext(ctx) != api.Admin {
 		return domain.ErrForbidden

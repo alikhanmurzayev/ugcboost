@@ -50,8 +50,8 @@ const (
 	CodeCampaignAddAfterApproveFailed = "CAMPAIGN_ADD_AFTER_APPROVE_FAILED"
 )
 
-// Campaign-creator (chunk 10) user-facing codes carried in 4xx responses by
-// the admin-only batch add / single remove / list endpoints.
+// Campaign-creator user-facing codes carried in 4xx responses by the
+// admin-only batch add / single remove / list / notify / remind endpoints.
 const (
 	// 422 — POST /campaigns/{id}/creators with empty creatorIds.
 	CodeCampaignCreatorIdsRequired = "CAMPAIGN_CREATOR_IDS_REQUIRED"
@@ -77,7 +77,7 @@ const (
 	CodeCampaignCreatorBatchInvalid = "CAMPAIGN_CREATOR_BATCH_INVALID"
 )
 
-// Campaign tma_url lock code — chunk 12 PATCH guard.
+// Campaign tma_url lock code — PATCH guard.
 const (
 	// 422 — PATCH /campaigns/{id} that flips tma_url while at least one
 	// creator in this campaign has invited_count > 0. Outbound bot messages

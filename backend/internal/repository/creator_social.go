@@ -25,9 +25,10 @@ const (
 )
 
 // CreatorSocialRow maps to the creator_socials table. Verified / Method /
-// VerifiedByUserID / VerifiedAt are insert-tagged: chunk 18b copies the
-// verification snapshot from the application's social row, so they enter
-// the table as the values picked by the service rather than DB defaults.
+// VerifiedByUserID / VerifiedAt are insert-tagged: the approve flow copies
+// the verification snapshot from the application's social row, so they
+// enter the table as the values picked by the service rather than DB
+// defaults.
 type CreatorSocialRow struct {
 	ID               string     `db:"id"`
 	CreatorID        string     `db:"creator_id"          insert:"creator_id"`

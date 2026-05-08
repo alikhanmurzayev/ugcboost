@@ -23,8 +23,8 @@ import (
 // CAMPAIGN_NAME_TAKEN by respondError's generic *BusinessError branch.
 //
 // Response carries only the freshly created id — the full read aggregate
-// lives in the upcoming GET /campaigns/{id} (chunk #4); echoing the whole
-// row from create would just duplicate the read contract without value.
+// lives in GET /campaigns/{id}; echoing the whole row from create would
+// just duplicate the read contract without value.
 func (s *Server) CreateCampaign(ctx context.Context, request api.CreateCampaignRequestObject) (api.CreateCampaignResponseObject, error) {
 	if err := s.authzService.CanCreateCampaign(ctx); err != nil {
 		return nil, err

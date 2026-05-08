@@ -28,7 +28,7 @@ const (
 // CreatorApplicationSocialRow maps to the creator_application_socials table.
 // Verified/Method/VerifiedByUserID/VerifiedAt are select-only — they default
 // to (false, NULL, NULL, NULL) on INSERT and are populated later by the
-// SendPulse webhook (chunk 8) or by manual admin verification (chunk 9).
+// SendPulse webhook or by manual admin verification.
 type CreatorApplicationSocialRow struct {
 	ID               string     `db:"id"`
 	ApplicationID    string     `db:"application_id"      insert:"application_id"`
@@ -60,7 +60,7 @@ type CreatorApplicationSocialRepo interface {
 // the social id and the (possibly self-fixed) handle that
 // CreatorApplicationSocialRepo.UpdateVerification writes in a single UPDATE.
 // VerifiedByUserID is nil for auto-verification (SendPulse webhook); the
-// manual-verify endpoint (chunk 9) sets it to the admin's user id.
+// manual-verify endpoint sets it to the admin's user id.
 type UpdateSocialVerificationParams struct {
 	ID               string
 	Handle           string

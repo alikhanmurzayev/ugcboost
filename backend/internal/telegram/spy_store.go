@@ -33,12 +33,10 @@ type SentFilter struct {
 
 // SentSpyStore is the thread-safe ring of recorded outbound messages.
 // Created only when EnableTestEndpoints is true. The same store also owns
-// per-chat one-shot synthetic-failure registrations used by chunk-12 e2e
-// to exercise partial-success delivery without a real blocked-by-user, and
-// a "fake chat" set for tests that need TeeSender to skip the upstream
-// real-bot call entirely (synthetic chat_ids cannot be reached by a live
-// bot — staging would always reply "chat not found", breaking the chunk-12
-// happy-path contract on `undelivered=[]`).
+// per-chat one-shot synthetic-failure registrations (e2e exercises
+// partial-success delivery without a real blocked-by-user) and a "fake
+// chat" set (TeeSender skips the upstream real-bot call for synthetic
+// chat_ids that no live bot can reach).
 type SentSpyStore struct {
 	mu        sync.Mutex
 	records   []SentRecord
@@ -59,9 +57,7 @@ func NewSentSpyStore() *SentSpyStore {
 
 // RegisterFakeChat marks chatID as test-synthetic so TeeSender skips the
 // real-bot SendMessage call and returns success directly. SpyOnlySender
-// ignores this since it is already recording-only. Used by chunk-12 e2e
-// happy-path scenarios where the synthetic Telegram user id has no live
-// chat for the bot to reach.
+// ignores this since it is already recording-only.
 func (s *SentSpyStore) RegisterFakeChat(chatID int64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

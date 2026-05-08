@@ -98,9 +98,8 @@ type CreatorService interface {
 }
 
 // CampaignService is the interface Server needs from the campaign service —
-// admin-only POST /campaigns plus per-id read and patch; subsequent chunks
-// (#6–#7) extend it with list / soft-delete. AssertActiveCampaigns is the
-// pre-validation hook for the optional `campaignIds` payload of POST
+// admin-only POST /campaigns plus per-id read, patch, list. AssertActiveCampaigns
+// is the pre-validation hook for the optional `campaignIds` payload of POST
 // /creators/applications/{id}/approve.
 type CampaignService interface {
 	CreateCampaign(ctx context.Context, in domain.CampaignInput) (*domain.Campaign, error)
@@ -112,8 +111,8 @@ type CampaignService interface {
 
 // CampaignCreatorService is the interface Server needs from the campaign-
 // creator service — admin-only batch add (POST), single remove (DELETE),
-// no-pagination list (GET) and the chunk-12 batch notify / remind-invitation
-// flows on /campaigns/{id}/{notify,remind-invitation}.
+// no-pagination list (GET) and the batch notify / remind-invitation flows
+// on /campaigns/{id}/{notify,remind-invitation}.
 type CampaignCreatorService interface {
 	Add(ctx context.Context, campaignID string, creatorIDs []string) ([]*domain.CampaignCreator, error)
 	Remove(ctx context.Context, campaignID, creatorID string) error
