@@ -49,6 +49,11 @@ void i18n.use(initReactI18next).init({
     },
   },
   interpolation: {
+    // React escapes children, so we don't double-escape via i18next:
+    // copy-to-clipboard flows (e.g. Telegram bot deep-link) interpolate URL
+    // chars that must reach navigator.clipboard verbatim, not as &#x2F;...
+    // entities. If we ever use <Trans> or dangerouslySetInnerHTML, switch
+    // those callers to a sanitised wrapper rather than flipping this flag.
     escapeValue: false,
   },
 });

@@ -238,24 +238,17 @@ describe("CampaignCreatorsTable", () => {
     const cells = within(row).getAllByRole("cell");
     expect(cells).toHaveLength(7);
 
-    // index column
     expect(cells[0]).toHaveTextContent("1");
-    // fullName column
     expect(cells[1]).toHaveTextContent("Иванова Анна");
-    // socials column — link to instagram with @-handle
     const social = within(cells[2] as HTMLElement).getByTestId(
       "social-instagram",
     );
     expect(social).toHaveAttribute("href", "https://instagram.com/иванова");
     expect(social).toHaveTextContent("@иванова");
-    // categories column — single chip "Мода"
     expect(cells[3]).toHaveTextContent("Мода");
-    // age column — calcAge from birthDate "2007-01-01" relative to today
     const expectedAge = String(calcAgeAtToday("2007-01-01"));
     expect(cells[4]).toHaveTextContent(expectedAge);
-    // city column
     expect(cells[5]).toHaveTextContent("Алматы");
-    // createdAt column — "30 апр." for "2026-04-30T12:00:00Z"
     expect(cells[6]).toHaveTextContent("30 апр.");
   });
 
@@ -270,11 +263,9 @@ describe("CampaignCreatorsTable", () => {
 
     const row = screen.getByTestId(`row-${CREATOR_A}`);
     const cells = within(row).getAllByRole("cell");
-    // index renders normally; cells 1..6 should each contain the placeholder
     expect(cells[0]).toHaveTextContent("1");
     for (const cell of cells.slice(1)) {
       expect(cell).toHaveTextContent("—");
-      // Each placeholder span carries the deletion tooltip.
       const placeholderSpan = within(cell as HTMLElement).getByTitle(
         "Креатор удалён из системы",
       );
@@ -283,8 +274,175 @@ describe("CampaignCreatorsTable", () => {
   });
 });
 
-// calcAgeAtToday mirrors `@/shared/utils/age` to avoid leaking timezone-
-// sensitive year-arithmetic into the assertion string.
+describe("CampaignCreatorsTable — selection", () => {
+  it("does not render checkbox column when checkedCreatorIds is undefined", () => {
+    const rows: CampaignCreatorRow[] = [
+      { campaignCreator: makeCC(CREATOR_A), creator: makeCreator(CREATOR_A, "Иванова") },
+    ];
+
+    render(
+      <CampaignCreatorsTable rows={rows} onRowClick={() => {}} emptyMessage="" />,
+    );
+
+    expect(
+      screen.queryByTestId(`campaign-creator-checkbox-${CREATOR_A}`),
+    ).not.toBeInTheDocument();
+  });
+
+  it("renders header checkbox + per-row checkbox when checkedCreatorIds is provided", () => {
+    const rows: CampaignCreatorRow[] = [
+      { campaignCreator: makeCC(CREATOR_A), creator: makeCreator(CREATOR_A, "Иванова") },
+      { campaignCreator: makeCC(CREATOR_B), creator: makeCreator(CREATOR_B, "Петрова") },
+    ];
+
+    render(
+      <CampaignCreatorsTable
+        rows={rows}
+        onRowClick={() => {}}
+        emptyMessage=""
+        checkedCreatorIds={new Set([CREATOR_A])}
+        selectAllState="indeterminate"
+        selectAllTestId="campaign-creators-select-all-planned"
+      />,
+    );
+
+    expect(
+      screen.getByTestId("campaign-creators-select-all-planned"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId(`campaign-creator-checkbox-${CREATOR_A}`),
+    ).toBeChecked();
+    expect(
+      screen.getByTestId(`campaign-creator-checkbox-${CREATOR_B}`),
+    ).not.toBeChecked();
+  });
+
+  it("toggling a row checkbox calls onToggleOne with the creatorId and does not fire row click", async () => {
+    const onToggleOne = vi.fn();
+    const onRowClick = vi.fn();
+    const rows: CampaignCreatorRow[] = [
+      { campaignCreator: makeCC(CREATOR_A), creator: makeCreator(CREATOR_A, "Иванова") },
+    ];
+
+    render(
+      <CampaignCreatorsTable
+        rows={rows}
+        onRowClick={onRowClick}
+        emptyMessage=""
+        checkedCreatorIds={new Set()}
+        onToggleOne={onToggleOne}
+        selectAllState="unchecked"
+      />,
+    );
+
+    await userEvent.click(
+      screen.getByTestId(`campaign-creator-checkbox-${CREATOR_A}`),
+    );
+
+    expect(onToggleOne).toHaveBeenCalledWith(CREATOR_A);
+    expect(onRowClick).not.toHaveBeenCalled();
+  });
+
+  it("toggling the header checkbox calls onToggleAll", async () => {
+    const onToggleAll = vi.fn();
+    const rows: CampaignCreatorRow[] = [
+      { campaignCreator: makeCC(CREATOR_A), creator: makeCreator(CREATOR_A, "Иванова") },
+    ];
+
+    render(
+      <CampaignCreatorsTable
+        rows={rows}
+        onRowClick={() => {}}
+        emptyMessage=""
+        checkedCreatorIds={new Set()}
+        onToggleAll={onToggleAll}
+        selectAllState="unchecked"
+        selectAllTestId="campaign-creators-select-all-planned"
+      />,
+    );
+
+    await userEvent.click(
+      screen.getByTestId("campaign-creators-select-all-planned"),
+    );
+
+    expect(onToggleAll).toHaveBeenCalledTimes(1);
+  });
+
+  it("header checkbox.indeterminate is set as HTML property when state is indeterminate", () => {
+    const rows: CampaignCreatorRow[] = [
+      { campaignCreator: makeCC(CREATOR_A), creator: makeCreator(CREATOR_A, "Иванова") },
+    ];
+
+    render(
+      <CampaignCreatorsTable
+        rows={rows}
+        onRowClick={() => {}}
+        emptyMessage=""
+        checkedCreatorIds={new Set([CREATOR_A])}
+        selectAllState="indeterminate"
+        selectAllTestId="campaign-creators-select-all-planned"
+      />,
+    );
+
+    const headerCb = screen.getByTestId(
+      "campaign-creators-select-all-planned",
+    ) as HTMLInputElement;
+    expect(headerCb.indeterminate).toBe(true);
+    expect(headerCb).not.toBeChecked();
+  });
+
+  it("header checkbox is checked when selectAllState='checked'", () => {
+    const rows: CampaignCreatorRow[] = [
+      { campaignCreator: makeCC(CREATOR_A), creator: makeCreator(CREATOR_A, "Иванова") },
+    ];
+
+    render(
+      <CampaignCreatorsTable
+        rows={rows}
+        onRowClick={() => {}}
+        emptyMessage=""
+        checkedCreatorIds={new Set([CREATOR_A])}
+        selectAllState="checked"
+        selectAllTestId="campaign-creators-select-all-planned"
+      />,
+    );
+
+    const headerCb = screen.getByTestId(
+      "campaign-creators-select-all-planned",
+    ) as HTMLInputElement;
+    expect(headerCb).toBeChecked();
+    expect(headerCb.indeterminate).toBe(false);
+  });
+
+  it("clicking a row checkbox does not toggle row data-selected (stopPropagation)", async () => {
+    const onRowClick = vi.fn();
+    const rows: CampaignCreatorRow[] = [
+      { campaignCreator: makeCC(CREATOR_A), creator: makeCreator(CREATOR_A, "Иванова") },
+    ];
+
+    render(
+      <CampaignCreatorsTable
+        rows={rows}
+        onRowClick={onRowClick}
+        emptyMessage=""
+        checkedCreatorIds={new Set()}
+        onToggleOne={() => {}}
+        selectAllState="unchecked"
+      />,
+    );
+
+    await userEvent.click(
+      screen.getByTestId(`campaign-creator-checkbox-${CREATOR_A}`),
+    );
+
+    expect(onRowClick).not.toHaveBeenCalled();
+    expect(screen.getByTestId(`row-${CREATOR_A}`)).toHaveAttribute(
+      "data-selected",
+      "false",
+    );
+  });
+});
+
 function calcAgeAtToday(birthDate: string): number {
   const birth = new Date(birthDate);
   const now = new Date();

@@ -85,17 +85,33 @@ const applicationApprovedText = "Здравствуйте!\n\n" +
 // body must not leak campaign details (name, brand, deadlines) because
 // notify covers re-invites after declines as well, and stale text from a
 // previous round would mislead. The accompanying inline web_app button
-// drops the creator straight into the TMA.
+// drops the creator straight into the TMA where the creator reviews the
+// brief and presses "Согласиться" inside the mini-app.
 //
 // These literals are mirrored in `backend/e2e/campaign_creator/
 // campaign_notify_test.go` (the e2e module cannot import internal/telegram
 // by design — see backend-testing-e2e.md). When changing the copy here,
 // update the e2e mirror too or `waitInviteSent` will time out.
 const (
-	campaignInviteText             = "Привет! У нас есть для тебя предложение по сотрудничеству. Открой, чтобы посмотреть условия:"
-	campaignRemindInvitationText   = "Напоминаем — мы ждём твоего решения по приглашению."
+	campaignInviteText = "Добрый день! EURASIAN FASHION WEEK уже скоро ✨\n\n" +
+		"У нас есть для вас предложение по сотрудничеству в качестве UGC-креатора. Откройте ссылку, чтобы ознакомиться с датами, условиями, форматом участия и техническим заданием для контента.\n\n" +
+		"Если вы согласны, нажмите кнопку \"Согласиться\" и мы отправим вам онлайн соглашение о сотрудничестве на подписание 💫"
+	campaignRemindInvitationText = "Откройте ссылку, чтобы ознакомиться с датами, условиями, форматом участия и техническим заданием для контента.\n\n" +
+		"Если вы согласны, нажмите кнопку \"Согласиться\" и мы отправим вам онлайн соглашение о сотрудничестве на подписание 💫"
 	campaignInviteWebAppButtonText = "Посмотреть"
 )
+
+// campaignContractSignedText is the post-signing congrat message — sent
+// from chunk 17 once TrustMe confirms the creator signed the contract.
+// Defined here ahead of time so the copy lives in one place and reviewers
+// can audit it before the chunk lands. No notifier method is wired up
+// yet; chunk 17 introduces NotifyCampaignContractSigned and the e2e
+// mirror at the same time.
+const campaignContractSignedText = "Ура, мы подписали с вами соглашение ✅ Скоро отправим вам онлайн пригласительный на показы 😍"
+
+// CampaignContractSignedText exposes the post-signing copy for tests
+// and (later) for the chunk-17 notifier method.
+func CampaignContractSignedText() string { return campaignContractSignedText }
 
 // ApplicationLinkedPayload carries everything NotifyApplicationLinked needs
 // to pick the right welcome variant and substitute the verification code.

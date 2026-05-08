@@ -741,6 +741,71 @@ function sendPulseSecret(): string {
   return process.env.SENDPULSE_WEBHOOK_SECRET || DEFAULT_SENDPULSE_SECRET;
 }
 
+// registerFakeChat enrolls a Telegram chatId into the test spy so the
+// fake telegram sender treats outgoing messages as delivered (returning a
+// synthetic message id) instead of contacting real Telegram. Required
+// before any notify/remind in tests where the seeded creator's
+// telegramUserId has no real chat.
+export async function registerFakeChat(
+  request: APIRequestContext,
+  apiUrl: string,
+  chatId: number,
+): Promise<void> {
+  const resp = await request.post(`${apiUrl}/test/telegram/spy/fake-chat`, {
+    data: { chatId },
+  });
+  if (resp.status() !== 204) {
+    throw new Error(
+      `registerFakeChat ${chatId}: ${resp.status()} ${await resp.text()}`,
+    );
+  }
+}
+
+// registerFailNext queues a one-shot failure for the next outgoing
+// Telegram message to the given chatId. The next sendTelegram call to
+// that chatId fails with the supplied error string (defaults to a
+// "blocked the bot" message). Lets tests deterministically exercise
+// partial-success paths in notify/remind handlers.
+export async function registerFailNext(
+  request: APIRequestContext,
+  apiUrl: string,
+  chatId: number,
+  reason?: string,
+): Promise<void> {
+  const data: { chatId: number; error?: string } = { chatId };
+  if (reason !== undefined) data.error = reason;
+  const resp = await request.post(`${apiUrl}/test/telegram/spy/fail-next`, {
+    data,
+  });
+  if (resp.status() !== 204) {
+    throw new Error(
+      `registerFailNext ${chatId}: ${resp.status()} ${await resp.text()}`,
+    );
+  }
+}
+
+// notifyAsAdmin drives admin POST /campaigns/{id}/notify directly via
+// HTTP — used by tests to flip campaign_creators rows server-side without
+// going through the admin UI (e.g. to set up a race condition where the
+// frontend cache is stale relative to backend state).
+export async function notifyAsAdmin(
+  request: APIRequestContext,
+  apiUrl: string,
+  campaignId: string,
+  creatorIds: string[],
+  adminToken: string,
+): Promise<void> {
+  const resp = await request.post(`${apiUrl}/campaigns/${campaignId}/notify`, {
+    headers: { Authorization: `Bearer ${adminToken}` },
+    data: { creatorIds },
+  });
+  if (resp.status() !== 200) {
+    throw new Error(
+      `notifyAsAdmin ${campaignId}: ${resp.status()} ${await resp.text()}`,
+    );
+  }
+}
+
 // triggerSendPulseInstagramWebhook posts the canonical "verified" payload
 // for the given application — mimicking what SendPulse sends when the
 // creator DMs their UGC-NNNNNN code to the Instagram bot. After the call

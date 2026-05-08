@@ -59,7 +59,7 @@
   "campaignCreators": {
     "title": "Креаторы кампании",
     "count": "{{count}} в кампании",
-    "empty": "Креаторов пока нет",
+    "emptyAll": "Креаторов в кампании пока нет",
     "addButton": "Добавить креаторов",
     "loadError": "Не удалось загрузить креаторов",
     "creatorDeleted": "Креатор удалён из системы",
@@ -72,6 +72,42 @@
     "capHint": "Максимум 200 за одну операцию",
     "removeAria": "Удалить креатора из кампании",
     "selectAria": "Выбрать креатора {{name}}",
+    "selectAll": "Выбрать всех",
+    "deselectAll": "Снять выделение",
+    "selectionCounter": "Выбрано: {{count}} / {{max}}",
+    "notifyButton": "Разослать приглашение",
+    "notifySubmitting": "Отправка…",
+    "remindButton": "Разослать ремайндер",
+    "remindSubmitting": "Отправка…",
+    "groups": {
+      "planned": "Запланированы",
+      "invited": "Приглашены",
+      "declined": "Отказались",
+      "agreed": "Согласились"
+    },
+    "currentStatus": {
+      "planned": "Запланирован(а)",
+      "invited": "Приглашён(а)",
+      "declined": "Отказался(лась)",
+      "agreed": "Согласился(лась)"
+    },
+    "result": {
+      "delivered_one": "Доставлен {{count}}",
+      "delivered_few": "Доставлено {{count}}",
+      "delivered_many": "Доставлено {{count}}",
+      "delivered_other": "Доставлено {{count}}",
+      "undelivered_one": "Не доставлен {{count}}:",
+      "undelivered_few": "Не доставлено {{count}}:",
+      "undelivered_many": "Не доставлено {{count}}:",
+      "undelivered_other": "Не доставлено {{count}}:",
+      "validationError": "Часть выбранных уже в другом статусе. Список обновлён.",
+      "validationUnknown": "Некорректный запрос. Сообщите разработчику.",
+      "networkError": "Не удалось разослать. Попробуйте снова."
+    },
+    "undeliveredReason": {
+      "bot_blocked": "заблокировал(а) бота",
+      "unknown": "не удалось доставить"
+    },
     "removeConfirmTitle": "Удалить креатора?",
     "removeConfirmMessage": "{{name}} будет удалён(а) из кампании. Это действие нельзя отменить.",
     "removeConfirmButton": "Удалить",

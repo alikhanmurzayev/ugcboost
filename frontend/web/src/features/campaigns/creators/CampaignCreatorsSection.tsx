@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router-dom";
 import {
@@ -9,16 +9,28 @@ import Spinner from "@/shared/components/Spinner";
 import ErrorState from "@/shared/components/ErrorState";
 import { ApiError } from "@/api/client";
 import type { Campaign } from "@/api/campaigns";
-import { removeCampaignCreator } from "@/api/campaignCreators";
+import {
+  removeCampaignCreator,
+  type CampaignCreatorStatus,
+} from "@/api/campaignCreators";
 import { campaignCreatorKeys } from "@/shared/constants/queryKeys";
+import {
+  CAMPAIGN_CREATOR_GROUP_ORDER,
+  CAMPAIGN_CREATOR_STATUS,
+} from "@/shared/constants/campaignCreatorStatus";
 import { SEARCH_PARAMS } from "@/shared/constants/routes";
 import {
   useCampaignCreators,
   type CampaignCreatorRow,
 } from "./hooks/useCampaignCreators";
-import CampaignCreatorsTable from "./CampaignCreatorsTable";
+import {
+  useCampaignNotifyMutations,
+  type CampaignNotifyMutations,
+} from "./hooks/useCampaignNotifyMutations";
+import CampaignCreatorGroupSection from "./CampaignCreatorGroupSection";
 import AddCreatorsDrawer from "./AddCreatorsDrawer";
 import RemoveCreatorConfirm from "./RemoveCreatorConfirm";
+import { parseSettled, type SectionResult } from "./notifyResult";
 
 interface CampaignCreatorsSectionProps {
   campaign: Campaign;
@@ -33,15 +45,21 @@ export default function CampaignCreatorsSection({
   const { rows, total, existingCreatorIds, isLoading, isError, refetch } =
     useCampaignCreators(campaign.id, { enabled: !campaign.isDeleted });
 
+  const notifyMutations = useCampaignNotifyMutations(campaign.id);
+
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [removeTarget, setRemoveTarget] = useState<CampaignCreatorRow | null>(
     null,
   );
   const [removeError, setRemoveError] = useState<string | null>(null);
-  // Double-submit guard: external flag mirrors `isPending` but is also held
-  // during the synchronous gap between rapid clicks before React re-renders
-  // the disabled-button state. Sibling pattern to AddCreatorsDrawer.
   const [isRemoveSubmitting, setIsRemoveSubmitting] = useState(false);
+
+  const [resultsByStatus, setResultsByStatus] = useState<
+    Partial<Record<CampaignCreatorStatus, SectionResult>>
+  >({});
+  const [submittingByStatus, setSubmittingByStatus] = useState<
+    Partial<Record<CampaignCreatorStatus, boolean>>
+  >({});
 
   const removeMutation = useMutation({
     mutationFn: ({
@@ -85,6 +103,23 @@ export default function CampaignCreatorsSection({
     },
   });
 
+  const groupedRows = useMemo(() => {
+    const acc: Record<CampaignCreatorStatus, CampaignCreatorRow[]> = {
+      planned: [],
+      invited: [],
+      declined: [],
+      agreed: [],
+    };
+    for (const row of rows) {
+      const bucket = acc[row.campaignCreator.status];
+      // Defensive: backend may ship a new status before the frontend bundle
+      // knows it; drop the row instead of crashing the page.
+      if (!bucket) continue;
+      bucket.push(row);
+    }
+    return acc;
+  }, [rows]);
+
   if (campaign.isDeleted) return null;
 
   const selectedCreatorId = searchParams.get(SEARCH_PARAMS.CREATOR_ID);
@@ -100,9 +135,6 @@ export default function CampaignCreatorsSection({
   }
 
   function handleRemoveRequest(row: CampaignCreatorRow) {
-    // Ignore trash clicks while a previous remove is still in-flight; the
-    // dialog would otherwise re-open with the new creator's name while the
-    // earlier mutation's onSettled is still pending.
     if (isRemoveSubmitting || removeMutation.isPending) return;
     setRemoveError(null);
     setRemoveTarget(row);
@@ -126,6 +158,38 @@ export default function CampaignCreatorsSection({
 
   function handleAddClose() {
     setIsAddOpen(false);
+  }
+
+  function handleGroupSubmit(
+    status: CampaignCreatorStatus,
+    creatorIds: string[],
+    namesSnapshot: Record<string, string>,
+  ) {
+    const action = actionForStatus(status, notifyMutations, t);
+    if (!action.mutation) return;
+    setSubmittingByStatus((prev) => ({ ...prev, [status]: true }));
+    setResultsByStatus((prev) => {
+      const next = { ...prev };
+      delete next[status];
+      return next;
+    });
+    action.mutation.mutate(creatorIds, {
+      onSettled: (data, error) => {
+        void queryClient.invalidateQueries({
+          queryKey: campaignCreatorKeys.list(campaign.id),
+        });
+        setSubmittingByStatus((prev) => ({ ...prev, [status]: false }));
+        setResultsByStatus((prev) => ({
+          ...prev,
+          [status]: parseSettled(
+            data,
+            error,
+            creatorIds.length,
+            namesSnapshot,
+          ),
+        }));
+      },
+    });
   }
 
   return (
@@ -164,14 +228,45 @@ export default function CampaignCreatorsSection({
           message={t("campaignCreators.loadError")}
           onRetry={refetch}
         />
+      ) : total === 0 && !hasAnyResult(resultsByStatus) ? (
+        <p
+          className="mt-6 text-gray-500"
+          data-testid="campaign-creators-empty-all"
+        >
+          {t("campaignCreators.emptyAll")}
+        </p>
       ) : (
-        <CampaignCreatorsTable
-          rows={rows}
-          selectedKey={selectedCreatorId ?? undefined}
-          onRowClick={handleRowClick}
-          onRemove={handleRemoveRequest}
-          emptyMessage={t("campaignCreators.empty")}
-        />
+        CAMPAIGN_CREATOR_GROUP_ORDER.map((status) => {
+          const groupRows = groupedRows[status];
+          const result = resultsByStatus[status] ?? null;
+          // Keep the section visible while a result is on screen, even if
+          // every row has moved to another group after a successful submit.
+          if (groupRows.length === 0 && !result) return null;
+          const action = actionForStatus(status, notifyMutations, t);
+          const isPending = action.mutation?.isPending ?? false;
+          const isSubmitting = submittingByStatus[status] ?? false;
+          return (
+            <CampaignCreatorGroupSection
+              key={status}
+              status={status}
+              title={t(`campaignCreators.groups.${status}`)}
+              rows={groupRows}
+              actionLabel={action.actionLabel}
+              actionSubmittingLabel={action.actionSubmittingLabel}
+              onSubmit={
+                action.mutation
+                  ? (ids, names) => handleGroupSubmit(status, ids, names)
+                  : undefined
+              }
+              result={result}
+              isPending={isPending}
+              isSubmitting={isSubmitting}
+              onRemove={handleRemoveRequest}
+              drawerSelectedCreatorId={selectedCreatorId ?? undefined}
+              onRowClick={handleRowClick}
+            />
+          );
+        })
       )}
 
       {isAddOpen && (
@@ -193,6 +288,46 @@ export default function CampaignCreatorsSection({
       />
     </section>
   );
+}
+
+function hasAnyResult(
+  map: Partial<Record<CampaignCreatorStatus, SectionResult>>,
+): boolean {
+  for (const key of CAMPAIGN_CREATOR_GROUP_ORDER) {
+    if (map[key]) return true;
+  }
+  return false;
+}
+
+function actionForStatus(
+  status: CampaignCreatorStatus,
+  mutations: CampaignNotifyMutations,
+  t: (key: string) => string,
+): {
+  actionLabel?: string;
+  actionSubmittingLabel?: string;
+  mutation?:
+    | CampaignNotifyMutations["notify"]
+    | CampaignNotifyMutations["remind"];
+} {
+  if (
+    status === CAMPAIGN_CREATOR_STATUS.PLANNED ||
+    status === CAMPAIGN_CREATOR_STATUS.DECLINED
+  ) {
+    return {
+      actionLabel: t("campaignCreators.notifyButton"),
+      actionSubmittingLabel: t("campaignCreators.notifySubmitting"),
+      mutation: mutations.notify,
+    };
+  }
+  if (status === CAMPAIGN_CREATOR_STATUS.INVITED) {
+    return {
+      actionLabel: t("campaignCreators.remindButton"),
+      actionSubmittingLabel: t("campaignCreators.remindSubmitting"),
+      mutation: mutations.remind,
+    };
+  }
+  return {};
 }
 
 function removeTargetName(

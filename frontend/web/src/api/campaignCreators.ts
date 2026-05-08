@@ -2,28 +2,38 @@ import type { components } from "./generated/schema";
 import client, { ApiError } from "./client";
 
 export type CampaignCreator = components["schemas"]["CampaignCreator"];
+export type CampaignCreatorStatus =
+  components["schemas"]["CampaignCreatorStatus"];
 export type AddCampaignCreatorsInput =
   components["schemas"]["AddCampaignCreatorsInput"];
+export type CampaignNotifyResult =
+  components["schemas"]["CampaignNotifyResult"];
+export type CampaignNotifyUndelivered =
+  components["schemas"]["CampaignNotifyUndelivered"];
+export type CampaignNotifyUndeliveredReason =
+  components["schemas"]["CampaignNotifyUndeliveredReason"];
+export type CampaignCreatorBatchInvalidError =
+  components["schemas"]["CampaignCreatorBatchInvalidError"];
+export type CampaignCreatorBatchInvalidDetail =
+  components["schemas"]["CampaignCreatorBatchInvalidDetail"];
 
 function extractErrorParts(error: unknown): {
   code: string;
   message?: string;
+  details?: unknown;
 } {
-  if (
-    typeof error === "object" &&
-    error !== null &&
-    "error" in error &&
-    typeof (error as { error: unknown }).error === "object" &&
-    (error as { error: unknown }).error !== null
-  ) {
-    const inner = (error as { error: { code?: unknown; message?: unknown } })
-      .error;
-    const code = typeof inner.code === "string" ? inner.code : "INTERNAL_ERROR";
-    const message =
-      typeof inner.message === "string" ? inner.message : undefined;
-    return { code, message };
-  }
-  return { code: "INTERNAL_ERROR" };
+  if (!isRecord(error)) return { code: "INTERNAL_ERROR" };
+  const inner = error.error;
+  if (!isRecord(inner)) return { code: "INTERNAL_ERROR" };
+  const code =
+    typeof inner.code === "string" ? inner.code : "INTERNAL_ERROR";
+  const message =
+    typeof inner.message === "string" ? inner.message : undefined;
+  return { code, message, details: inner.details };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
 }
 
 export async function listCampaignCreators(
@@ -35,7 +45,12 @@ export async function listCampaignCreators(
   );
   if (error || !data) {
     const parts = extractErrorParts(error);
-    throw new ApiError(response.status, parts.code, parts.message);
+    throw new ApiError(
+      response?.status ?? 0,
+      parts.code,
+      parts.message,
+      parts.details,
+    );
   }
   return data.data.items;
 }
@@ -53,7 +68,12 @@ export async function addCampaignCreators(
   );
   if (error || !data) {
     const parts = extractErrorParts(error);
-    throw new ApiError(response.status, parts.code, parts.message);
+    throw new ApiError(
+      response?.status ?? 0,
+      parts.code,
+      parts.message,
+      parts.details,
+    );
   }
   return data.data.items;
 }
@@ -68,6 +88,57 @@ export async function removeCampaignCreator(
   );
   if (error) {
     const parts = extractErrorParts(error);
-    throw new ApiError(response.status, parts.code, parts.message);
+    throw new ApiError(
+      response?.status ?? 0,
+      parts.code,
+      parts.message,
+      parts.details,
+    );
   }
+}
+
+export async function notifyCampaignCreators(
+  campaignId: string,
+  creatorIds: string[],
+): Promise<CampaignNotifyResult> {
+  const { data, error, response } = await client.POST(
+    "/campaigns/{id}/notify",
+    {
+      params: { path: { id: campaignId } },
+      body: { creatorIds },
+    },
+  );
+  if (error || !data) {
+    const parts = extractErrorParts(error);
+    throw new ApiError(
+      response?.status ?? 0,
+      parts.code,
+      parts.message,
+      parts.details,
+    );
+  }
+  return data;
+}
+
+export async function remindCampaignCreatorsInvitation(
+  campaignId: string,
+  creatorIds: string[],
+): Promise<CampaignNotifyResult> {
+  const { data, error, response } = await client.POST(
+    "/campaigns/{id}/remind-invitation",
+    {
+      params: { path: { id: campaignId } },
+      body: { creatorIds },
+    },
+  );
+  if (error || !data) {
+    const parts = extractErrorParts(error);
+    throw new ApiError(
+      response?.status ?? 0,
+      parts.code,
+      parts.message,
+      parts.details,
+    );
+  }
+  return data;
 }

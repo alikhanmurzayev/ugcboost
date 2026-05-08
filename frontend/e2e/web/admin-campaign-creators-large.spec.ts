@@ -39,6 +39,7 @@ import {
   seedCampaign,
   type SeededApprovedCreator,
 } from "../helpers/api";
+import { loginAs } from "../helpers/ui-web";
 
 const API_URL = process.env.API_URL || "http://localhost:8080";
 const CLEANUP_TIMEOUT_MS = 180_000;
@@ -134,8 +135,8 @@ test.describe("Admin campaign creators — large-scale (cap-cycle, 200+ members)
 
     await expect(page.getByTestId("campaign-creators-section")).toBeVisible();
     await expect(
-      page.getByTestId("campaign-creators-table-empty"),
-    ).toHaveText("Креаторов пока нет");
+      page.getByTestId("campaign-creators-empty-all"),
+    ).toHaveText("Креаторов в кампании пока нет");
 
     // ── First batch: cap-fill 200 across pages 1–4 ───────────────────
     await page.getByTestId("campaign-creators-add-button").click();
@@ -343,18 +344,6 @@ async function batchedCleanup(
     const slice = fns.slice(i, i + CLEANUP_BATCH);
     await Promise.allSettled(slice.map((fn) => fn()));
   }
-}
-
-async function loginAs(
-  page: Page,
-  email: string,
-  password: string,
-): Promise<void> {
-  await page.goto("/login", { waitUntil: "domcontentloaded" });
-  await page.getByTestId("email-input").fill(email);
-  await page.getByTestId("password-input").fill(password);
-  await page.getByTestId("login-button").click();
-  await expect(page).toHaveURL("/");
 }
 
 async function withTimeout<T>(
