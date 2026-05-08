@@ -50,6 +50,7 @@ import {
   seedCreatorApplication,
   uniqueTelegramUserId,
 } from "../helpers/api";
+import { loginAs } from "../helpers/ui-web";
 import { collectTelegramSent } from "../helpers/telegram";
 
 const API_URL = process.env.API_URL || "http://localhost:8080";
@@ -318,18 +319,6 @@ test.describe("Admin reject application action", () => {
     expect(after.rejection ?? null).toBeNull();
   });
 });
-
-async function loginAs(
-  page: Page,
-  email: string,
-  password: string,
-): Promise<void> {
-  await page.goto("/login", { waitUntil: "domcontentloaded" });
-  await page.getByTestId("email-input").fill(email);
-  await page.getByTestId("password-input").fill(password);
-  await page.getByTestId("login-button").click();
-  await expect(page).toHaveURL("/");
-}
 
 async function withTimeout<T>(
   promise: Promise<T>,

@@ -68,6 +68,7 @@ import {
   type LinkedTelegram,
   type SeededCreatorApplication,
 } from "../helpers/api";
+import { loginAs } from "../helpers/ui-web";
 import { collectTelegramSent } from "../helpers/telegram";
 import type { components } from "../types/test-schema";
 
@@ -418,18 +419,6 @@ async function setupModerationViaIG(
   const result: SetupResult = { application };
   if (telegramLink) result.telegramLink = telegramLink;
   return result;
-}
-
-async function loginAs(
-  page: Page,
-  email: string,
-  password: string,
-): Promise<void> {
-  await page.goto("/login", { waitUntil: "domcontentloaded" });
-  await page.getByTestId("email-input").fill(email);
-  await page.getByTestId("password-input").fill(password);
-  await page.getByTestId("login-button").click();
-  await expect(page).toHaveURL("/");
 }
 
 async function withTimeout<T>(

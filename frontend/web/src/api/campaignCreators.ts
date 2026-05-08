@@ -22,25 +22,18 @@ function extractErrorParts(error: unknown): {
   message?: string;
   details?: unknown;
 } {
-  if (
-    typeof error === "object" &&
-    error !== null &&
-    "error" in error &&
-    typeof (error as { error: unknown }).error === "object" &&
-    (error as { error: unknown }).error !== null
-  ) {
-    const inner = (
-      error as {
-        error: { code?: unknown; message?: unknown; details?: unknown };
-      }
-    ).error;
-    const code = typeof inner.code === "string" ? inner.code : "INTERNAL_ERROR";
-    const message =
-      typeof inner.message === "string" ? inner.message : undefined;
-    const details = inner.details;
-    return { code, message, details };
-  }
-  return { code: "INTERNAL_ERROR" };
+  if (!isRecord(error)) return { code: "INTERNAL_ERROR" };
+  const inner = error.error;
+  if (!isRecord(inner)) return { code: "INTERNAL_ERROR" };
+  const code =
+    typeof inner.code === "string" ? inner.code : "INTERNAL_ERROR";
+  const message =
+    typeof inner.message === "string" ? inner.message : undefined;
+  return { code, message, details: inner.details };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
 }
 
 export async function listCampaignCreators(
@@ -53,7 +46,7 @@ export async function listCampaignCreators(
   if (error || !data) {
     const parts = extractErrorParts(error);
     throw new ApiError(
-      response.status,
+      response?.status ?? 0,
       parts.code,
       parts.message,
       parts.details,
@@ -76,7 +69,7 @@ export async function addCampaignCreators(
   if (error || !data) {
     const parts = extractErrorParts(error);
     throw new ApiError(
-      response.status,
+      response?.status ?? 0,
       parts.code,
       parts.message,
       parts.details,
@@ -96,7 +89,7 @@ export async function removeCampaignCreator(
   if (error) {
     const parts = extractErrorParts(error);
     throw new ApiError(
-      response.status,
+      response?.status ?? 0,
       parts.code,
       parts.message,
       parts.details,
@@ -118,7 +111,7 @@ export async function notifyCampaignCreators(
   if (error || !data) {
     const parts = extractErrorParts(error);
     throw new ApiError(
-      response.status,
+      response?.status ?? 0,
       parts.code,
       parts.message,
       parts.details,
@@ -141,7 +134,7 @@ export async function remindCampaignCreatorsInvitation(
   if (error || !data) {
     const parts = extractErrorParts(error);
     throw new ApiError(
-      response.status,
+      response?.status ?? 0,
       parts.code,
       parts.message,
       parts.details,

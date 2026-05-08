@@ -2,7 +2,7 @@
 title: 'chunk 13 — фронт кнопок рассылки приглашений и ремайндеров'
 type: feature
 created: '2026-05-08'
-status: done
+status: in-review
 baseline_commit: a3d9562
 context:
   - docs/standards/frontend-api.md

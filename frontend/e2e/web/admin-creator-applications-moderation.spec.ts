@@ -117,6 +117,7 @@ import {
   type SeededCreatorApplication,
   type SocialAccountInput,
 } from "../helpers/api";
+import { loginAs } from "../helpers/ui-web";
 
 const API_URL = process.env.API_URL || "http://localhost:8080";
 const CLEANUP_TIMEOUT_MS = 5_000;
@@ -1061,18 +1062,6 @@ async function seedAndPromoteIG(
   }
 
   return application;
-}
-
-async function loginAs(
-  page: Page,
-  email: string,
-  password: string,
-): Promise<void> {
-  await page.goto("/login", { waitUntil: "domcontentloaded" });
-  await page.getByTestId("email-input").fill(email);
-  await page.getByTestId("password-input").fill(password);
-  await page.getByTestId("login-button").click();
-  await expect(page).toHaveURL("/");
 }
 
 async function withTimeout<T>(

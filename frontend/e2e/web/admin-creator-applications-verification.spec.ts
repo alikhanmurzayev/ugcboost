@@ -54,6 +54,7 @@ import {
   seedCreatorApplication,
   type SeededCreatorApplication,
 } from "../helpers/api";
+import { loginAs } from "../helpers/ui-web";
 
 const API_URL = process.env.API_URL || "http://localhost:8080";
 const CLEANUP_TIMEOUT_MS = 5_000;
@@ -423,18 +424,6 @@ test.describe("Admin verification flow", () => {
     await expect(page.getByTestId("dashboard-page")).toBeVisible();
   });
 });
-
-async function loginAs(
-  page: Page,
-  email: string,
-  password: string,
-): Promise<void> {
-  await page.goto("/login", { waitUntil: "domcontentloaded" });
-  await page.getByTestId("email-input").fill(email);
-  await page.getByTestId("password-input").fill(password);
-  await page.getByTestId("login-button").click();
-  await expect(page).toHaveURL("/");
-}
 
 // buildExpectedFullName mirrors buildFullName in ApplicationDrawer.tsx. Kept
 // in one place so empty/null middleName cases stay aligned with what the

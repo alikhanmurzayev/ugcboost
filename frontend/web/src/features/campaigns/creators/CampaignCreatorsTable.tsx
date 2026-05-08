@@ -1,5 +1,5 @@
 import {
-  useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   type ChangeEvent,
@@ -26,6 +26,7 @@ interface CampaignCreatorsTableProps {
   onToggleAll?: () => void;
   selectAllState?: SelectAllState;
   selectAllTestId?: string;
+  rowSelectionDisabled?: boolean;
 }
 
 export default function CampaignCreatorsTable({
@@ -39,6 +40,7 @@ export default function CampaignCreatorsTable({
   onToggleAll,
   selectAllState,
   selectAllTestId,
+  rowSelectionDisabled,
 }: CampaignCreatorsTableProps) {
   const { t } = useTranslation("creators");
   const { t: tCampaigns } = useTranslation("campaigns");
@@ -52,6 +54,7 @@ export default function CampaignCreatorsTable({
         onToggleAll,
         selectAllState: selectAllState ?? "unchecked",
         selectAllTestId,
+        selectionDisabled: rowSelectionDisabled ?? false,
       }),
     [
       t,
@@ -62,6 +65,7 @@ export default function CampaignCreatorsTable({
       onToggleAll,
       selectAllState,
       selectAllTestId,
+      rowSelectionDisabled,
     ],
   );
 
@@ -85,6 +89,7 @@ interface BuildColumnsOpts {
   onToggleAll?: () => void;
   selectAllState: SelectAllState;
   selectAllTestId?: string;
+  selectionDisabled: boolean;
 }
 
 function buildColumns(
@@ -95,7 +100,7 @@ function buildColumns(
   const placeholder = tCampaigns("campaignCreators.deletedPlaceholder");
   const deletedTitle = tCampaigns("campaignCreators.creatorDeleted");
 
-  const checkbox: Column<CampaignCreatorRow>[] | [] = opts.checkedCreatorIds
+  const checkbox: Column<CampaignCreatorRow>[] = opts.checkedCreatorIds
     ? [
         {
           key: "checkbox",
@@ -105,7 +110,12 @@ function buildColumns(
               state={opts.selectAllState}
               onToggle={opts.onToggleAll}
               testid={opts.selectAllTestId ?? "campaign-creators-select-all"}
-              ariaLabel={tCampaigns("campaignCreators.selectAll")}
+              ariaLabel={
+                opts.selectAllState === "checked"
+                  ? tCampaigns("campaignCreators.deselectAll")
+                  : tCampaigns("campaignCreators.selectAll")
+              }
+              disabled={opts.selectionDisabled}
             />
           ),
           render: (row) => (
@@ -121,6 +131,7 @@ function buildColumns(
                   ? `${row.creator.lastName} ${row.creator.firstName}`
                   : tCampaigns("campaignCreators.creatorDeleted"),
               })}
+              disabled={opts.selectionDisabled}
             />
           ),
         },
@@ -250,7 +261,7 @@ function buildColumns(
     },
   ];
 
-  const actions: Column<CampaignCreatorRow>[] | [] = opts.onRemove
+  const actions: Column<CampaignCreatorRow>[] = opts.onRemove
     ? [
         {
           key: "actions",
@@ -283,6 +294,7 @@ interface SelectAllCheckboxProps {
   onToggle?: () => void;
   testid: string;
   ariaLabel: string;
+  disabled?: boolean;
 }
 
 function SelectAllCheckbox({
@@ -290,11 +302,12 @@ function SelectAllCheckbox({
   onToggle,
   testid,
   ariaLabel,
+  disabled,
 }: SelectAllCheckboxProps) {
   const ref = useRef<HTMLInputElement>(null);
-  // `indeterminate` is an HTML property, not a React attribute — set it via
-  // ref after mount/update so the visual tri-state stays in sync.
-  useEffect(() => {
+  // `indeterminate` is an HTML property, not a React attribute — apply it
+  // synchronously before the browser paints to avoid a one-frame flicker.
+  useLayoutEffect(() => {
     if (ref.current) {
       ref.current.indeterminate = state === "indeterminate";
     }
@@ -312,7 +325,8 @@ function SelectAllCheckbox({
       onChange={handleChange}
       aria-label={ariaLabel}
       data-testid={testid}
-      className="h-4 w-4 cursor-pointer rounded border-surface-300"
+      disabled={disabled}
+      className="h-4 w-4 cursor-pointer rounded border-surface-300 disabled:cursor-not-allowed disabled:opacity-50"
     />
   );
 }
@@ -322,6 +336,7 @@ interface RowCheckboxProps {
   checked: boolean;
   onToggle?: (creatorId: string) => void;
   ariaLabel: string;
+  disabled?: boolean;
 }
 
 function RowCheckbox({
@@ -329,6 +344,7 @@ function RowCheckbox({
   checked,
   onToggle,
   ariaLabel,
+  disabled,
 }: RowCheckboxProps) {
   function handleChange(_e: ChangeEvent<HTMLInputElement>) {
     onToggle?.(creatorId);
@@ -355,7 +371,8 @@ function RowCheckbox({
         onChange={handleChange}
         aria-label={ariaLabel}
         data-testid={`campaign-creator-checkbox-${creatorId}`}
-        className="h-4 w-4 cursor-pointer rounded border-surface-300"
+        disabled={disabled}
+        className="h-4 w-4 cursor-pointer rounded border-surface-300 disabled:cursor-not-allowed disabled:opacity-50"
       />
     </div>
   );

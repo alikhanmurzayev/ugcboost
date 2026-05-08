@@ -23,10 +23,14 @@ import {
   useCampaignCreators,
   type CampaignCreatorRow,
 } from "./hooks/useCampaignCreators";
-import { useCampaignNotifyMutations } from "./hooks/useCampaignNotifyMutations";
+import {
+  useCampaignNotifyMutations,
+  type CampaignNotifyMutations,
+} from "./hooks/useCampaignNotifyMutations";
 import CampaignCreatorGroupSection from "./CampaignCreatorGroupSection";
 import AddCreatorsDrawer from "./AddCreatorsDrawer";
 import RemoveCreatorConfirm from "./RemoveCreatorConfirm";
+import { parseSettled, type SectionResult } from "./notifyResult";
 
 interface CampaignCreatorsSectionProps {
   campaign: Campaign;
@@ -49,6 +53,13 @@ export default function CampaignCreatorsSection({
   );
   const [removeError, setRemoveError] = useState<string | null>(null);
   const [isRemoveSubmitting, setIsRemoveSubmitting] = useState(false);
+
+  const [resultsByStatus, setResultsByStatus] = useState<
+    Partial<Record<CampaignCreatorStatus, SectionResult>>
+  >({});
+  const [submittingByStatus, setSubmittingByStatus] = useState<
+    Partial<Record<CampaignCreatorStatus, boolean>>
+  >({});
 
   const removeMutation = useMutation({
     mutationFn: ({
@@ -100,7 +111,11 @@ export default function CampaignCreatorsSection({
       agreed: [],
     };
     for (const row of rows) {
-      acc[row.campaignCreator.status].push(row);
+      const bucket = acc[row.campaignCreator.status];
+      // Defensive: backend may ship a new status before the frontend bundle
+      // knows it; drop the row instead of crashing the page.
+      if (!bucket) continue;
+      bucket.push(row);
     }
     return acc;
   }, [rows]);
@@ -145,6 +160,38 @@ export default function CampaignCreatorsSection({
     setIsAddOpen(false);
   }
 
+  function handleGroupSubmit(
+    status: CampaignCreatorStatus,
+    creatorIds: string[],
+    namesSnapshot: Record<string, string>,
+  ) {
+    const action = actionForStatus(status, notifyMutations, t);
+    if (!action.mutation) return;
+    setSubmittingByStatus((prev) => ({ ...prev, [status]: true }));
+    setResultsByStatus((prev) => {
+      const next = { ...prev };
+      delete next[status];
+      return next;
+    });
+    action.mutation.mutate(creatorIds, {
+      onSettled: (data, error) => {
+        void queryClient.invalidateQueries({
+          queryKey: campaignCreatorKeys.list(campaign.id),
+        });
+        setSubmittingByStatus((prev) => ({ ...prev, [status]: false }));
+        setResultsByStatus((prev) => ({
+          ...prev,
+          [status]: parseSettled(
+            data,
+            error,
+            creatorIds.length,
+            namesSnapshot,
+          ),
+        }));
+      },
+    });
+  }
+
   return (
     <section
       className="mt-6 rounded-card border border-surface-300 bg-white p-6"
@@ -181,7 +228,7 @@ export default function CampaignCreatorsSection({
           message={t("campaignCreators.loadError")}
           onRetry={refetch}
         />
-      ) : total === 0 ? (
+      ) : total === 0 && !hasAnyResult(resultsByStatus) ? (
         <p
           className="mt-6 text-gray-500"
           data-testid="campaign-creators-empty-all"
@@ -191,17 +238,29 @@ export default function CampaignCreatorsSection({
       ) : (
         CAMPAIGN_CREATOR_GROUP_ORDER.map((status) => {
           const groupRows = groupedRows[status];
-          if (groupRows.length === 0) return null;
+          const result = resultsByStatus[status] ?? null;
+          // Keep the section visible while a result is on screen, even if
+          // every row has moved to another group after a successful submit.
+          if (groupRows.length === 0 && !result) return null;
           const action = actionForStatus(status, notifyMutations, t);
+          const isPending = action.mutation?.isPending ?? false;
+          const isSubmitting = submittingByStatus[status] ?? false;
           return (
             <CampaignCreatorGroupSection
               key={status}
               status={status}
-              campaignId={campaign.id}
               title={t(`campaignCreators.groups.${status}`)}
               rows={groupRows}
               actionLabel={action.actionLabel}
-              mutation={action.mutation}
+              actionSubmittingLabel={action.actionSubmittingLabel}
+              onSubmit={
+                action.mutation
+                  ? (ids, names) => handleGroupSubmit(status, ids, names)
+                  : undefined
+              }
+              result={result}
+              isPending={isPending}
+              isSubmitting={isSubmitting}
               onRemove={handleRemoveRequest}
               drawerSelectedCreatorId={selectedCreatorId ?? undefined}
               onRowClick={handleRowClick}
@@ -231,15 +290,25 @@ export default function CampaignCreatorsSection({
   );
 }
 
-type NotifyMutations = ReturnType<typeof useCampaignNotifyMutations>;
+function hasAnyResult(
+  map: Partial<Record<CampaignCreatorStatus, SectionResult>>,
+): boolean {
+  for (const key of CAMPAIGN_CREATOR_GROUP_ORDER) {
+    if (map[key]) return true;
+  }
+  return false;
+}
 
 function actionForStatus(
   status: CampaignCreatorStatus,
-  mutations: NotifyMutations,
+  mutations: CampaignNotifyMutations,
   t: (key: string) => string,
 ): {
   actionLabel?: string;
-  mutation?: NotifyMutations["notify"] | NotifyMutations["remind"];
+  actionSubmittingLabel?: string;
+  mutation?:
+    | CampaignNotifyMutations["notify"]
+    | CampaignNotifyMutations["remind"];
 } {
   if (
     status === CAMPAIGN_CREATOR_STATUS.PLANNED ||
@@ -247,12 +316,14 @@ function actionForStatus(
   ) {
     return {
       actionLabel: t("campaignCreators.notifyButton"),
+      actionSubmittingLabel: t("campaignCreators.notifySubmitting"),
       mutation: mutations.notify,
     };
   }
   if (status === CAMPAIGN_CREATOR_STATUS.INVITED) {
     return {
       actionLabel: t("campaignCreators.remindButton"),
+      actionSubmittingLabel: t("campaignCreators.remindSubmitting"),
       mutation: mutations.remind,
     };
   }

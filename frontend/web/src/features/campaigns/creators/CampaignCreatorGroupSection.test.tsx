@@ -1,43 +1,28 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import "@/shared/i18n/config";
-import type { ReactNode } from "react";
 
-vi.mock("@/api/campaignCreators", async () => {
-  const actual = await vi.importActual<
-    typeof import("@/api/campaignCreators")
-  >("@/api/campaignCreators");
-  return {
-    ...actual,
-    notifyCampaignCreators: vi.fn(),
-    remindCampaignCreatorsInvitation: vi.fn(),
-  };
-});
-
-import {
-  notifyCampaignCreators,
-  remindCampaignCreatorsInvitation,
-  type CampaignCreator,
-  type CampaignNotifyResult,
+import type {
+  CampaignCreator,
+  CampaignCreatorStatus,
 } from "@/api/campaignCreators";
 import type { CreatorListItem } from "@/api/creators";
-import { ApiError } from "@/api/client";
-import { campaignCreatorKeys } from "@/shared/constants/queryKeys";
-import { useCampaignNotifyMutations } from "./hooks/useCampaignNotifyMutations";
 import CampaignCreatorGroupSection from "./CampaignCreatorGroupSection";
 import type { CampaignCreatorRow } from "./hooks/useCampaignCreators";
+import type { SectionResult } from "./notifyResult";
 
-const CAMPAIGN_ID = "11111111-1111-1111-1111-111111111111";
 const CREATOR_A = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
 const CREATOR_B = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb";
 const CREATOR_C = "cccccccc-cccc-cccc-cccc-cccccccccccc";
 
-function makeCC(creatorId: string, status: CampaignCreator["status"] = "planned"): CampaignCreator {
+function makeCC(
+  creatorId: string,
+  status: CampaignCreatorStatus = "planned",
+): CampaignCreator {
   return {
     id: `cc-${creatorId}`,
-    campaignId: CAMPAIGN_ID,
+    campaignId: "11111111-1111-1111-1111-111111111111",
     creatorId,
     status,
     invitedAt: null,
@@ -68,64 +53,53 @@ function makeCreator(id: string, lastName: string): CreatorListItem {
   };
 }
 
-interface HarnessProps {
-  status: "planned" | "invited" | "declined" | "agreed";
+interface RenderOpts {
+  status?: CampaignCreatorStatus;
   rows: CampaignCreatorRow[];
   actionLabel?: string;
-  withMutation?: boolean;
+  actionSubmittingLabel?: string;
+  onSubmit?: (
+    creatorIds: string[],
+    namesSnapshot: Record<string, string>,
+  ) => void;
+  result?: SectionResult | null;
+  isSubmitting?: boolean;
+  isPending?: boolean;
   onRemove?: (row: CampaignCreatorRow) => void;
   onRowClick?: (row: CampaignCreatorRow) => void;
   drawerSelectedCreatorId?: string;
 }
 
-function Harness({
-  status,
+function renderGroup({
+  status = "planned",
   rows,
   actionLabel,
-  withMutation = true,
+  actionSubmittingLabel,
+  onSubmit,
+  result = null,
+  isSubmitting = false,
+  isPending = false,
   onRemove,
   onRowClick,
   drawerSelectedCreatorId,
-}: HarnessProps) {
-  const { notify, remind } = useCampaignNotifyMutations(CAMPAIGN_ID);
-  const mutation = withMutation
-    ? status === "invited"
-      ? remind
-      : notify
-    : undefined;
-  return (
+}: RenderOpts) {
+  return render(
     <CampaignCreatorGroupSection
       status={status}
-      campaignId={CAMPAIGN_ID}
       title={`group ${status}`}
       rows={rows}
       actionLabel={actionLabel}
-      mutation={mutation}
+      actionSubmittingLabel={actionSubmittingLabel}
+      onSubmit={onSubmit}
+      result={result}
+      isSubmitting={isSubmitting}
+      isPending={isPending}
       onRemove={onRemove ?? (() => {})}
       onRowClick={onRowClick ?? (() => {})}
       drawerSelectedCreatorId={drawerSelectedCreatorId}
-    />
+    />,
   );
 }
-
-function renderHarness(props: HarnessProps) {
-  const queryClient = new QueryClient({
-    defaultOptions: {
-      queries: { retry: false },
-      mutations: { retry: false },
-    },
-  });
-  const invalidateSpy = vi.spyOn(queryClient, "invalidateQueries");
-  function Wrapper({ children }: { children: ReactNode }) {
-    return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
-  }
-  const utils = render(<Harness {...props} />, { wrapper: Wrapper });
-  return { ...utils, queryClient, invalidateSpy };
-}
-
-beforeEach(() => {
-  vi.clearAllMocks();
-});
 
 describe("CampaignCreatorGroupSection — header + action visibility", () => {
   it("renders title with rows count", () => {
@@ -134,10 +108,17 @@ describe("CampaignCreatorGroupSection — header + action visibility", () => {
       { campaignCreator: makeCC(CREATOR_B), creator: makeCreator(CREATOR_B, "Петрова") },
     ];
 
-    renderHarness({ status: "planned", rows, actionLabel: "Разослать приглашение" });
+    renderGroup({
+      status: "planned",
+      rows,
+      actionLabel: "Разослать приглашение",
+      onSubmit: () => {},
+    });
 
     const header = screen.getByTestId("campaign-creators-group-planned");
-    expect(within(header).getByRole("heading")).toHaveTextContent("group planned");
+    expect(within(header).getByRole("heading")).toHaveTextContent(
+      "group planned",
+    );
     expect(within(header).getByRole("heading")).toHaveTextContent("2");
   });
 
@@ -149,7 +130,7 @@ describe("CampaignCreatorGroupSection — header + action visibility", () => {
       },
     ];
 
-    renderHarness({ status: "agreed", rows, withMutation: false });
+    renderGroup({ status: "agreed", rows });
 
     expect(
       screen.queryByTestId("campaign-creators-group-action-agreed"),
@@ -159,25 +140,63 @@ describe("CampaignCreatorGroupSection — header + action visibility", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("renders the action button when actionLabel + mutation are provided", () => {
+  it("renders the action button when actionLabel + onSubmit are provided", () => {
     const rows: CampaignCreatorRow[] = [
-      { campaignCreator: makeCC(CREATOR_A), creator: makeCreator(CREATOR_A, "Иванова") },
+      {
+        campaignCreator: makeCC(CREATOR_A),
+        creator: makeCreator(CREATOR_A, "Иванова"),
+      },
     ];
 
-    renderHarness({ status: "planned", rows, actionLabel: "Разослать приглашение" });
+    renderGroup({
+      status: "planned",
+      rows,
+      actionLabel: "Разослать приглашение",
+      onSubmit: () => {},
+    });
 
     const btn = screen.getByTestId("campaign-creators-group-action-planned");
     expect(btn).toHaveTextContent("Разослать приглашение");
+  });
+
+  it("button shows submittingLabel while isSubmitting=true", () => {
+    const rows: CampaignCreatorRow[] = [
+      {
+        campaignCreator: makeCC(CREATOR_A),
+        creator: makeCreator(CREATOR_A, "Иванова"),
+      },
+    ];
+
+    renderGroup({
+      status: "planned",
+      rows,
+      actionLabel: "Разослать приглашение",
+      actionSubmittingLabel: "Отправка…",
+      onSubmit: () => {},
+      isSubmitting: true,
+    });
+
+    const btn = screen.getByTestId("campaign-creators-group-action-planned");
+    expect(btn).toHaveTextContent("Отправка…");
+    expect(btn).toBeDisabled();
   });
 });
 
 describe("CampaignCreatorGroupSection — selection state", () => {
   it("button is disabled while selection is empty", () => {
     const rows: CampaignCreatorRow[] = [
-      { campaignCreator: makeCC(CREATOR_A), creator: makeCreator(CREATOR_A, "Иванова") },
+      {
+        campaignCreator: makeCC(CREATOR_A),
+        creator: makeCreator(CREATOR_A, "Иванова"),
+      },
     ];
 
-    renderHarness({ status: "planned", rows, actionLabel: "Разослать приглашение" });
+    renderGroup({
+      status: "planned",
+      rows,
+      actionLabel: "Разослать приглашение",
+      onSubmit: () => {},
+    });
 
     expect(
       screen.getByTestId("campaign-creators-group-action-planned"),
@@ -190,7 +209,12 @@ describe("CampaignCreatorGroupSection — selection state", () => {
       { campaignCreator: makeCC(CREATOR_B), creator: makeCreator(CREATOR_B, "Петрова") },
     ];
 
-    renderHarness({ status: "planned", rows, actionLabel: "Разослать приглашение" });
+    renderGroup({
+      status: "planned",
+      rows,
+      actionLabel: "Разослать приглашение",
+      onSubmit: () => {},
+    });
 
     await userEvent.click(
       screen.getByTestId(`campaign-creator-checkbox-${CREATOR_A}`),
@@ -211,7 +235,12 @@ describe("CampaignCreatorGroupSection — selection state", () => {
       { campaignCreator: makeCC(CREATOR_B), creator: makeCreator(CREATOR_B, "Петрова") },
     ];
 
-    renderHarness({ status: "planned", rows, actionLabel: "Разослать приглашение" });
+    renderGroup({
+      status: "planned",
+      rows,
+      actionLabel: "Разослать приглашение",
+      onSubmit: () => {},
+    });
 
     await userEvent.click(
       screen.getByTestId(`campaign-creator-checkbox-${CREATOR_A}`),
@@ -233,7 +262,12 @@ describe("CampaignCreatorGroupSection — selection state", () => {
       { campaignCreator: makeCC(CREATOR_B), creator: makeCreator(CREATOR_B, "Петрова") },
     ];
 
-    renderHarness({ status: "planned", rows, actionLabel: "Разослать приглашение" });
+    renderGroup({
+      status: "planned",
+      rows,
+      actionLabel: "Разослать приглашение",
+      onSubmit: () => {},
+    });
 
     await userEvent.click(
       screen.getByTestId("campaign-creators-select-all-planned"),
@@ -253,9 +287,13 @@ describe("CampaignCreatorGroupSection — selection state", () => {
       { campaignCreator: makeCC(CREATOR_B), creator: makeCreator(CREATOR_B, "Петрова") },
     ];
 
-    renderHarness({ status: "planned", rows, actionLabel: "Разослать приглашение" });
+    renderGroup({
+      status: "planned",
+      rows,
+      actionLabel: "Разослать приглашение",
+      onSubmit: () => {},
+    });
 
-    // Select all then click again to clear.
     await userEvent.click(screen.getByTestId("campaign-creators-select-all-planned"));
     await userEvent.click(screen.getByTestId("campaign-creators-select-all-planned"));
 
@@ -265,24 +303,53 @@ describe("CampaignCreatorGroupSection — selection state", () => {
     expect(
       screen.getByTestId(`campaign-creator-checkbox-${CREATOR_B}`),
     ).not.toBeChecked();
+  });
+
+  it("toggling beyond cap (200) is ignored — extra rows stay unchecked", async () => {
+    // 201 rows; user picks select-all → only 200 land in the selection.
+    const rows: CampaignCreatorRow[] = Array.from({ length: 201 }, (_, i) => {
+      const id = `00000000-0000-0000-0000-${String(i).padStart(12, "0")}`;
+      return {
+        campaignCreator: makeCC(id),
+        creator: makeCreator(id, `Last${i}`),
+      };
+    });
+
+    renderGroup({
+      status: "planned",
+      rows,
+      actionLabel: "Разослать приглашение",
+      onSubmit: () => {},
+    });
+
+    await userEvent.click(
+      screen.getByTestId("campaign-creators-select-all-planned"),
+    );
+
+    expect(
+      screen.getByTestId(
+        "campaign-creators-group-counter-planned",
+      ),
+    ).toHaveTextContent("Выбрано: 200 / 200");
+    expect(
+      screen.getByTestId("campaign-creators-group-cap-hint-planned"),
+    ).toHaveTextContent(/Максимум 200/);
   });
 });
 
-describe("CampaignCreatorGroupSection — submit + result parsing", () => {
-  it("submitting fires mutation with selected creatorIds and renders inline-success when undelivered=[]", async () => {
-    vi.mocked(notifyCampaignCreators).mockResolvedValueOnce({
-      data: { undelivered: [] },
-    } satisfies CampaignNotifyResult);
-
+describe("CampaignCreatorGroupSection — submit + props integration", () => {
+  it("submitting fires onSubmit with selected creatorIds + namesSnapshot", async () => {
+    const onSubmit = vi.fn();
     const rows: CampaignCreatorRow[] = [
       { campaignCreator: makeCC(CREATOR_A), creator: makeCreator(CREATOR_A, "Иванова") },
       { campaignCreator: makeCC(CREATOR_B), creator: makeCreator(CREATOR_B, "Петрова") },
     ];
 
-    const { invalidateSpy } = renderHarness({
+    renderGroup({
       status: "planned",
       rows,
       actionLabel: "Разослать приглашение",
+      onSubmit,
     });
 
     await userEvent.click(
@@ -295,223 +362,130 @@ describe("CampaignCreatorGroupSection — submit + result parsing", () => {
       screen.getByTestId("campaign-creators-group-action-planned"),
     );
 
-    await waitFor(() => {
-      expect(
-        screen.getByTestId("campaign-creators-group-result-planned"),
-      ).toBeInTheDocument();
-    });
-
-    expect(notifyCampaignCreators).toHaveBeenCalledWith(CAMPAIGN_ID, [
-      CREATOR_A,
-      CREATOR_B,
-    ]);
-    expect(
-      screen.getByTestId("campaign-creators-group-result-planned"),
-    ).toHaveTextContent("Доставлено 2");
-    // Selection cleared, button disabled again.
-    expect(
-      screen.getByTestId(`campaign-creator-checkbox-${CREATOR_A}`),
-    ).not.toBeChecked();
-    expect(
-      screen.getByTestId("campaign-creators-group-action-planned"),
-    ).toBeDisabled();
-    // Invalidate fired with the campaign creators list key.
-    expect(invalidateSpy).toHaveBeenCalledWith({
-      queryKey: campaignCreatorKeys.list(CAMPAIGN_ID),
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+    expect(onSubmit.mock.calls[0]?.[0]).toEqual([CREATOR_A, CREATOR_B]);
+    expect(onSubmit.mock.calls[0]?.[1]).toEqual({
+      [CREATOR_A]: "Иванова Анна",
+      [CREATOR_B]: "Петрова Анна",
     });
   });
 
-  it("renders partial-success result with delivered count + undelivered list with name and reason", async () => {
-    vi.mocked(notifyCampaignCreators).mockResolvedValueOnce({
-      data: { undelivered: [{ creatorId: CREATOR_A, reason: "bot_blocked" }] },
-    });
-
-    const rows: CampaignCreatorRow[] = [
-      { campaignCreator: makeCC(CREATOR_A), creator: makeCreator(CREATOR_A, "Иванова") },
-      { campaignCreator: makeCC(CREATOR_B), creator: makeCreator(CREATOR_B, "Петрова") },
-    ];
-
-    renderHarness({ status: "planned", rows, actionLabel: "Разослать приглашение" });
-
-    await userEvent.click(
-      screen.getByTestId(`campaign-creator-checkbox-${CREATOR_A}`),
-    );
-    await userEvent.click(
-      screen.getByTestId(`campaign-creator-checkbox-${CREATOR_B}`),
-    );
-    await userEvent.click(
-      screen.getByTestId("campaign-creators-group-action-planned"),
-    );
-
-    await waitFor(() => {
-      expect(
-        screen.getByTestId("campaign-creators-group-result-planned"),
-      ).toHaveTextContent("Доставлено 1");
-    });
-    const undelivered = screen.getByTestId(
-      `campaign-creators-group-undelivered-planned-${CREATOR_A}`,
-    );
-    expect(undelivered).toHaveTextContent("Иванова Анна");
-    expect(undelivered).toHaveTextContent("заблокировал(а) бота");
-    // Selection cleared in onSettled even on partial-success.
-    expect(
-      screen.getByTestId(`campaign-creator-checkbox-${CREATOR_A}`),
-    ).not.toBeChecked();
-    expect(
-      screen.getByTestId(`campaign-creator-checkbox-${CREATOR_B}`),
-    ).not.toBeChecked();
-  });
-
-  it("undelivered with soft-deleted creator falls back to deletedPlaceholder", async () => {
-    vi.mocked(notifyCampaignCreators).mockResolvedValueOnce({
-      data: { undelivered: [{ creatorId: CREATOR_C, reason: "unknown" }] },
-    });
-
-    const rows: CampaignCreatorRow[] = [
-      // Creator C row has no `creator` profile (soft-deleted).
-      { campaignCreator: makeCC(CREATOR_C) },
-    ];
-
-    renderHarness({ status: "planned", rows, actionLabel: "Разослать приглашение" });
-
-    await userEvent.click(
-      screen.getByTestId(`campaign-creator-checkbox-${CREATOR_C}`),
-    );
-    await userEvent.click(
-      screen.getByTestId("campaign-creators-group-action-planned"),
-    );
-
-    await waitFor(() => {
-      expect(
-        screen.getByTestId(
-          `campaign-creators-group-undelivered-planned-${CREATOR_C}`,
-        ),
-      ).toHaveTextContent("—");
-    });
-  });
-
-  it("422 CAMPAIGN_CREATOR_BATCH_INVALID renders inline validation error and clears selection", async () => {
-    vi.mocked(notifyCampaignCreators).mockRejectedValueOnce(
-      new ApiError(422, "CAMPAIGN_CREATOR_BATCH_INVALID", "batch invalid", [
-        { creatorId: CREATOR_A, reason: "wrong_status", currentStatus: "invited" },
-      ]),
-    );
-
+  it("rapid double-click only fires onSubmit once when isSubmitting flips on", async () => {
+    const onSubmit = vi.fn();
     const rows: CampaignCreatorRow[] = [
       { campaignCreator: makeCC(CREATOR_A), creator: makeCreator(CREATOR_A, "Иванова") },
     ];
 
-    const { invalidateSpy } = renderHarness({
+    const { rerender } = renderGroup({
       status: "planned",
       rows,
       actionLabel: "Разослать приглашение",
+      onSubmit,
     });
-
-    await userEvent.click(
-      screen.getByTestId(`campaign-creator-checkbox-${CREATOR_A}`),
-    );
-    await userEvent.click(
-      screen.getByTestId("campaign-creators-group-action-planned"),
-    );
-
-    await waitFor(() => {
-      expect(
-        screen.getByTestId("campaign-creators-group-result-planned"),
-      ).toHaveTextContent(/уже в другом статусе/i);
-    });
-    expect(
-      screen.getByTestId(`campaign-creator-checkbox-${CREATOR_A}`),
-    ).not.toBeChecked();
-    expect(invalidateSpy).toHaveBeenCalledWith({
-      queryKey: campaignCreatorKeys.list(CAMPAIGN_ID),
-    });
-  });
-
-  it("network/5xx error renders inline networkError result", async () => {
-    vi.mocked(notifyCampaignCreators).mockRejectedValueOnce(
-      new ApiError(500, "INTERNAL_ERROR"),
-    );
-
-    const rows: CampaignCreatorRow[] = [
-      { campaignCreator: makeCC(CREATOR_A), creator: makeCreator(CREATOR_A, "Иванова") },
-    ];
-
-    renderHarness({ status: "planned", rows, actionLabel: "Разослать приглашение" });
-
-    await userEvent.click(
-      screen.getByTestId(`campaign-creator-checkbox-${CREATOR_A}`),
-    );
-    await userEvent.click(
-      screen.getByTestId("campaign-creators-group-action-planned"),
-    );
-
-    await waitFor(() => {
-      expect(
-        screen.getByTestId("campaign-creators-group-result-planned"),
-      ).toHaveTextContent(/Не удалось разослать/i);
-    });
-  });
-
-  it("rapid double-click only fires the mutation once (double-submit guard)", async () => {
-    let resolveCall: (v: CampaignNotifyResult) => void = () => {};
-    vi.mocked(notifyCampaignCreators).mockImplementationOnce(
-      () =>
-        new Promise<CampaignNotifyResult>((r) => {
-          resolveCall = r;
-        }),
-    );
-
-    const rows: CampaignCreatorRow[] = [
-      { campaignCreator: makeCC(CREATOR_A), creator: makeCreator(CREATOR_A, "Иванова") },
-    ];
-
-    renderHarness({ status: "planned", rows, actionLabel: "Разослать приглашение" });
 
     await userEvent.click(
       screen.getByTestId(`campaign-creator-checkbox-${CREATOR_A}`),
     );
     const btn = screen.getByTestId("campaign-creators-group-action-planned");
     await userEvent.click(btn);
+    // Parent flipping isSubmitting=true should disable the button before
+    // any second click can fire — emulate that by re-rendering with the flag.
+    rerender(
+      <CampaignCreatorGroupSection
+        status="planned"
+        title="group planned"
+        rows={rows}
+        actionLabel="Разослать приглашение"
+        onSubmit={onSubmit}
+        result={null}
+        isSubmitting={true}
+        isPending={false}
+        onRemove={() => {}}
+        onRowClick={() => {}}
+      />,
+    );
     await userEvent.click(btn);
 
-    expect(notifyCampaignCreators).toHaveBeenCalledTimes(1);
-
-    resolveCall({ data: { undelivered: [] } });
-    await waitFor(() => {
-      expect(
-        screen.getByTestId("campaign-creators-group-result-planned"),
-      ).toBeInTheDocument();
-    });
+    expect(onSubmit).toHaveBeenCalledTimes(1);
   });
 
-  it("invited group fires the remind mutation, not notify", async () => {
-    vi.mocked(remindCampaignCreatorsInvitation).mockResolvedValueOnce({
-      data: { undelivered: [] },
-    });
-
+  it("clears selection when isSubmitting flips from true to false", async () => {
+    const onSubmit = vi.fn();
     const rows: CampaignCreatorRow[] = [
-      {
-        campaignCreator: makeCC(CREATOR_A, "invited"),
-        creator: makeCreator(CREATOR_A, "Иванова"),
-      },
+      { campaignCreator: makeCC(CREATOR_A), creator: makeCreator(CREATOR_A, "Иванова") },
     ];
 
-    renderHarness({ status: "invited", rows, actionLabel: "Разослать ремайндер" });
+    const { rerender } = renderGroup({
+      status: "planned",
+      rows,
+      actionLabel: "Разослать приглашение",
+      onSubmit,
+    });
 
     await userEvent.click(
       screen.getByTestId(`campaign-creator-checkbox-${CREATOR_A}`),
     );
-    await userEvent.click(
-      screen.getByTestId("campaign-creators-group-action-invited"),
+    expect(
+      screen.getByTestId(`campaign-creator-checkbox-${CREATOR_A}`),
+    ).toBeChecked();
+
+    // Submit → parent says isSubmitting=true.
+    rerender(
+      <CampaignCreatorGroupSection
+        status="planned"
+        title="group planned"
+        rows={rows}
+        actionLabel="Разослать приглашение"
+        onSubmit={onSubmit}
+        result={null}
+        isSubmitting={true}
+        isPending={false}
+        onRemove={() => {}}
+        onRowClick={() => {}}
+      />,
+    );
+    // ... and then back to false (mutation settled).
+    rerender(
+      <CampaignCreatorGroupSection
+        status="planned"
+        title="group planned"
+        rows={rows}
+        actionLabel="Разослать приглашение"
+        onSubmit={onSubmit}
+        result={{ kind: "success", deliveredCount: 1, undelivered: [] }}
+        isSubmitting={false}
+        isPending={false}
+        onRemove={() => {}}
+        onRowClick={() => {}}
+      />,
     );
 
     await waitFor(() => {
-      expect(remindCampaignCreatorsInvitation).toHaveBeenCalledWith(
-        CAMPAIGN_ID,
-        [CREATOR_A],
-      );
+      expect(
+        screen.getByTestId(`campaign-creator-checkbox-${CREATOR_A}`),
+      ).not.toBeChecked();
     });
-    expect(notifyCampaignCreators).not.toHaveBeenCalled();
+  });
+
+  it("checkboxes are disabled when isSubmitting=true", async () => {
+    const rows: CampaignCreatorRow[] = [
+      { campaignCreator: makeCC(CREATOR_A), creator: makeCreator(CREATOR_A, "Иванова") },
+    ];
+
+    renderGroup({
+      status: "planned",
+      rows,
+      actionLabel: "Разослать приглашение",
+      onSubmit: () => {},
+      isSubmitting: true,
+    });
+
+    expect(
+      screen.getByTestId(`campaign-creator-checkbox-${CREATOR_A}`),
+    ).toBeDisabled();
+    expect(
+      screen.getByTestId("campaign-creators-select-all-planned"),
+    ).toBeDisabled();
   });
 
   it("clicking a checkbox does not also fire row click (stopPropagation)", async () => {
@@ -520,10 +494,11 @@ describe("CampaignCreatorGroupSection — submit + result parsing", () => {
       { campaignCreator: makeCC(CREATOR_A), creator: makeCreator(CREATOR_A, "Иванова") },
     ];
 
-    renderHarness({
+    renderGroup({
       status: "planned",
       rows,
       actionLabel: "Разослать приглашение",
+      onSubmit: () => {},
       onRowClick,
     });
 
@@ -532,5 +507,183 @@ describe("CampaignCreatorGroupSection — submit + result parsing", () => {
     );
 
     expect(onRowClick).not.toHaveBeenCalled();
+  });
+});
+
+describe("CampaignCreatorGroupSection — result rendering", () => {
+  it("renders inline-success result with delivered count", () => {
+    const rows: CampaignCreatorRow[] = [
+      { campaignCreator: makeCC(CREATOR_A), creator: makeCreator(CREATOR_A, "Иванова") },
+    ];
+    const result: SectionResult = {
+      kind: "success",
+      deliveredCount: 2,
+      undelivered: [],
+      undeliveredNames: {},
+    };
+
+    renderGroup({
+      status: "planned",
+      rows,
+      actionLabel: "Разослать приглашение",
+      onSubmit: () => {},
+      result,
+    });
+
+    expect(
+      screen.getByTestId("campaign-creators-group-result-planned-success"),
+    ).toHaveTextContent("Доставлено 2");
+  });
+
+  it("renders partial-success result with delivered count + undelivered list with name and reason", () => {
+    const rows: CampaignCreatorRow[] = [
+      { campaignCreator: makeCC(CREATOR_A), creator: makeCreator(CREATOR_A, "Иванова") },
+      { campaignCreator: makeCC(CREATOR_B), creator: makeCreator(CREATOR_B, "Петрова") },
+    ];
+    const result: SectionResult = {
+      kind: "success",
+      deliveredCount: 1,
+      undelivered: [{ creatorId: CREATOR_A, reason: "bot_blocked" }],
+      undeliveredNames: { [CREATOR_A]: "Иванова Анна", [CREATOR_B]: "Петрова Анна" },
+    };
+
+    renderGroup({
+      status: "planned",
+      rows,
+      actionLabel: "Разослать приглашение",
+      onSubmit: () => {},
+      result,
+    });
+
+    const successBlock = screen.getByTestId(
+      "campaign-creators-group-result-planned-success",
+    );
+    expect(successBlock).toHaveTextContent("Доставлен 1");
+    const undelivered = screen.getByTestId(
+      `campaign-creators-group-undelivered-planned-${CREATOR_A}`,
+    );
+    expect(undelivered).toHaveTextContent("Иванова Анна");
+    expect(undelivered).toHaveTextContent("заблокировал(а) бота");
+  });
+
+  it("undelivered with soft-deleted creator falls back to deletedPlaceholder", () => {
+    const rows: CampaignCreatorRow[] = [
+      // Soft-deleted creator (no `creator` profile) but still in the group.
+      { campaignCreator: makeCC(CREATOR_C) },
+    ];
+    const result: SectionResult = {
+      kind: "success",
+      deliveredCount: 0,
+      undelivered: [{ creatorId: CREATOR_C, reason: "unknown" }],
+      undeliveredNames: { [CREATOR_C]: "—" },
+    };
+
+    renderGroup({
+      status: "planned",
+      rows,
+      actionLabel: "Разослать приглашение",
+      onSubmit: () => {},
+      result,
+    });
+
+    expect(
+      screen.getByTestId(
+        `campaign-creators-group-undelivered-planned-${CREATOR_C}`,
+      ),
+    ).toHaveTextContent("—");
+  });
+
+  it("422 batch-invalid result renders inline validation alert with details list", () => {
+    const rows: CampaignCreatorRow[] = [
+      { campaignCreator: makeCC(CREATOR_A), creator: makeCreator(CREATOR_A, "Иванова") },
+    ];
+    const result: SectionResult = {
+      kind: "validation_error",
+      validationDetails: [{ creatorId: CREATOR_A, currentStatus: "invited" }],
+      detailNames: { [CREATOR_A]: "Иванова Анна" },
+    };
+
+    renderGroup({
+      status: "planned",
+      rows,
+      actionLabel: "Разослать приглашение",
+      onSubmit: () => {},
+      result,
+    });
+
+    expect(
+      screen.getByTestId(
+        "campaign-creators-group-result-planned-validation",
+      ),
+    ).toHaveTextContent(/уже в другом статусе/i);
+    const detailItem = screen.getByTestId(
+      `campaign-creators-group-validation-details-planned-${CREATOR_A}`,
+    );
+    expect(detailItem).toHaveTextContent("Иванова Анна");
+    expect(detailItem).toHaveTextContent(/Приглашён/);
+  });
+
+  it("422 unknown-code result renders distinct validation message", () => {
+    const rows: CampaignCreatorRow[] = [
+      { campaignCreator: makeCC(CREATOR_A), creator: makeCreator(CREATOR_A, "Иванова") },
+    ];
+    const result: SectionResult = { kind: "validation_unknown" };
+
+    renderGroup({
+      status: "planned",
+      rows,
+      actionLabel: "Разослать приглашение",
+      onSubmit: () => {},
+      result,
+    });
+
+    expect(
+      screen.getByTestId(
+        "campaign-creators-group-result-planned-validation-unknown",
+      ),
+    ).toHaveTextContent(/Некорректный запрос/i);
+  });
+
+  it("network-error result renders inline networkError alert", () => {
+    const rows: CampaignCreatorRow[] = [
+      { campaignCreator: makeCC(CREATOR_A), creator: makeCreator(CREATOR_A, "Иванова") },
+    ];
+    const result: SectionResult = { kind: "network_error" };
+
+    renderGroup({
+      status: "planned",
+      rows,
+      actionLabel: "Разослать приглашение",
+      onSubmit: () => {},
+      result,
+    });
+
+    expect(
+      screen.getByTestId("campaign-creators-group-result-planned-network"),
+    ).toHaveTextContent(/Не удалось разослать/i);
+  });
+
+  it("section renders heading + result even with rows.length=0 (after success → group emptied)", () => {
+    const result: SectionResult = {
+      kind: "success",
+      deliveredCount: 3,
+      undelivered: [],
+      undeliveredNames: {},
+    };
+
+    renderGroup({
+      status: "planned",
+      rows: [],
+      actionLabel: "Разослать приглашение",
+      onSubmit: () => {},
+      result,
+    });
+
+    expect(
+      screen.getByTestId("campaign-creators-group-result-planned-success"),
+    ).toHaveTextContent("Доставлено 3");
+    // Heading still visible — count is now 0.
+    const header = screen.getByTestId("campaign-creators-group-planned");
+    expect(within(header).getByRole("heading")).toHaveTextContent(/group planned/);
   });
 });

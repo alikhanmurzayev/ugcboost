@@ -565,6 +565,210 @@ describe("CampaignCreatorsSection — Remove flow", () => {
       ).not.toBeInTheDocument();
     });
   });
+
+  it("Cancel closes the dialog without calling the mutation", async () => {
+    vi.mocked(listCampaignCreators).mockResolvedValueOnce([
+      makeCC(CREATOR_A, "planned"),
+    ]);
+    vi.mocked(listCreators).mockResolvedValueOnce({
+      data: {
+        items: [makeCreator(CREATOR_A, "Иванова")],
+        total: 1,
+        page: 1,
+        perPage: 200,
+      },
+    });
+
+    renderSection(FIXTURE_CAMPAIGN_LIVE);
+
+    await userEvent.click(
+      await screen.findByTestId(`campaign-creator-remove-${CREATOR_A}`),
+    );
+    await userEvent.click(
+      await screen.findByTestId("remove-creator-confirm-cancel"),
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.queryByTestId("remove-creator-confirm"),
+      ).not.toBeInTheDocument();
+    });
+    expect(removeCampaignCreator).not.toHaveBeenCalled();
+  });
+
+  it("5xx keeps dialog open with generic removeFailed alert", async () => {
+    vi.mocked(listCampaignCreators).mockResolvedValueOnce([
+      makeCC(CREATOR_A, "planned"),
+    ]);
+    vi.mocked(listCreators).mockResolvedValueOnce({
+      data: {
+        items: [makeCreator(CREATOR_A, "Иванова")],
+        total: 1,
+        page: 1,
+        perPage: 200,
+      },
+    });
+    vi.mocked(removeCampaignCreator).mockRejectedValueOnce(
+      new ApiError(500, "INTERNAL_ERROR"),
+    );
+
+    renderSection(FIXTURE_CAMPAIGN_LIVE);
+
+    await userEvent.click(
+      await screen.findByTestId(`campaign-creator-remove-${CREATOR_A}`),
+    );
+    await userEvent.click(
+      await screen.findByTestId("remove-creator-confirm-submit"),
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.getByTestId("remove-creator-confirm-error"),
+      ).toHaveTextContent(/не удалось удалить/i);
+    });
+    expect(screen.getByTestId("remove-creator-confirm")).toBeInTheDocument();
+  });
+
+  it("422 with an unknown code falls back to the generic removeFailed alert", async () => {
+    vi.mocked(listCampaignCreators).mockResolvedValueOnce([
+      makeCC(CREATOR_A, "planned"),
+    ]);
+    vi.mocked(listCreators).mockResolvedValueOnce({
+      data: {
+        items: [makeCreator(CREATOR_A, "Иванова")],
+        total: 1,
+        page: 1,
+        perPage: 200,
+      },
+    });
+    vi.mocked(removeCampaignCreator).mockRejectedValueOnce(
+      new ApiError(422, "SOME_NEW_VALIDATION"),
+    );
+
+    renderSection(FIXTURE_CAMPAIGN_LIVE);
+
+    await userEvent.click(
+      await screen.findByTestId(`campaign-creator-remove-${CREATOR_A}`),
+    );
+    await userEvent.click(
+      await screen.findByTestId("remove-creator-confirm-submit"),
+    );
+
+    await waitFor(() => {
+      expect(
+        screen.getByTestId("remove-creator-confirm-error"),
+      ).toHaveTextContent(/не удалось удалить/i);
+    });
+  });
+
+  it("rapid double-confirm calls removeCampaignCreator exactly once (double-submit guard)", async () => {
+    vi.mocked(listCampaignCreators).mockResolvedValueOnce([
+      makeCC(CREATOR_A, "planned"),
+    ]);
+    vi.mocked(listCreators).mockResolvedValueOnce({
+      data: {
+        items: [makeCreator(CREATOR_A, "Иванова")],
+        total: 1,
+        page: 1,
+        perPage: 200,
+      },
+    });
+    let resolveMutate: (() => void) | undefined;
+    vi.mocked(removeCampaignCreator).mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveMutate = resolve;
+        }),
+    );
+
+    renderSection(FIXTURE_CAMPAIGN_LIVE);
+
+    await userEvent.click(
+      await screen.findByTestId(`campaign-creator-remove-${CREATOR_A}`),
+    );
+    const submit = await screen.findByTestId("remove-creator-confirm-submit");
+    await userEvent.click(submit);
+    await userEvent.click(submit);
+    await userEvent.click(submit);
+
+    expect(removeCampaignCreator).toHaveBeenCalledTimes(1);
+    resolveMutate?.();
+    await waitFor(() => {
+      expect(
+        screen.queryByTestId("remove-creator-confirm"),
+      ).not.toBeInTheDocument();
+    });
+  });
+
+  it("trash click on a different row is ignored while a previous remove is still pending", async () => {
+    vi.mocked(listCampaignCreators).mockResolvedValueOnce([
+      makeCC(CREATOR_A, "planned"),
+      makeCC(CREATOR_B, "planned"),
+    ]);
+    vi.mocked(listCreators).mockResolvedValueOnce({
+      data: {
+        items: [
+          makeCreator(CREATOR_A, "Иванова"),
+          makeCreator(CREATOR_B, "Петрова"),
+        ],
+        total: 2,
+        page: 1,
+        perPage: 200,
+      },
+    });
+    let resolveMutate: (() => void) | undefined;
+    vi.mocked(removeCampaignCreator).mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveMutate = resolve;
+        }),
+    );
+
+    renderSection(FIXTURE_CAMPAIGN_LIVE);
+
+    await userEvent.click(
+      await screen.findByTestId(`campaign-creator-remove-${CREATOR_A}`),
+    );
+    await userEvent.click(
+      await screen.findByTestId("remove-creator-confirm-submit"),
+    );
+
+    // Confirm dialog must still be Anna's — Petrova's trash must be a no-op.
+    await userEvent.click(
+      screen.getByTestId(`campaign-creator-remove-${CREATOR_B}`),
+    );
+    expect(
+      within(screen.getByTestId("remove-creator-confirm")).getByText(
+        /Иванова Анна/,
+      ),
+    ).toBeInTheDocument();
+
+    resolveMutate?.();
+    await waitFor(() => {
+      expect(
+        screen.queryByTestId("remove-creator-confirm"),
+      ).not.toBeInTheDocument();
+    });
+  });
+
+  it("RemoveCreatorConfirm uses a soft-deleted-creator placeholder when the creator profile is missing", async () => {
+    // listCampaignCreators returns A; listCreators returns no profile for A.
+    vi.mocked(listCampaignCreators).mockResolvedValueOnce([
+      makeCC(CREATOR_A, "planned"),
+    ]);
+    vi.mocked(listCreators).mockResolvedValueOnce({
+      data: { items: [], total: 0, page: 1, perPage: 200 },
+    });
+
+    renderSection(FIXTURE_CAMPAIGN_LIVE);
+
+    await userEvent.click(
+      await screen.findByTestId(`campaign-creator-remove-${CREATOR_A}`),
+    );
+
+    const dialog = await screen.findByTestId("remove-creator-confirm");
+    expect(within(dialog).getByText(/Креатор удалён из системы/)).toBeInTheDocument();
+  });
 });
 
 describe("CampaignCreatorsSection — notify flow integration", () => {
@@ -603,8 +807,8 @@ describe("CampaignCreatorsSection — notify flow integration", () => {
     });
     await waitFor(() => {
       expect(
-        screen.getByTestId("campaign-creators-group-result-planned"),
-      ).toHaveTextContent("Доставлено 1");
+        screen.getByTestId("campaign-creators-group-result-planned-success"),
+      ).toHaveTextContent("Доставлен 1");
     });
   });
 

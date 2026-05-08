@@ -32,6 +32,9 @@ import {
 import {
   addCampaignCreators,
   loginAsAdmin,
+  notifyAsAdmin,
+  registerFailNext,
+  registerFakeChat,
   removeCampaignCreator,
   seedAdmin,
   seedApprovedCreator,
@@ -40,6 +43,7 @@ import {
   type SeededCampaign,
   type SeededUser,
 } from "../helpers/api";
+import { loginAs } from "../helpers/ui-web";
 
 const API_URL = process.env.API_URL || "http://localhost:8080";
 const CLEANUP_TIMEOUT_MS = 5_000;
@@ -68,7 +72,12 @@ test.describe("Admin campaign notify — chunk 13", () => {
     while (cleanupStack.length > 0) {
       const fn = cleanupStack.pop();
       if (!fn) continue;
-      await withTimeout(fn(), CLEANUP_TIMEOUT_MS, "cleanup");
+      // Don't let cleanup failures flip a passing test red.
+      try {
+        await withTimeout(fn(), CLEANUP_TIMEOUT_MS, "cleanup");
+      } catch (err) {
+        console.error("[campaign-notify] cleanup step failed:", err);
+      }
     }
   });
 
@@ -82,7 +91,7 @@ test.describe("Admin campaign notify — chunk 13", () => {
     // Make every chat synthetic so notify resolves locally without touching
     // upstream Telegram.
     for (const c of [creatorA, creatorB, creatorC]) {
-      await registerFakeChat(request, c.telegram.telegramUserId);
+      await registerFakeChat(request, API_URL, c.telegram.telegramUserId);
     }
 
     await loginAs(page, admin.email, admin.password);
@@ -111,7 +120,7 @@ test.describe("Admin campaign notify — chunk 13", () => {
     await action.click();
 
     await expect(
-      page.getByTestId("campaign-creators-group-result-planned"),
+      page.getByTestId("campaign-creators-group-result-planned-success"),
     ).toContainText("Доставлено 2");
 
     // Invalidate fired in onSettled rerenders the groups: A and B moved to
@@ -146,12 +155,12 @@ test.describe("Admin campaign notify — chunk 13", () => {
       await setupNotify(request, cleanupStack);
 
     for (const c of [creatorA, creatorB, creatorC]) {
-      await registerFakeChat(request, c.telegram.telegramUserId);
+      await registerFakeChat(request, API_URL, c.telegram.telegramUserId);
     }
     // Force the next send to creatorA to fail with the canonical
     // bot-blocked message — backend MapTelegramErrorToReason classifies it
     // as `bot_blocked`.
-    await registerFailNext(request, creatorA.telegram.telegramUserId);
+    await registerFailNext(request, API_URL, creatorA.telegram.telegramUserId);
 
     await loginAs(page, admin.email, admin.password);
     await page.goto(`/campaigns/${campaign.campaignId}`);
@@ -171,9 +180,9 @@ test.describe("Admin campaign notify — chunk 13", () => {
       .check();
     await page.getByTestId("campaign-creators-group-action-planned").click();
 
-    const result = page.getByTestId("campaign-creators-group-result-planned");
+    const result = page.getByTestId("campaign-creators-group-result-planned-success");
     await expect(result).toContainText("Доставлено 2");
-    await expect(result).toContainText("Не доставлено 1");
+    await expect(result).toContainText("Не доставлен 1");
     const undelivered = page.getByTestId(
       `campaign-creators-group-undelivered-planned-${creatorA.creatorId}`,
     );
@@ -206,7 +215,7 @@ test.describe("Admin campaign notify — chunk 13", () => {
       await setupNotify(request, cleanupStack);
 
     for (const c of [creatorA, creatorB, creatorC]) {
-      await registerFakeChat(request, c.telegram.telegramUserId);
+      await registerFakeChat(request, API_URL, c.telegram.telegramUserId);
     }
 
     await loginAs(page, admin.email, admin.password);
@@ -219,9 +228,13 @@ test.describe("Admin campaign notify — chunk 13", () => {
 
     // Through the admin API: notify creator A alone — backend flips its
     // status to `invited`. Frontend cache still shows him under `planned`.
-    await notifyAsAdmin(request, adminToken, campaign.campaignId, [
-      creatorA.creatorId,
-    ]);
+    await notifyAsAdmin(
+      request,
+      API_URL,
+      campaign.campaignId,
+      [creatorA.creatorId],
+      adminToken,
+    );
 
     // Now select all 3 in the (stale) planned group and submit. Backend
     // collects creator A as wrong_status → 422 CAMPAIGN_CREATOR_BATCH_INVALID.
@@ -237,8 +250,17 @@ test.describe("Admin campaign notify — chunk 13", () => {
     await page.getByTestId("campaign-creators-group-action-planned").click();
 
     await expect(
-      page.getByTestId("campaign-creators-group-result-planned"),
+      page.getByTestId("campaign-creators-group-result-planned-validation"),
     ).toContainText(/уже в другом статусе/i);
+
+    // Selection must be cleared after a 422 — otherwise rapid re-submit
+    // re-sends stale ids and locks the admin in a retry loop.
+    await expect(
+      page.getByTestId(`campaign-creator-checkbox-${creatorB.creatorId}`),
+    ).not.toBeChecked();
+    await expect(
+      page.getByTestId(`campaign-creator-checkbox-${creatorC.creatorId}`),
+    ).not.toBeChecked();
 
     // Invalidate refreshed the lists — creator A is now under invited.
     const invitedGroup = page.getByTestId("campaign-creators-group-invited");
@@ -294,66 +316,6 @@ async function setupNotify(
   }
 
   return { admin, adminToken, creatorA, creatorB, creatorC, campaign };
-}
-
-async function registerFakeChat(
-  request: APIRequestContext,
-  chatId: number,
-): Promise<void> {
-  const resp = await request.post(`${API_URL}/test/telegram/spy/fake-chat`, {
-    data: { chatId },
-  });
-  if (resp.status() !== 204) {
-    throw new Error(
-      `fake-chat ${chatId}: ${resp.status()} ${await resp.text()}`,
-    );
-  }
-}
-
-async function registerFailNext(
-  request: APIRequestContext,
-  chatId: number,
-): Promise<void> {
-  const resp = await request.post(`${API_URL}/test/telegram/spy/fail-next`, {
-    data: { chatId },
-  });
-  if (resp.status() !== 204) {
-    throw new Error(
-      `fail-next ${chatId}: ${resp.status()} ${await resp.text()}`,
-    );
-  }
-}
-
-async function notifyAsAdmin(
-  request: APIRequestContext,
-  token: string,
-  campaignId: string,
-  creatorIds: string[],
-): Promise<void> {
-  const resp = await request.post(
-    `${API_URL}/campaigns/${campaignId}/notify`,
-    {
-      headers: { Authorization: `Bearer ${token}` },
-      data: { creatorIds },
-    },
-  );
-  if (resp.status() !== 200) {
-    throw new Error(
-      `notifyAsAdmin ${campaignId}: ${resp.status()} ${await resp.text()}`,
-    );
-  }
-}
-
-async function loginAs(
-  page: Page,
-  email: string,
-  password: string,
-): Promise<void> {
-  await page.goto("/login", { waitUntil: "domcontentloaded" });
-  await page.getByTestId("email-input").fill(email);
-  await page.getByTestId("password-input").fill(password);
-  await page.getByTestId("login-button").click();
-  await expect(page).toHaveURL("/");
 }
 
 async function withTimeout<T>(

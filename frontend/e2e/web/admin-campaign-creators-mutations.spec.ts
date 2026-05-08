@@ -31,6 +31,7 @@ import {
   seedApprovedCreator,
   seedCampaign,
 } from "../helpers/api";
+import { loginAs } from "../helpers/ui-web";
 
 const API_URL = process.env.API_URL || "http://localhost:8080";
 const CLEANUP_TIMEOUT_MS = 5_000;
@@ -294,18 +295,6 @@ test.describe("Admin campaign creators — mutations (slice 2/2)", () => {
     );
   });
 });
-
-async function loginAs(
-  page: Page,
-  email: string,
-  password: string,
-): Promise<void> {
-  await page.goto("/login", { waitUntil: "domcontentloaded" });
-  await page.getByTestId("email-input").fill(email);
-  await page.getByTestId("password-input").fill(password);
-  await page.getByTestId("login-button").click();
-  await expect(page).toHaveURL("/");
-}
 
 async function withTimeout<T>(
   promise: Promise<T>,
