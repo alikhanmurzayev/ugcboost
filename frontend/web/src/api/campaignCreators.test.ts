@@ -4,10 +4,19 @@ vi.mock("./client", () => {
   class ApiError extends Error {
     status: number;
     code: string;
-    constructor(status: number, code: string) {
+    serverMessage?: string;
+    details?: unknown;
+    constructor(
+      status: number,
+      code: string,
+      serverMessage?: string,
+      details?: unknown,
+    ) {
       super(code);
       this.status = status;
       this.code = code;
+      this.serverMessage = serverMessage;
+      this.details = details;
     }
   }
   return {
@@ -25,6 +34,8 @@ import {
   listCampaignCreators,
   addCampaignCreators,
   removeCampaignCreator,
+  notifyCampaignCreators,
+  remindCampaignCreatorsInvitation,
 } from "./campaignCreators";
 
 const mockedGet = vi.mocked(client.GET);
@@ -265,6 +276,152 @@ describe("removeCampaignCreator", () => {
 
     await expect(
       removeCampaignCreator(CAMPAIGN_ID, CREATOR_A),
+    ).rejects.toMatchObject({
+      status: 500,
+      code: "INTERNAL_ERROR",
+    });
+  });
+});
+
+describe("notifyCampaignCreators", () => {
+  it("calls POST /campaigns/{id}/notify with creatorIds and returns the full CampaignNotifyResult envelope", async () => {
+    mockedPost.mockResolvedValueOnce({
+      data: { data: { undelivered: [] } },
+      response: { status: 200 } as Response,
+    });
+
+    const result = await notifyCampaignCreators(CAMPAIGN_ID, [CREATOR_A]);
+
+    expect(mockedPost).toHaveBeenCalledTimes(1);
+    expect(mockedPost).toHaveBeenCalledWith("/campaigns/{id}/notify", {
+      params: { path: { id: CAMPAIGN_ID } },
+      body: { creatorIds: [CREATOR_A] },
+    });
+    expect(result).toEqual({ data: { undelivered: [] } });
+  });
+
+  it("returns partial-undelivered list when delivery fails for some creators", async () => {
+    mockedPost.mockResolvedValueOnce({
+      data: {
+        data: {
+          undelivered: [{ creatorId: CREATOR_A, reason: "bot_blocked" }],
+        },
+      },
+      response: { status: 200 } as Response,
+    });
+
+    const result = await notifyCampaignCreators(CAMPAIGN_ID, [CREATOR_A, CREATOR_B]);
+
+    expect(result.data.undelivered).toEqual([
+      { creatorId: CREATOR_A, reason: "bot_blocked" },
+    ]);
+  });
+
+  it("throws ApiError with code+details on 422 CAMPAIGN_CREATOR_BATCH_INVALID", async () => {
+    const details = [
+      { creatorId: CREATOR_A, reason: "wrong_status", currentStatus: "invited" },
+    ];
+    mockedPost.mockResolvedValueOnce({
+      error: {
+        error: {
+          code: "CAMPAIGN_CREATOR_BATCH_INVALID",
+          message: "batch invalid",
+          details,
+        },
+      },
+      response: { status: 422 } as Response,
+    });
+
+    await expect(
+      notifyCampaignCreators(CAMPAIGN_ID, [CREATOR_A]),
+    ).rejects.toMatchObject({
+      status: 422,
+      code: "CAMPAIGN_CREATOR_BATCH_INVALID",
+      details,
+    });
+  });
+
+  it("throws ApiError on 404 CAMPAIGN_NOT_FOUND (soft-deleted campaign)", async () => {
+    mockedPost.mockResolvedValueOnce({
+      error: { error: { code: "CAMPAIGN_NOT_FOUND", message: "missing" } },
+      response: { status: 404 } as Response,
+    });
+
+    await expect(
+      notifyCampaignCreators(CAMPAIGN_ID, [CREATOR_A]),
+    ).rejects.toMatchObject({
+      status: 404,
+      code: "CAMPAIGN_NOT_FOUND",
+    });
+  });
+
+  it("falls back to INTERNAL_ERROR on malformed 5xx body", async () => {
+    mockedPost.mockResolvedValueOnce({
+      error: {},
+      response: { status: 500 } as Response,
+    });
+
+    await expect(
+      notifyCampaignCreators(CAMPAIGN_ID, [CREATOR_A]),
+    ).rejects.toMatchObject({
+      status: 500,
+      code: "INTERNAL_ERROR",
+    });
+  });
+});
+
+describe("remindCampaignCreatorsInvitation", () => {
+  it("calls POST /campaigns/{id}/remind-invitation with creatorIds and returns the envelope", async () => {
+    mockedPost.mockResolvedValueOnce({
+      data: { data: { undelivered: [] } },
+      response: { status: 200 } as Response,
+    });
+
+    const result = await remindCampaignCreatorsInvitation(CAMPAIGN_ID, [CREATOR_A]);
+
+    expect(mockedPost).toHaveBeenCalledTimes(1);
+    expect(mockedPost).toHaveBeenCalledWith(
+      "/campaigns/{id}/remind-invitation",
+      {
+        params: { path: { id: CAMPAIGN_ID } },
+        body: { creatorIds: [CREATOR_A] },
+      },
+    );
+    expect(result).toEqual({ data: { undelivered: [] } });
+  });
+
+  it("throws ApiError with code+details on 422 CAMPAIGN_CREATOR_BATCH_INVALID", async () => {
+    const details = [
+      { creatorId: CREATOR_A, reason: "wrong_status", currentStatus: "planned" },
+    ];
+    mockedPost.mockResolvedValueOnce({
+      error: {
+        error: {
+          code: "CAMPAIGN_CREATOR_BATCH_INVALID",
+          message: "batch invalid",
+          details,
+        },
+      },
+      response: { status: 422 } as Response,
+    });
+
+    await expect(
+      remindCampaignCreatorsInvitation(CAMPAIGN_ID, [CREATOR_A]),
+    ).rejects.toMatchObject({
+      status: 422,
+      code: "CAMPAIGN_CREATOR_BATCH_INVALID",
+      details,
+    });
+  });
+
+  it("falls back to INTERNAL_ERROR on malformed 5xx body", async () => {
+    mockedPost.mockResolvedValueOnce({
+      error: {},
+      response: { status: 500 } as Response,
+    });
+
+    await expect(
+      remindCampaignCreatorsInvitation(CAMPAIGN_ID, [CREATOR_A]),
     ).rejects.toMatchObject({
       status: 500,
       code: "INTERNAL_ERROR",

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router-dom";
 import {
@@ -9,14 +9,22 @@ import Spinner from "@/shared/components/Spinner";
 import ErrorState from "@/shared/components/ErrorState";
 import { ApiError } from "@/api/client";
 import type { Campaign } from "@/api/campaigns";
-import { removeCampaignCreator } from "@/api/campaignCreators";
+import {
+  removeCampaignCreator,
+  type CampaignCreatorStatus,
+} from "@/api/campaignCreators";
 import { campaignCreatorKeys } from "@/shared/constants/queryKeys";
+import {
+  CAMPAIGN_CREATOR_GROUP_ORDER,
+  CAMPAIGN_CREATOR_STATUS,
+} from "@/shared/constants/campaignCreatorStatus";
 import { SEARCH_PARAMS } from "@/shared/constants/routes";
 import {
   useCampaignCreators,
   type CampaignCreatorRow,
 } from "./hooks/useCampaignCreators";
-import CampaignCreatorsTable from "./CampaignCreatorsTable";
+import { useCampaignNotifyMutations } from "./hooks/useCampaignNotifyMutations";
+import CampaignCreatorGroupSection from "./CampaignCreatorGroupSection";
 import AddCreatorsDrawer from "./AddCreatorsDrawer";
 import RemoveCreatorConfirm from "./RemoveCreatorConfirm";
 
@@ -33,14 +41,13 @@ export default function CampaignCreatorsSection({
   const { rows, total, existingCreatorIds, isLoading, isError, refetch } =
     useCampaignCreators(campaign.id, { enabled: !campaign.isDeleted });
 
+  const notifyMutations = useCampaignNotifyMutations(campaign.id);
+
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [removeTarget, setRemoveTarget] = useState<CampaignCreatorRow | null>(
     null,
   );
   const [removeError, setRemoveError] = useState<string | null>(null);
-  // Double-submit guard: external flag mirrors `isPending` but is also held
-  // during the synchronous gap between rapid clicks before React re-renders
-  // the disabled-button state. Sibling pattern to AddCreatorsDrawer.
   const [isRemoveSubmitting, setIsRemoveSubmitting] = useState(false);
 
   const removeMutation = useMutation({
@@ -85,6 +92,19 @@ export default function CampaignCreatorsSection({
     },
   });
 
+  const groupedRows = useMemo(() => {
+    const acc: Record<CampaignCreatorStatus, CampaignCreatorRow[]> = {
+      planned: [],
+      invited: [],
+      declined: [],
+      agreed: [],
+    };
+    for (const row of rows) {
+      acc[row.campaignCreator.status].push(row);
+    }
+    return acc;
+  }, [rows]);
+
   if (campaign.isDeleted) return null;
 
   const selectedCreatorId = searchParams.get(SEARCH_PARAMS.CREATOR_ID);
@@ -100,9 +120,6 @@ export default function CampaignCreatorsSection({
   }
 
   function handleRemoveRequest(row: CampaignCreatorRow) {
-    // Ignore trash clicks while a previous remove is still in-flight; the
-    // dialog would otherwise re-open with the new creator's name while the
-    // earlier mutation's onSettled is still pending.
     if (isRemoveSubmitting || removeMutation.isPending) return;
     setRemoveError(null);
     setRemoveTarget(row);
@@ -164,14 +181,33 @@ export default function CampaignCreatorsSection({
           message={t("campaignCreators.loadError")}
           onRetry={refetch}
         />
+      ) : total === 0 ? (
+        <p
+          className="mt-6 text-gray-500"
+          data-testid="campaign-creators-empty-all"
+        >
+          {t("campaignCreators.emptyAll")}
+        </p>
       ) : (
-        <CampaignCreatorsTable
-          rows={rows}
-          selectedKey={selectedCreatorId ?? undefined}
-          onRowClick={handleRowClick}
-          onRemove={handleRemoveRequest}
-          emptyMessage={t("campaignCreators.empty")}
-        />
+        CAMPAIGN_CREATOR_GROUP_ORDER.map((status) => {
+          const groupRows = groupedRows[status];
+          if (groupRows.length === 0) return null;
+          const action = actionForStatus(status, notifyMutations, t);
+          return (
+            <CampaignCreatorGroupSection
+              key={status}
+              status={status}
+              campaignId={campaign.id}
+              title={t(`campaignCreators.groups.${status}`)}
+              rows={groupRows}
+              actionLabel={action.actionLabel}
+              mutation={action.mutation}
+              onRemove={handleRemoveRequest}
+              drawerSelectedCreatorId={selectedCreatorId ?? undefined}
+              onRowClick={handleRowClick}
+            />
+          );
+        })
       )}
 
       {isAddOpen && (
@@ -193,6 +229,34 @@ export default function CampaignCreatorsSection({
       />
     </section>
   );
+}
+
+type NotifyMutations = ReturnType<typeof useCampaignNotifyMutations>;
+
+function actionForStatus(
+  status: CampaignCreatorStatus,
+  mutations: NotifyMutations,
+  t: (key: string) => string,
+): {
+  actionLabel?: string;
+  mutation?: NotifyMutations["notify"] | NotifyMutations["remind"];
+} {
+  if (
+    status === CAMPAIGN_CREATOR_STATUS.PLANNED ||
+    status === CAMPAIGN_CREATOR_STATUS.DECLINED
+  ) {
+    return {
+      actionLabel: t("campaignCreators.notifyButton"),
+      mutation: mutations.notify,
+    };
+  }
+  if (status === CAMPAIGN_CREATOR_STATUS.INVITED) {
+    return {
+      actionLabel: t("campaignCreators.remindButton"),
+      mutation: mutations.remind,
+    };
+  }
+  return {};
 }
 
 function removeTargetName(

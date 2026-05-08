@@ -1,4 +1,11 @@
-import { useMemo } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  type ChangeEvent,
+  type KeyboardEvent,
+  type MouseEvent,
+} from "react";
 import { useTranslation } from "react-i18next";
 import Table, { type Column } from "@/shared/components/Table";
 import { CategoryChips } from "@/shared/components/CategoryChip";
@@ -6,12 +13,19 @@ import SocialLink from "@/shared/components/SocialLink";
 import { calcAge } from "@/shared/utils/age";
 import type { CampaignCreatorRow } from "./hooks/useCampaignCreators";
 
+export type SelectAllState = "unchecked" | "indeterminate" | "checked";
+
 interface CampaignCreatorsTableProps {
   rows: CampaignCreatorRow[];
   selectedKey?: string;
   onRowClick: (row: CampaignCreatorRow) => void;
   onRemove?: (row: CampaignCreatorRow) => void;
   emptyMessage: string;
+  checkedCreatorIds?: Set<string>;
+  onToggleOne?: (creatorId: string) => void;
+  onToggleAll?: () => void;
+  selectAllState?: SelectAllState;
+  selectAllTestId?: string;
 }
 
 export default function CampaignCreatorsTable({
@@ -20,13 +34,35 @@ export default function CampaignCreatorsTable({
   onRowClick,
   onRemove,
   emptyMessage,
+  checkedCreatorIds,
+  onToggleOne,
+  onToggleAll,
+  selectAllState,
+  selectAllTestId,
 }: CampaignCreatorsTableProps) {
   const { t } = useTranslation("creators");
   const { t: tCampaigns } = useTranslation("campaigns");
 
   const columns = useMemo<Column<CampaignCreatorRow>[]>(
-    () => buildColumns(t, tCampaigns, onRemove),
-    [t, tCampaigns, onRemove],
+    () =>
+      buildColumns(t, tCampaigns, {
+        onRemove,
+        checkedCreatorIds,
+        onToggleOne,
+        onToggleAll,
+        selectAllState: selectAllState ?? "unchecked",
+        selectAllTestId,
+      }),
+    [
+      t,
+      tCampaigns,
+      onRemove,
+      checkedCreatorIds,
+      onToggleOne,
+      onToggleAll,
+      selectAllState,
+      selectAllTestId,
+    ],
   );
 
   return (
@@ -42,13 +78,54 @@ export default function CampaignCreatorsTable({
   );
 }
 
+interface BuildColumnsOpts {
+  onRemove?: (row: CampaignCreatorRow) => void;
+  checkedCreatorIds?: Set<string>;
+  onToggleOne?: (creatorId: string) => void;
+  onToggleAll?: () => void;
+  selectAllState: SelectAllState;
+  selectAllTestId?: string;
+}
+
 function buildColumns(
   t: (key: string) => string,
-  tCampaigns: (key: string) => string,
-  onRemove?: (row: CampaignCreatorRow) => void,
+  tCampaigns: (key: string, opts?: Record<string, unknown>) => string,
+  opts: BuildColumnsOpts,
 ): Column<CampaignCreatorRow>[] {
   const placeholder = tCampaigns("campaignCreators.deletedPlaceholder");
   const deletedTitle = tCampaigns("campaignCreators.creatorDeleted");
+
+  const checkbox: Column<CampaignCreatorRow>[] | [] = opts.checkedCreatorIds
+    ? [
+        {
+          key: "checkbox",
+          width: "w-10",
+          header: (
+            <SelectAllCheckbox
+              state={opts.selectAllState}
+              onToggle={opts.onToggleAll}
+              testid={opts.selectAllTestId ?? "campaign-creators-select-all"}
+              ariaLabel={tCampaigns("campaignCreators.selectAll")}
+            />
+          ),
+          render: (row) => (
+            <RowCheckbox
+              creatorId={row.campaignCreator.creatorId}
+              checked={
+                opts.checkedCreatorIds?.has(row.campaignCreator.creatorId) ??
+                false
+              }
+              onToggle={opts.onToggleOne}
+              ariaLabel={tCampaigns("campaignCreators.selectAria", {
+                name: row.creator
+                  ? `${row.creator.lastName} ${row.creator.firstName}`
+                  : tCampaigns("campaignCreators.creatorDeleted"),
+              })}
+            />
+          ),
+        },
+      ]
+    : [];
 
   const base: Column<CampaignCreatorRow>[] = [
     {
@@ -173,31 +250,115 @@ function buildColumns(
     },
   ];
 
-  if (!onRemove) return base;
+  const actions: Column<CampaignCreatorRow>[] | [] = opts.onRemove
+    ? [
+        {
+          key: "actions",
+          header: "",
+          width: "w-10",
+          render: (row) => (
+            <button
+              type="button"
+              aria-label={tCampaigns("campaignCreators.removeAria")}
+              data-testid={`campaign-creator-remove-${row.campaignCreator.creatorId}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                opts.onRemove?.(row);
+              }}
+              className="rounded-button p-1 text-gray-400 transition hover:bg-red-50 hover:text-red-600"
+            >
+              <TrashIcon />
+            </button>
+          ),
+          align: "right",
+        },
+      ]
+    : [];
 
-  return [
-    ...base,
-    {
-      key: "actions",
-      header: "",
-      width: "w-10",
-      render: (row) => (
-        <button
-          type="button"
-          aria-label={tCampaigns("campaignCreators.removeAria")}
-          data-testid={`campaign-creator-remove-${row.campaignCreator.creatorId}`}
-          onClick={(e) => {
-            e.stopPropagation();
-            onRemove(row);
-          }}
-          className="rounded-button p-1 text-gray-400 transition hover:bg-red-50 hover:text-red-600"
-        >
-          <TrashIcon />
-        </button>
-      ),
-      align: "right",
-    },
-  ];
+  return [...checkbox, ...base, ...actions];
+}
+
+interface SelectAllCheckboxProps {
+  state: SelectAllState;
+  onToggle?: () => void;
+  testid: string;
+  ariaLabel: string;
+}
+
+function SelectAllCheckbox({
+  state,
+  onToggle,
+  testid,
+  ariaLabel,
+}: SelectAllCheckboxProps) {
+  const ref = useRef<HTMLInputElement>(null);
+  // `indeterminate` is an HTML property, not a React attribute — set it via
+  // ref after mount/update so the visual tri-state stays in sync.
+  useEffect(() => {
+    if (ref.current) {
+      ref.current.indeterminate = state === "indeterminate";
+    }
+  }, [state]);
+
+  function handleChange() {
+    onToggle?.();
+  }
+
+  return (
+    <input
+      ref={ref}
+      type="checkbox"
+      checked={state === "checked"}
+      onChange={handleChange}
+      aria-label={ariaLabel}
+      data-testid={testid}
+      className="h-4 w-4 cursor-pointer rounded border-surface-300"
+    />
+  );
+}
+
+interface RowCheckboxProps {
+  creatorId: string;
+  checked: boolean;
+  onToggle?: (creatorId: string) => void;
+  ariaLabel: string;
+}
+
+function RowCheckbox({
+  creatorId,
+  checked,
+  onToggle,
+  ariaLabel,
+}: RowCheckboxProps) {
+  function handleChange(_e: ChangeEvent<HTMLInputElement>) {
+    onToggle?.(creatorId);
+  }
+
+  function stopMouse(e: MouseEvent<HTMLDivElement>) {
+    e.stopPropagation();
+  }
+
+  function stopKey(e: KeyboardEvent<HTMLDivElement>) {
+    e.stopPropagation();
+  }
+
+  return (
+    <div
+      className="flex items-center"
+      onClick={stopMouse}
+      onKeyDown={stopKey}
+      role="presentation"
+    >
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={handleChange}
+        aria-label={ariaLabel}
+        data-testid={`campaign-creator-checkbox-${creatorId}`}
+        className="h-4 w-4 cursor-pointer rounded border-surface-300"
+      />
+    </div>
+  );
 }
 
 function formatShortDate(iso: string): string {

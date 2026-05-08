@@ -26,8 +26,8 @@
  * закрывает AC «после slice 2/2 управление активно».
  *
  * Live + 0 креаторов — admin переходит на /campaigns/:id живой кампании
- * без добавленных. Ожидается empty-state `campaign-creators-table-empty`
- * с текстом «Креаторов пока нет», счётчик отсутствует, кнопка
+ * без добавленных. Ожидается empty-state `campaign-creators-empty-all`
+ * с текстом «Креаторов в кампании пока нет», счётчик отсутствует, кнопка
  * `campaign-creators-add-button` enabled.
  *
  * Click row → drawer — admin кликает строку креатора в секции; ожидается,
@@ -179,8 +179,8 @@ test.describe("Admin campaign creators — read-only section behavior", () => {
 
     await expect(page.getByTestId("campaign-creators-section")).toBeVisible();
     await expect(
-      page.getByTestId("campaign-creators-table-empty"),
-    ).toHaveText("Креаторов пока нет");
+      page.getByTestId("campaign-creators-empty-all"),
+    ).toHaveText("Креаторов в кампании пока нет");
     await expect(page.getByTestId("campaign-creators-counter")).toHaveCount(0);
 
     const addBtn = page.getByTestId("campaign-creators-add-button");
@@ -227,8 +227,9 @@ test.describe("Admin campaign creators — read-only section behavior", () => {
     await expect(row).toBeVisible();
     // Click the index cell — clicking the row's centre lands on the socials
     // column whose link wrapper stops propagation, so the row's onClick
-    // never fires.
-    await row.locator("td").first().click();
+    // never fires. After chunk 13 the first cell is the checkbox column
+    // (also stopPropagation), so target the index cell at nth(1).
+    await row.locator("td").nth(1).click();
 
     await expect(page).toHaveURL(
       new RegExp(`creatorId=${creator.creatorId}`),
