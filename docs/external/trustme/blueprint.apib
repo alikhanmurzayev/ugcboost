@@ -1,0 +1,1726 @@
+FORMAT: 1A
+HOST: https://test.trustme.kz/trust_contract_public_apis/
+
+# API TrustContract
+Общие требования к работе с API
+
++ Данные должны передаваться в кодировке <b>UTF-8.</b>
+
++ Авторизация: Все запросы к API требуют указания выданного токена. <b>Токен указывается без префикса Bearer.</b>
+
++ В документации подробно описаны методы API, включая примеры запросов и ответов.
+
++ <b>Ограничение частоты запросов:</b> Не более 4 запросов в секунду.
+
++ Кнопка <b>Try</b> в данном сервисе не поддерживается.
+## Базовые рекомендации [/{method}]
+
+
+Данный раздел содержит основные рекомендации для корректного формирования запросов.
+
+<b> Реквизиты Первой стороны / Инициатора документа уже зашиты в токен. </b> 
+Рекомендации актуальны для всех типов данных.
+
++ <b>Ссылка на коллекцию в Postman: https://documenter.getpostman.com/view/21037790/2sAYXFgwWG
+</b>
+### recommended [POST]
+
++ Request
+        // Корректные и некорректные значения. Допустимые варианты:
+    ✅ "key":"Second Signatory Usual company"
+    ✅ "key":"Second Signatory «Usual company»"
+    ✅ "key":"Second Signatory / Usual company"
+        
+            // Корректные и некорректные значения. Недопустимые значения:
+        ❌ "key":"Second Signatory | Usual company" // value не допускается vertical bar
+        ❌ "key":"Second Signatory "Usual company" // value не должно содержать "" внутри себя
+        ❌ "key":"Second Signatory "Usual company"" // value не должно содержать "" внутри себя
+
+            // Пробелы или табуляция в ключе. Недопустимые значения:
+        ❌ " key":"some value" // ключ указан с пробелом, либо табом
+        ❌ "key ":"some value" // ключ указан с пробелом, либо табом
+        ❌ " key ":"some value" // ключ указан с пробелом, либо табом
+        
+        ❌ "key": "some:value" // Недопустимые символы перед двоеточием в значении
+        ✅ "key": "some :value" // Перед двоточием допускается только пробел
+        
+            //Номера телефонов
+        ❌ "PhoneNumber": "+7 700 500 40 30" Номер телефона не должен содержать пробелы
+        ❌ "PhoneNumber": "+7-700-500-40-30" Номер телефона не должен содержать тире
+        ❌ "PhoneNumber": "+7(700)500-40-30" Номер телефона не должен содержать скобки
+
+        ✅ "PhoneNumber": "+77005004030"  
+        ✅ "PhoneNumber": "77005004030"
+        
+            //ИИН/БИН
+        ❌ "INN_BIN": "0123 4567 8901" ИИН/БИН не должен содержать пробелы
+        ❌ "INN_BIN": "0123-4567-8901" ИИН/БИН не должен содержать тире
+
+        ✅ "INN_BIN": "012345678901"
+
+
+## Получить информацию о компании [/companies]
+
+Возвращает информацию о компании и текущем тарифе, к которому у пользователя есть доступ.
+
+
+
+### companies [GET]
++ Headers
+            Authorization:  {token}
++ Request (multipart/form-data)
+            
+
+
+
++ Response 200 (application/json)
+
+    // Successful response example
+{
+    "status": "Success",
+    "errorText": "",
+    "data": [
+        {
+            "id": "12345678-1234-1234-1234-12345678901",
+            "companyId": "12345678-1234-1234-1234-12345678901",
+            "userPhoto": "http://cdn.onlinewebfonts.com/svg/img_335286.png",
+            "permission": "admin",
+            "companyRequisite": {
+                "jurAddress": null,
+                "fizAddress": null,
+                "directorFio": "Иванов Иван Иванович",
+                "viceDirector": null,
+                "phone": {
+                    "fullNumber": "+77012345678"
+                },
+                "bin": "12345678901",
+                "iik": null,
+                "email": "example@gmail.com",
+                "bank": {
+                    "name": "Kaspi",
+                    "bik": "KASPKZKA"
+                },
+                "fullname": "TOO Ромашка"
+            },
+            "tarifs": [
+                {
+                    "prise": 109300,
+                    "signCount": 240,
+                    "expirationDate": "2025-01-01T00:00:00",
+                    "dateAdd": "2026-01-01T00:00:00",
+                    "tarifName": "Базовый (Y-240)"
+                }
+            ]
+        }
+    ]
+}
+
+
+## Отправка загружаемого документа на подписание [/SendToSignDocumentExt]
+
+Поддерживаемые форматы файлов для загрузки документа: pdf, docx, txt, jpeg, xlsx, rtf
+
+Важно, что формат прописывается маленькими буквами (lower case)
+
+Данный метод создаст документ который будет привязан к вашей компании, к контракту можно будет перейти по ссылке либо через личный кабинет - мои контракты.
+
+##### Тело запроса form-data
+
+<table border="1" cellspacing="0" cellpadding="5">
+    <thead>
+        <tr>
+            <th>Название параметра</th>
+            <th>Описание параметра</th>
+            <th>Обязателен</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><code>doc</code></td>
+            <td>Загружаемый документ на подписание.</td>
+            <td><b>Да</b></td>
+        </tr>
+        <tr>
+            <td><code>details</code></td>
+            <td>Текст в формате JSON для указания реквизитов сторон договора. Включает данные всех сторон, кроме первой.</td>
+            <td><b>Да</b></td>
+        </tr>
+        <tr>
+            <td><code>NumberDial</code></td>
+            <td>Номер договора.</td>
+            <td>Нет</td>
+        </tr>
+        <tr>
+            <td><code>AdditionalInfo</code></td>
+            <td>Дополнительная информация по контракту (может быть полезна при поиске договора в ЛК).</td>
+            <td>Нет</td>
+        </tr>
+        <tr>
+            <td><code>KzBmg</code></td>
+            <td>Для предварительной проверки контрагента через Базу Мобильных граждан. Требует отдельного подключения.</td>
+            <td>Нет</td>
+        </tr>
+        <tr>
+            <td><code>FaceId</code></td>
+            <td>Перед подписанием контрагент должен пройти биометрическую верификацию.</td>
+            <td>Нет</td>
+        </tr>
+        <tr>
+            <td><code>Requisites - CompanyName</code></td>
+            <td>Наименование стороны договора, также отображается в ЛК.</td>
+            <td>Нет</td>
+        </tr>
+        <tr>
+            <td><code>Requisites - FIO</code></td>
+            <td>ФИО подписанта.</td>
+            <td><b>Да</b></td>
+        </tr>
+        <tr>
+            <td><code>Requisites - IIN_BIN</code></td>
+            <td>ИИН/БИН стороны.</td>
+            <td><b>Да</b></td>
+        </tr>
+        <tr>
+            <td><code>Requisites - PhoneNumber</code></td>
+            <td>Номер телефона контргаента в формате <b>E.164</b></td>
+            <td><b>Да</b></td>
+        </tr>
+        <tr>
+            <td><code>contract_name</code></td>
+            <td>Наименование документа.</td>
+            <td><b>Да</b></td>
+        </tr>
+    </tbody>
+</table>
+
+
+##### Примечание:
+
+Для боллее быстрой работы рекомендуется отправлять PDF документ.
+
+### SendToSignDocumentExt [POST]
++ Headers
+            Authorization:  {token}
++ Request (multipart/form-data)
+            
+// Реквизиты первой стороны (Инициатора документа) зашиты в токен
+
+// Body -> form-data
+// Key:doc, Format: File, Value: Path to the file (JPEG,XLSX,RTF,DOCX,TXT,PDF)
+// Key:details, Format: Text, Value: Json text, example below
+
+{
+    "NumberDial": "АВР-1",
+    "KzBmg": false,
+    "FaceId":false,
+    "AdditionalInfo": "Дополнительная информация",
+    "Requisites":[{
+        "CompanyName":"Second Signatory",
+        "FIO":"Куандыков Даулет Амирович", // ФИО второго подписанта  
+        "IIN_BIN": "654646546546", // Номер ИИН второго подписанта
+        "PhoneNumber":"+77050000000" // Номер телефона второго подписанта
+    },
+    {
+        "CompanyName":"Third Signatory",
+        "FIO":"Куропаткина Наталья Викторовна", // ФИО третьего подписанта
+        "IIN_BIN": "1567463468", // Номер ИИН/БИН третьего подписанта
+        "PhoneNumber":"+7707000000" // Номер телефона третьего подписанта
+    }]
+}
+
+// Key:contract_name, Format: Text, Value: String
+
+
++ Response 200 (application/json)
+
+    // Successful response example
+{"status": "Ok",
+    "errorText": "",
+    "data": { "url": "www.tct.kz/uploader/a1b2c3d4e5",  
+                     "document_id": "a1b2c3d4e5", 
+                     "fileName":"sd8f4as65d4f6sd7f98.pdf"   }}
+
+                
+    // Error response example
+{ 
+    "Status" : "Error", "ErrorText" :"1208", "Data":""  
+}
+                
+                
+## Отправка документа на подписание в формате BASE64 [/SendToSignBase64FileExt/{file_extension}]
+
+{file_extension} принимает следующие значения: pdf, docx, txt, jpeg, xlsx, rtf  
+
+Важно, что формат прописывается маленькими буквами (lower case)
+
+##### Тело запроса form-data
+
+<table border="1" cellspacing="0" cellpadding="5">
+    <thead>
+        <tr>
+            <th>Название параметра</th>
+            <th>Описание параметра</th>
+            <th>Обязателен</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><code>FileBase64</code></td>
+            <td>Документ на подписание, файл в формате BASE64. Важно отправляйте чистые данные в BASE64 без специальных данных в начале формата BASE64.</td>
+            <td><b>Да</b></td>
+        </tr>
+        <tr>
+            <td><code>details</code></td>
+            <td>Текст в формате JSON для указания реквизитов сторон договора. Включает данные всех сторон, кроме первой.</td>
+            <td><b>Да</b></td>
+        </tr>
+        <tr>
+            <td><code>NumberDial</code></td>
+            <td>Номер договора.</td>
+            <td>Нет</td>
+        </tr>
+        <tr>
+            <td><code>AdditionalInfo</code></td>
+            <td>Дополнительная информация по контракту (может быть полезна при поиске договора в ЛК).</td>
+            <td>Нет</td>
+        </tr>
+        <tr>
+            <td><code>KzBmg</code></td>
+            <td>Для предварительной проверки контрагента через Базу Мобильных граждан. Требует отдельного подключения.</td>
+            <td>Нет</td>
+        </tr>
+        <tr>
+            <td><code>FaceId</code></td>
+            <td>Перед подписанием контрагент должен пройти биометрическую верификацию.</td>
+            <td>Нет</td>
+        </tr>
+        <tr>
+            <td><code>Requisites - CompanyName</code></td>
+            <td>Наименование стороны договора, также отображается в ЛК.</td>
+            <td>Нет</td>
+        </tr>
+        <tr>
+            <td><code>Requisites - FIO</code></td>
+            <td>ФИО подписанта.</td>
+            <td><b>Да</b></td>
+        </tr>
+        <tr>
+            <td><code>Requisites - IIN_BIN</code></td>
+            <td>ИИН/БИН стороны.</td>
+            <td><b>Да</b></td>
+        </tr>
+        <tr>
+            <td><code>Requisites - PhoneNumber</code></td>
+            <td>Номер телефона контргаента в формате <b>E.164</b></td>
+            <td><b>Да</b></td>
+        </tr>
+        <tr>
+            <td><code>contract_name</code></td>
+            <td>Наименование документа.</td>
+            <td><b>Да</b></td>
+        </tr>
+    </tbody>
+</table>
+
+### SendToSignBase64FileExt/{file_extension}[POST]
++ Headers
+            Authorization:  {token}
++ Request (multipart/form-data)
+
+// Реквизиты первой стороны (Инициатора документа) зашиты в токен
+
+// Body -> form-data
+// Key:FileBase64, Format: Text, Value: String
+// Key:details, Format: Text, Value: Json text, example below
+
+{
+    "NumberDial": "АВР-1",
+    "KzBmg": false,
+    "FaceId":false,
+    "AdditionalInfo": "Дополнительная информация",
+    "Requisites":   
+    [
+        {
+            "CompanyName":"Second Signatory",
+            "FIO":"Куандыков Даулет Амирович", // ФИО второго подписанта
+            "IIN_BIN": "654646546546", // Номер ИИН второго подписанта
+            "PhoneNumber":"+77050000000" // Номер телефона второго подписанта
+        },
+        {
+            "CompanyName":"Third Signatory", 
+            "FIO":"Куропаткина Наталья Викторовна", // ФИО третьего подписанта
+            "IIN_BIN": "1567463468", // Номер ИИН третьего подписанта
+            "PhoneNumber":"+7707000000" // Номер телефона третьего подписанта
+        }
+    ]
+}
+
+// Key:contract_name, Format: Text, Value: String
+
++ Response 200 (application/json)
+
+        // Successful response example
+        
+{
+        "status": "Ok",
+        "errorText": "",
+        "data": { "url": "www.tct.kz/uploader/a1b2c3d4e5",   "document_id": "a1b2c3d4e5", "fileName":"sd8f4as65d4f6sd7f98.pdf"   }
+}
+                
+    // Error response example
+        
+{
+    "Status" : "Error", "ErrorText" :"1208", "Data":""  
+}
+
+
+## Отправка на подписание с указанием ссылки на документ [/UploadWithFileURL]
+
+Способ отправки договора где файл документ загружается путем указывания URL к допустимому файлу. 
+
+Для корректной работы желательно указатывать прямой URL к файлу. Например http://somefile.com/contract.pdf
+
+Поддерживаемые форматы: JPEG,XLSX,RTF,DOCX,TXT,PDF
+
+❌ *В случае указания неполного url к файлу. То будет возращена ошибка. Пример ошибочного url 'https://somedomain.com/contract'
+
+##### Тело запроса raw
+<table border="1" cellspacing="0" cellpadding="5">
+    <thead>
+        <tr>
+            <th>Название параметра</th>
+            <th>Описание параметра</th>
+            <th>Обязателен</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><code>downloadURL</code></td>
+            <td>Ссылка на документ</td>
+            <td><b>Да</b></td>
+        </tr>
+        <tr>
+        <tr>
+            <td><code>NumberDial</code></td>
+            <td>Номер договора.</td>
+            <td>Нет</td>
+        </tr>
+        <tr>
+            <td><code>AdditionalInfo</code></td>
+            <td>Дополнительная информация по контракту (может быть полезна при поиске договора в ЛК).</td>
+            <td>Нет</td>
+        </tr>
+        <tr>
+            <td><code>KzBmg</code></td>
+            <td>Для предварительной проверки контрагента через Базу Мобильных граждан. Требует отдельного подключения.</td>
+            <td>Нет</td>
+        </tr>
+        <tr>
+            <td><code>FaceId</code></td>
+            <td>Перед подписанием контрагент должен пройти биометрическую верификацию.</td>
+            <td>Нет</td>
+        </tr>
+        <tr>
+            <td><code>Requisites - CompanyName</code></td>
+            <td>Наименование стороны договора, также отображается в ЛК.</td>
+            <td>Нет</td>
+        </tr>
+        <tr>
+            <td><code>Requisites - FIO</code></td>
+            <td>ФИО подписанта.</td>
+            <td><b>Да</b></td>
+        </tr>
+        <tr>
+            <td><code>Requisites - IIN_BIN</code></td>
+            <td>ИИН/БИН стороны.</td>
+            <td><b>Да</b></td>
+        </tr>
+        <tr>
+            <td><code>Requisites - PhoneNumber</code></td>
+            <td>Номер телефона контргаента в формате <b>E.164</b></td>
+            <td><b>Да</b></td>
+        </tr>
+        <tr>
+            <td><code>contractName</code></td>
+            <td>Наименование документа.</td>
+            <td><b>Да</b></td>
+        </tr>
+        <tr>
+            <td><code>isCompanySigner</code></td>
+            <td>Тип сторон: участниками договора могут выступать Компания и клиент либо Только клиенты.</td>
+            <td>Нет</td>
+        </tr>
+    </tbody>
+</table>
+
+### UploadWithFileURL[POST]
++ Headers
+            Authorization:  {token}
++ Request (application/json)
+
+
+{
+    "downloadURL":"https://zhasylzher.kz/files/docs/9ac13f9dcf67f23ec75ade957d4158ed.pdf",
+    "KzBmg": false,
+    "FaceId":false,
+    "requisites": 
+    [{
+        "CompanyName":"Second Signatory",
+        "FIO":"Аблязов Даулет Амирович", // ФИО второго подписанта
+        "IIN_BIN": "654646546546", // Номер ИИН второго подписанта
+        "PhoneNumber":"+77050000000"  // Номер телефона второго подписанта
+    },
+    {
+        "CompanyName":"Third Signatory", 
+        "FIO":"Куропаткина Наталья Викторовна",// ФИО третьего подписанта 
+        "IIN_BIN": "1567463468", // Номер ИИН третьего подписанта
+        "PhoneNumber":"+77070000000"  // Номер телефона третьего подписанта
+    }],
+    "contractName": "Технические требования", // наименование документа
+    "isCompanySigner": true // Тип сторон: true - Компания является участником договора, false - Участники договора Только клиенты
+}
+
++ Response 200 (application/json)
+
+    // Success response example
+{
+    "status": "Ok",
+    "errorText": "",
+    "data": { "url": "www.tct.kz/uploader/a1b2c3d4e5",   "document_id": "a1b2c3d4e5", "fileName":"sd8f4as65d4f6sd7f98.pdf"   }
+}
+                
+    // Error response example
+{ 
+    "Status" : "Error", "ErrorText" :"Some text or number error", "Data":""  
+}
+   
+## Отправка на подписание только клиентам [/UploadDoc]
+
+Способ отправки договора, при котором компания не участвует в подписании и документ отправляется только клиентам.
+Документ передаётся в виде строки, закодированной в формате Base64.
+
+❗ Компания выступает исключительно как отправитель и не добавляется в список сторон договора.
+
+⚠️ Особенности
+
++ Компания не является участником договора.
+
++ Минимум один клиент обязателен.
+
++ documentBase64 должен содержать корректную Base64-строку файла.
+
++ Формат файла указывается в параметре fileFormat.
+
+##### Тело запроса raw
+<table border="1" cellspacing="0" cellpadding="5">
+    <thead>
+        <tr>
+            <th>Название параметра</th>
+            <th>Описание параметра</th>
+            <th>Обязателен</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><code>documentBase64</code></td>
+            <td>Документ, закодированный в формате Base64.</td>
+            <td><b>Да</b></td>
+        </tr>
+        <tr>
+            <td><code>details</code></td>
+            <td>Список клиентов-подписантов.</td>
+            <td><b>Да</b></td>
+        </tr>
+        <tr>
+            <td><code>details - companyName</code></td>
+            <td>Наименование стороны договора (клиента).</td>
+            <td><b>Да</b></td>
+        </tr>
+        <tr>
+            <td><code>details - fio</code></td>
+            <td>ФИО подписанта.</td>
+            <td><b>Да</b></td>
+        </tr>
+        <tr>
+            <td><code>details - iin_bin</code></td>
+            <td>ИИН/БИН клиента.</td>
+            <td><b>Да</b></td>
+        </tr>
+        <tr>
+            <td><code>details - phoneNumber</code></td>
+            <td>Номер телефона клиента в формате <b>E.164</b>.</td>
+            <td><b>Да</b></td>
+        </tr>
+        <tr>
+            <td><code>documentName</code></td>
+            <td>Наименование документа.</td>
+            <td><b>Да</b></td>
+        </tr>
+        <tr>
+            <td><code>companyId</code></td>
+            <td>Идентификатор компании-отправителя.</td>
+            <td><b>Да</b></td>
+        </tr>
+        <tr>
+            <td><code>fileFormat</code></td>
+            <td>Формат документа: PDF.</td>
+            <td><b>Да</b></td>
+        </tr>
+    </tbody>
+</table>
+
+
+### UploadDoc[POST]
++ Headers
+            Authorization:  {token}
++ Request (application/json)
+
+
+{
+  "documentBase64": "JVBERi0xLjQKJ...", // Документ в формате BASE64
+  "details": [
+    {
+      "companyName": "string", // Наименование компании подписанта
+      "fio": "string", // ФИО подписанта
+      "iiN_BIN": "000000000000", // ИИН/БИН подписанта
+      "phoneNumber": "+77000000000", // Номер телефона подписанта
+    }
+  ],
+  "documentName": "string", // Название документа
+  "companyId": "99851767-459f-4b82-bc62-764aa2b3cb19", // Айди компании (можно получить у отдела поддержки) 
+  "fileFormat": "pdf" // Формат файла пдф
+}
+
++ Response 200 (application/json)
+
+    // Success response example
+{
+    "status": "Ok",
+    "errorText": "",
+    "data": { 
+        "url": "www.tct.kz/uploader/a1b2c3d4e5",   
+        "document_id": "a1b2c3d4e5", 
+        "fileName":"sd8f4as65d4f6sd7f98.pdf"   
+        }
+}
+                
+    // Error response example
+{ 
+    "Status" : "Error", "ErrorText" :"Some text or number error", "Data":""  
+}   
+                
+## Отправка полей в шаблон документа [/UploadContractByTemplateName]
+
+Позволяет передавать переменные поля в заранее загруженный шаблон документа внутри системы **TrustContract**.  
+
+**Примечание:**  
+Шаблон документа должен быть предварительно загружен в систему через службу поддержки.  
+Значение параметра `templateName` можно получить у менеджера **TrustMe**.  
+В параметр `templateData` передаются поля в шаблон
+
+<table border="1" cellspacing="0" cellpadding="5">
+    <thead>
+        <tr>
+            <th>Название параметра</th>
+            <th>Описание параметра</th>
+            <th>Обязателен</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><code>templateName</code></td>
+            <td>Название шаблона (уточнить у службы поддержки)</td>
+            <td><b>Да</b></td>
+        </tr>
+        <tr>
+        <tr>
+            <td><code>contractNumber</code></td>
+            <td>Номер договора.</td>
+            <td>Нет</td>
+        </tr>
+        <tr>
+            <td><code>AdditionalInfo</code></td>
+            <td>Дополнительная информация по контракту (может быть полезна при поиске договора в ЛК).</td>
+            <td>Нет</td>
+        </tr>
+        <tr>
+            <td><code>KzBmg</code></td>
+            <td>Для предварительной проверки контрагента через Базу Мобильных граждан. Требует отдельного подключения.</td>
+            <td>Нет</td>
+        </tr>
+        <tr>
+            <td><code>FaceId</code></td>
+            <td>Перед подписанием контрагент должен пройти биометрическую верификацию.</td>
+            <td>Нет</td>
+        </tr>
+        <tr>
+            <td><code>Requisites - CompanyName</code></td>
+            <td>Наименование стороны договора, также отображается в ЛК.</td>
+            <td>Нет</td>
+        </tr>
+        <tr>
+            <td><code>Requisites - fio</code></td>
+            <td>ФИО подписанта.</td>
+            <td><b>Да</b></td>
+        </tr>
+        <tr>
+            <td><code>Requisites - IIN_BIN</code></td>
+            <td>ИИН/БИН стороны.</td>
+            <td><b>Да</b></td>
+        </tr>
+        <tr>
+            <td><code>Requisites - phoneNumber</code></td>
+            <td>Номер телефона контргаента в формате <b>E.164</b></td>
+            <td><b>Да</b></td>
+        </tr>
+        <tr>
+            <td><code>contractName</code></td>
+            <td>Наименование документа.</td>
+            <td><b>Да</b></td>
+        </tr>
+        <tr>
+            <td><code>templateData - key/value</code></td>
+            <td>Содержимое поле и его название передаваемое в шаблон</td>
+            <td>Нет</td>
+        </tr>
+    </tbody>
+</table>
+### UploadContractByTemplateName[POST]
++ Headers
+            Authorization:  {token}
++ Request (application/json)
+
+{ 
+"templateName": "{templateName}", 
+"contractNumber": "1", 
+"contractName": "contractName", 
+"additionalInfo": "", 
+"requisites": [ 
+{ 
+"companyName": "Минчев Аристотель Борисович", 
+"fio": "Минчев Аристотель Борисович", 
+"iiN_BIN": "012345678901", 
+"phoneNumber": "+77005004030" 
+} 
+], 
+"templateData": [ 
+{ 
+"key": "fio", 
+"value": "Иванов Иван Иванович" 
+}, 
+{ 
+"key": "IIN", 
+"value": "012345678901" 
+}, 
+{ 
+"key": "carMark", 
+"value": "Nissan" 
+}
+] 
+}
+
++ Response 200 (application/json)
+
+{
+    "status": "Ok",
+    "errorText": "",
+    "data": { "url": "www.tct.kz/uploader/a1b2c3d4e5",   "document_id": "a1b2c3d4e5", "fileName":"sd8f4as65d4f6sd7f98.pdf"   }
+}
+
+## Отправка документа с автоподписанием [/{UploadMethod}?auto_sign=1]
+
+Платный функционал, оплачивается отдельно. 
+
+Автоматическое подписание позволяет подписывать документ сразу после загрузки документа или после того, как подпишет клиент. Данный функционал работает пока только для подписей по СМС. Чтобы подписывать документы автоматически, необходимо добавить специальный параметр к URL:
+
+auto_sign=1 - Документ будет подписан сразу после загрузки
+
+Важно! Данный функционал работает только после согласования с компанией trustme.kz. В противном случае вернется ошибка с кодом: 1219
+
+Важно! Функционал работает для всех способов отправки документов описанных выше.
+
+### UploadContractFile?auto_sign=1[POST]
+
++ Response 200 (application/json)
+
+{
+    "status": "Ok",
+    "errorText": "",
+    "data": { "url": "www.tct.kz/uploader/a1b2c3d4e5",   "document_id": "a1b2c3d4e5", "fileName":"sd8f4as65d4f6sd7f98.pdf"   }
+}
+
+
+       
+## Получение статуса документа [/ContractStatus/{document_id}]
+
++ Числовые значения статусов и их интерпретация:
+                
+        0 - Не подписан
+                
+        1 - Подписан компанией
+                
+        2 - Подписан клиентом
+                
+        3 - Полностью подписан
+                
+        4 - Отозван компанией
+                
+        5 - Компания инициировала расторжение
+                
+        6 - Клиент инициировал расторжение
+                
+        7 - Клиент отказался от расторжения
+                
+        8 - Расторгнут
+                
+        9 - Клиент отказался подписывать договор
+
+### ContractStatus/{document_id} [GET]
+
++ Headers
+            Authorization:  {token}
++ Request (application/json)
+
+
+
+
+{
+    "status": "Ok",
+    "errorText": "",
+    "data": 6 // Клиент инициировал расторжение
+}
+
+## Массовое получение статусов документов [/ContractStatuses]
+
+Массив может содержать максимум 20 элементов.
+
+Если в массиве больше 20 элементов, сервер вернет ошибку валидации (400 Bad Request).
+
+<table border="1" cellspacing="0" cellpadding="5">
+    <thead>
+        <tr>
+            <th>Название параметра</th>
+            <th>Описание параметра</th>
+            <th>Обязателен</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><code>ShortUrls</code></td>
+            <td>Массив коротких ссылок. Максимум 20 элементов.</td>
+            <td><b>Да</b></td>
+        </tr>
+        <tr>
+    </tbody>
+</table>
+
+### ContractStatuses [GET]
+
++ Headers
+            Authorization:  {token}
++ Request (application/json)
+
+{
+    "ShortUrls": ["shortUrl1", "shortUrl2", "shortUrl3"]
+}
+
++ Response 200 (application/json)
+
+{
+    "status": "Ok",
+    "errorText": "",
+    "data": 6 // Клиент инициировал расторжение
+}
+          
+## Скачивание документа [/doc/DownloadContractFile/{document_id}]
+Данный метод скачивает документ из системы с QR-подписями (если документ подписан)
+
+{document_id} - идентификатор документа который указан в ответе при загрузке документа
+
+### /doc/DownloadContractFile/{document_id} [GET]
+
++ Response 200 (application/json)
+
+
+## Отзыв/расторжение документов [/RevokeContract/{document_id}]
+
+
+Тут {document_id} - это shortUrl документа, присваемый в нашей системе
+
+Логика работы следующая:
+
+Логика отзыва (Revoke): Если документ подписан не всеми сторонами, то работает отзыв, не требуется подписание сторонами
+
+Логика расторжения (Termination): Если документ подписан всеми сторонами, то работает расторжение, при этом инициируется новый документ, в который подтягиваются данные из основного документа
+
+Расторжение работает следующим образом :
+Если сторона подписала документ через СМС, то расторжение будет происходить через СМС
+Если сторона подписала документ через ЭЦП, то расторжение будет происходить через ЭЦП
+
+- То есть если первая сторона подписала документ через ЭЦП, а вторая сторона подписала этот же документ через СМС, 
+То первая сторона сможет подписать расторжение также через ЭЦП, вторая сторона - через СМС
+
+- Если первая сторона подписала документ через СМС, а вторая сторона подписала этот же документ через ЭЦП, 
+То первая сторона сможет подписать расторжение также через СМС, вторая сторона - через ЭЦП
+
+Тело ответа несет в себе информацию о статусе запроса, о статусе документа и
+id нового документа "Соглашение о Расторжении", которое необходимо подписать всем Сторонам для успешного расторжения основного документа.
+
+В данном примере
+
+document_id - 5cmn5f74q
+
+status - 4 (Если документ отозван)
+
+status - 5 (Если компания инициировала расторжение)
+
+
+
+### RevokeContract/{id-документа}[GET]
+
++ Response 200 (application/json)
+
+    // Revoke example
+    
+    {
+        "status": "Ok",
+        "errorText": "",
+        "data": {
+            "status": 4,
+            "shortUrl": "1a2b3c4d5e"
+        }
+    }
+    
+    
+    // Termination example
+    
+    { 
+        "status": "Ok", 
+        "errorText": "", 
+        "data": {
+            "status": 5,
+            "shortUrl": "1a2b3c4d5e"
+        }
+    }
+    
+    // Error response example
+    
+    {
+        "Status" : "Error", "ErrorText" :"1008", "Data":""  
+    }
+
+## Получение информации о документах [/search/Contracts]
+Данный метод возвращает список документов 
+
+Параметр "page" принимает числовые значение, рекомендуемо указывать значение - 10 или меньше.
+
+##### Примечание:
+
+Метод рабочий, будет дорабатываться
+
+<table border="1" cellspacing="0" cellpadding="5">
+    <thead>
+        <tr>
+            <th>Название параметра</th>
+            <th>Описание параметра</th>
+            <th>Обязателен</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><code>orderAsc</code></td>
+            <td>Поиск по убывания/возрастанию</td>
+            <td>Нет</td>
+        </tr>
+        <tr>
+        <tr>
+            <td><code>page</code></td>
+            <td>Страница документов</td>
+            <td><b>Да</b></td>
+        </tr>
+        <tr>
+        <tr>
+            <td><code>searchData</code></td>
+            <td>Поиск документов по ключевым словам. Значение указывается в fieldValue </td>
+            <td>Нет</td>
+        </tr>
+        <tr>
+        <tr>
+            <td><code>orderField</code></td>
+            <td>Поле, по которому будет отсортирован результат </td>
+            <td>Нет</td>
+        </tr>
+    </tbody>
+</table>
+
+### search/Contracts [POST]
+
++ Headers
+            Authorization:  {token}
++ Request (application/json)
+
+{   
+    "searchData": [],
+    "orderField": "CreatedAt"
+    "orderAsc": false,
+    "page": 1
+}
+
+
++ Response 200 (json)
+
+    // Successful response example
+    {
+        "status": "Ok",
+        "errorText": "",
+        "data": [
+            // ниже массив из данных
+            {
+                "id": "11111e-22b-333c-444d-55555555555e", // внутренний идентификатор документа в системе
+                "shortUrl": "12345abcde", // id документа в нашей системе
+                "contractStatus": 2, // статус документа, см. ContractStatus
+                "numberDeal": "529820", // Номер документа
+                "contractName": "Договор ГПХ", // Название документа
+                "createdAt": "2024-01-01T01:01:01", // Дата создания документа
+                "additionalInfo": "Доп информация",
+                "companyId": "a11111-b22-c333-d444-e55555555555",
+                "signers": [
+                // ниже информация о подписантах
+                    {
+                        "signType": 0,
+                        "dateSign": null,
+                        "signed": false, // true - подписан, false - не подписан
+                        "phoneNumber": "77005000000", // Номер директора Инициатора
+                        "isCreator": true, // Инициатор документа
+                        "jsonData": "" // json с информацией о подписанте
+                    },
+                    {
+                        "signType": 0,
+                        "dateSign": "2024-01-01T01:01:02", // Дата подписания 
+                        "signed": true, // true - подписан, false - не подписан
+                        "phoneNumber": "77000000000",
+                        "isCreator": false, // Неинициатор документа
+                        "jsonData": "" // json с информацией о подписанте
+                    }
+                ]
+            },
+        ]
+    }
+                
+    
+    // Error response example
+
+{
+    "status": "Error",
+    "errorText": "", // текст ошибки
+    "data": null
+}
+
+
+## Установка хуков [/SetHook]
+
+Хуки- обычные HTTP запросы отправляемые сервером в случае измений статуса документа. Принимающей стороне необходимо развернуть на собственном сервере контроллер который будет принимать запросы.
+
+<table border="1" cellspacing="0" cellpadding="5">
+    <thead>
+        <tr>
+            <th>Название параметра</th>
+            <th>Описание параметра</th>
+            <th>Обязателен</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td><code>URL</code></td>
+            <td>Ваш адрес контроллера, который будет принимать запрос</td>
+            <td><b>Да</b></td>
+        </tr>
+        <tr>
+        <tr>
+            <td><code>Token</code></td>
+            <td><b>Статичный</b> токен запишется в заголовок Authorization http запроса.</td>
+            <td><b>Да</b></td>
+        </tr>
+    </tbody>
+</table>
+
+Примечание: 
++ сервис не будет отправлять хук, если документ создан через интерфейс сервиса
+
++ в случае установки нового веб-хука система перезапишет его на старый
+
+### SetHook[POST]
+
++ Headers
+            Authorization:  {token}
++ Request (application/json)
+
+{
+    "URL":"https://client.api.hook.com/ntfmessage",
+    "Token":"s6d5f6as5d.asdtgtrjykygiukjsdfgetrnyu76yhwgaefrwegtyuityu.werwer5twer4"
+}
+
++ Response 200 (application/json)
+
+// Successful response example
+
+{
+    "status": "Ok",
+    "errorText": "",
+    "data": "" 
+}
+
+// Error response example
+{
+    "Status" : "Error", "ErrorText" :"1208", "Data":""  
+}
+                
+## Получение установленного хука [/HookInfo]
+
+### HookInfo[GET]
++ Headers
+            Authorization:  {token}
++ Request (application/json)
+
+
+// Successful response example
+
+{
+    "status": "Ok",
+    "errorText": "",
+    "data": 
+    {
+        "url": "https://client.api.hook.com/ntfmessage",
+        "bearerToken": "s6d5f6as5d"
+    }
+}
+
+// Error response example
+{
+    "Status" : "Error", "ErrorText" :"1208", "Data":""  
+}
+
+# Group Содержимое хука
+
+Пример тела хука
+
+```  
+    {
+        "contract_id": "2uml98kxc", // уникальный идентификатор договора
+        "status": 3, // статус договора
+        "client": "77071507875", // номер телефона, который воспроизвел изменение статуса 
+        "contract_url": "www.tct.kz/uploader/2uml98kxc" // Полный URL к договору
+    }
+```
+
+
+С 01.04.2024 введены изменения в структуру хуков: возвращаемые строковые значения заменены на целочисленные (integer)
+
++ Числовые значения статусов и их интерпретация Вы можете посмотреть в разделе "Получить статус документа"
+
+
+## Удаление хука [/RemoveHook]
+
+### RemoveHook[DELETE]
+    
++ Response 200 (application/json)
+
+// Successful response example
+
+{
+    "status": "Ok",
+    "errorText": "",
+    "data": 
+        {
+        "url": "https://client.api.hook.com/ntfmessage",
+        "Token": "s6d5f6as5d"
+        }
+}
+
+// Error response example
+
+{
+    "Status" : "Error", 
+    "ErrorText" :"1208", 
+    "Data":""  
+}
+
+
+
+# Group Процесс обновления токена
+
+В заголовок вставляют старый токен и 
+ в ответе получают новый токен. 
+
+Срок действия нового токена составляет 24 часа с момента его получения. 
+
+<b>Примечание: Данный метод не активен и находится в разработке.</b>
+
+## Обновление Токена [/UpdateToken]
+
+### UpdateToken[GET]
+
++ Response 200 
+
+
+No parameters
+
+# Group Коды ошибок TrusMe.kz
+    "-2147024809":"Найдены одинаковые файлы",
+    
+    "1000":"Поле логин не может быть пустым",
+    
+    "1001":"Поле пароль не может быть пустым",
+    
+    "1003":"Превышен максимальный лимит символов",
+    
+    "1004":"Не найден указанный пользователь",
+    
+    "1005":"Неправильной пароль",
+    
+    "1006":"Не найден указанный пользователь или пароль",
+    
+    "1007":"Пользователь заблокирован",
+    
+    "1008":"Внутренняя ошибка сервера",
+    
+    "1009":"Номер телефона не может быть пустым",
+    
+    "1010":"Превышенное максимальное количество символов в номере телефона",
+    
+    "1011":"Указанное имя пользователя уже занято",
+    
+    "1012":"Верифицируйте номер телефона",
+    
+    "1013":"Поле смс код не может быть пустым",
+    
+    "1014":"Превышено максимальное количество символов в смс коде",
+    
+    "1015":"Не найден указаный номер телефона",
+    
+    "1016":"Не найден указанный смс код",
+    
+    "1017":"Поле новый пароль не может быть пустым",
+    
+    "1018":"Максимальная длина пароля не может быть более 16-ти символов",
+    
+    "1019":"Пустой идентификатор пользователя",
+    
+    "1020":"Поле ИИН не может быть пустым",
+    
+    "1021":"Превышено максимальное количество символов в поле ИИН(30 символов)",
+    
+    "1022":"Поле 'Имя' не может быть пустым",
+    
+    "1023":"Поле 'Имя' не может содержать более 50-ти символов",
+    
+    "1024":"Поле 'Фамилия' не может быть пустым и содержать более 50 символов",
+    
+    "1025":"Ошибка валидации ИИН",
+    
+    "1026":"Ошибка валидации Email",
+    
+    "1025S":"Поле 'поиск' не может быть пустым и содержать более 450 символов",
+    
+    "1026L":"Поле 'limit' не может быть пустым и иметь значение более 15 и менее 10",
+    
+    "1027":"Поле 'offset' не может быть пустым",
+    
+    "1028":"Поле 'html' не может быть пустым",
+    
+    "1029":"Название файла не может быть пустым",
+    
+    "1030":"Не найден файл контракта",
+    
+    "1031":"Не найден документ",
+    
+    "1032":"Договор подписан всеми сторонами",
+    
+    "1033":"Ошибка удаления файла, попробуйте позднее",
+    
+    "1034":"Ошибка в конвертацию pdf",
+    
+    "1035":"Ошибка загрузки файла",
+    
+    "1036":"Поле 'doc' не может быть пустым",
+    
+    "1037":"Поле'doc_parties' не может быть пустым",
+    
+    "1038":"Поле 'contract_name' не может быть пустым и содержать более 450 символов",
+    
+    "1039":"Поле 'nubmer_deal' не может быть пусть и содержать более 550 символов",
+    
+    "1040":"Не поддерживаемый тип файла",
+    
+    "1041":"Количество сторон подписания не может быть менее 2-х",
+    
+    "1042":"Ошибка сохранения договора. Попробуйте позднее",
+    
+    "1043":"contract_id' не может быть пустым",
+    
+    "1044":"Ошибка валидации номера телефона",
+    
+    "1045":"Ошибка валидации реквизитов договора",
+    
+    "1046":"Неизвестная ошибка",
+    
+    "1047":"Не найден договор или подписан не всеми сторонами",
+    
+    "1048":"Ордер не может быть пустым и содержать более 200 символов",
+    
+    "1049":"Не найден указанный ордер",
+    
+    "1050":"Укажите сертификат",
+    
+    "1051":"Поле 'Doc' не может быть пустым",
+    
+    "1052":"Документ был подписан вами ранее",
+    
+    "1053":"ИИН не совпадают! Пожалуйста, проверьте данные или обратитесь в Отдел кадрового администрирования",
+    
+    "1054":"Документ уже подписан вашей организацией!",
+    
+    "1055":"Вы не имеете права подписи",
+    
+    "1056":"Невозможно прочитать файл формата pkcs#12",
+    
+    "1057":"Невозможно открыть файл формата pkcs12",
+    
+    "1058":"Недопустимый идентификатор расширения сертификата",
+    
+    "1059":"Размер буфера слишком мал",
+    
+    "1060":"Невозможно разобрать (распарсить) сертификат",
+    
+    "1061":"Недопустимый флаг",
+    
+    "1062":"Невозможно открыть файл",
+    
+    "1063":"Невозможно выделить память",
+    
+    "1064":"Не найден сертификат УЦ или сертификат пользователя при проверки цепочки",
+    
+    "1065":"Недопустимый тип валидации сертификата",
+    
+    "1066":"Некорректный формат CRL",
+    
+    "1067":"Невозможно загрузить CRL",
+    
+    "1068":"Невозможно загрузить CRL-ы",
+    
+    "1069":"Неизвестный алгоритм подписи",
+    
+    "1070":"Не найден приватный ключ пользователя",
+    
+    "1071":"Невозможно инициализировать менеджера подписи",
+    
+    "1072":"Не удалось сгенерировать цифровую подпись",
+    
+    "1073":"Ошибка шифрования",
+    
+    "1074":"Недопустимые флаги",
+    
+    "1075":"Не найден сертификат пользователя",
+    
+    "1076":"Ошибка верификации подписи xml",
+    
+    "1077":"Ошибка дешифровки из Base 64",
+    
+    "1078":"Неизвестный формат CMS",
+    
+    "1079":"Не найден сертификат УЦ",
+    
+    "1080":"Ошибка инициализации xmlsec",
+    
+    "1081":"Ошибка загрузки доверенных сертификатов",
+    
+    "1082":"Недопустимая подпись xml",
+    
+    "1083":"Не найдена подпись во входных данных",
+    
+    "1084":"Ошибка дешифрования",
+    
+    "1085":"Невозможно разобрать (распарсить) xml",
+    
+    "1086":"Не удалось добавить атрибут ID",
+    
+    "1087":"Ошибка при работе с xml",
+    
+    "1088":"Не удалось подписать xml",
+    
+    "1090":"Ошибка openssl",
+    
+    "1091":"Не найден токен",
+    
+    "1092":"Не удалось добавить сертификат в ocsp",
+    
+    "1093":"Не удалось разобрать url",
+    
+    "1094":"Не удалось добавить хост",
+    
+    "1095":"Укажите файл для загрузки",
+    
+    "1096":"Нет провайдеров или все провайдеры выключены!",
+    
+    "1097":"Имя провайдера не может быть пустым и содержать более 40 символов",
+    
+    "1098":"Поле 'Enable' не может быть пустым",
+    
+    "1099":"Ненайден указанный провайдер",
+    
+    "1100":"Не более 70-ти символов" ,
+    
+    "1101":"Поле не может быть пустым" ,
+    
+    "1102":"Поле 'Text' не может быть пустым",
+    
+    "1103":"Ошибка отправки смс провайдером",
+    
+    "1104":"Исчерпан лимит смс, подождите 4 минуты" ,
+    
+    "1105":"Ошибка. Повторная отправка СМС. Выждите указанное время" ,
+    
+    "1106":"Отказано в доступе" ,
+    
+    "1107":"Документ отозван работодателем",
+    
+    "1108":"Ненайден указанный роут",
+    
+    "1109":"Количество cторон подписания должно быть более 5-и и менее 1-го",
+    
+    "1110":"Номера телефонов должны быть формата '+77777777777'",
+    
+    "1112":"URL не соотвествует шаблону 'https://test.com'" ,
+    
+    "1113":"Нельзя подписывать документ авторизационным ключом",
+    
+    "1114":"Ошибка подписания юр.лицом" ,
+    
+    "1115":"Невозможно прочитать файл формата pkcs#12" ,
+    
+    "1116":"Невозможно открыть файл формата pkcs12" ,
+    
+    "1117":"Недопустимый идентификатор расширения сертификата" ,
+    
+    "1118":"Размер буфера слишком мал" ,
+    
+    "1119":"Невозможно разобрать (распарсить) сертификат" ,
+    
+    "1120":"Недопустимый флаг" ,
+    
+    "1121":"Невозможно открыть файл" ,
+    
+    "1122":"Неправильный пароль" ,
+    
+    "1123":" Невозможно выделить память" ,
+    
+    "1124":"Не найден сертификат УЦ или сертификат пользователя при проверки цепочки" ,
+    
+    "1125":"Недопустимый тип валидации сертификата" ,
+    
+    "1126":"Некорректный формат CRL" ,
+    
+    "1127":"Невозможно загрузить CRL" ,
+    
+    "1128":"Невозможно загрузить CRL-ы" ,
+    
+    "1129":"Неизвестный алгоритм подписи" ,
+    
+    "1130":"Не найден приватный ключ пользователя" ,
+    
+    "1131":"Невозможно инициализировать менеджера подписи" ,
+    
+    "1132":"Не удалось сгенерировать цифровую подпись" ,
+    
+    "1133":"Ошибка шифрования" ,
+    
+    "1134":"Недопустимые флаги" ,
+    
+    "1135":"Не найден сертификат пользователя" ,
+    
+    "1136":"Ошибка верификации подписи xml" ,
+    
+    "1137":"Ошибка дешифровки из Base 64" ,
+    
+    "1138":"Неизвестный формат CMS" ,
+    
+    "1139":"Не найден сертификат УЦ" ,
+    
+    "1140":"Ошибка инициализации xmlsec" ,
+    
+    "1141":"Ошибка загрузки доверенных сертификатов" ,
+    
+    "1142":"Недопустимая подпись xml" ,
+    
+    "1143":"Не найдена подпись во входных данных" ,
+    
+    "1144":"Ошибка дешифрования" ,
+    
+    "1145":"Невозможно разобрать (распарсить) xml" ,
+    
+    "1146":"Не удалось добавить атрибут ID" ,
+    
+    "1147":"Ошибка при работе с xml" ,
+    
+    "1148":"Не удалось подписать xml" ,
+    
+    "1149":"Ошибка openssl" ,
+    
+    "1150":"Не найден токен" ,
+    
+    "1151":"Не удалось добавить сертификат в ocsp" ,
+    
+    "1152":"Не удалось разобрать url" ,
+    
+    "1153":"Не удалось добавить хост" ,
+    
+    "1154":"Не удалось добавить текущее время в запрос" ,
+    
+    "1155":"Ошибка подключения к OCSP респондеру" ,
+    
+    "1156":"Нет входных данных для верификации" ,
+    
+    "1157":"Не найден атрибут ID" ,
+    
+    "1158":"Некорректный идентификатор" ,
+    
+    "1159":"Не найден ридер" ,
+    
+    "1160":"Не удалось получить значение атрибута" ,
+    
+    "1161":"Неизвестный формат подписи" ,
+    
+    "1162":"Неизвестный формат входных данных" ,
+    
+    "1163":"Неизвестный формат выходных данных" ,
+    
+    "1164":"Невозможно инициализировать менеджера верификации подписи" ,
+    
+    "1165":"Не удалось верифицировать цифровую подпись" ,
+    
+    "1166":"Не удалось хэшировать данные" ,
+    
+    "1167":"Не удалось подписать хэшированные данные" ,
+    
+    "1168":"Не найден сертификат УЦ в хранилище сертификатов",
+    
+    "1169":"Срок действия сертификата истек либо еще не наступил",
+    
+    "1170":"Ошибка записи сертификата в структуру X509" ,
+    
+    "1171":"Ошибка генерации запроса timestamp" ,
+    
+    "1172":"Ошибка записи OID в ASN1 структуру" ,
+    
+    "1173":"Ошибка генерации уникального числа" ,
+    
+    "1174":"Ошибка протокола http" ,
+    
+    "1175":"Ошибка проверки расширения CADESBES в CMS" ,
+    
+    "1176":"Ошибка проверки подписи токена TSA" ,
+    
+    "1177":"В подписи не присутствует метка TSA" ,
+    
+    "1178":"Неправильная длина хэша" ,
+    
+    "1179":"Ошибка генерации случайного числа" ,
+    
+    "1180":"Не найдены заголовки SOAP-сообщений" ,
+    
+    "1181":"Ошибка экспорта публичного ключа" ,
+    
+    "1182":"Ошибка получения информации о сертификате" ,
+    
+    "1183":"Ошибка чтения файла" ,
+    
+    "1184":"Хэш не совпадает" ,
+    
+    "1185":"Невозможно открыть архив" ,
+    
+    "1186":"Не найден MANIFEST" ,
+    
+    "1187":"не удалось проверить Хэш подписи TS" ,
+    
+    "1188":"XAdES-T: Ошибка проверки подписи" ,
+    
+    "1189":"Неправильный запрос" ,
+    
+    "1190":"Внутренняя ошибка" ,
+    
+    "1191":"Попробуйте позже" ,
+    
+    "1192":"Должны подписать запрос" ,
+    
+    "1193":"Запрос не авторизован" ,
+    
+    "1194":"не удалось проверить IssuerSerialV2 в XAdES" ,
+    
+    "1195":"Ошибка проверки сертификата OCSP-респондера" ,
+    
+    "1196":"CRL-файл просрочен" ,
+    
+    "1197":"Библиотека не инициализирована" ,
+    
+    "1198":"Ошибка подключения (загрузки) модуля (engine)" ,
+    
+    "1199":"Некорректные входные данные" ,
+    
+    "1200":"Статус сертификата – валидный. (не является ошибкой, делается запись в лог)" ,
+    
+    "1201":"Статус сертификата – отозван. " ,
+    
+    "1202":"Статус сертификата – неизвестен. Например, не удалось установить издателя сертификата." ,
+    
+    "1203":"Ошибка на стороне НУЦ. Пожалуйста, попробуйте подписать позже" ,
+    
+    "1204":"Ошибка открытия файла ЭЦП. Файл не соотвествует формату" ,
+    
+    "1205":"Договор находится в процессе подписания" ,
+    
+    "1206":"Договор удален или находится в процессе удаления" ,
+    
+    "1207":"Невозможно удалить подписанный документ" ,
+    
+    "1208":"Реквезиты не соотвествуют формату" ,
+    
+    "1209", "Реквезиты не могут быть пустыми",
+    
+    "1210":"Компания не найдена" ,
+    
+    "1211":"Не подключен тариф" ,
+    
+    "1212":"Обратитесь к поставщику услуг" ,
+    
+    "1213":"Ответ сервера не содержит данных" ,
+    
+    "1214":"Недостаточно доступных подписаний для перевода" ,
+    
+    "1215":"Ошибка создания платежа" ,
+    
+    "1216":"Не найден указанный тариф" ,
+    
+    "1217":"Для подпсания через ЭЦП поле 'ИИН' или 'БИН' должны быть заполены" ,
+    
+    "1218":"Данные не обновлены" ,
+    
+    "1219":"Нет разрешения на автоподписание документа" ,
+    
+    "1220":"Ненайдена компания партнера по номеру телефона" ,
+    
+    "1221":"Невозможно отозвать подписанный документ" ,
+    
+    "1222":"Вы уже подтвеждали рассторжение документа" ,
+    
+    "1223":"Документ подписан через ЭЦП. Выберите 'Подтвердить через ЭЦП'" ,
+    
+    "1224":"У вас нет прав для рассторжения указанного контракта",
+    
+    "1239":"Не удалось получить данные договора" ,
+    
+    "1240":"На указанные номера уже существуют ранее созданные заявки" ,
+    
+    "1241":"Пустые файлы" ,
+    
+    "1242":"Ненайдена заявка" ,
+    
+    "1243":"Есть не проверенные документы. Проверьте все документы в заявке" ,
+    
+    "1244":"В заявке есть недостающие файлы" ,
+    
+    "1245":"Указанный документ был добавлен ранее в заявку",
+    
+    "1246":"Указанный шаблон был добавлен ранее в заявку",
+    
+    "1248":"Указанный документ был согласован вами ранее" ,
+    
+    "1249":"У вас нет прав для согласования данного документа" ,
+    
+    "1250":"Документ не может быть подписан вами в данный момент. Убедитесь, что все необходимые подписи от других участников уже присутствуют" ,
+    
+    "1251":"Документ нельзя согласовывать вашим способом" ,
+    
+    "1252":"Не удалось сохранить подпись" ,
+    
+    "1253":"Ошибка скачивания файла" ,
+    
+    "1254":"Ошибка при подписании согласования через ЭЦП НУЦ РК" ,
+    
+    "1255":"Ошибка обновления листа согласования при слиянии документов" ,
+    
+    "1256":"Ошибка чтения данных полей" ,
+    
+    "1257":"Переданы не все поля" ,
+    
+    "1258":"Заполнены не все требуемые поля" ,
+    
+    "1259":"Не найдены указанные поля в заявке" ,
+    
+    "1260":"Пользователь не является сотрудником указанной компании" ,
+    
+    "1261":"Отвественный сотрудник был добавлен ранее" ,
+    
+    "1262":"Статус заявки не позволяет добавлять отвественного сотрудника" ,
+    
+    "1263":"Нет подписей согласущих в заявке",
+    
+    "1264":"Ошибка удаления документов",
+    
+    "1265":"Нельзя отзывать уже подписанный документ",
+    
+    "1266":"Данный документ запрещено отзывать из согласовани",
+    
+    "1267":"Данный документ был отозван из согласования ранее",
+    
+    "1268":"Очередь подписания не дошла до вас",
+    
+    "1269":"Указан пустой номер документа",
+    
+    "1270":"Указанный номер документа добавлен ранее",
+    
+    1271 : "Биометрия не пройдена" ,
+    
+    1272, "ErrorText": "Пользователь не зарегистрирован БМГ",
+    
+    "1273":"Подписание приостановлено на короткое время".
+
+    "1274":"Что-то пошло не так при конвертации. Попробуйте еще раз.",
+    
+    "1276":"Договор отозван либо начато расторжение",
+    
+    "1277":"Расторжение приостановлено на короткое время",
+    
+    "1278":"Ошибка при массовом расторжении",
+    
+    "1279": "Массовое расторжение может инициировать только директор.",
+ 
+    "1280": "Документы отправлены на подписание и будут обработаны в фоновом режиме",
+    
+    "1281": "Документы отправлены на расторжение и будут обработаны в фоновом режиме",
+    
+    "1282": "Что-то пошло не так",
+    
+    "1283": "Ошибка при массовом подписании",
+    
+    "1284":"У вас недостаточно прав для выполнения этой операции",
+    
+    "1285":"Вы можете создать только 20 папок в одной компании",
+    
+    "1286":"Сотрудник не найден",
+    
+    "1287":"Недостаточно прав",
+    
+    "Out of range":"Не загружены все документы",
+    
+    "default":"Неизвестная ошибка".
+
+
+
+
+
+
+
+
+
+
+
