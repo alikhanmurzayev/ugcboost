@@ -4,3 +4,5 @@
 
 # Auto-generated TypeScript schemas (openapi-typescript).
 frontend/*/src/api/generated/** linguist-generated=true
+frontend/e2e/types/schema.ts linguist-generated=true
+frontend/e2e/types/test-schema.ts linguist-generated=true
