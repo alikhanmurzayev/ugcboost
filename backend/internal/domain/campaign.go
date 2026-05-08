@@ -43,6 +43,16 @@ var ErrCampaignNameTaken = NewBusinessError(
 // hits sql.ErrNoRows. respondError maps it to 404 CAMPAIGN_NOT_FOUND.
 var ErrCampaignNotFound = errors.New("campaign not found")
 
+// ErrCampaignTmaURLLocked is raised by UpdateCampaign when the request flips
+// tma_url while at least one creator in this campaign has already been
+// invited (invited_count > 0). The previous URL is embedded in the inline
+// web_app button of bot messages already delivered to creators; flipping it
+// would silently break those links.
+var ErrCampaignTmaURLLocked = NewValidationError(
+	CodeCampaignTmaURLLocked,
+	"Нельзя изменить ссылку на ТЗ — приглашения по текущей ссылке уже отправлены креаторам.",
+)
+
 // ErrCampaignIdsTooMany is raised by ApproveCreatorApplication when the
 // optional `campaignIds` payload exceeds the per-call cap.
 var ErrCampaignIdsTooMany = NewValidationError(

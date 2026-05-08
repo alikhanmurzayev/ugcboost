@@ -1,6 +1,7 @@
 package telegram
 
 import (
+	"errors"
 	"sync"
 	"time"
 
@@ -31,17 +32,78 @@ type SentFilter struct {
 }
 
 // SentSpyStore is the thread-safe ring of recorded outbound messages.
-// Created only when EnableTestEndpoints is true.
+// Created only when EnableTestEndpoints is true. The same store also owns
+// per-chat one-shot synthetic-failure registrations (e2e exercises
+// partial-success delivery without a real blocked-by-user) and a "fake
+// chat" set (TeeSender skips the upstream real-bot call for synthetic
+// chat_ids that no live bot can reach).
 type SentSpyStore struct {
-	mu      sync.Mutex
-	records []SentRecord
+	mu        sync.Mutex
+	records   []SentRecord
+	failNext  map[int64]string // chatID → reason text for the next send
+	fakeChats map[int64]struct{}
 }
 
 // NewSentSpyStore returns a store with the package-level capacity. The
 // capacity is fixed so test infrastructure cannot accidentally tune it
 // down to a value that lets parallel e2e runs evict each other's records.
 func NewSentSpyStore() *SentSpyStore {
-	return &SentSpyStore{records: make([]SentRecord, 0, sentSpyStoreCapacity)}
+	return &SentSpyStore{
+		records:   make([]SentRecord, 0, sentSpyStoreCapacity),
+		failNext:  make(map[int64]string),
+		fakeChats: make(map[int64]struct{}),
+	}
+}
+
+// RegisterFakeChat marks chatID as test-synthetic so TeeSender skips the
+// real-bot SendMessage call and returns success directly. SpyOnlySender
+// ignores this since it is already recording-only.
+func (s *SentSpyStore) RegisterFakeChat(chatID int64) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.fakeChats[chatID] = struct{}{}
+}
+
+// IsFakeChat reports whether RegisterFakeChat was called for chatID.
+func (s *SentSpyStore) IsFakeChat(chatID int64) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	_, ok := s.fakeChats[chatID]
+	return ok
+}
+
+// RegisterFailNext queues a one-shot synthetic failure for the next
+// SendMessage call to chatID. reason is the verbatim error string the
+// sender will return; pass `""` to use the canonical "Forbidden: bot was
+// blocked by the user" payload that maps to NotifyFailureReasonBotBlocked.
+func (s *SentSpyStore) RegisterFailNext(chatID int64, reason string) {
+	if reason == "" {
+		reason = "Forbidden: bot was blocked by the user"
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.failNext[chatID] = reason
+}
+
+// consumeFailNext returns the queued reason string for chatID and clears
+// the registration so the failure fires exactly once. Returns ("", false)
+// when no failure is queued.
+func (s *SentSpyStore) consumeFailNext(chatID int64) (string, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	reason, ok := s.failNext[chatID]
+	if !ok {
+		return "", false
+	}
+	delete(s.failNext, chatID)
+	return reason, true
+}
+
+// newSyntheticTGErr returns an error whose .Error() is exactly reason so
+// MapTelegramErrorToReason classifies it like the real SDK counterpart
+// ("Forbidden: ..." → bot_blocked, anything else → unknown).
+func newSyntheticTGErr(reason string) error {
+	return errors.New(reason)
 }
 
 // Record appends one send result. When the ring is full the oldest record

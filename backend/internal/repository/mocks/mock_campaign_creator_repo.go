@@ -118,6 +118,142 @@ func (_c *MockCampaignCreatorRepo_Add_Call) RunAndReturn(run func(ctx context.Co
 	return _c
 }
 
+// ApplyInvite provides a mock function for the type MockCampaignCreatorRepo
+func (_mock *MockCampaignCreatorRepo) ApplyInvite(ctx context.Context, id string) (*repository.CampaignCreatorRow, error) {
+	ret := _mock.Called(ctx, id)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ApplyInvite")
+	}
+
+	var r0 *repository.CampaignCreatorRow
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) (*repository.CampaignCreatorRow, error)); ok {
+		return returnFunc(ctx, id)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) *repository.CampaignCreatorRow); ok {
+		r0 = returnFunc(ctx, id)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*repository.CampaignCreatorRow)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string) error); ok {
+		r1 = returnFunc(ctx, id)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockCampaignCreatorRepo_ApplyInvite_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ApplyInvite'
+type MockCampaignCreatorRepo_ApplyInvite_Call struct {
+	*mock.Call
+}
+
+// ApplyInvite is a helper method to define mock.On call
+//   - ctx context.Context
+//   - id string
+func (_e *MockCampaignCreatorRepo_Expecter) ApplyInvite(ctx interface{}, id interface{}) *MockCampaignCreatorRepo_ApplyInvite_Call {
+	return &MockCampaignCreatorRepo_ApplyInvite_Call{Call: _e.mock.On("ApplyInvite", ctx, id)}
+}
+
+func (_c *MockCampaignCreatorRepo_ApplyInvite_Call) Run(run func(ctx context.Context, id string)) *MockCampaignCreatorRepo_ApplyInvite_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockCampaignCreatorRepo_ApplyInvite_Call) Return(campaignCreatorRow *repository.CampaignCreatorRow, err error) *MockCampaignCreatorRepo_ApplyInvite_Call {
+	_c.Call.Return(campaignCreatorRow, err)
+	return _c
+}
+
+func (_c *MockCampaignCreatorRepo_ApplyInvite_Call) RunAndReturn(run func(ctx context.Context, id string) (*repository.CampaignCreatorRow, error)) *MockCampaignCreatorRepo_ApplyInvite_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// ApplyRemind provides a mock function for the type MockCampaignCreatorRepo
+func (_mock *MockCampaignCreatorRepo) ApplyRemind(ctx context.Context, id string) (*repository.CampaignCreatorRow, error) {
+	ret := _mock.Called(ctx, id)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ApplyRemind")
+	}
+
+	var r0 *repository.CampaignCreatorRow
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) (*repository.CampaignCreatorRow, error)); ok {
+		return returnFunc(ctx, id)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) *repository.CampaignCreatorRow); ok {
+		r0 = returnFunc(ctx, id)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*repository.CampaignCreatorRow)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string) error); ok {
+		r1 = returnFunc(ctx, id)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockCampaignCreatorRepo_ApplyRemind_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ApplyRemind'
+type MockCampaignCreatorRepo_ApplyRemind_Call struct {
+	*mock.Call
+}
+
+// ApplyRemind is a helper method to define mock.On call
+//   - ctx context.Context
+//   - id string
+func (_e *MockCampaignCreatorRepo_Expecter) ApplyRemind(ctx interface{}, id interface{}) *MockCampaignCreatorRepo_ApplyRemind_Call {
+	return &MockCampaignCreatorRepo_ApplyRemind_Call{Call: _e.mock.On("ApplyRemind", ctx, id)}
+}
+
+func (_c *MockCampaignCreatorRepo_ApplyRemind_Call) Run(run func(ctx context.Context, id string)) *MockCampaignCreatorRepo_ApplyRemind_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockCampaignCreatorRepo_ApplyRemind_Call) Return(campaignCreatorRow *repository.CampaignCreatorRow, err error) *MockCampaignCreatorRepo_ApplyRemind_Call {
+	_c.Call.Return(campaignCreatorRow, err)
+	return _c
+}
+
+func (_c *MockCampaignCreatorRepo_ApplyRemind_Call) RunAndReturn(run func(ctx context.Context, id string) (*repository.CampaignCreatorRow, error)) *MockCampaignCreatorRepo_ApplyRemind_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // DeleteByID provides a mock function for the type MockCampaignCreatorRepo
 func (_mock *MockCampaignCreatorRepo) DeleteByID(ctx context.Context, id string) error {
 	ret := _mock.Called(ctx, id)
@@ -171,6 +307,72 @@ func (_c *MockCampaignCreatorRepo_DeleteByID_Call) Return(err error) *MockCampai
 }
 
 func (_c *MockCampaignCreatorRepo_DeleteByID_Call) RunAndReturn(run func(ctx context.Context, id string) error) *MockCampaignCreatorRepo_DeleteByID_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// ExistsInvitedInCampaign provides a mock function for the type MockCampaignCreatorRepo
+func (_mock *MockCampaignCreatorRepo) ExistsInvitedInCampaign(ctx context.Context, campaignID string) (bool, error) {
+	ret := _mock.Called(ctx, campaignID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ExistsInvitedInCampaign")
+	}
+
+	var r0 bool
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) (bool, error)); ok {
+		return returnFunc(ctx, campaignID)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) bool); ok {
+		r0 = returnFunc(ctx, campaignID)
+	} else {
+		r0 = ret.Get(0).(bool)
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string) error); ok {
+		r1 = returnFunc(ctx, campaignID)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockCampaignCreatorRepo_ExistsInvitedInCampaign_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ExistsInvitedInCampaign'
+type MockCampaignCreatorRepo_ExistsInvitedInCampaign_Call struct {
+	*mock.Call
+}
+
+// ExistsInvitedInCampaign is a helper method to define mock.On call
+//   - ctx context.Context
+//   - campaignID string
+func (_e *MockCampaignCreatorRepo_Expecter) ExistsInvitedInCampaign(ctx interface{}, campaignID interface{}) *MockCampaignCreatorRepo_ExistsInvitedInCampaign_Call {
+	return &MockCampaignCreatorRepo_ExistsInvitedInCampaign_Call{Call: _e.mock.On("ExistsInvitedInCampaign", ctx, campaignID)}
+}
+
+func (_c *MockCampaignCreatorRepo_ExistsInvitedInCampaign_Call) Run(run func(ctx context.Context, campaignID string)) *MockCampaignCreatorRepo_ExistsInvitedInCampaign_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockCampaignCreatorRepo_ExistsInvitedInCampaign_Call) Return(b bool, err error) *MockCampaignCreatorRepo_ExistsInvitedInCampaign_Call {
+	_c.Call.Return(b, err)
+	return _c
+}
+
+func (_c *MockCampaignCreatorRepo_ExistsInvitedInCampaign_Call) RunAndReturn(run func(ctx context.Context, campaignID string) (bool, error)) *MockCampaignCreatorRepo_ExistsInvitedInCampaign_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -313,6 +515,80 @@ func (_c *MockCampaignCreatorRepo_ListByCampaign_Call) Return(campaignCreatorRow
 }
 
 func (_c *MockCampaignCreatorRepo_ListByCampaign_Call) RunAndReturn(run func(ctx context.Context, campaignID string) ([]*repository.CampaignCreatorRow, error)) *MockCampaignCreatorRepo_ListByCampaign_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// ListByCampaignAndCreators provides a mock function for the type MockCampaignCreatorRepo
+func (_mock *MockCampaignCreatorRepo) ListByCampaignAndCreators(ctx context.Context, campaignID string, creatorIDs []string) ([]*repository.CampaignCreatorRow, error) {
+	ret := _mock.Called(ctx, campaignID, creatorIDs)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ListByCampaignAndCreators")
+	}
+
+	var r0 []*repository.CampaignCreatorRow
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, []string) ([]*repository.CampaignCreatorRow, error)); ok {
+		return returnFunc(ctx, campaignID, creatorIDs)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, []string) []*repository.CampaignCreatorRow); ok {
+		r0 = returnFunc(ctx, campaignID, creatorIDs)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]*repository.CampaignCreatorRow)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, []string) error); ok {
+		r1 = returnFunc(ctx, campaignID, creatorIDs)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockCampaignCreatorRepo_ListByCampaignAndCreators_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ListByCampaignAndCreators'
+type MockCampaignCreatorRepo_ListByCampaignAndCreators_Call struct {
+	*mock.Call
+}
+
+// ListByCampaignAndCreators is a helper method to define mock.On call
+//   - ctx context.Context
+//   - campaignID string
+//   - creatorIDs []string
+func (_e *MockCampaignCreatorRepo_Expecter) ListByCampaignAndCreators(ctx interface{}, campaignID interface{}, creatorIDs interface{}) *MockCampaignCreatorRepo_ListByCampaignAndCreators_Call {
+	return &MockCampaignCreatorRepo_ListByCampaignAndCreators_Call{Call: _e.mock.On("ListByCampaignAndCreators", ctx, campaignID, creatorIDs)}
+}
+
+func (_c *MockCampaignCreatorRepo_ListByCampaignAndCreators_Call) Run(run func(ctx context.Context, campaignID string, creatorIDs []string)) *MockCampaignCreatorRepo_ListByCampaignAndCreators_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 []string
+		if args[2] != nil {
+			arg2 = args[2].([]string)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockCampaignCreatorRepo_ListByCampaignAndCreators_Call) Return(campaignCreatorRows []*repository.CampaignCreatorRow, err error) *MockCampaignCreatorRepo_ListByCampaignAndCreators_Call {
+	_c.Call.Return(campaignCreatorRows, err)
+	return _c
+}
+
+func (_c *MockCampaignCreatorRepo_ListByCampaignAndCreators_Call) RunAndReturn(run func(ctx context.Context, campaignID string, creatorIDs []string) ([]*repository.CampaignCreatorRow, error)) *MockCampaignCreatorRepo_ListByCampaignAndCreators_Call {
 	_c.Call.Return(run)
 	return _c
 }

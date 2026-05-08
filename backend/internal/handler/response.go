@@ -6,6 +6,9 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/google/uuid"
+	openapi_types "github.com/oapi-codegen/runtime/types"
+
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/api"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/domain"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/logger"
@@ -28,6 +31,12 @@ func encodeJSON(w http.ResponseWriter, r *http.Request, v any, log logger.Logger
 // Server's logger and plugged into strict-server's ResponseErrorHandlerFunc /
 // RequestErrorHandlerFunc — keeping domain → HTTP translation in one place.
 func respondError(w http.ResponseWriter, r *http.Request, err error, log logger.Logger) {
+	var bie *domain.CampaignCreatorBatchInvalidError
+	if errors.As(err, &bie) {
+		writeBatchInvalid(w, r, bie, log)
+		return
+	}
+
 	var ve *domain.ValidationError
 	if errors.As(err, &ve) {
 		writeError(w, r, http.StatusUnprocessableEntity, ve.Code, ve.Message, log)
@@ -95,5 +104,42 @@ func writeError(w http.ResponseWriter, r *http.Request, status int, code, messag
 	w.WriteHeader(status)
 	encodeJSON(w, r, api.ErrorResponse{
 		Error: api.APIError{Code: code, Message: message},
+	}, log)
+}
+
+// writeBatchInvalid renders the CAMPAIGN_CREATOR_BATCH_INVALID 422 body. The
+// generated strict-server union (`oneOf` of two schemas) only exposes a
+// private `union json.RawMessage` field, so we bypass strict-server's
+// response interface and write the response directly here. The schema name
+// matches `CampaignCreatorBatchInvalidErrorResponse` from openapi.yaml.
+func writeBatchInvalid(w http.ResponseWriter, r *http.Request, bie *domain.CampaignCreatorBatchInvalidError, log logger.Logger) {
+	details := make([]api.CampaignCreatorBatchInvalidDetail, 0, len(bie.Details))
+	for _, d := range bie.Details {
+		// CreatorID strings originate from uuid.UUID.String() in the handler,
+		// so re-parse always succeeds; on the impossible failure path we fall
+		// back to uuid.Nil rather than 500 — caller still sees the reason.
+		parsed, err := uuid.Parse(d.CreatorID)
+		if err != nil {
+			log.Error(r.Context(), "writeBatchInvalid: invalid creator UUID",
+				"error", err, "creator_id", d.CreatorID)
+		}
+		detail := api.CampaignCreatorBatchInvalidDetail{
+			CreatorId: openapi_types.UUID(parsed),
+			Reason:    api.CampaignCreatorBatchInvalidReason(d.Reason),
+		}
+		if d.CurrentStatus != "" {
+			status := api.CampaignCreatorStatus(d.CurrentStatus)
+			detail.CurrentStatus = &status
+		}
+		details = append(details, detail)
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusUnprocessableEntity)
+	encodeJSON(w, r, api.CampaignCreatorBatchInvalidErrorResponse{
+		Error: api.CampaignCreatorBatchInvalidError{
+			Code:    domain.CodeCampaignCreatorBatchInvalid,
+			Message: "Некоторые креаторы не могут быть приглашены: обновите список и повторите.",
+			Details: details,
+		},
 	}, log)
 }

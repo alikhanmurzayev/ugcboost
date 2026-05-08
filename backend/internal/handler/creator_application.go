@@ -322,10 +322,10 @@ func (s *Server) VerifyCreatorApplicationSocial(ctx context.Context, request api
 // non-admin callers see 403 without the service ever being asked. The actor
 // uuid comes from the bearer token via middleware.UserIDFromContext; no body
 // is accepted (no internal note, no category, no creator-facing message —
-// the Telegram template is static and ships separately in chunk 14). Sentinel
-// errors from the service map to user-facing codes through respondError;
-// success returns an empty object so the caller refetches the aggregate to
-// observe the new state and the populated rejection block.
+// the Telegram template is static). Sentinel errors from the service map to
+// user-facing codes through respondError; success returns an empty object
+// so the caller refetches the aggregate to observe the new state and the
+// populated rejection block.
 func (s *Server) RejectCreatorApplication(ctx context.Context, request api.RejectCreatorApplicationRequestObject) (api.RejectCreatorApplicationResponseObject, error) {
 	if err := s.authzService.CanRejectCreatorApplication(ctx); err != nil {
 		return nil, err

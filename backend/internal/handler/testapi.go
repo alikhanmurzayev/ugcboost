@@ -255,7 +255,14 @@ func (h *TestAPIHandler) GetTelegramSent(_ context.Context, request testapi.GetT
 func webAppURLFrom(markup any) string {
 	kb, ok := markup.(tgmodels.InlineKeyboardMarkup)
 	if !ok {
-		return ""
+		// Pointer-shaped markup is what NewInlineKeyboardMarkup helpers produce;
+		// flat-value comes from the SendCampaignInvite path. Try both before
+		// giving up.
+		kbPtr, okPtr := markup.(*tgmodels.InlineKeyboardMarkup)
+		if !okPtr || kbPtr == nil {
+			return ""
+		}
+		kb = *kbPtr
 	}
 	for _, row := range kb.InlineKeyboard {
 		for _, btn := range row {
@@ -265,4 +272,30 @@ func webAppURLFrom(markup any) string {
 		}
 	}
 	return ""
+}
+
+// TelegramSpyFailNext handles POST /test/telegram/spy/fail-next. Registers
+// a one-shot synthetic Telegram failure for the given chat_id; the next
+// SendMessage call returns the registered reason string (defaulting to the
+// canonical "Forbidden: bot was blocked by the user" so
+// MapTelegramErrorToReason classifies it as bot_blocked).
+func (h *TestAPIHandler) TelegramSpyFailNext(_ context.Context, request testapi.TelegramSpyFailNextRequestObject) (testapi.TelegramSpyFailNextResponseObject, error) {
+	if request.Body == nil {
+		return nil, domain.NewValidationError(domain.CodeValidation, "body is required")
+	}
+	reason := ""
+	if request.Body.Reason != nil {
+		reason = *request.Body.Reason
+	}
+	h.telegramSpy.RegisterFailNext(request.Body.ChatId, reason)
+	return testapi.TelegramSpyFailNext204Response{}, nil
+}
+
+// TelegramSpyFakeChat handles POST /test/telegram/spy/fake-chat. Marks
+// chatId as test-synthetic so TeeSender bypasses the real upstream bot
+// for that chat — synthetic test chat_ids cannot be reached by a live bot.
+// Strict-server enforces non-nil body upstream; no defensive check here.
+func (h *TestAPIHandler) TelegramSpyFakeChat(_ context.Context, request testapi.TelegramSpyFakeChatRequestObject) (testapi.TelegramSpyFakeChatResponseObject, error) {
+	h.telegramSpy.RegisterFakeChat(request.Body.ChatId)
+	return testapi.TelegramSpyFakeChat204Response{}, nil
 }

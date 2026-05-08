@@ -381,12 +381,12 @@ func (s *CreatorApplicationService) iinErrorToValidation(_ error) error {
 
 // normaliseSocials enforces the whitelist of platforms and normalises each
 // handle via domain.NormalizeInstagramHandle (trim → strip leading '@' →
-// lowercase). The helper is named after Instagram because the chunk-8
-// SendPulse webhook makes a strict equality check against the persisted
-// IG handle, but the rule is byte-identical to what TikTok/Threads need
-// in the current scope, so all platforms run through it. Duplicates on the
-// same (platform, handle) pair inside one request are rejected up front so
-// we never hit the DB UNIQUE constraint mid-TX. Validation messages
+// lowercase). The helper is named after Instagram because the SendPulse
+// webhook makes a strict equality check against the persisted IG handle,
+// but the rule is byte-identical to what TikTok/Threads need in the
+// current scope, so all platforms run through it. Duplicates on the same
+// (platform, handle) pair inside one request are rejected up front so we
+// never hit the DB UNIQUE constraint mid-TX. Validation messages
 // reference only the platform (an enum value) — the user-controlled handle
 // never makes it into an error response or, by extension, into stdout
 // logs through respondError.
@@ -542,7 +542,8 @@ func trimOptional(s *string) *string {
 // `to_status=rejected` transition row to populate the Rejection block. A
 // missing or malformed transition row degrades gracefully: the block stays nil
 // and a warn lands in the logs — better to surface a partial read than to
-// throw 500 on legacy data that predates the chunk-12 invariant.
+// throw 500 on legacy data that predates the from_status / actor_id
+// invariant.
 func (s *CreatorApplicationService) GetByID(ctx context.Context, id string) (*domain.CreatorApplicationDetail, error) {
 	appRow, err := s.repoFactory.NewCreatorApplicationRepo(s.pool).GetByID(ctx, id)
 	if err != nil {
@@ -584,7 +585,7 @@ func (s *CreatorApplicationService) GetByID(ctx context.Context, id string) (*do
 
 // loadRejection fetches the most recent reject-transition row for an
 // application and shapes it into the domain block. sql.ErrNoRows or partial
-// data (nil from_status / actor_id — the schema permits both, the chunk-12
+// data (nil from_status / actor_id — the schema permits both, the rejection
 // invariant requires both) degrades to a nil block + warn log so admins still
 // see the rejected status even when the transition row is missing.
 func (s *CreatorApplicationService) loadRejection(ctx context.Context, applicationID string) (*domain.CreatorApplicationRejection, error) {

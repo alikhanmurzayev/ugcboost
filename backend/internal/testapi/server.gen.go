@@ -185,6 +185,23 @@ type TelegramSentResult struct {
 	Data TelegramSentData `json:"data"`
 }
 
+// TelegramSpyFailNextRequest defines model for TelegramSpyFailNextRequest.
+type TelegramSpyFailNextRequest struct {
+	// ChatId Chat id whose next SendMessage call should fail.
+	ChatId int64 `json:"chatId"`
+
+	// Reason Optional override for the error string the spy returns. Defaults
+	// to "Forbidden: bot was blocked by the user" so MapTelegramErrorToReason
+	// classifies it as bot_blocked.
+	Reason *string `json:"reason,omitempty"`
+}
+
+// TelegramSpyFakeChatRequest defines model for TelegramSpyFakeChatRequest.
+type TelegramSpyFakeChatRequest struct {
+	// ChatId Chat id to register as test-synthetic.
+	ChatId int64 `json:"chatId"`
+}
+
 // GetResetTokenParams defines parameters for GetResetToken.
 type GetResetTokenParams struct {
 	Email openapi_types.Email `form:"email" json:"email"`
@@ -208,6 +225,12 @@ type SeedUserJSONRequestBody = SeedUserRequest
 // SendTelegramMessageJSONRequestBody defines body for SendTelegramMessage for application/json ContentType.
 type SendTelegramMessageJSONRequestBody = SendTelegramMessageRequest
 
+// TelegramSpyFailNextJSONRequestBody defines body for TelegramSpyFailNext for application/json ContentType.
+type TelegramSpyFailNextJSONRequestBody = TelegramSpyFailNextRequest
+
+// TelegramSpyFakeChatJSONRequestBody defines body for TelegramSpyFakeChat for application/json ContentType.
+type TelegramSpyFakeChatJSONRequestBody = TelegramSpyFakeChatRequest
+
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
 	// Hard-delete a test entity (user or brand) and its references
@@ -225,6 +248,12 @@ type ServerInterface interface {
 	// Read recorded outbound Telegram messages
 	// (GET /test/telegram/sent)
 	GetTelegramSent(w http.ResponseWriter, r *http.Request, params GetTelegramSentParams)
+	// Force the next outbound bot send to chatId to fail
+	// (POST /test/telegram/spy/fail-next)
+	TelegramSpyFailNext(w http.ResponseWriter, r *http.Request)
+	// Mark chatId as test-synthetic so TeeSender skips the real bot
+	// (POST /test/telegram/spy/fake-chat)
+	TelegramSpyFakeChat(w http.ResponseWriter, r *http.Request)
 }
 
 // Unimplemented server implementation that returns http.StatusNotImplemented for each endpoint.
@@ -258,6 +287,18 @@ func (_ Unimplemented) SendTelegramMessage(w http.ResponseWriter, r *http.Reques
 // Read recorded outbound Telegram messages
 // (GET /test/telegram/sent)
 func (_ Unimplemented) GetTelegramSent(w http.ResponseWriter, r *http.Request, params GetTelegramSentParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Force the next outbound bot send to chatId to fail
+// (POST /test/telegram/spy/fail-next)
+func (_ Unimplemented) TelegramSpyFailNext(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Mark chatId as test-synthetic so TeeSender skips the real bot
+// (POST /test/telegram/spy/fake-chat)
+func (_ Unimplemented) TelegramSpyFakeChat(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -379,6 +420,34 @@ func (siw *ServerInterfaceWrapper) GetTelegramSent(w http.ResponseWriter, r *htt
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetTelegramSent(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// TelegramSpyFailNext operation middleware
+func (siw *ServerInterfaceWrapper) TelegramSpyFailNext(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.TelegramSpyFailNext(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// TelegramSpyFakeChat operation middleware
+func (siw *ServerInterfaceWrapper) TelegramSpyFakeChat(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.TelegramSpyFakeChat(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -516,6 +585,12 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/test/telegram/sent", wrapper.GetTelegramSent)
 	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/test/telegram/spy/fail-next", wrapper.TelegramSpyFailNext)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/test/telegram/spy/fake-chat", wrapper.TelegramSpyFakeChat)
+	})
 
 	return r
 }
@@ -649,6 +724,56 @@ func (response GetTelegramSent200JSONResponse) VisitGetTelegramSentResponse(w ht
 	return json.NewEncoder(w).Encode(response)
 }
 
+type TelegramSpyFailNextRequestObject struct {
+	Body *TelegramSpyFailNextJSONRequestBody
+}
+
+type TelegramSpyFailNextResponseObject interface {
+	VisitTelegramSpyFailNextResponse(w http.ResponseWriter) error
+}
+
+type TelegramSpyFailNext204Response struct {
+}
+
+func (response TelegramSpyFailNext204Response) VisitTelegramSpyFailNextResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type TelegramSpyFailNext422JSONResponse ErrorResponse
+
+func (response TelegramSpyFailNext422JSONResponse) VisitTelegramSpyFailNextResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(422)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type TelegramSpyFakeChatRequestObject struct {
+	Body *TelegramSpyFakeChatJSONRequestBody
+}
+
+type TelegramSpyFakeChatResponseObject interface {
+	VisitTelegramSpyFakeChatResponse(w http.ResponseWriter) error
+}
+
+type TelegramSpyFakeChat204Response struct {
+}
+
+func (response TelegramSpyFakeChat204Response) VisitTelegramSpyFakeChatResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type TelegramSpyFakeChat422JSONResponse ErrorResponse
+
+func (response TelegramSpyFakeChat422JSONResponse) VisitTelegramSpyFakeChatResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(422)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
 	// Hard-delete a test entity (user or brand) and its references
@@ -666,6 +791,12 @@ type StrictServerInterface interface {
 	// Read recorded outbound Telegram messages
 	// (GET /test/telegram/sent)
 	GetTelegramSent(ctx context.Context, request GetTelegramSentRequestObject) (GetTelegramSentResponseObject, error)
+	// Force the next outbound bot send to chatId to fail
+	// (POST /test/telegram/spy/fail-next)
+	TelegramSpyFailNext(ctx context.Context, request TelegramSpyFailNextRequestObject) (TelegramSpyFailNextResponseObject, error)
+	// Mark chatId as test-synthetic so TeeSender skips the real bot
+	// (POST /test/telegram/spy/fake-chat)
+	TelegramSpyFakeChat(ctx context.Context, request TelegramSpyFakeChatRequestObject) (TelegramSpyFakeChatResponseObject, error)
 }
 
 type StrictHandlerFunc = strictnethttp.StrictHTTPHandlerFunc
@@ -835,6 +966,68 @@ func (sh *strictHandler) GetTelegramSent(w http.ResponseWriter, r *http.Request,
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(GetTelegramSentResponseObject); ok {
 		if err := validResponse.VisitGetTelegramSentResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// TelegramSpyFailNext operation middleware
+func (sh *strictHandler) TelegramSpyFailNext(w http.ResponseWriter, r *http.Request) {
+	var request TelegramSpyFailNextRequestObject
+
+	var body TelegramSpyFailNextJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.TelegramSpyFailNext(ctx, request.(TelegramSpyFailNextRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "TelegramSpyFailNext")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(TelegramSpyFailNextResponseObject); ok {
+		if err := validResponse.VisitTelegramSpyFailNextResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// TelegramSpyFakeChat operation middleware
+func (sh *strictHandler) TelegramSpyFakeChat(w http.ResponseWriter, r *http.Request) {
+	var request TelegramSpyFakeChatRequestObject
+
+	var body TelegramSpyFakeChatJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.TelegramSpyFakeChat(ctx, request.(TelegramSpyFakeChatRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "TelegramSpyFakeChat")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(TelegramSpyFakeChatResponseObject); ok {
+		if err := validResponse.VisitTelegramSpyFakeChatResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

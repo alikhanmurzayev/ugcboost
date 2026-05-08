@@ -22,6 +22,24 @@ const (
 	BearerAuthScopes = "bearerAuth.Scopes"
 )
 
+// Defines values for CampaignCreatorBatchInvalidReason.
+const (
+	NotInCampaign CampaignCreatorBatchInvalidReason = "not_in_campaign"
+	WrongStatus   CampaignCreatorBatchInvalidReason = "wrong_status"
+)
+
+// Valid indicates whether the value is a known member of the CampaignCreatorBatchInvalidReason enum.
+func (e CampaignCreatorBatchInvalidReason) Valid() bool {
+	switch e {
+	case NotInCampaign:
+		return true
+	case WrongStatus:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for CampaignCreatorStatus.
 const (
 	Agreed   CampaignCreatorStatus = "agreed"
@@ -61,6 +79,24 @@ func (e CampaignListSortField) Valid() bool {
 	case CampaignListSortFieldName:
 		return true
 	case CampaignListSortFieldUpdatedAt:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CampaignNotifyUndeliveredReason.
+const (
+	BotBlocked CampaignNotifyUndeliveredReason = "bot_blocked"
+	Unknown    CampaignNotifyUndeliveredReason = "unknown"
+)
+
+// Valid indicates whether the value is a known member of the CampaignNotifyUndeliveredReason enum.
+func (e CampaignNotifyUndeliveredReason) Valid() bool {
+	switch e {
+	case BotBlocked:
+		return true
+	case Unknown:
 		return true
 	default:
 		return false
@@ -431,6 +467,66 @@ type CampaignCreator struct {
 	UpdatedAt time.Time             `json:"updatedAt"`
 }
 
+// CampaignCreatorBatchInput Batch input shared by `POST /campaigns/{id}/notify` and
+// `POST /campaigns/{id}/remind-invitation`. The shape mirrors
+// AddCampaignCreatorsInput; both endpoints enforce the same
+// empty/over-200/duplicate-id checks before reaching the service.
+type CampaignCreatorBatchInput struct {
+	CreatorIds []openapi_types.UUID `json:"creatorIds"`
+}
+
+// CampaignCreatorBatchInvalidDetail defines model for CampaignCreatorBatchInvalidDetail.
+type CampaignCreatorBatchInvalidDetail struct {
+	CreatorId openapi_types.UUID `json:"creatorId"`
+
+	// CurrentStatus Lifecycle state of a creator within a campaign.
+	//
+	// - `planned` — admin added the creator to the campaign (default on create).
+	// - `invited` — admin sent an invitation; awaiting creator response.
+	// - `declined` — creator declined via TMA.
+	// - `agreed` — creator accepted via TMA. Terminal for the current scope.
+	CurrentStatus *CampaignCreatorStatus `json:"currentStatus,omitempty"`
+
+	// Reason - `not_in_campaign` — the creatorId is not attached to this campaign
+	//   (or does not exist as a creator at all; the admin UX is identical:
+	//   refresh the list).
+	// - `wrong_status` — the creator is attached but the current status is
+	//   incompatible with the action (notify needs `planned`/`declined`,
+	//   remind-invitation needs `invited`). `currentStatus` carries the
+	//   actual status for richer UX copy.
+	Reason CampaignCreatorBatchInvalidReason `json:"reason"`
+}
+
+// CampaignCreatorBatchInvalidError Strict-422 response body for notify / remind-invitation batch
+// validation. The validate-pass collects every offending creatorId in
+// one sweep so the admin UI can highlight all problematic rows at once.
+type CampaignCreatorBatchInvalidError struct {
+	// Code Always `CAMPAIGN_CREATOR_BATCH_INVALID`.
+	Code    string                              `json:"code"`
+	Details []CampaignCreatorBatchInvalidDetail `json:"details"`
+
+	// Message Human-readable fallback message.
+	Message string `json:"message"`
+}
+
+// CampaignCreatorBatchInvalidErrorResponse defines model for CampaignCreatorBatchInvalidErrorResponse.
+type CampaignCreatorBatchInvalidErrorResponse struct {
+	// Error Strict-422 response body for notify / remind-invitation batch
+	// validation. The validate-pass collects every offending creatorId in
+	// one sweep so the admin UI can highlight all problematic rows at once.
+	Error CampaignCreatorBatchInvalidError `json:"error"`
+}
+
+// CampaignCreatorBatchInvalidReason - `not_in_campaign` — the creatorId is not attached to this campaign
+//
+//		(or does not exist as a creator at all; the admin UX is identical:
+//		refresh the list).
+//	  - `wrong_status` — the creator is attached but the current status is
+//	    incompatible with the action (notify needs `planned`/`declined`,
+//	    remind-invitation needs `invited`). `currentStatus` carries the
+//	    actual status for richer UX copy.
+type CampaignCreatorBatchInvalidReason string
+
 // CampaignCreatorStatus Lifecycle state of a creator within a campaign.
 //
 // - `planned` — admin added the creator to the campaign (default on create).
@@ -451,6 +547,36 @@ type CampaignInput struct {
 // CampaignListSortField Sort field for the admin list. Mapped to a SQL column on the backend.
 // Unknown values are rejected with 422.
 type CampaignListSortField string
+
+// CampaignNotifyResult Partial-success result of a notify / remind-invitation batch. Only
+// creators that failed delivery appear in `undelivered`; everyone else
+// succeeded (`delivered_count` is `len(creatorIds) - len(undelivered)`
+// on the client).
+type CampaignNotifyResult struct {
+	Data struct {
+		Undelivered []CampaignNotifyUndelivered `json:"undelivered"`
+	} `json:"data"`
+}
+
+// CampaignNotifyUndelivered defines model for CampaignNotifyUndelivered.
+type CampaignNotifyUndelivered struct {
+	CreatorId openapi_types.UUID `json:"creatorId"`
+
+	// Reason - `bot_blocked` — Telegram refused delivery because the user blocked
+	//   the bot or deactivated the account; the admin needs an alternative
+	//   channel for this creator.
+	// - `unknown` — every other transport failure (network, timeout, 5xx
+	//   from Telegram). The raw error is logged server-side without PII.
+	Reason CampaignNotifyUndeliveredReason `json:"reason"`
+}
+
+// CampaignNotifyUndeliveredReason - `bot_blocked` — Telegram refused delivery because the user blocked
+//
+//		the bot or deactivated the account; the admin needs an alternative
+//		channel for this creator.
+//	  - `unknown` — every other transport failure (network, timeout, 5xx
+//	    from Telegram). The raw error is logged server-side without PII.
+type CampaignNotifyUndeliveredReason string
 
 // CampaignsListData defines model for CampaignsListData.
 type CampaignsListData struct {
@@ -1297,6 +1423,12 @@ type UpdateCampaignJSONRequestBody = CampaignInput
 // AddCampaignCreatorsJSONRequestBody defines body for AddCampaignCreators for application/json ContentType.
 type AddCampaignCreatorsJSONRequestBody = AddCampaignCreatorsInput
 
+// NotifyCampaignCreatorsJSONRequestBody defines body for NotifyCampaignCreators for application/json ContentType.
+type NotifyCampaignCreatorsJSONRequestBody = CampaignCreatorBatchInput
+
+// RemindCampaignCreatorsInvitationJSONRequestBody defines body for RemindCampaignCreatorsInvitation for application/json ContentType.
+type RemindCampaignCreatorsInvitationJSONRequestBody = CampaignCreatorBatchInput
+
 // SubmitCreatorApplicationJSONRequestBody defines body for SubmitCreatorApplication for application/json ContentType.
 type SubmitCreatorApplicationJSONRequestBody = CreatorApplicationSubmitRequest
 
@@ -1380,6 +1512,12 @@ type ServerInterface interface {
 	// Remove a creator from a campaign (admin-only)
 	// (DELETE /campaigns/{id}/creators/{creatorId})
 	RemoveCampaignCreator(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, creatorId openapi_types.UUID)
+	// Send invitation messages to campaign creators (admin-only)
+	// (POST /campaigns/{id}/notify)
+	NotifyCampaignCreators(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+	// Send invitation reminders to campaign creators (admin-only)
+	// (POST /campaigns/{id}/remind-invitation)
+	RemindCampaignCreatorsInvitation(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
 	// Submit a creator application from the public landing page
 	// (POST /creators/applications)
 	SubmitCreatorApplication(w http.ResponseWriter, r *http.Request)
@@ -1545,6 +1683,18 @@ func (_ Unimplemented) AddCampaignCreators(w http.ResponseWriter, r *http.Reques
 // Remove a creator from a campaign (admin-only)
 // (DELETE /campaigns/{id}/creators/{creatorId})
 func (_ Unimplemented) RemoveCampaignCreator(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, creatorId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Send invitation messages to campaign creators (admin-only)
+// (POST /campaigns/{id}/notify)
+func (_ Unimplemented) NotifyCampaignCreators(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Send invitation reminders to campaign creators (admin-only)
+// (POST /campaigns/{id}/remind-invitation)
+func (_ Unimplemented) RemindCampaignCreatorsInvitation(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -2297,6 +2447,68 @@ func (siw *ServerInterfaceWrapper) RemoveCampaignCreator(w http.ResponseWriter, 
 	handler.ServeHTTP(w, r)
 }
 
+// NotifyCampaignCreators operation middleware
+func (siw *ServerInterfaceWrapper) NotifyCampaignCreators(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.NotifyCampaignCreators(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RemindCampaignCreatorsInvitation operation middleware
+func (siw *ServerInterfaceWrapper) RemindCampaignCreatorsInvitation(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RemindCampaignCreatorsInvitation(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // SubmitCreatorApplication operation middleware
 func (siw *ServerInterfaceWrapper) SubmitCreatorApplication(w http.ResponseWriter, r *http.Request) {
 
@@ -2763,6 +2975,12 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Delete(options.BaseURL+"/campaigns/{id}/creators/{creatorId}", wrapper.RemoveCampaignCreator)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/campaigns/{id}/notify", wrapper.NotifyCampaignCreators)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/campaigns/{id}/remind-invitation", wrapper.RemindCampaignCreatorsInvitation)
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/creators/applications", wrapper.SubmitCreatorApplication)
@@ -3828,6 +4046,142 @@ func (response RemoveCampaignCreatordefaultJSONResponse) VisitRemoveCampaignCrea
 	return json.NewEncoder(w).Encode(response.Body)
 }
 
+type NotifyCampaignCreatorsRequestObject struct {
+	Id   openapi_types.UUID `json:"id"`
+	Body *NotifyCampaignCreatorsJSONRequestBody
+}
+
+type NotifyCampaignCreatorsResponseObject interface {
+	VisitNotifyCampaignCreatorsResponse(w http.ResponseWriter) error
+}
+
+type NotifyCampaignCreators200JSONResponse CampaignNotifyResult
+
+func (response NotifyCampaignCreators200JSONResponse) VisitNotifyCampaignCreatorsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type NotifyCampaignCreators401JSONResponse ErrorResponse
+
+func (response NotifyCampaignCreators401JSONResponse) VisitNotifyCampaignCreatorsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type NotifyCampaignCreators403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response NotifyCampaignCreators403JSONResponse) VisitNotifyCampaignCreatorsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type NotifyCampaignCreators404JSONResponse ErrorResponse
+
+func (response NotifyCampaignCreators404JSONResponse) VisitNotifyCampaignCreatorsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type NotifyCampaignCreators422JSONResponse struct {
+	union json.RawMessage
+}
+
+func (response NotifyCampaignCreators422JSONResponse) VisitNotifyCampaignCreatorsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(422)
+
+	return json.NewEncoder(w).Encode(response.union)
+}
+
+type NotifyCampaignCreatorsdefaultJSONResponse struct {
+	Body       ErrorResponse
+	StatusCode int
+}
+
+func (response NotifyCampaignCreatorsdefaultJSONResponse) VisitNotifyCampaignCreatorsResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+
+	return json.NewEncoder(w).Encode(response.Body)
+}
+
+type RemindCampaignCreatorsInvitationRequestObject struct {
+	Id   openapi_types.UUID `json:"id"`
+	Body *RemindCampaignCreatorsInvitationJSONRequestBody
+}
+
+type RemindCampaignCreatorsInvitationResponseObject interface {
+	VisitRemindCampaignCreatorsInvitationResponse(w http.ResponseWriter) error
+}
+
+type RemindCampaignCreatorsInvitation200JSONResponse CampaignNotifyResult
+
+func (response RemindCampaignCreatorsInvitation200JSONResponse) VisitRemindCampaignCreatorsInvitationResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type RemindCampaignCreatorsInvitation401JSONResponse ErrorResponse
+
+func (response RemindCampaignCreatorsInvitation401JSONResponse) VisitRemindCampaignCreatorsInvitationResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type RemindCampaignCreatorsInvitation403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response RemindCampaignCreatorsInvitation403JSONResponse) VisitRemindCampaignCreatorsInvitationResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type RemindCampaignCreatorsInvitation404JSONResponse ErrorResponse
+
+func (response RemindCampaignCreatorsInvitation404JSONResponse) VisitRemindCampaignCreatorsInvitationResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type RemindCampaignCreatorsInvitation422JSONResponse struct {
+	union json.RawMessage
+}
+
+func (response RemindCampaignCreatorsInvitation422JSONResponse) VisitRemindCampaignCreatorsInvitationResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(422)
+
+	return json.NewEncoder(w).Encode(response.union)
+}
+
+type RemindCampaignCreatorsInvitationdefaultJSONResponse struct {
+	Body       ErrorResponse
+	StatusCode int
+}
+
+func (response RemindCampaignCreatorsInvitationdefaultJSONResponse) VisitRemindCampaignCreatorsInvitationResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+
+	return json.NewEncoder(w).Encode(response.Body)
+}
+
 type SubmitCreatorApplicationRequestObject struct {
 	Body *SubmitCreatorApplicationJSONRequestBody
 }
@@ -4521,6 +4875,12 @@ type StrictServerInterface interface {
 	// Remove a creator from a campaign (admin-only)
 	// (DELETE /campaigns/{id}/creators/{creatorId})
 	RemoveCampaignCreator(ctx context.Context, request RemoveCampaignCreatorRequestObject) (RemoveCampaignCreatorResponseObject, error)
+	// Send invitation messages to campaign creators (admin-only)
+	// (POST /campaigns/{id}/notify)
+	NotifyCampaignCreators(ctx context.Context, request NotifyCampaignCreatorsRequestObject) (NotifyCampaignCreatorsResponseObject, error)
+	// Send invitation reminders to campaign creators (admin-only)
+	// (POST /campaigns/{id}/remind-invitation)
+	RemindCampaignCreatorsInvitation(ctx context.Context, request RemindCampaignCreatorsInvitationRequestObject) (RemindCampaignCreatorsInvitationResponseObject, error)
 	// Submit a creator application from the public landing page
 	// (POST /creators/applications)
 	SubmitCreatorApplication(ctx context.Context, request SubmitCreatorApplicationRequestObject) (SubmitCreatorApplicationResponseObject, error)
@@ -5174,6 +5534,72 @@ func (sh *strictHandler) RemoveCampaignCreator(w http.ResponseWriter, r *http.Re
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(RemoveCampaignCreatorResponseObject); ok {
 		if err := validResponse.VisitRemoveCampaignCreatorResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// NotifyCampaignCreators operation middleware
+func (sh *strictHandler) NotifyCampaignCreators(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request NotifyCampaignCreatorsRequestObject
+
+	request.Id = id
+
+	var body NotifyCampaignCreatorsJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.NotifyCampaignCreators(ctx, request.(NotifyCampaignCreatorsRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "NotifyCampaignCreators")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(NotifyCampaignCreatorsResponseObject); ok {
+		if err := validResponse.VisitNotifyCampaignCreatorsResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// RemindCampaignCreatorsInvitation operation middleware
+func (sh *strictHandler) RemindCampaignCreatorsInvitation(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request RemindCampaignCreatorsInvitationRequestObject
+
+	request.Id = id
+
+	var body RemindCampaignCreatorsInvitationJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.RemindCampaignCreatorsInvitation(ctx, request.(RemindCampaignCreatorsInvitationRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RemindCampaignCreatorsInvitation")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(RemindCampaignCreatorsInvitationResponseObject); ok {
+		if err := validResponse.VisitRemindCampaignCreatorsInvitationResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

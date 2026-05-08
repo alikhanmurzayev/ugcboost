@@ -82,8 +82,8 @@ type CreatorSocial struct {
 }
 
 // CreatorCategory is one category code attached to the creator. CategoryCode
-// is resolved against the active categories dictionary at read time
-// (chunk 18c), so the domain layer keeps only the raw code.
+// is resolved against the active categories dictionary at read time, so
+// the domain layer keeps only the raw code.
 type CreatorCategory struct {
 	CreatorID    string
 	CategoryCode string

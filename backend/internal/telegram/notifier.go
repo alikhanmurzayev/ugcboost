@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"html"
 	"runtime/debug"
+	"strings"
 	"sync"
 	"time"
 
@@ -13,6 +14,7 @@ import (
 	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
 
+	"github.com/alikhanmurzayev/ugcboost/backend/internal/domain"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/logger"
 )
 
@@ -55,13 +57,13 @@ const welcomeWithIGTemplate = "Здравствуйте! 👋\n\n" +
 const welcomeNoIGText = "Здравствуйте! 👋\n\n" +
 	"Мы получили вашу заявку. Скоро сообщим здесь результаты отбора ✅"
 
-// verificationApprovedText replaces the chunk-8 placeholder. No inline
-// keyboard — TMA is out of the onboarding flow per roadmap v2.
+// verificationApprovedText is the static post-verification message. No
+// inline keyboard — TMA is out of the onboarding flow.
 const verificationApprovedText = "Вы успешно подтвердили свой аккаунт ✅\n\n" +
 	"Скоро сообщим здесь результаты отбора 🖤"
 
-// applicationRejectedText is the static reject message (chunk 13). The wording
-// is time-bound (mentions fashion-кампаний) and is rotated by replacing this
+// applicationRejectedText is the static reject message. The wording is
+// time-bound (mentions fashion-кампаний) and is rotated by replacing this
 // constant in a separate PR — no Config switch, no template fan-out.
 const applicationRejectedText = "Здравствуйте! Благодарим вас за интерес к платформе UGC boost.\n\n" +
 	"Мы внимательно рассмотрели вашу заявку, профиль, контент и текущие показатели аккаунта. К сожалению, на данном этапе ваша заявка не прошла модерацию платформы.\n\n" +
@@ -77,6 +79,23 @@ const applicationApprovedText = "Здравствуйте!\n\n" +
 	"Добро пожаловать на платформу UGC boost 💫\n\n" +
 	"После Недели моды мы планируем запустить приложение в App Store и добавить новые возможности для UGC-сотрудничества с брендами и партнерами EURASIAN FASHION WEEK.\n\n" +
 	"Оставайтесь с нами — впереди много масштабных проектов!"
+
+// campaignInviteText / campaignRemindInvitationText carry the universal copy
+// for outbound invite / remind messages. Generic by design — the message
+// body must not leak campaign details (name, brand, deadlines) because
+// notify covers re-invites after declines as well, and stale text from a
+// previous round would mislead. The accompanying inline web_app button
+// drops the creator straight into the TMA.
+//
+// These literals are mirrored in `backend/e2e/campaign_creator/
+// campaign_notify_test.go` (the e2e module cannot import internal/telegram
+// by design — see backend-testing-e2e.md). When changing the copy here,
+// update the e2e mirror too or `waitInviteSent` will time out.
+const (
+	campaignInviteText             = "Привет! У нас есть для тебя предложение по сотрудничеству. Открой, чтобы посмотреть условия:"
+	campaignRemindInvitationText   = "Напоминаем — мы ждём твоего решения по приглашению."
+	campaignInviteWebAppButtonText = "Посмотреть"
+)
 
 // ApplicationLinkedPayload carries everything NotifyApplicationLinked needs
 // to pick the right welcome variant and substitute the verification code.
@@ -307,4 +326,62 @@ func buildWelcomeText(p ApplicationLinkedPayload) string {
 		return welcomeNoIGText
 	}
 	return fmt.Sprintf(welcomeWithIGTemplate, html.EscapeString(p.VerificationCode))
+}
+
+// SendCampaignInvite delivers an invite or remind-invitation message
+// synchronously. Unlike the fire-and-forget Notify* family, this method
+// returns the underlying SendMessage error so the campaign-creator service
+// can map per-creator failures into the partial-success `undelivered` list.
+// No retry — the admin re-invokes the endpoint with the unanswered subset.
+//
+// The message embeds an inline `web_app` button pointing at the campaign's
+// TMA URL. The TMA agree/decline endpoints rely on this delivery surface:
+// Telegram only attaches initData (HMAC-signed user payload) when the TMA
+// is opened via a `web_app` button, so a plain-text URL would leave the
+// creator unauthenticated.
+func (n *Notifier) SendCampaignInvite(ctx context.Context, chatID int64, text, tmaURL string) error {
+	callCtx, cancel := context.WithTimeout(ctx, n.timeout)
+	defer cancel()
+	_, err := n.sender.SendMessage(callCtx, &bot.SendMessageParams{
+		ChatID: chatID,
+		Text:   text,
+		ReplyMarkup: &models.InlineKeyboardMarkup{
+			InlineKeyboard: [][]models.InlineKeyboardButton{{{
+				Text:   campaignInviteWebAppButtonText,
+				WebApp: &models.WebAppInfo{URL: tmaURL},
+			}}},
+		},
+	})
+	return err
+}
+
+// CampaignInviteText returns the universal A4 invite copy. Exposed so the
+// service layer can pass it back into SendCampaignInvite; keeping the
+// constant private would force the service to hardcode the same string.
+func CampaignInviteText() string { return campaignInviteText }
+
+// CampaignRemindInvitationText returns the universal A5 reminder copy.
+func CampaignRemindInvitationText() string { return campaignRemindInvitationText }
+
+// MapTelegramErrorToReason classifies a SendMessage error into a
+// domain.NotifyFailureReason* enum value. The sentinel branch
+// (`bot.ErrorForbidden`) is the canonical signal that the creator
+// blocked the bot. The string-substring fallback uses tight phrases
+// (`bot was blocked by the user`, `user is deactivated`) tied to the
+// current Telegram API surface so a future SDK rename falls into the
+// safer `unknown` branch instead of misclassifying as `bot_blocked`.
+// nil err returns "" — caller checks before invoking.
+func MapTelegramErrorToReason(err error) string {
+	if err == nil {
+		return ""
+	}
+	if errors.Is(err, bot.ErrorForbidden) {
+		return domain.NotifyFailureReasonBotBlocked
+	}
+	msg := err.Error()
+	if strings.Contains(msg, "bot was blocked by the user") ||
+		strings.Contains(msg, "user is deactivated") {
+		return domain.NotifyFailureReasonBotBlocked
+	}
+	return domain.NotifyFailureReasonUnknown
 }

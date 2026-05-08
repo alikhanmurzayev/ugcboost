@@ -278,11 +278,13 @@ func TestCampaignService_UpdateCampaign(t *testing.T) {
 		pool := dbmocks.NewMockPool(t)
 		factory := svcmocks.NewMockCampaignRepoFactory(t)
 		campaigns := repomocks.NewMockCampaignRepo(t)
+		ccRepo := repomocks.NewMockCampaignCreatorRepo(t)
 		audit := repomocks.NewMockAuditRepo(t)
 		created := time.Date(2026, 5, 6, 12, 0, 0, 0, time.UTC)
 
 		pool.EXPECT().Begin(mock.Anything).Return(testTx{}, nil)
 		factory.EXPECT().NewCampaignRepo(mock.Anything).Return(campaigns)
+		factory.EXPECT().NewCampaignCreatorRepo(mock.Anything).Return(ccRepo)
 		factory.EXPECT().NewAuditRepo(mock.Anything).Return(audit)
 		campaigns.EXPECT().GetByID(mock.Anything, "c-1").
 			Return(&repository.CampaignRow{
@@ -293,6 +295,7 @@ func TestCampaignService_UpdateCampaign(t *testing.T) {
 				CreatedAt: created,
 				UpdatedAt: created,
 			}, nil)
+		ccRepo.EXPECT().ExistsInvitedInCampaign(mock.Anything, "c-1").Return(false, nil)
 		campaigns.EXPECT().Update(mock.Anything, "c-1", "Promo Y", "https://tma.ugcboost.kz/tz/new").
 			Return((*repository.CampaignRow)(nil), sql.ErrNoRows)
 
@@ -307,11 +310,13 @@ func TestCampaignService_UpdateCampaign(t *testing.T) {
 		pool := dbmocks.NewMockPool(t)
 		factory := svcmocks.NewMockCampaignRepoFactory(t)
 		campaigns := repomocks.NewMockCampaignRepo(t)
+		ccRepo := repomocks.NewMockCampaignCreatorRepo(t)
 		audit := repomocks.NewMockAuditRepo(t)
 		created := time.Date(2026, 5, 6, 12, 0, 0, 0, time.UTC)
 
 		pool.EXPECT().Begin(mock.Anything).Return(testTx{}, nil)
 		factory.EXPECT().NewCampaignRepo(mock.Anything).Return(campaigns)
+		factory.EXPECT().NewCampaignCreatorRepo(mock.Anything).Return(ccRepo)
 		factory.EXPECT().NewAuditRepo(mock.Anything).Return(audit)
 		campaigns.EXPECT().GetByID(mock.Anything, "c-1").
 			Return(&repository.CampaignRow{
@@ -322,6 +327,7 @@ func TestCampaignService_UpdateCampaign(t *testing.T) {
 				CreatedAt: created,
 				UpdatedAt: created,
 			}, nil)
+		ccRepo.EXPECT().ExistsInvitedInCampaign(mock.Anything, "c-1").Return(false, nil)
 		campaigns.EXPECT().Update(mock.Anything, "c-1", "Promo Y", "https://tma.ugcboost.kz/tz/new").
 			Return((*repository.CampaignRow)(nil), domain.ErrCampaignNameTaken)
 
@@ -336,11 +342,13 @@ func TestCampaignService_UpdateCampaign(t *testing.T) {
 		pool := dbmocks.NewMockPool(t)
 		factory := svcmocks.NewMockCampaignRepoFactory(t)
 		campaigns := repomocks.NewMockCampaignRepo(t)
+		ccRepo := repomocks.NewMockCampaignCreatorRepo(t)
 		audit := repomocks.NewMockAuditRepo(t)
 		created := time.Date(2026, 5, 6, 12, 0, 0, 0, time.UTC)
 
 		pool.EXPECT().Begin(mock.Anything).Return(testTx{}, nil)
 		factory.EXPECT().NewCampaignRepo(mock.Anything).Return(campaigns)
+		factory.EXPECT().NewCampaignCreatorRepo(mock.Anything).Return(ccRepo)
 		factory.EXPECT().NewAuditRepo(mock.Anything).Return(audit)
 		campaigns.EXPECT().GetByID(mock.Anything, "c-1").
 			Return(&repository.CampaignRow{
@@ -351,6 +359,7 @@ func TestCampaignService_UpdateCampaign(t *testing.T) {
 				CreatedAt: created,
 				UpdatedAt: created,
 			}, nil)
+		ccRepo.EXPECT().ExistsInvitedInCampaign(mock.Anything, "c-1").Return(false, nil)
 		campaigns.EXPECT().Update(mock.Anything, "c-1", "Promo Y", "https://tma.ugcboost.kz/tz/new").
 			Return((*repository.CampaignRow)(nil), errors.New("db unavailable"))
 
@@ -366,12 +375,14 @@ func TestCampaignService_UpdateCampaign(t *testing.T) {
 		pool := dbmocks.NewMockPool(t)
 		factory := svcmocks.NewMockCampaignRepoFactory(t)
 		campaigns := repomocks.NewMockCampaignRepo(t)
+		ccRepo := repomocks.NewMockCampaignCreatorRepo(t)
 		audit := repomocks.NewMockAuditRepo(t)
 		created := time.Date(2026, 5, 6, 12, 0, 0, 0, time.UTC)
 		updated := created.Add(time.Hour)
 
 		pool.EXPECT().Begin(mock.Anything).Return(testTx{}, nil)
 		factory.EXPECT().NewCampaignRepo(mock.Anything).Return(campaigns)
+		factory.EXPECT().NewCampaignCreatorRepo(mock.Anything).Return(ccRepo)
 		factory.EXPECT().NewAuditRepo(mock.Anything).Return(audit)
 		campaigns.EXPECT().GetByID(mock.Anything, "c-1").
 			Return(&repository.CampaignRow{
@@ -382,6 +393,7 @@ func TestCampaignService_UpdateCampaign(t *testing.T) {
 				CreatedAt: created,
 				UpdatedAt: created,
 			}, nil)
+		ccRepo.EXPECT().ExistsInvitedInCampaign(mock.Anything, "c-1").Return(false, nil)
 		campaigns.EXPECT().Update(mock.Anything, "c-1", "Promo Y", "https://tma.ugcboost.kz/tz/new").
 			Return(&repository.CampaignRow{
 				ID:        "c-1",
@@ -404,6 +416,7 @@ func TestCampaignService_UpdateCampaign(t *testing.T) {
 		pool := dbmocks.NewMockPool(t)
 		factory := svcmocks.NewMockCampaignRepoFactory(t)
 		campaigns := repomocks.NewMockCampaignRepo(t)
+		ccRepo := repomocks.NewMockCampaignCreatorRepo(t)
 		audit := repomocks.NewMockAuditRepo(t)
 		log := logmocks.NewMockLogger(t)
 		created := time.Date(2026, 5, 6, 12, 0, 0, 0, time.UTC)
@@ -432,6 +445,7 @@ func TestCampaignService_UpdateCampaign(t *testing.T) {
 
 		pool.EXPECT().Begin(mock.Anything).Return(testTx{}, nil)
 		factory.EXPECT().NewCampaignRepo(mock.Anything).Return(campaigns)
+		factory.EXPECT().NewCampaignCreatorRepo(mock.Anything).Return(ccRepo)
 		factory.EXPECT().NewAuditRepo(mock.Anything).Return(audit)
 		campaigns.EXPECT().GetByID(mock.Anything, "c-1").
 			Return(&repository.CampaignRow{
@@ -442,6 +456,7 @@ func TestCampaignService_UpdateCampaign(t *testing.T) {
 				CreatedAt: oldCampaign.CreatedAt,
 				UpdatedAt: oldCampaign.UpdatedAt,
 			}, nil)
+		ccRepo.EXPECT().ExistsInvitedInCampaign(mock.Anything, "c-1").Return(false, nil)
 		campaigns.EXPECT().Update(mock.Anything, "c-1", "Promo Y", "https://tma.ugcboost.kz/tz/new").
 			Return(&repository.CampaignRow{
 				ID:        newCampaign.ID,
@@ -470,6 +485,106 @@ func TestCampaignService_UpdateCampaign(t *testing.T) {
 		err = svc.UpdateCampaign(context.Background(), "c-1",
 			domain.CampaignInput{Name: "Promo Y", TmaURL: "https://tma.ugcboost.kz/tz/new"})
 		require.NoError(t, err)
+	})
+
+	t.Run("tma_url lock fires when invited rows exist", func(t *testing.T) {
+		t.Parallel()
+		pool := dbmocks.NewMockPool(t)
+		factory := svcmocks.NewMockCampaignRepoFactory(t)
+		campaigns := repomocks.NewMockCampaignRepo(t)
+		ccRepo := repomocks.NewMockCampaignCreatorRepo(t)
+		audit := repomocks.NewMockAuditRepo(t)
+		created := time.Date(2026, 5, 6, 12, 0, 0, 0, time.UTC)
+
+		pool.EXPECT().Begin(mock.Anything).Return(testTx{}, nil)
+		factory.EXPECT().NewCampaignRepo(mock.Anything).Return(campaigns)
+		factory.EXPECT().NewCampaignCreatorRepo(mock.Anything).Return(ccRepo)
+		factory.EXPECT().NewAuditRepo(mock.Anything).Return(audit)
+		campaigns.EXPECT().GetByID(mock.Anything, "c-1").
+			Return(&repository.CampaignRow{
+				ID:        "c-1",
+				Name:      "Promo X",
+				TmaURL:    "https://tma.ugcboost.kz/tz/abc",
+				IsDeleted: false,
+				CreatedAt: created,
+				UpdatedAt: created,
+			}, nil)
+		ccRepo.EXPECT().ExistsInvitedInCampaign(mock.Anything, "c-1").Return(true, nil)
+
+		svc := NewCampaignService(pool, factory, logmocks.NewMockLogger(t))
+		err := svc.UpdateCampaign(context.Background(), "c-1",
+			domain.CampaignInput{Name: "Promo Y", TmaURL: "https://tma.ugcboost.kz/tz/new"})
+		require.ErrorIs(t, err, domain.ErrCampaignTmaURLLocked)
+	})
+
+	t.Run("tma_url lock skipped when tma_url unchanged (no-op same value)", func(t *testing.T) {
+		t.Parallel()
+		pool := dbmocks.NewMockPool(t)
+		factory := svcmocks.NewMockCampaignRepoFactory(t)
+		campaigns := repomocks.NewMockCampaignRepo(t)
+		audit := repomocks.NewMockAuditRepo(t)
+		log := logmocks.NewMockLogger(t)
+		created := time.Date(2026, 5, 6, 12, 0, 0, 0, time.UTC)
+		updated := created.Add(time.Hour)
+
+		oldRow := &repository.CampaignRow{
+			ID:        "c-1",
+			Name:      "Promo X",
+			TmaURL:    "https://tma.ugcboost.kz/tz/abc",
+			IsDeleted: false,
+			CreatedAt: created,
+			UpdatedAt: created,
+		}
+		newRow := &repository.CampaignRow{
+			ID:        "c-1",
+			Name:      "Promo Y",
+			TmaURL:    "https://tma.ugcboost.kz/tz/abc",
+			IsDeleted: false,
+			CreatedAt: created,
+			UpdatedAt: updated,
+		}
+		pool.EXPECT().Begin(mock.Anything).Return(testTx{}, nil)
+		factory.EXPECT().NewCampaignRepo(mock.Anything).Return(campaigns)
+		factory.EXPECT().NewAuditRepo(mock.Anything).Return(audit)
+		campaigns.EXPECT().GetByID(mock.Anything, "c-1").Return(oldRow, nil)
+		// No NewCampaignCreatorRepo / ExistsInvitedInCampaign call: lock skipped.
+		campaigns.EXPECT().Update(mock.Anything, "c-1", "Promo Y", "https://tma.ugcboost.kz/tz/abc").
+			Return(newRow, nil)
+		audit.EXPECT().Create(mock.Anything, mock.Anything).Return(nil).Once()
+		log.EXPECT().Info(mock.Anything, "campaign updated", mock.Anything).Once()
+
+		svc := NewCampaignService(pool, factory, log)
+		err := svc.UpdateCampaign(context.Background(), "c-1",
+			domain.CampaignInput{Name: "Promo Y", TmaURL: "https://tma.ugcboost.kz/tz/abc"})
+		require.NoError(t, err)
+	})
+
+	t.Run("tma_url lock check error wraps with context", func(t *testing.T) {
+		t.Parallel()
+		pool := dbmocks.NewMockPool(t)
+		factory := svcmocks.NewMockCampaignRepoFactory(t)
+		campaigns := repomocks.NewMockCampaignRepo(t)
+		ccRepo := repomocks.NewMockCampaignCreatorRepo(t)
+		audit := repomocks.NewMockAuditRepo(t)
+		created := time.Date(2026, 5, 6, 12, 0, 0, 0, time.UTC)
+
+		pool.EXPECT().Begin(mock.Anything).Return(testTx{}, nil)
+		factory.EXPECT().NewCampaignRepo(mock.Anything).Return(campaigns)
+		factory.EXPECT().NewCampaignCreatorRepo(mock.Anything).Return(ccRepo)
+		factory.EXPECT().NewAuditRepo(mock.Anything).Return(audit)
+		campaigns.EXPECT().GetByID(mock.Anything, "c-1").
+			Return(&repository.CampaignRow{
+				ID: "c-1", Name: "Promo X", TmaURL: "https://tma.ugcboost.kz/tz/abc",
+				IsDeleted: false, CreatedAt: created, UpdatedAt: created,
+			}, nil)
+		ccRepo.EXPECT().ExistsInvitedInCampaign(mock.Anything, "c-1").
+			Return(false, errors.New("db down"))
+
+		svc := NewCampaignService(pool, factory, logmocks.NewMockLogger(t))
+		err := svc.UpdateCampaign(context.Background(), "c-1",
+			domain.CampaignInput{Name: "Promo Y", TmaURL: "https://tma.ugcboost.kz/tz/new"})
+		require.ErrorContains(t, err, "check tma_url lock")
+		require.ErrorContains(t, err, "db down")
 	})
 }
 

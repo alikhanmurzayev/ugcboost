@@ -608,3 +608,80 @@ func TestNotifier_Retry_OuterCtxBudgetExhausted(t *testing.T) {
 
 	require.GreaterOrEqual(t, calls.Load(), int32(1))
 }
+
+func TestNotifier_SendCampaignInvite(t *testing.T) {
+	t.Parallel()
+
+	t.Run("success carries text and web_app button with tma_url", func(t *testing.T) {
+		t.Parallel()
+		sender := tgmocks.NewMockSender(t)
+		log := logmocks.NewMockLogger(t)
+		var captured *bot.SendMessageParams
+		sender.EXPECT().SendMessage(mock.Anything, mock.AnythingOfType("*bot.SendMessageParams")).
+			Run(func(_ context.Context, p *bot.SendMessageParams) { captured = p }).
+			Return(&models.Message{ID: 42}, nil).Once()
+
+		n := newSingleShotNotifier(sender, log)
+		require.NoError(t, n.SendCampaignInvite(context.Background(), 555,
+			telegram.CampaignInviteText(),
+			"https://tma.example/tz/abc",
+		))
+
+		require.NotNil(t, captured)
+		require.Equal(t, int64(555), captured.ChatID)
+		require.Equal(t, telegram.CampaignInviteText(), captured.Text)
+		require.NotNil(t, captured.ReplyMarkup)
+		markup, ok := captured.ReplyMarkup.(*models.InlineKeyboardMarkup)
+		require.True(t, ok)
+		require.Len(t, markup.InlineKeyboard, 1)
+		require.Len(t, markup.InlineKeyboard[0], 1)
+		button := markup.InlineKeyboard[0][0]
+		require.Equal(t, "Посмотреть", button.Text)
+		require.NotNil(t, button.WebApp)
+		require.Equal(t, "https://tma.example/tz/abc", button.WebApp.URL)
+	})
+
+	t.Run("propagates sender error untouched", func(t *testing.T) {
+		t.Parallel()
+		sender := tgmocks.NewMockSender(t)
+		log := logmocks.NewMockLogger(t)
+		boom := errors.New("network down")
+		sender.EXPECT().SendMessage(mock.Anything, mock.Anything).
+			Return(nil, boom).Once()
+
+		n := newSingleShotNotifier(sender, log)
+		err := n.SendCampaignInvite(context.Background(), 1,
+			telegram.CampaignRemindInvitationText(),
+			"https://tma.example/tz/zzz",
+		)
+		require.ErrorIs(t, err, boom)
+	})
+}
+
+func TestMapTelegramErrorToReason(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name string
+		err  error
+		want string
+	}{
+		{"nil error", nil, ""},
+		{"sentinel forbidden", fmt.Errorf("wrap: %w", bot.ErrorForbidden), "bot_blocked"},
+		{"forbidden text", errors.New("Forbidden: bot was blocked by the user"), "bot_blocked"},
+		{"user is deactivated phrase", errors.New("Forbidden: user is deactivated"), "bot_blocked"},
+		// Bare "Forbidden" without the bot-was-blocked phrase no longer
+		// matches — the substring is intentionally tight to keep an
+		// SDK rename from silently mis-bucketing unrelated 403s.
+		{"bare forbidden no canonical phrase", errors.New("Forbidden: chat not found"), "unknown"},
+		{"network error", errors.New("connection reset"), "unknown"},
+		{"deadline exceeded", context.DeadlineExceeded, "unknown"},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tc.want, telegram.MapTelegramErrorToReason(tc.err))
+		})
+	}
+}

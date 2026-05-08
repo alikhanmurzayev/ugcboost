@@ -14,14 +14,15 @@ import (
 )
 
 // CampaignRepoFactory creates the repositories needed by CampaignService.
+// The campaign_creators repo backs the PATCH lock — UpdateCampaign refuses
+// tma_url changes once any creator in the campaign has been invited.
 type CampaignRepoFactory interface {
 	NewCampaignRepo(db dbutil.DB) repository.CampaignRepo
+	NewCampaignCreatorRepo(db dbutil.DB) repository.CampaignCreatorRepo
 	NewAuditRepo(db dbutil.DB) repository.AuditRepo
 }
 
-// CampaignService owns the marketing-campaign lifecycle. The current chunk
-// only covers admin-initiated creation; downstream chunks (#4–#7) extend it
-// with read / update / soft-delete.
+// CampaignService owns the marketing-campaign lifecycle.
 type CampaignService struct {
 	pool        dbutil.Pool
 	repoFactory CampaignRepoFactory
@@ -35,8 +36,8 @@ func NewCampaignService(pool dbutil.Pool, repoFactory CampaignRepoFactory, log l
 
 // CreateCampaign inserts a new campaign and writes the matching audit row in
 // the same transaction. The whole *domain.Campaign is serialized into
-// audit_logs.new_value so the payload follows the struct as it grows in
-// future chunks without per-callsite changes.
+// audit_logs.new_value so the payload follows the struct without
+// per-callsite changes.
 func (s *CampaignService) CreateCampaign(ctx context.Context, in domain.CampaignInput) (*domain.Campaign, error) {
 	var campaign *domain.Campaign
 	err := dbutil.WithTx(ctx, s.pool, func(tx dbutil.DB) error {
@@ -65,6 +66,17 @@ func (s *CampaignService) CreateCampaign(ctx context.Context, in domain.Campaign
 // UpdateCampaign full-replaces name/tma_url and writes a campaign_update audit
 // row in the same tx. Pre-fetch via GetByID feeds audit_logs.old_value;
 // soft-deleted rows are refused with ErrCampaignNotFound (gate is here, not repo).
+//
+// tma_url lock: when the request flips tma_url to a new value, we refuse
+// the change if any creator in this campaign has been invited at least
+// once. The previous URL is already embedded in inline `web_app` buttons
+// of bot messages delivered to creators; flipping it would silently break
+// those links. The check uses ExistsInvitedInCampaign on the same tx as
+// the UPDATE on `campaigns`. Residual race under READ COMMITTED: a
+// concurrent Notify can INSERT/UPDATE `campaign_creators` between our
+// EXISTS read and the UPDATE on `campaigns`. Closing it would require a
+// `SELECT FOR UPDATE` on the campaigns row in both Notify and PATCH.
+// No-op (tma_url unchanged) bypasses the lock entirely.
 func (s *CampaignService) UpdateCampaign(ctx context.Context, id string, in domain.CampaignInput) error {
 	err := dbutil.WithTx(ctx, s.pool, func(tx dbutil.DB) error {
 		campaignRepo := s.repoFactory.NewCampaignRepo(tx)
@@ -81,6 +93,16 @@ func (s *CampaignService) UpdateCampaign(ctx context.Context, id string, in doma
 			return domain.ErrCampaignNotFound
 		}
 		oldCampaign := campaignRowToDomain(oldRow)
+
+		if in.TmaURL != oldRow.TmaURL {
+			locked, err := s.repoFactory.NewCampaignCreatorRepo(tx).ExistsInvitedInCampaign(ctx, id)
+			if err != nil {
+				return fmt.Errorf("check tma_url lock: %w", err)
+			}
+			if locked {
+				return domain.ErrCampaignTmaURLLocked
+			}
+		}
 
 		newRow, err := campaignRepo.Update(ctx, id, in.Name, in.TmaURL)
 		if err != nil {

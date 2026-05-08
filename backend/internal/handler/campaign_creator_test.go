@@ -23,7 +23,11 @@ const (
 	creatorBUUID = "33333333-3333-3333-3333-333333333333"
 )
 
-var campaignCreatorsPath = "/campaigns/" + campaignUUID + "/creators"
+var (
+	campaignCreatorsPath = "/campaigns/" + campaignUUID + "/creators"
+	campaignNotifyPath   = "/campaigns/" + campaignUUID + "/notify"
+	campaignRemindPath   = "/campaigns/" + campaignUUID + "/remind-invitation"
+)
 
 func TestServer_AddCampaignCreators(t *testing.T) {
 	t.Parallel()
@@ -446,5 +450,232 @@ func TestServer_ListCampaignCreators(t *testing.T) {
 		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, ccSvc, nil, ServerConfig{Version: "test-version"}, log))
 		w, _ := doJSON[api.ErrorResponse](t, router, http.MethodGet, campaignCreatorsPath, nil)
 		require.Equal(t, http.StatusInternalServerError, w.Code)
+	})
+}
+
+func TestServer_NotifyCampaignCreators(t *testing.T) {
+	t.Parallel()
+
+	t.Run("forbidden for manager", func(t *testing.T) {
+		t.Parallel()
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanNotifyCampaignCreators(mock.Anything).Return(domain.ErrForbidden)
+
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, campaignNotifyPath,
+			api.CampaignCreatorBatchInput{CreatorIds: []openapi_types.UUID{uuid.MustParse(creatorAUUID)}})
+		require.Equal(t, http.StatusForbidden, w.Code)
+		require.Equal(t, domain.CodeForbidden, resp.Error.Code)
+	})
+
+	t.Run("empty creatorIds → 422 CAMPAIGN_CREATOR_IDS_REQUIRED", func(t *testing.T) {
+		t.Parallel()
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanNotifyCampaignCreators(mock.Anything).Return(nil)
+
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, campaignNotifyPath,
+			api.CampaignCreatorBatchInput{CreatorIds: []openapi_types.UUID{}})
+		require.Equal(t, http.StatusUnprocessableEntity, w.Code)
+		require.Equal(t, domain.CodeCampaignCreatorIdsRequired, resp.Error.Code)
+	})
+
+	t.Run("over 200 creatorIds → 422 CAMPAIGN_CREATOR_IDS_TOO_MANY", func(t *testing.T) {
+		t.Parallel()
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanNotifyCampaignCreators(mock.Anything).Return(nil)
+
+		ids := make([]openapi_types.UUID, 201)
+		for i := range ids {
+			ids[i] = uuid.New()
+		}
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, campaignNotifyPath,
+			api.CampaignCreatorBatchInput{CreatorIds: ids})
+		require.Equal(t, http.StatusUnprocessableEntity, w.Code)
+		require.Equal(t, domain.CodeCampaignCreatorIdsTooMany, resp.Error.Code)
+	})
+
+	t.Run("duplicate creatorIds → 422 CAMPAIGN_CREATOR_IDS_DUPLICATES", func(t *testing.T) {
+		t.Parallel()
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanNotifyCampaignCreators(mock.Anything).Return(nil)
+
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, campaignNotifyPath,
+			api.CampaignCreatorBatchInput{CreatorIds: []openapi_types.UUID{
+				uuid.MustParse(creatorAUUID), uuid.MustParse(creatorAUUID),
+			}})
+		require.Equal(t, http.StatusUnprocessableEntity, w.Code)
+		require.Equal(t, domain.CodeCampaignCreatorIdsDuplicates, resp.Error.Code)
+	})
+
+	t.Run("service ErrCampaignNotFound → 404 CAMPAIGN_NOT_FOUND", func(t *testing.T) {
+		t.Parallel()
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanNotifyCampaignCreators(mock.Anything).Return(nil)
+		ccSvc := mocks.NewMockCampaignCreatorService(t)
+		ccSvc.EXPECT().Notify(mock.Anything, campaignUUID, []string{creatorAUUID}).
+			Return(nil, domain.ErrCampaignNotFound)
+
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, ccSvc, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, campaignNotifyPath,
+			api.CampaignCreatorBatchInput{CreatorIds: []openapi_types.UUID{uuid.MustParse(creatorAUUID)}})
+		require.Equal(t, http.StatusNotFound, w.Code)
+		require.Equal(t, domain.CodeCampaignNotFound, resp.Error.Code)
+	})
+
+	t.Run("service CampaignCreatorBatchInvalidError → 422 with custom schema details", func(t *testing.T) {
+		t.Parallel()
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanNotifyCampaignCreators(mock.Anything).Return(nil)
+		ccSvc := mocks.NewMockCampaignCreatorService(t)
+		ccSvc.EXPECT().Notify(mock.Anything, campaignUUID, []string{creatorAUUID, creatorBUUID}).
+			Return(nil, &domain.CampaignCreatorBatchInvalidError{
+				Details: []domain.BatchValidationDetail{
+					{CreatorID: creatorAUUID, Reason: domain.BatchInvalidReasonWrongStatus, CurrentStatus: domain.CampaignCreatorStatusAgreed},
+					{CreatorID: creatorBUUID, Reason: domain.BatchInvalidReasonNotInCampaign},
+				},
+			})
+
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, ccSvc, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		w, resp := doJSON[api.CampaignCreatorBatchInvalidErrorResponse](t, router, http.MethodPost, campaignNotifyPath,
+			api.CampaignCreatorBatchInput{CreatorIds: []openapi_types.UUID{
+				uuid.MustParse(creatorAUUID), uuid.MustParse(creatorBUUID),
+			}})
+		require.Equal(t, http.StatusUnprocessableEntity, w.Code)
+		require.Equal(t, domain.CodeCampaignCreatorBatchInvalid, resp.Error.Code)
+		require.Len(t, resp.Error.Details, 2)
+		require.Equal(t, uuid.MustParse(creatorAUUID), uuid.UUID(resp.Error.Details[0].CreatorId))
+		require.Equal(t, api.WrongStatus, resp.Error.Details[0].Reason)
+		require.NotNil(t, resp.Error.Details[0].CurrentStatus)
+		require.Equal(t, api.Agreed, *resp.Error.Details[0].CurrentStatus)
+		require.Equal(t, uuid.MustParse(creatorBUUID), uuid.UUID(resp.Error.Details[1].CreatorId))
+		require.Equal(t, api.NotInCampaign, resp.Error.Details[1].Reason)
+		require.Nil(t, resp.Error.Details[1].CurrentStatus)
+	})
+
+	t.Run("happy path with empty undelivered → 200", func(t *testing.T) {
+		t.Parallel()
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanNotifyCampaignCreators(mock.Anything).Return(nil)
+		ccSvc := mocks.NewMockCampaignCreatorService(t)
+		ccSvc.EXPECT().Notify(mock.Anything, campaignUUID, []string{creatorAUUID}).
+			Return(nil, nil)
+
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, ccSvc, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		w, resp := doJSON[api.CampaignNotifyResult](t, router, http.MethodPost, campaignNotifyPath,
+			api.CampaignCreatorBatchInput{CreatorIds: []openapi_types.UUID{uuid.MustParse(creatorAUUID)}})
+		require.Equal(t, http.StatusOK, w.Code)
+		require.Empty(t, resp.Data.Undelivered)
+	})
+
+	t.Run("partial-success surfaces undelivered list", func(t *testing.T) {
+		t.Parallel()
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanNotifyCampaignCreators(mock.Anything).Return(nil)
+		ccSvc := mocks.NewMockCampaignCreatorService(t)
+		ccSvc.EXPECT().Notify(mock.Anything, campaignUUID, []string{creatorAUUID, creatorBUUID}).
+			Return([]domain.NotifyFailure{
+				{CreatorID: creatorAUUID, Reason: domain.NotifyFailureReasonBotBlocked},
+			}, nil)
+
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, ccSvc, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		w, resp := doJSON[api.CampaignNotifyResult](t, router, http.MethodPost, campaignNotifyPath,
+			api.CampaignCreatorBatchInput{CreatorIds: []openapi_types.UUID{
+				uuid.MustParse(creatorAUUID), uuid.MustParse(creatorBUUID),
+			}})
+		require.Equal(t, http.StatusOK, w.Code)
+		require.Len(t, resp.Data.Undelivered, 1)
+		require.Equal(t, uuid.MustParse(creatorAUUID), uuid.UUID(resp.Data.Undelivered[0].CreatorId))
+		require.Equal(t, api.BotBlocked, resp.Data.Undelivered[0].Reason)
+	})
+
+	t.Run("service generic error → 500", func(t *testing.T) {
+		t.Parallel()
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanNotifyCampaignCreators(mock.Anything).Return(nil)
+		ccSvc := mocks.NewMockCampaignCreatorService(t)
+		ccSvc.EXPECT().Notify(mock.Anything, campaignUUID, []string{creatorAUUID}).
+			Return(nil, errors.New("db unavailable"))
+		log := logmocks.NewMockLogger(t)
+		expectHandlerUnexpectedErrorLog(log, campaignNotifyPath)
+
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, ccSvc, nil, ServerConfig{Version: "test-version"}, log))
+		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, campaignNotifyPath,
+			api.CampaignCreatorBatchInput{CreatorIds: []openapi_types.UUID{uuid.MustParse(creatorAUUID)}})
+		require.Equal(t, http.StatusInternalServerError, w.Code)
+		require.Equal(t, domain.CodeInternal, resp.Error.Code)
+	})
+}
+
+func TestServer_RemindCampaignCreatorsInvitation(t *testing.T) {
+	t.Parallel()
+
+	t.Run("forbidden for manager", func(t *testing.T) {
+		t.Parallel()
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanRemindCampaignCreators(mock.Anything).Return(domain.ErrForbidden)
+
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, campaignRemindPath,
+			api.CampaignCreatorBatchInput{CreatorIds: []openapi_types.UUID{uuid.MustParse(creatorAUUID)}})
+		require.Equal(t, http.StatusForbidden, w.Code)
+		require.Equal(t, domain.CodeForbidden, resp.Error.Code)
+	})
+
+	t.Run("happy path with empty undelivered → 200", func(t *testing.T) {
+		t.Parallel()
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanRemindCampaignCreators(mock.Anything).Return(nil)
+		ccSvc := mocks.NewMockCampaignCreatorService(t)
+		ccSvc.EXPECT().RemindInvitation(mock.Anything, campaignUUID, []string{creatorAUUID}).
+			Return(nil, nil)
+
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, ccSvc, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		w, resp := doJSON[api.CampaignNotifyResult](t, router, http.MethodPost, campaignRemindPath,
+			api.CampaignCreatorBatchInput{CreatorIds: []openapi_types.UUID{uuid.MustParse(creatorAUUID)}})
+		require.Equal(t, http.StatusOK, w.Code)
+		require.Empty(t, resp.Data.Undelivered)
+	})
+
+	t.Run("service batch-invalid → 422 with details", func(t *testing.T) {
+		t.Parallel()
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanRemindCampaignCreators(mock.Anything).Return(nil)
+		ccSvc := mocks.NewMockCampaignCreatorService(t)
+		ccSvc.EXPECT().RemindInvitation(mock.Anything, campaignUUID, []string{creatorAUUID}).
+			Return(nil, &domain.CampaignCreatorBatchInvalidError{
+				Details: []domain.BatchValidationDetail{
+					{CreatorID: creatorAUUID, Reason: domain.BatchInvalidReasonWrongStatus, CurrentStatus: domain.CampaignCreatorStatusPlanned},
+				},
+			})
+
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, ccSvc, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		w, resp := doJSON[api.CampaignCreatorBatchInvalidErrorResponse](t, router, http.MethodPost, campaignRemindPath,
+			api.CampaignCreatorBatchInput{CreatorIds: []openapi_types.UUID{uuid.MustParse(creatorAUUID)}})
+		require.Equal(t, http.StatusUnprocessableEntity, w.Code)
+		require.Equal(t, domain.CodeCampaignCreatorBatchInvalid, resp.Error.Code)
+		require.Len(t, resp.Error.Details, 1)
+		require.Equal(t, api.WrongStatus, resp.Error.Details[0].Reason)
+		require.NotNil(t, resp.Error.Details[0].CurrentStatus)
+		require.Equal(t, api.Planned, *resp.Error.Details[0].CurrentStatus)
+	})
+
+	t.Run("service generic error → 500", func(t *testing.T) {
+		t.Parallel()
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanRemindCampaignCreators(mock.Anything).Return(nil)
+		ccSvc := mocks.NewMockCampaignCreatorService(t)
+		ccSvc.EXPECT().RemindInvitation(mock.Anything, campaignUUID, []string{creatorAUUID}).
+			Return(nil, errors.New("db unavailable"))
+		log := logmocks.NewMockLogger(t)
+		expectHandlerUnexpectedErrorLog(log, campaignRemindPath)
+
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, ccSvc, nil, ServerConfig{Version: "test-version"}, log))
+		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, campaignRemindPath,
+			api.CampaignCreatorBatchInput{CreatorIds: []openapi_types.UUID{uuid.MustParse(creatorAUUID)}})
+		require.Equal(t, http.StatusInternalServerError, w.Code)
+		require.Equal(t, domain.CodeInternal, resp.Error.Code)
 	})
 }

@@ -109,6 +109,16 @@ type ClientInterface interface {
 
 	// GetTelegramSent request
 	GetTelegramSent(ctx context.Context, params *GetTelegramSentParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// TelegramSpyFailNextWithBody request with any body
+	TelegramSpyFailNextWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	TelegramSpyFailNext(ctx context.Context, body TelegramSpyFailNextJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// TelegramSpyFakeChatWithBody request with any body
+	TelegramSpyFakeChatWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	TelegramSpyFakeChat(ctx context.Context, body TelegramSpyFakeChatJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 }
 
 func (c *Client) CleanupEntityWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -197,6 +207,54 @@ func (c *Client) SendTelegramMessage(ctx context.Context, body SendTelegramMessa
 
 func (c *Client) GetTelegramSent(ctx context.Context, params *GetTelegramSentParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewGetTelegramSentRequest(c.Server, params)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) TelegramSpyFailNextWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewTelegramSpyFailNextRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) TelegramSpyFailNext(ctx context.Context, body TelegramSpyFailNextJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewTelegramSpyFailNextRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) TelegramSpyFakeChatWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewTelegramSpyFakeChatRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) TelegramSpyFakeChat(ctx context.Context, body TelegramSpyFakeChatJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewTelegramSpyFakeChatRequest(c.Server, body)
 	if err != nil {
 		return nil, err
 	}
@@ -433,6 +491,86 @@ func NewGetTelegramSentRequest(server string, params *GetTelegramSentParams) (*h
 	return req, nil
 }
 
+// NewTelegramSpyFailNextRequest calls the generic TelegramSpyFailNext builder with application/json body
+func NewTelegramSpyFailNextRequest(server string, body TelegramSpyFailNextJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewTelegramSpyFailNextRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewTelegramSpyFailNextRequestWithBody generates requests for TelegramSpyFailNext with any type of body
+func NewTelegramSpyFailNextRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/test/telegram/spy/fail-next")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewTelegramSpyFakeChatRequest calls the generic TelegramSpyFakeChat builder with application/json body
+func NewTelegramSpyFakeChatRequest(server string, body TelegramSpyFakeChatJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewTelegramSpyFakeChatRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewTelegramSpyFakeChatRequestWithBody generates requests for TelegramSpyFakeChat with any type of body
+func NewTelegramSpyFakeChatRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/test/telegram/spy/fake-chat")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 func (c *Client) applyEditors(ctx context.Context, req *http.Request, additionalEditors []RequestEditorFn) error {
 	for _, r := range c.RequestEditors {
 		if err := r(ctx, req); err != nil {
@@ -496,6 +634,16 @@ type ClientWithResponsesInterface interface {
 
 	// GetTelegramSentWithResponse request
 	GetTelegramSentWithResponse(ctx context.Context, params *GetTelegramSentParams, reqEditors ...RequestEditorFn) (*GetTelegramSentResponse, error)
+
+	// TelegramSpyFailNextWithBodyWithResponse request with any body
+	TelegramSpyFailNextWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*TelegramSpyFailNextResponse, error)
+
+	TelegramSpyFailNextWithResponse(ctx context.Context, body TelegramSpyFailNextJSONRequestBody, reqEditors ...RequestEditorFn) (*TelegramSpyFailNextResponse, error)
+
+	// TelegramSpyFakeChatWithBodyWithResponse request with any body
+	TelegramSpyFakeChatWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*TelegramSpyFakeChatResponse, error)
+
+	TelegramSpyFakeChatWithResponse(ctx context.Context, body TelegramSpyFakeChatJSONRequestBody, reqEditors ...RequestEditorFn) (*TelegramSpyFakeChatResponse, error)
 }
 
 type CleanupEntityResponse struct {
@@ -612,6 +760,50 @@ func (r GetTelegramSentResponse) StatusCode() int {
 	return 0
 }
 
+type TelegramSpyFailNextResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON422      *ErrorResponse
+}
+
+// Status returns HTTPResponse.Status
+func (r TelegramSpyFailNextResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r TelegramSpyFailNextResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type TelegramSpyFakeChatResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON422      *ErrorResponse
+}
+
+// Status returns HTTPResponse.Status
+func (r TelegramSpyFakeChatResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r TelegramSpyFakeChatResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 // CleanupEntityWithBodyWithResponse request with arbitrary body returning *CleanupEntityResponse
 func (c *ClientWithResponses) CleanupEntityWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CleanupEntityResponse, error) {
 	rsp, err := c.CleanupEntityWithBody(ctx, contentType, body, reqEditors...)
@@ -679,6 +871,40 @@ func (c *ClientWithResponses) GetTelegramSentWithResponse(ctx context.Context, p
 		return nil, err
 	}
 	return ParseGetTelegramSentResponse(rsp)
+}
+
+// TelegramSpyFailNextWithBodyWithResponse request with arbitrary body returning *TelegramSpyFailNextResponse
+func (c *ClientWithResponses) TelegramSpyFailNextWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*TelegramSpyFailNextResponse, error) {
+	rsp, err := c.TelegramSpyFailNextWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseTelegramSpyFailNextResponse(rsp)
+}
+
+func (c *ClientWithResponses) TelegramSpyFailNextWithResponse(ctx context.Context, body TelegramSpyFailNextJSONRequestBody, reqEditors ...RequestEditorFn) (*TelegramSpyFailNextResponse, error) {
+	rsp, err := c.TelegramSpyFailNext(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseTelegramSpyFailNextResponse(rsp)
+}
+
+// TelegramSpyFakeChatWithBodyWithResponse request with arbitrary body returning *TelegramSpyFakeChatResponse
+func (c *ClientWithResponses) TelegramSpyFakeChatWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*TelegramSpyFakeChatResponse, error) {
+	rsp, err := c.TelegramSpyFakeChatWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseTelegramSpyFakeChatResponse(rsp)
+}
+
+func (c *ClientWithResponses) TelegramSpyFakeChatWithResponse(ctx context.Context, body TelegramSpyFakeChatJSONRequestBody, reqEditors ...RequestEditorFn) (*TelegramSpyFakeChatResponse, error) {
+	rsp, err := c.TelegramSpyFakeChat(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseTelegramSpyFakeChatResponse(rsp)
 }
 
 // ParseCleanupEntityResponse parses an HTTP response from a CleanupEntityWithResponse call
@@ -833,6 +1059,58 @@ func ParseGetTelegramSentResponse(rsp *http.Response) (*GetTelegramSentResponse,
 			return nil, err
 		}
 		response.JSON200 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseTelegramSpyFailNextResponse parses an HTTP response from a TelegramSpyFailNextWithResponse call
+func ParseTelegramSpyFailNextResponse(rsp *http.Response) (*TelegramSpyFailNextResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &TelegramSpyFailNextResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON422 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseTelegramSpyFakeChatResponse parses an HTTP response from a TelegramSpyFakeChatWithResponse call
+func ParseTelegramSpyFakeChatResponse(rsp *http.Response) (*TelegramSpyFakeChatResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &TelegramSpyFakeChatResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON422 = &dest
 
 	}
 

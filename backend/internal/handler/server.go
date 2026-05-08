@@ -59,6 +59,8 @@ type AuthzService interface {
 	CanAddCampaignCreators(ctx context.Context) error
 	CanRemoveCampaignCreator(ctx context.Context) error
 	CanListCampaignCreators(ctx context.Context) error
+	CanNotifyCampaignCreators(ctx context.Context) error
+	CanRemindCampaignCreators(ctx context.Context) error
 }
 
 // AuditLogService is the interface Server needs from the audit service.
@@ -96,9 +98,8 @@ type CreatorService interface {
 }
 
 // CampaignService is the interface Server needs from the campaign service —
-// admin-only POST /campaigns plus per-id read and patch; subsequent chunks
-// (#6–#7) extend it with list / soft-delete. AssertActiveCampaigns is the
-// pre-validation hook for the optional `campaignIds` payload of POST
+// admin-only POST /campaigns plus per-id read, patch, list. AssertActiveCampaigns
+// is the pre-validation hook for the optional `campaignIds` payload of POST
 // /creators/applications/{id}/approve.
 type CampaignService interface {
 	CreateCampaign(ctx context.Context, in domain.CampaignInput) (*domain.Campaign, error)
@@ -109,12 +110,15 @@ type CampaignService interface {
 }
 
 // CampaignCreatorService is the interface Server needs from the campaign-
-// creator service — admin-only batch add (POST), single remove (DELETE) and
-// no-pagination list (GET) on /campaigns/{id}/creators.
+// creator service — admin-only batch add (POST), single remove (DELETE),
+// no-pagination list (GET) and the batch notify / remind-invitation flows
+// on /campaigns/{id}/{notify,remind-invitation}.
 type CampaignCreatorService interface {
 	Add(ctx context.Context, campaignID string, creatorIDs []string) ([]*domain.CampaignCreator, error)
 	Remove(ctx context.Context, campaignID, creatorID string) error
 	List(ctx context.Context, campaignID string) ([]*domain.CampaignCreator, error)
+	Notify(ctx context.Context, campaignID string, creatorIDs []string) ([]domain.NotifyFailure, error)
+	RemindInvitation(ctx context.Context, campaignID string, creatorIDs []string) ([]domain.NotifyFailure, error)
 }
 
 // ServerConfig bundles configuration values the handler layer needs. Keeping

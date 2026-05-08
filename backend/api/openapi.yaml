@@ -1211,7 +1211,12 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "422":
-          description: Validation error
+          description: |
+            Validation error. CAMPAIGN_TMA_URL_LOCKED — `tmaUrl` cannot be
+            changed once any creator in this campaign has been invited
+            (`invited_count > 0`); the existing Telegram messages already
+            embed the previous URL via inline `web_app` button. Other
+            shape/format violations surface as VALIDATION_ERROR.
           content:
             application/json:
               schema:
@@ -1365,6 +1370,141 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: "#/components/responses/UnexpectedError"
+
+  /campaigns/{id}/notify:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      operationId: notifyCampaignCreators
+      summary: Send invitation messages to campaign creators (admin-only)
+      description: |
+        Sends a Telegram invitation message with an inline `web_app` button to
+        every creator in the batch. Allowed source statuses are `planned` and
+        `declined` — the latter resets `reminded_count`/`reminded_at`/
+        `decided_at` so the next decision cycle starts clean. The endpoint
+        validates the whole batch atomically before sending: any creator that
+        is not attached to this campaign or sits in an incompatible status
+        (`invited` / `agreed`) fails the request with 422
+        CAMPAIGN_CREATOR_BATCH_INVALID — no message is sent and the database
+        is untouched. After validation, delivery runs per-creator with
+        partial-success semantics: creators that fail to receive the message
+        (e.g. blocked the bot) come back in the `undelivered` list and their
+        row keeps the previous status / counters / audit; delivered creators
+        flip to `invited` with the counter and audit row written in the same
+        per-creator transaction.
+
+        Soft-deleted campaigns surface as 404. Non-admin callers receive 403.
+      tags: [campaigns]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CampaignCreatorBatchInput"
+      responses:
+        "200":
+          description: Notification batch processed (with possible partial undelivered).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CampaignNotifyResult"
+        "401":
+          description: Unauthenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: Campaign not found (missing or soft-deleted).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: |
+            Either a shape/format violation (empty array, > 200 ids, duplicate
+            ids) returned as the standard ErrorResponse, or
+            CAMPAIGN_CREATOR_BATCH_INVALID with `details` listing every
+            unattached / wrong-status creator from the batch.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/CampaignCreatorBatchInvalidErrorResponse"
+                  - $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: "#/components/responses/UnexpectedError"
+
+  /campaigns/{id}/remind-invitation:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      operationId: remindCampaignCreatorsInvitation
+      summary: Send invitation reminders to campaign creators (admin-only)
+      description: |
+        Symmetric to `POST /campaigns/{id}/notify` but for creators already in
+        status `invited`. The status does not change — only `reminded_count`
+        and `reminded_at` advance on delivery. Validation, partial-success and
+        error semantics match the notify endpoint exactly; the only
+        difference is the allowed source status (`invited`).
+      tags: [campaigns]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CampaignCreatorBatchInput"
+      responses:
+        "200":
+          description: Reminder batch processed (with possible partial undelivered).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CampaignNotifyResult"
+        "401":
+          description: Unauthenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: Campaign not found (missing or soft-deleted).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: |
+            Either a shape/format violation (empty array, > 200 ids, duplicate
+            ids) returned as the standard ErrorResponse, or
+            CAMPAIGN_CREATOR_BATCH_INVALID with `details` listing every
+            unattached / wrong-status creator from the batch.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/CampaignCreatorBatchInvalidErrorResponse"
+                  - $ref: "#/components/schemas/ErrorResponse"
         default:
           $ref: "#/components/responses/UnexpectedError"
 
@@ -2918,6 +3058,112 @@ components:
               type: array
               items:
                 $ref: "#/components/schemas/CampaignCreator"
+
+    CampaignCreatorBatchInput:
+      type: object
+      description: |
+        Batch input shared by `POST /campaigns/{id}/notify` and
+        `POST /campaigns/{id}/remind-invitation`. The shape mirrors
+        AddCampaignCreatorsInput; both endpoints enforce the same
+        empty/over-200/duplicate-id checks before reaching the service.
+      required: [creatorIds]
+      properties:
+        creatorIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+          minItems: 1
+          maxItems: 200
+
+    CampaignCreatorBatchInvalidReason:
+      type: string
+      description: |
+        - `not_in_campaign` — the creatorId is not attached to this campaign
+          (or does not exist as a creator at all; the admin UX is identical:
+          refresh the list).
+        - `wrong_status` — the creator is attached but the current status is
+          incompatible with the action (notify needs `planned`/`declined`,
+          remind-invitation needs `invited`). `currentStatus` carries the
+          actual status for richer UX copy.
+      enum: [not_in_campaign, wrong_status]
+
+    CampaignCreatorBatchInvalidDetail:
+      type: object
+      required: [creatorId, reason]
+      properties:
+        creatorId:
+          type: string
+          format: uuid
+        reason:
+          $ref: "#/components/schemas/CampaignCreatorBatchInvalidReason"
+        currentStatus:
+          $ref: "#/components/schemas/CampaignCreatorStatus"
+          nullable: true
+
+    CampaignCreatorBatchInvalidError:
+      type: object
+      description: |
+        Strict-422 response body for notify / remind-invitation batch
+        validation. The validate-pass collects every offending creatorId in
+        one sweep so the admin UI can highlight all problematic rows at once.
+      required: [code, message, details]
+      properties:
+        code:
+          type: string
+          description: Always `CAMPAIGN_CREATOR_BATCH_INVALID`.
+        message:
+          type: string
+          description: Human-readable fallback message.
+        details:
+          type: array
+          items:
+            $ref: "#/components/schemas/CampaignCreatorBatchInvalidDetail"
+
+    CampaignCreatorBatchInvalidErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          $ref: "#/components/schemas/CampaignCreatorBatchInvalidError"
+
+    CampaignNotifyUndeliveredReason:
+      type: string
+      description: |
+        - `bot_blocked` — Telegram refused delivery because the user blocked
+          the bot or deactivated the account; the admin needs an alternative
+          channel for this creator.
+        - `unknown` — every other transport failure (network, timeout, 5xx
+          from Telegram). The raw error is logged server-side without PII.
+      enum: [bot_blocked, unknown]
+
+    CampaignNotifyUndelivered:
+      type: object
+      required: [creatorId, reason]
+      properties:
+        creatorId:
+          type: string
+          format: uuid
+        reason:
+          $ref: "#/components/schemas/CampaignNotifyUndeliveredReason"
+
+    CampaignNotifyResult:
+      type: object
+      description: |
+        Partial-success result of a notify / remind-invitation batch. Only
+        creators that failed delivery appear in `undelivered`; everyone else
+        succeeded (`delivered_count` is `len(creatorIds) - len(undelivered)`
+        on the client).
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [undelivered]
+          properties:
+            undelivered:
+              type: array
+              items:
+                $ref: "#/components/schemas/CampaignNotifyUndelivered"
 
   securitySchemes:
     bearerAuth:

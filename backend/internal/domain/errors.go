@@ -50,8 +50,8 @@ const (
 	CodeCampaignAddAfterApproveFailed = "CAMPAIGN_ADD_AFTER_APPROVE_FAILED"
 )
 
-// Campaign-creator (chunk 10) user-facing codes carried in 4xx responses by
-// the admin-only batch add / single remove / list endpoints.
+// Campaign-creator user-facing codes carried in 4xx responses by the
+// admin-only batch add / single remove / list / notify / remind endpoints.
 const (
 	// 422 — POST /campaigns/{id}/creators with empty creatorIds.
 	CodeCampaignCreatorIdsRequired = "CAMPAIGN_CREATOR_IDS_REQUIRED"
@@ -70,6 +70,20 @@ const (
 	// 422 — DELETE /campaigns/{id}/creators/{creatorId} once the row has
 	// reached status=agreed; the row stays for the downstream TrustMe flow.
 	CodeCampaignCreatorRemoveAfterAgreed = "CAMPAIGN_CREATOR_REMOVE_AFTER_AGREED"
+	// 422 — POST /campaigns/{id}/notify or remind-invitation when at least one
+	// creatorId in the batch is not attached to this campaign or sits in a
+	// status incompatible with the action. Returned with a custom response
+	// schema carrying `details` (one entry per offending creator).
+	CodeCampaignCreatorBatchInvalid = "CAMPAIGN_CREATOR_BATCH_INVALID"
+)
+
+// Campaign tma_url lock code — PATCH guard.
+const (
+	// 422 — PATCH /campaigns/{id} that flips tma_url while at least one
+	// creator in this campaign has invited_count > 0. Outbound bot messages
+	// embed the previous tma_url via inline web_app button, so changing it
+	// would silently strand creators on a dead link.
+	CodeCampaignTmaURLLocked = "CAMPAIGN_TMA_URL_LOCKED"
 )
 
 // Sentinel domain errors — handlers map these to HTTP status codes.
