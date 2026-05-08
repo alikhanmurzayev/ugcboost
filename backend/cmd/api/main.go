@@ -97,7 +97,7 @@ func run() error {
 	registerNotifyWaiter(tgRig.Notifier, cl)
 
 	campaignSvc := service.NewCampaignService(pool, repoFactory, appLogger)
-	campaignCreatorSvc := service.NewCampaignCreatorService(pool, repoFactory, appLogger)
+	campaignCreatorSvc := service.NewCampaignCreatorService(pool, repoFactory, tgRig.Notifier, appLogger)
 	creatorApplicationSvc := service.NewCreatorApplicationService(pool, repoFactory, tgRig.Notifier, campaignCreatorSvc, appLogger)
 	creatorApplicationTelegramSvc := service.NewCreatorApplicationTelegramService(pool, repoFactory, tgRig.Notifier, appLogger)
 	creatorSvc := service.NewCreatorService(pool, repoFactory, appLogger)

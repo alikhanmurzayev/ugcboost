@@ -705,6 +705,69 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/campaigns/{id}/notify": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Send invitation messages to campaign creators (admin-only)
+         * @description Sends a Telegram invitation message with an inline `web_app` button to
+         *     every creator in the batch. Allowed source statuses are `planned` and
+         *     `declined` — the latter resets `reminded_count`/`reminded_at`/
+         *     `decided_at` so the next decision cycle starts clean. The endpoint
+         *     validates the whole batch atomically before sending: any creator that
+         *     is not attached to this campaign or sits in an incompatible status
+         *     (`invited` / `agreed`) fails the request with 422
+         *     CAMPAIGN_CREATOR_BATCH_INVALID — no message is sent and the database
+         *     is untouched. After validation, delivery runs per-creator with
+         *     partial-success semantics: creators that fail to receive the message
+         *     (e.g. blocked the bot) come back in the `undelivered` list and their
+         *     row keeps the previous status / counters / audit; delivered creators
+         *     flip to `invited` with the counter and audit row written in the same
+         *     per-creator transaction.
+         *
+         *     Soft-deleted campaigns surface as 404. Non-admin callers receive 403.
+         */
+        post: operations["notifyCampaignCreators"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/campaigns/{id}/remind-invitation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Send invitation reminders to campaign creators (admin-only)
+         * @description Symmetric to `POST /campaigns/{id}/notify` but for creators already in
+         *     status `invited`. The status does not change — only `reminded_count`
+         *     and `reminded_at` advance on delivery. Validation, partial-success and
+         *     error semantics match the notify endpoint exactly; the only
+         *     difference is the allowed source status (`invited`).
+         */
+        post: operations["remindCampaignCreatorsInvitation"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/webhooks/sendpulse/instagram": {
         parameters: {
             query?: never;
@@ -1600,6 +1663,72 @@ export interface components {
         ListCampaignCreatorsResult: {
             data: {
                 items: components["schemas"]["CampaignCreator"][];
+            };
+        };
+        /**
+         * @description Batch input shared by `POST /campaigns/{id}/notify` and
+         *     `POST /campaigns/{id}/remind-invitation`. The shape mirrors
+         *     AddCampaignCreatorsInput; both endpoints enforce the same
+         *     empty/over-200/duplicate-id checks before reaching the service.
+         */
+        CampaignCreatorBatchInput: {
+            creatorIds: string[];
+        };
+        /**
+         * @description - `not_in_campaign` — the creatorId is not attached to this campaign
+         *       (or does not exist as a creator at all; the admin UX is identical:
+         *       refresh the list).
+         *     - `wrong_status` — the creator is attached but the current status is
+         *       incompatible with the action (notify needs `planned`/`declined`,
+         *       remind-invitation needs `invited`). `currentStatus` carries the
+         *       actual status for richer UX copy.
+         * @enum {string}
+         */
+        CampaignCreatorBatchInvalidReason: "not_in_campaign" | "wrong_status";
+        CampaignCreatorBatchInvalidDetail: {
+            /** Format: uuid */
+            creatorId: string;
+            reason: components["schemas"]["CampaignCreatorBatchInvalidReason"];
+            currentStatus?: components["schemas"]["CampaignCreatorStatus"];
+        };
+        /**
+         * @description Strict-422 response body for notify / remind-invitation batch
+         *     validation. The validate-pass collects every offending creatorId in
+         *     one sweep so the admin UI can highlight all problematic rows at once.
+         */
+        CampaignCreatorBatchInvalidError: {
+            /** @description Always `CAMPAIGN_CREATOR_BATCH_INVALID`. */
+            code: string;
+            /** @description Human-readable fallback message. */
+            message: string;
+            details: components["schemas"]["CampaignCreatorBatchInvalidDetail"][];
+        };
+        CampaignCreatorBatchInvalidErrorResponse: {
+            error: components["schemas"]["CampaignCreatorBatchInvalidError"];
+        };
+        /**
+         * @description - `bot_blocked` — Telegram refused delivery because the user blocked
+         *       the bot or deactivated the account; the admin needs an alternative
+         *       channel for this creator.
+         *     - `unknown` — every other transport failure (network, timeout, 5xx
+         *       from Telegram). The raw error is logged server-side without PII.
+         * @enum {string}
+         */
+        CampaignNotifyUndeliveredReason: "bot_blocked" | "unknown";
+        CampaignNotifyUndelivered: {
+            /** Format: uuid */
+            creatorId: string;
+            reason: components["schemas"]["CampaignNotifyUndeliveredReason"];
+        };
+        /**
+         * @description Partial-success result of a notify / remind-invitation batch. Only
+         *     creators that failed delivery appear in `undelivered`; everyone else
+         *     succeeded (`delivered_count` is `len(creatorIds) - len(undelivered)`
+         *     on the client).
+         */
+        CampaignNotifyResult: {
+            data: {
+                undelivered: components["schemas"]["CampaignNotifyUndelivered"][];
             };
         };
     };
@@ -2769,7 +2898,13 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
-            /** @description Validation error */
+            /**
+             * @description Validation error. CAMPAIGN_TMA_URL_LOCKED — `tmaUrl` cannot be
+             *     changed once any creator in this campaign has been invited
+             *     (`invited_count > 0`); the existing Telegram messages already
+             *     embed the previous URL via inline `web_app` button. Other
+             *     shape/format violations surface as VALIDATION_ERROR.
+             */
             422: {
                 headers: {
                     [name: string]: unknown;
@@ -2923,6 +3058,126 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            default: components["responses"]["UnexpectedError"];
+        };
+    };
+    notifyCampaignCreators: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CampaignCreatorBatchInput"];
+            };
+        };
+        responses: {
+            /** @description Notification batch processed (with possible partial undelivered). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CampaignNotifyResult"];
+                };
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            /** @description Campaign not found (missing or soft-deleted). */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /**
+             * @description Either a shape/format violation (empty array, > 200 ids, duplicate
+             *     ids) returned as the standard ErrorResponse, or
+             *     CAMPAIGN_CREATOR_BATCH_INVALID with `details` listing every
+             *     unattached / wrong-status creator from the batch.
+             */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CampaignCreatorBatchInvalidErrorResponse"] | components["schemas"]["ErrorResponse"];
+                };
+            };
+            default: components["responses"]["UnexpectedError"];
+        };
+    };
+    remindCampaignCreatorsInvitation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CampaignCreatorBatchInput"];
+            };
+        };
+        responses: {
+            /** @description Reminder batch processed (with possible partial undelivered). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CampaignNotifyResult"];
+                };
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            /** @description Campaign not found (missing or soft-deleted). */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /**
+             * @description Either a shape/format violation (empty array, > 200 ids, duplicate
+             *     ids) returned as the standard ErrorResponse, or
+             *     CAMPAIGN_CREATOR_BATCH_INVALID with `details` listing every
+             *     unattached / wrong-status creator from the batch.
+             */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CampaignCreatorBatchInvalidErrorResponse"] | components["schemas"]["ErrorResponse"];
                 };
             };
             default: components["responses"]["UnexpectedError"];

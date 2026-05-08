@@ -66,6 +66,10 @@ type CampaignCreatorRepo interface {
 	Add(ctx context.Context, campaignID, creatorID, status string) (*CampaignCreatorRow, error)
 	GetByCampaignAndCreator(ctx context.Context, campaignID, creatorID string) (*CampaignCreatorRow, error)
 	ListByCampaign(ctx context.Context, campaignID string) ([]*CampaignCreatorRow, error)
+	ListByCampaignAndCreators(ctx context.Context, campaignID string, creatorIDs []string) ([]*CampaignCreatorRow, error)
+	ApplyInvite(ctx context.Context, id string) (*CampaignCreatorRow, error)
+	ApplyRemind(ctx context.Context, id string) (*CampaignCreatorRow, error)
+	ExistsInvitedInCampaign(ctx context.Context, campaignID string) (bool, error)
 	DeleteByID(ctx context.Context, id string) error
 }
 
@@ -150,4 +154,84 @@ func (r *campaignCreatorRepository) DeleteByID(ctx context.Context, id string) e
 		return sql.ErrNoRows
 	}
 	return nil
+}
+
+// ListByCampaignAndCreators returns every campaign_creators row that matches
+// the (campaign, creator IN ($creatorIds)) pair. Used by chunk 12 notify /
+// remind-invitation as the read-only validation pre-pass: the service
+// compares the result against the input batch to surface
+// not_in_campaign / wrong_status details. Empty creatorIds returns an empty
+// result without hitting the database.
+func (r *campaignCreatorRepository) ListByCampaignAndCreators(ctx context.Context, campaignID string, creatorIDs []string) ([]*CampaignCreatorRow, error) {
+	if len(creatorIDs) == 0 {
+		return nil, nil
+	}
+	q := sq.Select(campaignCreatorSelectColumns...).
+		From(TableCampaignCreators).
+		Where(sq.Eq{
+			CampaignCreatorColumnCampaignID: campaignID,
+			CampaignCreatorColumnCreatorID:  creatorIDs,
+		})
+	return dbutil.Many[CampaignCreatorRow](ctx, r.db, q)
+}
+
+// ApplyInvite advances a campaign_creators row to status=invited and bumps
+// the invitation counter. The CASE branches reset the decision-cycle fields
+// (`reminded_count`, `reminded_at`, `decided_at`) only when the source
+// status was `declined` — re-invite after refusal restarts the cycle as if
+// the row had just been added. Coming from `planned`, those fields are
+// already at their initial values, so the CASE is a no-op there. Returns
+// the freshly updated row for audit. Caller (service) is responsible for
+// the validation pre-pass: this method does not check the source status,
+// it just trusts the caller-provided id.
+//
+// Postgres semantics note: every SET expression sees the OLD row state,
+// so the CASE branches read `status` before the same statement flips it
+// to `invited`. Do not refactor the SET ordering for "clarity" without
+// preserving this property — moving `status` last would not change
+// behaviour, but moving CASE columns into a multi-row CTE would.
+func (r *campaignCreatorRepository) ApplyInvite(ctx context.Context, id string) (*CampaignCreatorRow, error) {
+	resetIfDeclined := func(col string, fallback any) sq.Sqlizer {
+		return sq.Expr(
+			"CASE WHEN "+CampaignCreatorColumnStatus+" = ? THEN ? ELSE "+col+" END",
+			domain.CampaignCreatorStatusDeclined, fallback,
+		)
+	}
+	q := sq.Update(TableCampaignCreators).
+		Set(CampaignCreatorColumnStatus, domain.CampaignCreatorStatusInvited).
+		Set(CampaignCreatorColumnInvitedCount, sq.Expr(CampaignCreatorColumnInvitedCount+" + 1")).
+		Set(CampaignCreatorColumnInvitedAt, sq.Expr("now()")).
+		Set(CampaignCreatorColumnRemindedCount, resetIfDeclined(CampaignCreatorColumnRemindedCount, 0)).
+		Set(CampaignCreatorColumnRemindedAt, resetIfDeclined(CampaignCreatorColumnRemindedAt, nil)).
+		Set(CampaignCreatorColumnDecidedAt, resetIfDeclined(CampaignCreatorColumnDecidedAt, nil)).
+		Set(CampaignCreatorColumnUpdatedAt, sq.Expr("now()")).
+		Where(sq.Eq{CampaignCreatorColumnID: id}).
+		Suffix(returningClause(campaignCreatorSelectColumns))
+	return dbutil.One[CampaignCreatorRow](ctx, r.db, q)
+}
+
+// ApplyRemind bumps reminded_count and reminded_at on a campaign_creators
+// row without changing the status. Caller (service) verifies the row is in
+// status=invited before calling — this method does not re-check.
+func (r *campaignCreatorRepository) ApplyRemind(ctx context.Context, id string) (*CampaignCreatorRow, error) {
+	q := sq.Update(TableCampaignCreators).
+		Set(CampaignCreatorColumnRemindedCount, sq.Expr(CampaignCreatorColumnRemindedCount+" + 1")).
+		Set(CampaignCreatorColumnRemindedAt, sq.Expr("now()")).
+		Set(CampaignCreatorColumnUpdatedAt, sq.Expr("now()")).
+		Where(sq.Eq{CampaignCreatorColumnID: id}).
+		Suffix(returningClause(campaignCreatorSelectColumns))
+	return dbutil.One[CampaignCreatorRow](ctx, r.db, q)
+}
+
+// ExistsInvitedInCampaign returns true if any campaign_creators row in this
+// campaign has invited_count > 0 — i.e. an invitation has been delivered at
+// least once. Used by UpdateCampaign to lock tma_url against changes that
+// would silently break already-delivered web_app links.
+func (r *campaignCreatorRepository) ExistsInvitedInCampaign(ctx context.Context, campaignID string) (bool, error) {
+	sub := sq.Select("1").
+		From(TableCampaignCreators).
+		Where(sq.Eq{CampaignCreatorColumnCampaignID: campaignID}).
+		Where(sq.Gt{CampaignCreatorColumnInvitedCount: 0})
+	q := sq.Select().Column(sq.Expr("EXISTS (?)", sub))
+	return dbutil.Val[bool](ctx, r.db, q)
 }

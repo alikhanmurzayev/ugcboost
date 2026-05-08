@@ -13,6 +13,24 @@ const (
 	BearerAuthScopes = "bearerAuth.Scopes"
 )
 
+// Defines values for CampaignCreatorBatchInvalidReason.
+const (
+	NotInCampaign CampaignCreatorBatchInvalidReason = "not_in_campaign"
+	WrongStatus   CampaignCreatorBatchInvalidReason = "wrong_status"
+)
+
+// Valid indicates whether the value is a known member of the CampaignCreatorBatchInvalidReason enum.
+func (e CampaignCreatorBatchInvalidReason) Valid() bool {
+	switch e {
+	case NotInCampaign:
+		return true
+	case WrongStatus:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for CampaignCreatorStatus.
 const (
 	Agreed   CampaignCreatorStatus = "agreed"
@@ -52,6 +70,24 @@ func (e CampaignListSortField) Valid() bool {
 	case CampaignListSortFieldName:
 		return true
 	case CampaignListSortFieldUpdatedAt:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CampaignNotifyUndeliveredReason.
+const (
+	BotBlocked CampaignNotifyUndeliveredReason = "bot_blocked"
+	Unknown    CampaignNotifyUndeliveredReason = "unknown"
+)
+
+// Valid indicates whether the value is a known member of the CampaignNotifyUndeliveredReason enum.
+func (e CampaignNotifyUndeliveredReason) Valid() bool {
+	switch e {
+	case BotBlocked:
+		return true
+	case Unknown:
 		return true
 	default:
 		return false
@@ -422,6 +458,66 @@ type CampaignCreator struct {
 	UpdatedAt time.Time             `json:"updatedAt"`
 }
 
+// CampaignCreatorBatchInput Batch input shared by `POST /campaigns/{id}/notify` and
+// `POST /campaigns/{id}/remind-invitation`. The shape mirrors
+// AddCampaignCreatorsInput; both endpoints enforce the same
+// empty/over-200/duplicate-id checks before reaching the service.
+type CampaignCreatorBatchInput struct {
+	CreatorIds []openapi_types.UUID `json:"creatorIds"`
+}
+
+// CampaignCreatorBatchInvalidDetail defines model for CampaignCreatorBatchInvalidDetail.
+type CampaignCreatorBatchInvalidDetail struct {
+	CreatorId openapi_types.UUID `json:"creatorId"`
+
+	// CurrentStatus Lifecycle state of a creator within a campaign.
+	//
+	// - `planned` — admin added the creator to the campaign (default on create).
+	// - `invited` — admin sent an invitation; awaiting creator response.
+	// - `declined` — creator declined via TMA.
+	// - `agreed` — creator accepted via TMA. Terminal for the current scope.
+	CurrentStatus *CampaignCreatorStatus `json:"currentStatus,omitempty"`
+
+	// Reason - `not_in_campaign` — the creatorId is not attached to this campaign
+	//   (or does not exist as a creator at all; the admin UX is identical:
+	//   refresh the list).
+	// - `wrong_status` — the creator is attached but the current status is
+	//   incompatible with the action (notify needs `planned`/`declined`,
+	//   remind-invitation needs `invited`). `currentStatus` carries the
+	//   actual status for richer UX copy.
+	Reason CampaignCreatorBatchInvalidReason `json:"reason"`
+}
+
+// CampaignCreatorBatchInvalidError Strict-422 response body for notify / remind-invitation batch
+// validation. The validate-pass collects every offending creatorId in
+// one sweep so the admin UI can highlight all problematic rows at once.
+type CampaignCreatorBatchInvalidError struct {
+	// Code Always `CAMPAIGN_CREATOR_BATCH_INVALID`.
+	Code    string                              `json:"code"`
+	Details []CampaignCreatorBatchInvalidDetail `json:"details"`
+
+	// Message Human-readable fallback message.
+	Message string `json:"message"`
+}
+
+// CampaignCreatorBatchInvalidErrorResponse defines model for CampaignCreatorBatchInvalidErrorResponse.
+type CampaignCreatorBatchInvalidErrorResponse struct {
+	// Error Strict-422 response body for notify / remind-invitation batch
+	// validation. The validate-pass collects every offending creatorId in
+	// one sweep so the admin UI can highlight all problematic rows at once.
+	Error CampaignCreatorBatchInvalidError `json:"error"`
+}
+
+// CampaignCreatorBatchInvalidReason - `not_in_campaign` — the creatorId is not attached to this campaign
+//
+//		(or does not exist as a creator at all; the admin UX is identical:
+//		refresh the list).
+//	  - `wrong_status` — the creator is attached but the current status is
+//	    incompatible with the action (notify needs `planned`/`declined`,
+//	    remind-invitation needs `invited`). `currentStatus` carries the
+//	    actual status for richer UX copy.
+type CampaignCreatorBatchInvalidReason string
+
 // CampaignCreatorStatus Lifecycle state of a creator within a campaign.
 //
 // - `planned` — admin added the creator to the campaign (default on create).
@@ -442,6 +538,36 @@ type CampaignInput struct {
 // CampaignListSortField Sort field for the admin list. Mapped to a SQL column on the backend.
 // Unknown values are rejected with 422.
 type CampaignListSortField string
+
+// CampaignNotifyResult Partial-success result of a notify / remind-invitation batch. Only
+// creators that failed delivery appear in `undelivered`; everyone else
+// succeeded (`delivered_count` is `len(creatorIds) - len(undelivered)`
+// on the client).
+type CampaignNotifyResult struct {
+	Data struct {
+		Undelivered []CampaignNotifyUndelivered `json:"undelivered"`
+	} `json:"data"`
+}
+
+// CampaignNotifyUndelivered defines model for CampaignNotifyUndelivered.
+type CampaignNotifyUndelivered struct {
+	CreatorId openapi_types.UUID `json:"creatorId"`
+
+	// Reason - `bot_blocked` — Telegram refused delivery because the user blocked
+	//   the bot or deactivated the account; the admin needs an alternative
+	//   channel for this creator.
+	// - `unknown` — every other transport failure (network, timeout, 5xx
+	//   from Telegram). The raw error is logged server-side without PII.
+	Reason CampaignNotifyUndeliveredReason `json:"reason"`
+}
+
+// CampaignNotifyUndeliveredReason - `bot_blocked` — Telegram refused delivery because the user blocked
+//
+//		the bot or deactivated the account; the admin needs an alternative
+//		channel for this creator.
+//	  - `unknown` — every other transport failure (network, timeout, 5xx
+//	    from Telegram). The raw error is logged server-side without PII.
+type CampaignNotifyUndeliveredReason string
 
 // CampaignsListData defines model for CampaignsListData.
 type CampaignsListData struct {
@@ -1287,6 +1413,12 @@ type UpdateCampaignJSONRequestBody = CampaignInput
 
 // AddCampaignCreatorsJSONRequestBody defines body for AddCampaignCreators for application/json ContentType.
 type AddCampaignCreatorsJSONRequestBody = AddCampaignCreatorsInput
+
+// NotifyCampaignCreatorsJSONRequestBody defines body for NotifyCampaignCreators for application/json ContentType.
+type NotifyCampaignCreatorsJSONRequestBody = CampaignCreatorBatchInput
+
+// RemindCampaignCreatorsInvitationJSONRequestBody defines body for RemindCampaignCreatorsInvitation for application/json ContentType.
+type RemindCampaignCreatorsInvitationJSONRequestBody = CampaignCreatorBatchInput
 
 // SubmitCreatorApplicationJSONRequestBody defines body for SubmitCreatorApplication for application/json ContentType.
 type SubmitCreatorApplicationJSONRequestBody = CreatorApplicationSubmitRequest

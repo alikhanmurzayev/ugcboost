@@ -2,6 +2,7 @@ package domain
 
 import (
 	"errors"
+	"fmt"
 	"time"
 )
 
@@ -59,3 +60,46 @@ var ErrCampaignCreatorCreatorNotFound = NewValidationError(
 // (campaign, creator) pair that is not in campaign_creators. respondError
 // maps it to 404 CAMPAIGN_CREATOR_NOT_FOUND.
 var ErrCampaignCreatorNotFound = errors.New("campaign creator not found")
+
+// CampaignCreator batch-invalid reason values — used in CampaignCreatorBatchInvalidError.
+const (
+	BatchInvalidReasonNotInCampaign = "not_in_campaign"
+	BatchInvalidReasonWrongStatus   = "wrong_status"
+)
+
+// BatchValidationDetail is one entry in the strict-422 response of
+// notify / remind-invitation: which creatorId was rejected, why, and (for
+// wrong_status) what the current status is so the UI can phrase the error.
+type BatchValidationDetail struct {
+	CreatorID     string `json:"creator_id"`
+	Reason        string `json:"reason"`
+	CurrentStatus string `json:"current_status,omitempty"`
+}
+
+// CampaignCreatorBatchInvalidError carries the full set of batch validation
+// failures for notify / remind-invitation. Validate-pass collects every
+// offending creator before returning, so the admin UI gets the whole picture
+// in one response. The handler renders this through a dedicated branch in
+// respondError that emits the CAMPAIGN_CREATOR_BATCH_INVALID schema (rather
+// than the generic ErrorResponse).
+type CampaignCreatorBatchInvalidError struct {
+	Details []BatchValidationDetail
+}
+
+func (e *CampaignCreatorBatchInvalidError) Error() string {
+	return fmt.Sprintf("campaign creator batch invalid: %d details", len(e.Details))
+}
+
+// NotifyFailureReason values for the partial-success response of A4/A5.
+const (
+	NotifyFailureReasonBotBlocked = "bot_blocked"
+	NotifyFailureReasonUnknown    = "unknown"
+)
+
+// NotifyFailure carries one creator that the bot could not reach during a
+// notify / remind-invitation batch. Service returns these so the handler can
+// surface them in the `undelivered` list of the 200 response.
+type NotifyFailure struct {
+	CreatorID string
+	Reason    string
+}

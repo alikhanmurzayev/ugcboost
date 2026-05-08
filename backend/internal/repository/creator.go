@@ -92,6 +92,7 @@ const (
 type CreatorRepo interface {
 	Create(ctx context.Context, row CreatorRow) (*CreatorRow, error)
 	GetByID(ctx context.Context, id string) (*CreatorRow, error)
+	GetTelegramUserIDsByIDs(ctx context.Context, ids []string) (map[string]int64, error)
 	List(ctx context.Context, params CreatorListParams) ([]*CreatorListRow, int64, error)
 	DeleteForTests(ctx context.Context, id string) error
 }
@@ -181,6 +182,32 @@ func (r *creatorRepository) GetByID(ctx context.Context, id string) (*CreatorRow
 		From(TableCreators).
 		Where(sq.Eq{CreatorColumnID: id})
 	return dbutil.One[CreatorRow](ctx, r.db, q)
+}
+
+// GetTelegramUserIDsByIDs returns a creator-id → telegram_user_id map for
+// the requested ids. Missing ids are simply absent from the result; the
+// caller (chunk 12 notify / remind-invitation) compares against the input
+// batch to decide. Empty input yields an empty map without hitting the DB.
+func (r *creatorRepository) GetTelegramUserIDsByIDs(ctx context.Context, ids []string) (map[string]int64, error) {
+	if len(ids) == 0 {
+		return map[string]int64{}, nil
+	}
+	q := sq.Select(CreatorColumnID, CreatorColumnTelegramUserID).
+		From(TableCreators).
+		Where(sq.Eq{CreatorColumnID: ids})
+	type row struct {
+		ID             string `db:"id"`
+		TelegramUserID int64  `db:"telegram_user_id"`
+	}
+	rows, err := dbutil.Many[row](ctx, r.db, q)
+	if err != nil {
+		return nil, fmt.Errorf("creator_repository.GetTelegramUserIDsByIDs: %w", err)
+	}
+	out := make(map[string]int64, len(rows))
+	for _, r := range rows {
+		out[r.ID] = r.TelegramUserID
+	}
+	return out, nil
 }
 
 // DeleteForTests hard-deletes a creator by id. Children in

@@ -158,6 +158,62 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /test/telegram/spy/fake-chat:
+    post:
+      operationId: telegramSpyFakeChat
+      summary: Mark chatId as test-synthetic so TeeSender skips the real bot
+      description: |
+        Registers chatId in the spy store's fake-chat set. Subsequent
+        SendMessage calls to that chat_id are recorded with success
+        without involving the upstream Telegram bot. Needed by chunk-12
+        e2e: synthetic creator chat_ids have no live chat for staging
+        Telegram, so without this stub TeeSender would always return
+        "Bad Request: chat not found" and `undelivered` could never be
+        empty. NEVER enabled in production.
+      tags: [test]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TelegramSpyFakeChatRequest"
+      responses:
+        "204":
+          description: Fake chat registered
+        "422":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /test/telegram/spy/fail-next:
+    post:
+      operationId: telegramSpyFailNext
+      summary: Force the next outbound bot send to chatId to fail
+      description: |
+        Registers a one-shot synthetic failure for the chat_id. The next
+        SendMessage call to that chat_id returns the canonical Telegram
+        error string ("Forbidden: bot was blocked by the user" by default).
+        Used by chunk-12 e2e to exercise partial-success delivery without
+        a real blocked-by-user account. NEVER enabled in production.
+      tags: [test]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TelegramSpyFailNextRequest"
+      responses:
+        "204":
+          description: Failure registered
+        "422":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
 components:
   schemas:
     SeedUserRequest:
@@ -305,6 +361,30 @@ components:
       properties:
         data:
           $ref: "#/components/schemas/TelegramSentData"
+
+    TelegramSpyFailNextRequest:
+      type: object
+      required: [chatId]
+      properties:
+        chatId:
+          type: integer
+          format: int64
+          description: Chat id whose next SendMessage call should fail.
+        reason:
+          type: string
+          description: |
+            Optional override for the error string the spy returns. Defaults
+            to "Forbidden: bot was blocked by the user" so MapTelegramErrorToReason
+            classifies it as bot_blocked.
+
+    TelegramSpyFakeChatRequest:
+      type: object
+      required: [chatId]
+      properties:
+        chatId:
+          type: integer
+          format: int64
+          description: Chat id to register as test-synthetic.
 
     ErrorResponse:
       type: object

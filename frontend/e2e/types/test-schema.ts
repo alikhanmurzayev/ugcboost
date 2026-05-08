@@ -108,6 +108,56 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/test/telegram/spy/fake-chat": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mark chatId as test-synthetic so TeeSender skips the real bot
+         * @description Registers chatId in the spy store's fake-chat set. Subsequent
+         *     SendMessage calls to that chat_id are recorded with success
+         *     without involving the upstream Telegram bot. Needed by chunk-12
+         *     e2e: synthetic creator chat_ids have no live chat for staging
+         *     Telegram, so without this stub TeeSender would always return
+         *     "Bad Request: chat not found" and `undelivered` could never be
+         *     empty. NEVER enabled in production.
+         */
+        post: operations["telegramSpyFakeChat"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/test/telegram/spy/fail-next": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Force the next outbound bot send to chatId to fail
+         * @description Registers a one-shot synthetic failure for the chat_id. The next
+         *     SendMessage call to that chat_id returns the canonical Telegram
+         *     error string ("Forbidden: bot was blocked by the user" by default).
+         *     Used by chunk-12 e2e to exercise partial-success delivery without
+         *     a real blocked-by-user account. NEVER enabled in production.
+         */
+        post: operations["telegramSpyFailNext"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -189,6 +239,26 @@ export interface components {
         };
         TelegramSentResult: {
             data: components["schemas"]["TelegramSentData"];
+        };
+        TelegramSpyFailNextRequest: {
+            /**
+             * Format: int64
+             * @description Chat id whose next SendMessage call should fail.
+             */
+            chatId: number;
+            /**
+             * @description Optional override for the error string the spy returns. Defaults
+             *     to "Forbidden: bot was blocked by the user" so MapTelegramErrorToReason
+             *     classifies it as bot_blocked.
+             */
+            reason?: string;
+        };
+        TelegramSpyFakeChatRequest: {
+            /**
+             * Format: int64
+             * @description Chat id to register as test-synthetic.
+             */
+            chatId: number;
         };
         ErrorResponse: {
             error: {
@@ -355,6 +425,68 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["SendTelegramMessageResult"];
                 };
+            };
+            /** @description Validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    telegramSpyFakeChat: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TelegramSpyFakeChatRequest"];
+            };
+        };
+        responses: {
+            /** @description Fake chat registered */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    telegramSpyFailNext: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TelegramSpyFailNextRequest"];
+            };
+        };
+        responses: {
+            /** @description Failure registered */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation error */
             422: {

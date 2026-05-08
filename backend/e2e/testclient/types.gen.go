@@ -178,6 +178,23 @@ type TelegramSentResult struct {
 	Data TelegramSentData `json:"data"`
 }
 
+// TelegramSpyFailNextRequest defines model for TelegramSpyFailNextRequest.
+type TelegramSpyFailNextRequest struct {
+	// ChatId Chat id whose next SendMessage call should fail.
+	ChatId int64 `json:"chatId"`
+
+	// Reason Optional override for the error string the spy returns. Defaults
+	// to "Forbidden: bot was blocked by the user" so MapTelegramErrorToReason
+	// classifies it as bot_blocked.
+	Reason *string `json:"reason,omitempty"`
+}
+
+// TelegramSpyFakeChatRequest defines model for TelegramSpyFakeChatRequest.
+type TelegramSpyFakeChatRequest struct {
+	// ChatId Chat id to register as test-synthetic.
+	ChatId int64 `json:"chatId"`
+}
+
 // GetResetTokenParams defines parameters for GetResetToken.
 type GetResetTokenParams struct {
 	Email openapi_types.Email `form:"email" json:"email"`
@@ -200,3 +217,9 @@ type SeedUserJSONRequestBody = SeedUserRequest
 
 // SendTelegramMessageJSONRequestBody defines body for SendTelegramMessage for application/json ContentType.
 type SendTelegramMessageJSONRequestBody = SendTelegramMessageRequest
+
+// TelegramSpyFailNextJSONRequestBody defines body for TelegramSpyFailNext for application/json ContentType.
+type TelegramSpyFailNextJSONRequestBody = TelegramSpyFailNextRequest
+
+// TelegramSpyFakeChatJSONRequestBody defines body for TelegramSpyFakeChat for application/json ContentType.
+type TelegramSpyFakeChatJSONRequestBody = TelegramSpyFakeChatRequest

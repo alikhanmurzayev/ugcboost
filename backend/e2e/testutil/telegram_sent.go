@@ -15,6 +15,41 @@ import (
 // giving the post-commit notify goroutine room to flush in slow CI runs.
 const telegramSentPollInterval = 100 * time.Millisecond
 
+// RegisterTelegramSpyFailNext queues a one-shot synthetic Telegram failure
+// for the chat_id via POST /test/telegram/spy/fail-next. The next outbound
+// SendMessage to that chat_id returns the canonical
+// "Forbidden: bot was blocked by the user" error so chunk-12 partial-success
+// e2e exercises the bot_blocked branch without needing a real blocked user.
+// Pass reason="" to use the default. The registration is consumed by the
+// next send (FIFO per chat_id).
+func RegisterTelegramSpyFailNext(t *testing.T, chatID int64, reason string) {
+	t.Helper()
+	client := NewTestClient(t)
+	body := testclient.TelegramSpyFailNextJSONRequestBody{ChatId: chatID}
+	if reason != "" {
+		r := reason
+		body.Reason = &r
+	}
+	resp, err := client.TelegramSpyFailNextWithResponse(context.Background(), body)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusNoContent, resp.StatusCode())
+}
+
+// RegisterTelegramSpyFakeChat marks chatID as test-synthetic so TeeSender
+// skips the real bot's SendMessage call. Required for chunk-12 e2e where
+// the synthetic creator chat_id has no live counterpart in staging
+// Telegram and the real bot would otherwise return "chat not found" for
+// every send. SpyOnlySender ignores the registration (it never hits a
+// real bot anyway). Idempotent; safe to call once per creator at setup.
+func RegisterTelegramSpyFakeChat(t *testing.T, chatID int64) {
+	t.Helper()
+	client := NewTestClient(t)
+	resp, err := client.TelegramSpyFakeChatWithResponse(context.Background(),
+		testclient.TelegramSpyFakeChatJSONRequestBody{ChatId: chatID})
+	require.NoError(t, err)
+	require.Equal(t, http.StatusNoContent, resp.StatusCode())
+}
+
 // TelegramSentOptions controls the polling behaviour of WaitForTelegramSent.
 // Since narrows the spy lookup; ExpectCount is the size the helper waits
 // for. Timeout caps total wall time spent polling.

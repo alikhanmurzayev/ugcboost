@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	tgbot "github.com/go-telegram/bot"
 	tgmodels "github.com/go-telegram/bot/models"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -489,6 +490,94 @@ func TestTestAPIHandler_SendTelegramMessage(t *testing.T) {
 		require.Len(t, resp.Replies, 1)
 		require.Equal(t, int64(999), resp.Replies[0].ChatId)
 		require.Equal(t, telegram.MessageFallback, resp.Replies[0].Text)
+	})
+}
+
+func TestTestAPIHandler_TelegramSpyFailNext(t *testing.T) {
+	t.Parallel()
+
+	t.Run("default reason classifies as bot_blocked", func(t *testing.T) {
+		t.Parallel()
+		auth := mocks.NewMockTestAPIAuthService(t)
+		repos := mocks.NewMockTestAPICleanupRepoFactory(t)
+		pool := dbutilmocks.NewMockPool(t)
+		store := mocks.NewMockTokenStore(t)
+		log := logmocks.NewMockLogger(t)
+		spy := telegram.NewSentSpyStore()
+		sender := telegram.NewSpyOnlySender(spy)
+
+		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, log), spy, log))
+
+		w, _ := doJSON[map[string]any](t, router, http.MethodPost,
+			"/test/telegram/spy/fail-next",
+			testapi.TelegramSpyFailNextRequest{ChatId: 555})
+		require.Equal(t, http.StatusNoContent, w.Code)
+
+		// Next send to chat 555 must come back with the canonical Forbidden
+		// error so MapTelegramErrorToReason classifies it as bot_blocked.
+		_, err := sender.SendMessage(context.Background(), &tgbot.SendMessageParams{
+			ChatID: int64(555),
+			Text:   "ping",
+		})
+		require.Error(t, err)
+		require.Equal(t, domain.NotifyFailureReasonBotBlocked, telegram.MapTelegramErrorToReason(err))
+
+		// One-shot: subsequent send goes through unchanged.
+		_, err = sender.SendMessage(context.Background(), &tgbot.SendMessageParams{
+			ChatID: int64(555),
+			Text:   "second",
+		})
+		require.NoError(t, err)
+	})
+
+	t.Run("custom reason is preserved verbatim", func(t *testing.T) {
+		t.Parallel()
+		auth := mocks.NewMockTestAPIAuthService(t)
+		repos := mocks.NewMockTestAPICleanupRepoFactory(t)
+		pool := dbutilmocks.NewMockPool(t)
+		store := mocks.NewMockTokenStore(t)
+		log := logmocks.NewMockLogger(t)
+		spy := telegram.NewSentSpyStore()
+		sender := telegram.NewSpyOnlySender(spy)
+
+		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, log), spy, log))
+
+		custom := "network down"
+		w, _ := doJSON[map[string]any](t, router, http.MethodPost,
+			"/test/telegram/spy/fail-next",
+			testapi.TelegramSpyFailNextRequest{ChatId: 777, Reason: &custom})
+		require.Equal(t, http.StatusNoContent, w.Code)
+
+		_, err := sender.SendMessage(context.Background(), &tgbot.SendMessageParams{
+			ChatID: int64(777),
+			Text:   "ping",
+		})
+		require.Error(t, err)
+		require.Equal(t, custom, err.Error())
+		require.Equal(t, domain.NotifyFailureReasonUnknown, telegram.MapTelegramErrorToReason(err))
+	})
+}
+
+func TestTestAPIHandler_TelegramSpyFakeChat(t *testing.T) {
+	t.Parallel()
+
+	t.Run("registers fake chat so IsFakeChat returns true", func(t *testing.T) {
+		t.Parallel()
+		auth := mocks.NewMockTestAPIAuthService(t)
+		repos := mocks.NewMockTestAPICleanupRepoFactory(t)
+		pool := dbutilmocks.NewMockPool(t)
+		store := mocks.NewMockTokenStore(t)
+		log := logmocks.NewMockLogger(t)
+		spy := telegram.NewSentSpyStore()
+
+		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, log), spy, log))
+
+		require.False(t, spy.IsFakeChat(101))
+		w, _ := doJSON[map[string]any](t, router, http.MethodPost,
+			"/test/telegram/spy/fake-chat",
+			testapi.TelegramSpyFakeChatRequest{ChatId: 101})
+		require.Equal(t, http.StatusNoContent, w.Code)
+		require.True(t, spy.IsFakeChat(101))
 	})
 }
 

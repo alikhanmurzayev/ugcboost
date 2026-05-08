@@ -90,6 +90,59 @@ func (_c *MockCampaignRepoFactory_NewAuditRepo_Call) RunAndReturn(run func(db db
 	return _c
 }
 
+// NewCampaignCreatorRepo provides a mock function for the type MockCampaignRepoFactory
+func (_mock *MockCampaignRepoFactory) NewCampaignCreatorRepo(db dbutil.DB) repository.CampaignCreatorRepo {
+	ret := _mock.Called(db)
+
+	if len(ret) == 0 {
+		panic("no return value specified for NewCampaignCreatorRepo")
+	}
+
+	var r0 repository.CampaignCreatorRepo
+	if returnFunc, ok := ret.Get(0).(func(dbutil.DB) repository.CampaignCreatorRepo); ok {
+		r0 = returnFunc(db)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(repository.CampaignCreatorRepo)
+		}
+	}
+	return r0
+}
+
+// MockCampaignRepoFactory_NewCampaignCreatorRepo_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'NewCampaignCreatorRepo'
+type MockCampaignRepoFactory_NewCampaignCreatorRepo_Call struct {
+	*mock.Call
+}
+
+// NewCampaignCreatorRepo is a helper method to define mock.On call
+//   - db dbutil.DB
+func (_e *MockCampaignRepoFactory_Expecter) NewCampaignCreatorRepo(db interface{}) *MockCampaignRepoFactory_NewCampaignCreatorRepo_Call {
+	return &MockCampaignRepoFactory_NewCampaignCreatorRepo_Call{Call: _e.mock.On("NewCampaignCreatorRepo", db)}
+}
+
+func (_c *MockCampaignRepoFactory_NewCampaignCreatorRepo_Call) Run(run func(db dbutil.DB)) *MockCampaignRepoFactory_NewCampaignCreatorRepo_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 dbutil.DB
+		if args[0] != nil {
+			arg0 = args[0].(dbutil.DB)
+		}
+		run(
+			arg0,
+		)
+	})
+	return _c
+}
+
+func (_c *MockCampaignRepoFactory_NewCampaignCreatorRepo_Call) Return(campaignCreatorRepo repository.CampaignCreatorRepo) *MockCampaignRepoFactory_NewCampaignCreatorRepo_Call {
+	_c.Call.Return(campaignCreatorRepo)
+	return _c
+}
+
+func (_c *MockCampaignRepoFactory_NewCampaignCreatorRepo_Call) RunAndReturn(run func(db dbutil.DB) repository.CampaignCreatorRepo) *MockCampaignRepoFactory_NewCampaignCreatorRepo_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // NewCampaignRepo provides a mock function for the type MockCampaignRepoFactory
 func (_mock *MockCampaignRepoFactory) NewCampaignRepo(db dbutil.DB) repository.CampaignRepo {
 	ret := _mock.Called(db)

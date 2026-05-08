@@ -35,3 +35,22 @@ func (a *AuthzService) CanListCampaignCreators(ctx context.Context) error {
 	}
 	return nil
 }
+
+// CanNotifyCampaignCreators gates POST /campaigns/{id}/notify to admins only.
+// Outbound bot rasylki are an admin-only operation in the current MVP — brand
+// managers do not own the campaign roster lifecycle.
+func (a *AuthzService) CanNotifyCampaignCreators(ctx context.Context) error {
+	if middleware.RoleFromContext(ctx) != api.Admin {
+		return domain.ErrForbidden
+	}
+	return nil
+}
+
+// CanRemindCampaignCreators gates POST /campaigns/{id}/remind-invitation to
+// admins only. Symmetric to CanNotifyCampaignCreators.
+func (a *AuthzService) CanRemindCampaignCreators(ctx context.Context) error {
+	if middleware.RoleFromContext(ctx) != api.Admin {
+		return domain.ErrForbidden
+	}
+	return nil
+}

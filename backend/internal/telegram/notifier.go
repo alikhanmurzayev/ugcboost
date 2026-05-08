@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"html"
 	"runtime/debug"
+	"strings"
 	"sync"
 	"time"
 
@@ -13,6 +14,7 @@ import (
 	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
 
+	"github.com/alikhanmurzayev/ugcboost/backend/internal/domain"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/logger"
 )
 
@@ -77,6 +79,23 @@ const applicationApprovedText = "Здравствуйте!\n\n" +
 	"Добро пожаловать на платформу UGC boost 💫\n\n" +
 	"После Недели моды мы планируем запустить приложение в App Store и добавить новые возможности для UGC-сотрудничества с брендами и партнерами EURASIAN FASHION WEEK.\n\n" +
 	"Оставайтесь с нами — впереди много масштабных проектов!"
+
+// campaignInviteText / campaignRemindInvitationText carry the universal copy
+// for chunk 12 outbound bot messages. Generic by design — the message body
+// must not leak campaign details (name, brand, deadlines) because A4 covers
+// re-invites after declines as well, and stale text from a previous round
+// would mislead. The accompanying inline web_app button drops the creator
+// straight into the TMA where chunk 14 will surface the actual offer.
+//
+// These literals are mirrored in `backend/e2e/campaign_creator/
+// campaign_notify_test.go` (the e2e module cannot import internal/telegram
+// by design — see backend-testing-e2e.md). When changing the copy here,
+// update the e2e mirror too or `waitInviteSent` will time out.
+const (
+	campaignInviteText             = "Привет! У нас есть для тебя предложение по сотрудничеству. Открой, чтобы посмотреть условия:"
+	campaignRemindInvitationText   = "Напоминаем — мы ждём твоего решения по приглашению."
+	campaignInviteWebAppButtonText = "Посмотреть"
+)
 
 // ApplicationLinkedPayload carries everything NotifyApplicationLinked needs
 // to pick the right welcome variant and substitute the verification code.
@@ -307,4 +326,61 @@ func buildWelcomeText(p ApplicationLinkedPayload) string {
 		return welcomeNoIGText
 	}
 	return fmt.Sprintf(welcomeWithIGTemplate, html.EscapeString(p.VerificationCode))
+}
+
+// SendCampaignInvite delivers a chunk-12 invite or remind-invitation message
+// synchronously. Unlike the fire-and-forget Notify* family, this method
+// returns the underlying SendMessage error so the campaign-creator service
+// can map per-creator failures into the partial-success `undelivered` list.
+// No retry — the admin re-invokes the endpoint with the unanswered subset.
+//
+// The message embeds an inline `web_app` button pointing at the campaign's
+// TMA URL. Chunk 14 relies on this delivery surface: Telegram only attaches
+// initData (HMAC-signed user payload) when the TMA is opened via a
+// `web_app` button, so a plain-text URL would leave the creator
+// unauthenticated on the TMA agree/decline endpoints.
+func (n *Notifier) SendCampaignInvite(ctx context.Context, chatID int64, text, tmaURL string) error {
+	callCtx, cancel := context.WithTimeout(ctx, n.timeout)
+	defer cancel()
+	_, err := n.sender.SendMessage(callCtx, &bot.SendMessageParams{
+		ChatID: chatID,
+		Text:   text,
+		ReplyMarkup: &models.InlineKeyboardMarkup{
+			InlineKeyboard: [][]models.InlineKeyboardButton{{{
+				Text:   campaignInviteWebAppButtonText,
+				WebApp: &models.WebAppInfo{URL: tmaURL},
+			}}},
+		},
+	})
+	return err
+}
+
+// CampaignInviteText returns the universal A4 invite copy. Exposed so the
+// service layer can pass it back into SendCampaignInvite; keeping the
+// constant private would force the service to hardcode the same string.
+func CampaignInviteText() string { return campaignInviteText }
+
+// CampaignRemindInvitationText returns the universal A5 reminder copy.
+func CampaignRemindInvitationText() string { return campaignRemindInvitationText }
+
+// MapTelegramErrorToReason classifies a SendMessage error into a
+// domain.NotifyFailureReason* enum value. Forbidden / blocked-by-user /
+// deactivated map to bot_blocked (the creator is unreachable through the
+// bot — admin needs an alternative channel); everything else (network,
+// timeout, 5xx) maps to unknown. nil err returns "" — caller checks before
+// invoking.
+func MapTelegramErrorToReason(err error) string {
+	if err == nil {
+		return ""
+	}
+	if errors.Is(err, bot.ErrorForbidden) {
+		return domain.NotifyFailureReasonBotBlocked
+	}
+	msg := err.Error()
+	if strings.Contains(msg, "Forbidden") ||
+		strings.Contains(msg, "blocked by the user") ||
+		strings.Contains(msg, "user is deactivated") {
+		return domain.NotifyFailureReasonBotBlocked
+	}
+	return domain.NotifyFailureReasonUnknown
 }

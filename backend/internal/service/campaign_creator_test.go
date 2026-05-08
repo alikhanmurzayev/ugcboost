@@ -19,6 +19,7 @@ import (
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/repository"
 	repomocks "github.com/alikhanmurzayev/ugcboost/backend/internal/repository/mocks"
 	svcmocks "github.com/alikhanmurzayev/ugcboost/backend/internal/service/mocks"
+	"github.com/alikhanmurzayev/ugcboost/backend/internal/telegram"
 )
 
 // adminCtx is the canonical authenticated-admin context for happy-path
@@ -54,7 +55,7 @@ func TestCampaignCreatorService_Add(t *testing.T) {
 		campaigns.EXPECT().GetByID(mock.Anything, "missing").
 			Return((*repository.CampaignRow)(nil), sql.ErrNoRows)
 
-		svc := NewCampaignCreatorService(pool, factory, logmocks.NewMockLogger(t))
+		svc := NewCampaignCreatorService(pool, factory, svcmocks.NewMockCampaignInviteNotifier(t), logmocks.NewMockLogger(t))
 		_, err := svc.Add(context.Background(), "missing", []string{"cr-1"})
 		require.ErrorIs(t, err, domain.ErrCampaignNotFound)
 	})
@@ -76,7 +77,7 @@ func TestCampaignCreatorService_Add(t *testing.T) {
 				UpdatedAt: created,
 			}, nil)
 
-		svc := NewCampaignCreatorService(pool, factory, logmocks.NewMockLogger(t))
+		svc := NewCampaignCreatorService(pool, factory, svcmocks.NewMockCampaignInviteNotifier(t), logmocks.NewMockLogger(t))
 		_, err := svc.Add(context.Background(), "camp-1", []string{"cr-1"})
 		require.ErrorIs(t, err, domain.ErrCampaignNotFound)
 	})
@@ -91,7 +92,7 @@ func TestCampaignCreatorService_Add(t *testing.T) {
 		campaigns.EXPECT().GetByID(mock.Anything, "camp-1").
 			Return((*repository.CampaignRow)(nil), errors.New("db unavailable"))
 
-		svc := NewCampaignCreatorService(pool, factory, logmocks.NewMockLogger(t))
+		svc := NewCampaignCreatorService(pool, factory, svcmocks.NewMockCampaignInviteNotifier(t), logmocks.NewMockLogger(t))
 		_, err := svc.Add(context.Background(), "camp-1", []string{"cr-1"})
 		require.ErrorContains(t, err, "get campaign")
 		require.ErrorContains(t, err, "db unavailable")
@@ -116,7 +117,7 @@ func TestCampaignCreatorService_Add(t *testing.T) {
 		ccRepo.EXPECT().Add(mock.Anything, "camp-1", "cr-1", domain.CampaignCreatorStatusPlanned).
 			Return((*repository.CampaignCreatorRow)(nil), domain.ErrCreatorAlreadyInCampaign)
 
-		svc := NewCampaignCreatorService(pool, factory, logmocks.NewMockLogger(t))
+		svc := NewCampaignCreatorService(pool, factory, svcmocks.NewMockCampaignInviteNotifier(t), logmocks.NewMockLogger(t))
 		_, err := svc.Add(context.Background(), "camp-1", []string{"cr-1", "cr-2"})
 		require.ErrorIs(t, err, domain.ErrCreatorAlreadyInCampaign)
 	})
@@ -139,7 +140,7 @@ func TestCampaignCreatorService_Add(t *testing.T) {
 		ccRepo.EXPECT().Add(mock.Anything, "camp-1", "cr-bad", domain.CampaignCreatorStatusPlanned).
 			Return((*repository.CampaignCreatorRow)(nil), domain.ErrCampaignCreatorCreatorNotFound)
 
-		svc := NewCampaignCreatorService(pool, factory, logmocks.NewMockLogger(t))
+		svc := NewCampaignCreatorService(pool, factory, svcmocks.NewMockCampaignInviteNotifier(t), logmocks.NewMockLogger(t))
 		_, err := svc.Add(context.Background(), "camp-1", []string{"cr-bad"})
 		require.ErrorIs(t, err, domain.ErrCampaignCreatorCreatorNotFound)
 	})
@@ -162,7 +163,7 @@ func TestCampaignCreatorService_Add(t *testing.T) {
 		ccRepo.EXPECT().Add(mock.Anything, "camp-1", "cr-1", domain.CampaignCreatorStatusPlanned).
 			Return((*repository.CampaignCreatorRow)(nil), domain.ErrCampaignNotFound)
 
-		svc := NewCampaignCreatorService(pool, factory, logmocks.NewMockLogger(t))
+		svc := NewCampaignCreatorService(pool, factory, svcmocks.NewMockCampaignInviteNotifier(t), logmocks.NewMockLogger(t))
 		_, err := svc.Add(context.Background(), "camp-1", []string{"cr-1"})
 		require.ErrorIs(t, err, domain.ErrCampaignNotFound)
 	})
@@ -185,7 +186,7 @@ func TestCampaignCreatorService_Add(t *testing.T) {
 		ccRepo.EXPECT().Add(mock.Anything, "camp-1", "cr-1", domain.CampaignCreatorStatusPlanned).
 			Return((*repository.CampaignCreatorRow)(nil), errors.New("db unavailable"))
 
-		svc := NewCampaignCreatorService(pool, factory, logmocks.NewMockLogger(t))
+		svc := NewCampaignCreatorService(pool, factory, svcmocks.NewMockCampaignInviteNotifier(t), logmocks.NewMockLogger(t))
 		_, err := svc.Add(context.Background(), "camp-1", []string{"cr-1"})
 		require.ErrorContains(t, err, "db unavailable")
 	})
@@ -212,7 +213,7 @@ func TestCampaignCreatorService_Add(t *testing.T) {
 			}, nil)
 		audit.EXPECT().Create(mock.Anything, mock.Anything).Return(errors.New("audit failed"))
 
-		svc := NewCampaignCreatorService(pool, factory, logmocks.NewMockLogger(t))
+		svc := NewCampaignCreatorService(pool, factory, svcmocks.NewMockCampaignInviteNotifier(t), logmocks.NewMockLogger(t))
 		_, err := svc.Add(context.Background(), "camp-1", []string{"cr-1"})
 		require.ErrorContains(t, err, "audit failed")
 	})
@@ -276,7 +277,7 @@ func TestCampaignCreatorService_Add(t *testing.T) {
 		log.EXPECT().Debug(mock.Anything, "campaign creators added",
 			[]any{"campaign_id", "camp-1", "count", 2}).Once()
 
-		svc := NewCampaignCreatorService(pool, factory, log)
+		svc := NewCampaignCreatorService(pool, factory, svcmocks.NewMockCampaignInviteNotifier(t), log)
 		got, err := svc.Add(adminCtx(), "camp-1", []string{"cr-1", "cr-2"})
 		require.NoError(t, err)
 		require.Equal(t, 2, auditCalls)
@@ -297,7 +298,7 @@ func TestCampaignCreatorService_Remove(t *testing.T) {
 		campaigns.EXPECT().GetByID(mock.Anything, "missing").
 			Return((*repository.CampaignRow)(nil), sql.ErrNoRows)
 
-		svc := NewCampaignCreatorService(pool, factory, logmocks.NewMockLogger(t))
+		svc := NewCampaignCreatorService(pool, factory, svcmocks.NewMockCampaignInviteNotifier(t), logmocks.NewMockLogger(t))
 		err := svc.Remove(context.Background(), "missing", "cr-1")
 		require.ErrorIs(t, err, domain.ErrCampaignNotFound)
 	})
@@ -315,7 +316,7 @@ func TestCampaignCreatorService_Remove(t *testing.T) {
 				ID: "camp-1", IsDeleted: true, CreatedAt: created, UpdatedAt: created,
 			}, nil)
 
-		svc := NewCampaignCreatorService(pool, factory, logmocks.NewMockLogger(t))
+		svc := NewCampaignCreatorService(pool, factory, svcmocks.NewMockCampaignInviteNotifier(t), logmocks.NewMockLogger(t))
 		err := svc.Remove(context.Background(), "camp-1", "cr-1")
 		require.ErrorIs(t, err, domain.ErrCampaignNotFound)
 	})
@@ -338,7 +339,7 @@ func TestCampaignCreatorService_Remove(t *testing.T) {
 		ccRepo.EXPECT().GetByCampaignAndCreator(mock.Anything, "camp-1", "cr-1").
 			Return((*repository.CampaignCreatorRow)(nil), sql.ErrNoRows)
 
-		svc := NewCampaignCreatorService(pool, factory, logmocks.NewMockLogger(t))
+		svc := NewCampaignCreatorService(pool, factory, svcmocks.NewMockCampaignInviteNotifier(t), logmocks.NewMockLogger(t))
 		err := svc.Remove(context.Background(), "camp-1", "cr-1")
 		require.ErrorIs(t, err, domain.ErrCampaignCreatorNotFound)
 	})
@@ -361,7 +362,7 @@ func TestCampaignCreatorService_Remove(t *testing.T) {
 		ccRepo.EXPECT().GetByCampaignAndCreator(mock.Anything, "camp-1", "cr-1").
 			Return((*repository.CampaignCreatorRow)(nil), errors.New("db unavailable"))
 
-		svc := NewCampaignCreatorService(pool, factory, logmocks.NewMockLogger(t))
+		svc := NewCampaignCreatorService(pool, factory, svcmocks.NewMockCampaignInviteNotifier(t), logmocks.NewMockLogger(t))
 		err := svc.Remove(context.Background(), "camp-1", "cr-1")
 		require.ErrorContains(t, err, "get campaign creator")
 		require.ErrorContains(t, err, "db unavailable")
@@ -388,7 +389,7 @@ func TestCampaignCreatorService_Remove(t *testing.T) {
 				Status: domain.CampaignCreatorStatusAgreed, CreatedAt: created, UpdatedAt: created,
 			}, nil)
 
-		svc := NewCampaignCreatorService(pool, factory, logmocks.NewMockLogger(t))
+		svc := NewCampaignCreatorService(pool, factory, svcmocks.NewMockCampaignInviteNotifier(t), logmocks.NewMockLogger(t))
 		err := svc.Remove(context.Background(), "camp-1", "cr-1")
 		require.ErrorIs(t, err, domain.ErrCampaignCreatorRemoveAfterAgreed)
 	})
@@ -415,7 +416,7 @@ func TestCampaignCreatorService_Remove(t *testing.T) {
 			}, nil)
 		ccRepo.EXPECT().DeleteByID(mock.Anything, "cc-1").Return(sql.ErrNoRows)
 
-		svc := NewCampaignCreatorService(pool, factory, logmocks.NewMockLogger(t))
+		svc := NewCampaignCreatorService(pool, factory, svcmocks.NewMockCampaignInviteNotifier(t), logmocks.NewMockLogger(t))
 		err := svc.Remove(context.Background(), "camp-1", "cr-1")
 		require.ErrorIs(t, err, domain.ErrCampaignCreatorNotFound)
 	})
@@ -442,7 +443,7 @@ func TestCampaignCreatorService_Remove(t *testing.T) {
 			}, nil)
 		ccRepo.EXPECT().DeleteByID(mock.Anything, "cc-1").Return(errors.New("db unavailable"))
 
-		svc := NewCampaignCreatorService(pool, factory, logmocks.NewMockLogger(t))
+		svc := NewCampaignCreatorService(pool, factory, svcmocks.NewMockCampaignInviteNotifier(t), logmocks.NewMockLogger(t))
 		err := svc.Remove(context.Background(), "camp-1", "cr-1")
 		require.ErrorContains(t, err, "delete campaign creator")
 		require.ErrorContains(t, err, "db unavailable")
@@ -471,7 +472,7 @@ func TestCampaignCreatorService_Remove(t *testing.T) {
 		ccRepo.EXPECT().DeleteByID(mock.Anything, "cc-1").Return(nil)
 		audit.EXPECT().Create(mock.Anything, mock.Anything).Return(errors.New("audit failed"))
 
-		svc := NewCampaignCreatorService(pool, factory, logmocks.NewMockLogger(t))
+		svc := NewCampaignCreatorService(pool, factory, svcmocks.NewMockCampaignInviteNotifier(t), logmocks.NewMockLogger(t))
 		err := svc.Remove(context.Background(), "camp-1", "cr-1")
 		require.ErrorContains(t, err, "audit failed")
 	})
@@ -519,7 +520,7 @@ func TestCampaignCreatorService_Remove(t *testing.T) {
 		log.EXPECT().Info(mock.Anything, "campaign creator removed",
 			[]any{"campaign_id", "camp-1", "creator_id", "cr-1"}).Once()
 
-		svc := NewCampaignCreatorService(pool, factory, log)
+		svc := NewCampaignCreatorService(pool, factory, svcmocks.NewMockCampaignInviteNotifier(t), log)
 		require.NoError(t, svc.Remove(adminCtx(), "camp-1", "cr-1"))
 	})
 }
@@ -537,7 +538,7 @@ func TestCampaignCreatorService_List(t *testing.T) {
 		campaigns.EXPECT().GetByID(mock.Anything, "missing").
 			Return((*repository.CampaignRow)(nil), sql.ErrNoRows)
 
-		svc := NewCampaignCreatorService(pool, factory, logmocks.NewMockLogger(t))
+		svc := NewCampaignCreatorService(pool, factory, svcmocks.NewMockCampaignInviteNotifier(t), logmocks.NewMockLogger(t))
 		_, err := svc.List(context.Background(), "missing")
 		require.ErrorIs(t, err, domain.ErrCampaignNotFound)
 	})
@@ -555,7 +556,7 @@ func TestCampaignCreatorService_List(t *testing.T) {
 				ID: "camp-1", IsDeleted: true, CreatedAt: created, UpdatedAt: created,
 			}, nil)
 
-		svc := NewCampaignCreatorService(pool, factory, logmocks.NewMockLogger(t))
+		svc := NewCampaignCreatorService(pool, factory, svcmocks.NewMockCampaignInviteNotifier(t), logmocks.NewMockLogger(t))
 		_, err := svc.List(context.Background(), "camp-1")
 		require.ErrorIs(t, err, domain.ErrCampaignNotFound)
 	})
@@ -575,7 +576,7 @@ func TestCampaignCreatorService_List(t *testing.T) {
 		ccRepo.EXPECT().ListByCampaign(mock.Anything, "camp-1").
 			Return(nil, errors.New("db unavailable"))
 
-		svc := NewCampaignCreatorService(pool, factory, logmocks.NewMockLogger(t))
+		svc := NewCampaignCreatorService(pool, factory, svcmocks.NewMockCampaignInviteNotifier(t), logmocks.NewMockLogger(t))
 		_, err := svc.List(context.Background(), "camp-1")
 		require.ErrorContains(t, err, "list campaign creators")
 		require.ErrorContains(t, err, "db unavailable")
@@ -604,7 +605,7 @@ func TestCampaignCreatorService_List(t *testing.T) {
 		ccRepo.EXPECT().ListByCampaign(mock.Anything, "camp-1").
 			Return([]*repository.CampaignCreatorRow{row1, row2}, nil)
 
-		svc := NewCampaignCreatorService(pool, factory, logmocks.NewMockLogger(t))
+		svc := NewCampaignCreatorService(pool, factory, svcmocks.NewMockCampaignInviteNotifier(t), logmocks.NewMockLogger(t))
 		got, err := svc.List(context.Background(), "camp-1")
 		require.NoError(t, err)
 		require.Equal(t, []*domain.CampaignCreator{
@@ -628,9 +629,463 @@ func TestCampaignCreatorService_List(t *testing.T) {
 		ccRepo.EXPECT().ListByCampaign(mock.Anything, "camp-1").
 			Return([]*repository.CampaignCreatorRow{}, nil)
 
-		svc := NewCampaignCreatorService(pool, factory, logmocks.NewMockLogger(t))
+		svc := NewCampaignCreatorService(pool, factory, svcmocks.NewMockCampaignInviteNotifier(t), logmocks.NewMockLogger(t))
 		got, err := svc.List(context.Background(), "camp-1")
 		require.NoError(t, err)
 		require.Empty(t, got)
+	})
+}
+
+// notifyKitOpts captures per-test customisation knobs for setupNotifyKit.
+type notifyKitOpts struct {
+	tmaURL string
+}
+
+// notifyKit bundles every mock newCampaignCreatorService needs for chunk-12
+// flow tests so each t.Run scenario stays focused on the specific assertion
+// (validation, partial-success, audit shape) instead of repeating the wiring.
+type notifyKit struct {
+	pool      *dbmocks.MockPool
+	factory   *svcmocks.MockCampaignCreatorRepoFactory
+	campaigns *repomocks.MockCampaignRepo
+	ccRepo    *repomocks.MockCampaignCreatorRepo
+	creator   *repomocks.MockCreatorRepo
+	audit     *repomocks.MockAuditRepo
+	notifier  *svcmocks.MockCampaignInviteNotifier
+	log       *logmocks.MockLogger
+	svc       *CampaignCreatorService
+	tmaURL    string
+}
+
+func setupNotifyKit(t *testing.T, opts notifyKitOpts) *notifyKit {
+	t.Helper()
+	tmaURL := opts.tmaURL
+	if tmaURL == "" {
+		tmaURL = "https://tma.ugcboost.kz/tz/abc"
+	}
+	pool := dbmocks.NewMockPool(t)
+	factory := svcmocks.NewMockCampaignCreatorRepoFactory(t)
+	campaigns := repomocks.NewMockCampaignRepo(t)
+	ccRepo := repomocks.NewMockCampaignCreatorRepo(t)
+	creator := repomocks.NewMockCreatorRepo(t)
+	audit := repomocks.NewMockAuditRepo(t)
+	notifier := svcmocks.NewMockCampaignInviteNotifier(t)
+	log := logmocks.NewMockLogger(t)
+	svc := NewCampaignCreatorService(pool, factory, notifier, log)
+	return &notifyKit{
+		pool: pool, factory: factory, campaigns: campaigns, ccRepo: ccRepo,
+		creator: creator, audit: audit, notifier: notifier, log: log,
+		svc: svc, tmaURL: tmaURL,
+	}
+}
+
+func (k *notifyKit) liveCampaign(id string) *repository.CampaignRow {
+	created := time.Date(2026, 5, 7, 12, 0, 0, 0, time.UTC)
+	return &repository.CampaignRow{
+		ID: id, Name: "Promo X", TmaURL: k.tmaURL,
+		IsDeleted: false, CreatedAt: created, UpdatedAt: created,
+	}
+}
+
+func TestCampaignCreatorService_Notify(t *testing.T) {
+	t.Parallel()
+
+	t.Run("happy path delivers all and writes invite audit per creator", func(t *testing.T) {
+		t.Parallel()
+		k := setupNotifyKit(t, notifyKitOpts{})
+		now := time.Date(2026, 5, 8, 10, 0, 0, 0, time.UTC)
+
+		k.factory.EXPECT().NewCampaignRepo(k.pool).Return(k.campaigns)
+		k.campaigns.EXPECT().GetByID(mock.Anything, "camp-1").Return(k.liveCampaign("camp-1"), nil)
+
+		oldRow1 := &repository.CampaignCreatorRow{
+			ID: "cc-1", CampaignID: "camp-1", CreatorID: "cr-1",
+			Status: domain.CampaignCreatorStatusPlanned, CreatedAt: now, UpdatedAt: now,
+		}
+		oldRow2 := &repository.CampaignCreatorRow{
+			ID: "cc-2", CampaignID: "camp-1", CreatorID: "cr-2",
+			Status: domain.CampaignCreatorStatusPlanned, CreatedAt: now, UpdatedAt: now,
+		}
+		k.factory.EXPECT().NewCampaignCreatorRepo(mock.Anything).Return(k.ccRepo)
+		k.ccRepo.EXPECT().ListByCampaignAndCreators(mock.Anything, "camp-1", []string{"cr-1", "cr-2"}).
+			Return([]*repository.CampaignCreatorRow{oldRow1, oldRow2}, nil)
+
+		k.factory.EXPECT().NewCreatorRepo(k.pool).Return(k.creator)
+		k.creator.EXPECT().GetTelegramUserIDsByIDs(mock.Anything, []string{"cr-1", "cr-2"}).
+			Return(map[string]int64{"cr-1": 1001, "cr-2": 1002}, nil)
+
+		k.notifier.EXPECT().SendCampaignInvite(mock.Anything, int64(1001), telegram.CampaignInviteText(), k.tmaURL).Return(nil).Once()
+		k.notifier.EXPECT().SendCampaignInvite(mock.Anything, int64(1002), telegram.CampaignInviteText(), k.tmaURL).Return(nil).Once()
+
+		newRow1 := &repository.CampaignCreatorRow{
+			ID: "cc-1", CampaignID: "camp-1", CreatorID: "cr-1",
+			Status: domain.CampaignCreatorStatusInvited, InvitedCount: 1,
+			InvitedAt: &now, CreatedAt: now, UpdatedAt: now,
+		}
+		newRow2 := &repository.CampaignCreatorRow{
+			ID: "cc-2", CampaignID: "camp-1", CreatorID: "cr-2",
+			Status: domain.CampaignCreatorStatusInvited, InvitedCount: 1,
+			InvitedAt: &now, CreatedAt: now, UpdatedAt: now,
+		}
+		k.pool.EXPECT().Begin(mock.Anything).Return(testTx{}, nil).Times(2)
+		k.factory.EXPECT().NewAuditRepo(mock.Anything).Return(k.audit)
+		k.ccRepo.EXPECT().ApplyInvite(mock.Anything, "cc-1").Return(newRow1, nil).Once()
+		k.ccRepo.EXPECT().ApplyInvite(mock.Anything, "cc-2").Return(newRow2, nil).Once()
+
+		auditSeen := map[string]bool{}
+		k.audit.EXPECT().Create(mock.Anything, mock.Anything).
+			Run(func(_ context.Context, row repository.AuditLogRow) {
+				require.Equal(t, AuditActionCampaignCreatorInvite, row.Action)
+				require.Equal(t, AuditEntityTypeCampaignCreator, row.EntityType)
+				require.NotNil(t, row.OldValue, "OldValue must carry the pre-invite snapshot")
+				require.NotNil(t, row.NewValue)
+				require.NotNil(t, row.EntityID)
+				auditSeen[*row.EntityID] = true
+			}).Return(nil).Times(2)
+
+		k.log.EXPECT().Info(mock.Anything, "campaign batch dispatched", mock.Anything).Once()
+
+		undelivered, err := k.svc.Notify(adminCtx(), "camp-1", []string{"cr-1", "cr-2"})
+		require.NoError(t, err)
+		require.Empty(t, undelivered)
+		require.Equal(t, map[string]bool{"cc-1": true, "cc-2": true}, auditSeen)
+	})
+
+	t.Run("re-invite from declined resets reminded counter via ApplyInvite", func(t *testing.T) {
+		t.Parallel()
+		k := setupNotifyKit(t, notifyKitOpts{})
+		now := time.Date(2026, 5, 8, 10, 0, 0, 0, time.UTC)
+		earlier := now.Add(-24 * time.Hour)
+
+		k.factory.EXPECT().NewCampaignRepo(k.pool).Return(k.campaigns)
+		k.campaigns.EXPECT().GetByID(mock.Anything, "camp-1").Return(k.liveCampaign("camp-1"), nil)
+
+		declinedRow := &repository.CampaignCreatorRow{
+			ID: "cc-1", CampaignID: "camp-1", CreatorID: "cr-1",
+			Status:       domain.CampaignCreatorStatusDeclined,
+			InvitedCount: 1, InvitedAt: &earlier,
+			RemindedCount: 2, RemindedAt: &earlier,
+			DecidedAt: &earlier,
+			CreatedAt: earlier, UpdatedAt: earlier,
+		}
+		k.factory.EXPECT().NewCampaignCreatorRepo(mock.Anything).Return(k.ccRepo)
+		k.ccRepo.EXPECT().ListByCampaignAndCreators(mock.Anything, "camp-1", []string{"cr-1"}).
+			Return([]*repository.CampaignCreatorRow{declinedRow}, nil)
+
+		k.factory.EXPECT().NewCreatorRepo(k.pool).Return(k.creator)
+		k.creator.EXPECT().GetTelegramUserIDsByIDs(mock.Anything, []string{"cr-1"}).
+			Return(map[string]int64{"cr-1": 1001}, nil)
+
+		k.notifier.EXPECT().SendCampaignInvite(mock.Anything, int64(1001), telegram.CampaignInviteText(), k.tmaURL).Return(nil).Once()
+
+		// ApplyInvite for declined-source returns the row with reset counters —
+		// the SQL CASE branches in the repo do this; the service trusts the
+		// returned snapshot. The audit then records the reset transition.
+		newRow := &repository.CampaignCreatorRow{
+			ID: "cc-1", CampaignID: "camp-1", CreatorID: "cr-1",
+			Status:       domain.CampaignCreatorStatusInvited,
+			InvitedCount: 2, InvitedAt: &now,
+			RemindedCount: 0, RemindedAt: nil,
+			DecidedAt: nil,
+			CreatedAt: earlier, UpdatedAt: now,
+		}
+		k.pool.EXPECT().Begin(mock.Anything).Return(testTx{}, nil).Once()
+		k.factory.EXPECT().NewAuditRepo(mock.Anything).Return(k.audit)
+		k.ccRepo.EXPECT().ApplyInvite(mock.Anything, "cc-1").Return(newRow, nil).Once()
+
+		k.audit.EXPECT().Create(mock.Anything, mock.Anything).
+			Run(func(_ context.Context, row repository.AuditLogRow) {
+				oldSnap := domain.CampaignCreator{}
+				require.NoError(t, json.Unmarshal(row.OldValue, &oldSnap))
+				require.Equal(t, domain.CampaignCreatorStatusDeclined, oldSnap.Status)
+				newSnap := domain.CampaignCreator{}
+				require.NoError(t, json.Unmarshal(row.NewValue, &newSnap))
+				require.Equal(t, domain.CampaignCreatorStatusInvited, newSnap.Status)
+				require.Equal(t, 2, newSnap.InvitedCount)
+				require.Equal(t, 0, newSnap.RemindedCount)
+				require.Nil(t, newSnap.RemindedAt)
+				require.Nil(t, newSnap.DecidedAt)
+			}).Return(nil).Once()
+
+		k.log.EXPECT().Info(mock.Anything, "campaign batch dispatched", mock.Anything).Once()
+
+		undelivered, err := k.svc.Notify(adminCtx(), "camp-1", []string{"cr-1"})
+		require.NoError(t, err)
+		require.Empty(t, undelivered)
+	})
+
+	t.Run("batch validation collects all details and skips delivery", func(t *testing.T) {
+		t.Parallel()
+		k := setupNotifyKit(t, notifyKitOpts{})
+		now := time.Date(2026, 5, 8, 10, 0, 0, 0, time.UTC)
+
+		k.factory.EXPECT().NewCampaignRepo(k.pool).Return(k.campaigns)
+		k.campaigns.EXPECT().GetByID(mock.Anything, "camp-1").Return(k.liveCampaign("camp-1"), nil)
+
+		// cr-1: agreed (wrong_status). cr-2: not in campaign. cr-3: planned (ok)
+		// — but the batch must still fail because of cr-1 / cr-2.
+		row3 := &repository.CampaignCreatorRow{
+			ID: "cc-3", CampaignID: "camp-1", CreatorID: "cr-3",
+			Status: domain.CampaignCreatorStatusPlanned, CreatedAt: now, UpdatedAt: now,
+		}
+		row1 := &repository.CampaignCreatorRow{
+			ID: "cc-1", CampaignID: "camp-1", CreatorID: "cr-1",
+			Status: domain.CampaignCreatorStatusAgreed, CreatedAt: now, UpdatedAt: now,
+		}
+		k.factory.EXPECT().NewCampaignCreatorRepo(mock.Anything).Return(k.ccRepo)
+		k.ccRepo.EXPECT().ListByCampaignAndCreators(mock.Anything, "camp-1", []string{"cr-1", "cr-2", "cr-3"}).
+			Return([]*repository.CampaignCreatorRow{row1, row3}, nil)
+
+		// No notifier / creator-repo / audit / Begin calls expected — strict-
+		// 422 short-circuits before delivery.
+		_, err := k.svc.Notify(adminCtx(), "camp-1", []string{"cr-1", "cr-2", "cr-3"})
+
+		var bie *domain.CampaignCreatorBatchInvalidError
+		require.ErrorAs(t, err, &bie)
+		require.Len(t, bie.Details, 2)
+		require.ElementsMatch(t, []domain.BatchValidationDetail{
+			{CreatorID: "cr-1", Reason: domain.BatchInvalidReasonWrongStatus, CurrentStatus: domain.CampaignCreatorStatusAgreed},
+			{CreatorID: "cr-2", Reason: domain.BatchInvalidReasonNotInCampaign},
+		}, bie.Details)
+	})
+
+	t.Run("partial-success: bot_blocked entry, others succeed", func(t *testing.T) {
+		t.Parallel()
+		k := setupNotifyKit(t, notifyKitOpts{})
+		now := time.Date(2026, 5, 8, 10, 0, 0, 0, time.UTC)
+
+		k.factory.EXPECT().NewCampaignRepo(k.pool).Return(k.campaigns)
+		k.campaigns.EXPECT().GetByID(mock.Anything, "camp-1").Return(k.liveCampaign("camp-1"), nil)
+
+		row1 := &repository.CampaignCreatorRow{
+			ID: "cc-1", CampaignID: "camp-1", CreatorID: "cr-1",
+			Status: domain.CampaignCreatorStatusPlanned, CreatedAt: now, UpdatedAt: now,
+		}
+		row2 := &repository.CampaignCreatorRow{
+			ID: "cc-2", CampaignID: "camp-1", CreatorID: "cr-2",
+			Status: domain.CampaignCreatorStatusPlanned, CreatedAt: now, UpdatedAt: now,
+		}
+		k.factory.EXPECT().NewCampaignCreatorRepo(mock.Anything).Return(k.ccRepo)
+		k.ccRepo.EXPECT().ListByCampaignAndCreators(mock.Anything, "camp-1", []string{"cr-1", "cr-2"}).
+			Return([]*repository.CampaignCreatorRow{row1, row2}, nil)
+
+		k.factory.EXPECT().NewCreatorRepo(k.pool).Return(k.creator)
+		k.creator.EXPECT().GetTelegramUserIDsByIDs(mock.Anything, []string{"cr-1", "cr-2"}).
+			Return(map[string]int64{"cr-1": 1001, "cr-2": 1002}, nil)
+
+		// cr-1 fails delivery → no DB write, recorded as bot_blocked.
+		k.notifier.EXPECT().SendCampaignInvite(mock.Anything, int64(1001), telegram.CampaignInviteText(), k.tmaURL).
+			Return(errors.New("Forbidden: bot was blocked by the user")).Once()
+		// cr-2 succeeds → ApplyInvite + audit fire.
+		k.notifier.EXPECT().SendCampaignInvite(mock.Anything, int64(1002), telegram.CampaignInviteText(), k.tmaURL).
+			Return(nil).Once()
+
+		newRow2 := &repository.CampaignCreatorRow{
+			ID: "cc-2", CampaignID: "camp-1", CreatorID: "cr-2",
+			Status: domain.CampaignCreatorStatusInvited, InvitedCount: 1,
+			InvitedAt: &now, CreatedAt: now, UpdatedAt: now,
+		}
+		k.pool.EXPECT().Begin(mock.Anything).Return(testTx{}, nil).Once()
+		k.factory.EXPECT().NewAuditRepo(mock.Anything).Return(k.audit)
+		k.ccRepo.EXPECT().ApplyInvite(mock.Anything, "cc-2").Return(newRow2, nil).Once()
+		k.audit.EXPECT().Create(mock.Anything, mock.Anything).Return(nil).Once()
+
+		k.log.EXPECT().Warn(mock.Anything, "campaign batch: telegram delivery failed", mock.Anything).Once()
+		k.log.EXPECT().Info(mock.Anything, "campaign batch dispatched", mock.Anything).Once()
+
+		undelivered, err := k.svc.Notify(adminCtx(), "camp-1", []string{"cr-1", "cr-2"})
+		require.NoError(t, err)
+		require.Equal(t, []domain.NotifyFailure{
+			{CreatorID: "cr-1", Reason: domain.NotifyFailureReasonBotBlocked},
+		}, undelivered)
+	})
+
+	t.Run("soft-deleted campaign returns 404", func(t *testing.T) {
+		t.Parallel()
+		k := setupNotifyKit(t, notifyKitOpts{})
+		now := time.Date(2026, 5, 8, 10, 0, 0, 0, time.UTC)
+
+		k.factory.EXPECT().NewCampaignRepo(k.pool).Return(k.campaigns)
+		k.campaigns.EXPECT().GetByID(mock.Anything, "camp-1").
+			Return(&repository.CampaignRow{
+				ID: "camp-1", IsDeleted: true, CreatedAt: now, UpdatedAt: now,
+			}, nil)
+
+		_, err := k.svc.Notify(adminCtx(), "camp-1", []string{"cr-1"})
+		require.ErrorIs(t, err, domain.ErrCampaignNotFound)
+	})
+
+	t.Run("missing campaign returns 404", func(t *testing.T) {
+		t.Parallel()
+		k := setupNotifyKit(t, notifyKitOpts{})
+
+		k.factory.EXPECT().NewCampaignRepo(k.pool).Return(k.campaigns)
+		k.campaigns.EXPECT().GetByID(mock.Anything, "missing").Return((*repository.CampaignRow)(nil), sql.ErrNoRows)
+
+		_, err := k.svc.Notify(adminCtx(), "missing", []string{"cr-1"})
+		require.ErrorIs(t, err, domain.ErrCampaignNotFound)
+	})
+
+	t.Run("send succeeds but apply tx fails — reported as unknown, batch continues", func(t *testing.T) {
+		t.Parallel()
+		k := setupNotifyKit(t, notifyKitOpts{})
+		now := time.Date(2026, 5, 8, 10, 0, 0, 0, time.UTC)
+
+		k.factory.EXPECT().NewCampaignRepo(k.pool).Return(k.campaigns)
+		k.campaigns.EXPECT().GetByID(mock.Anything, "camp-1").Return(k.liveCampaign("camp-1"), nil)
+
+		row1 := &repository.CampaignCreatorRow{
+			ID: "cc-1", CampaignID: "camp-1", CreatorID: "cr-1",
+			Status: domain.CampaignCreatorStatusPlanned, CreatedAt: now, UpdatedAt: now,
+		}
+		row2 := &repository.CampaignCreatorRow{
+			ID: "cc-2", CampaignID: "camp-1", CreatorID: "cr-2",
+			Status: domain.CampaignCreatorStatusPlanned, CreatedAt: now, UpdatedAt: now,
+		}
+		k.factory.EXPECT().NewCampaignCreatorRepo(mock.Anything).Return(k.ccRepo)
+		k.ccRepo.EXPECT().ListByCampaignAndCreators(mock.Anything, "camp-1", []string{"cr-1", "cr-2"}).
+			Return([]*repository.CampaignCreatorRow{row1, row2}, nil)
+
+		k.factory.EXPECT().NewCreatorRepo(k.pool).Return(k.creator)
+		k.creator.EXPECT().GetTelegramUserIDsByIDs(mock.Anything, []string{"cr-1", "cr-2"}).
+			Return(map[string]int64{"cr-1": 1001, "cr-2": 1002}, nil)
+
+		k.notifier.EXPECT().SendCampaignInvite(mock.Anything, int64(1001), telegram.CampaignInviteText(), k.tmaURL).Return(nil).Once()
+		k.notifier.EXPECT().SendCampaignInvite(mock.Anything, int64(1002), telegram.CampaignInviteText(), k.tmaURL).Return(nil).Once()
+
+		// cr-1: apply fails after a successful send → must surface as unknown
+		// undelivered without aborting the batch.
+		// cr-2: apply succeeds normally and writes audit.
+		k.pool.EXPECT().Begin(mock.Anything).Return(testTx{}, nil).Times(2)
+		k.factory.EXPECT().NewAuditRepo(mock.Anything).Return(k.audit)
+		k.ccRepo.EXPECT().ApplyInvite(mock.Anything, "cc-1").Return(nil, sql.ErrNoRows).Once()
+		newRow2 := &repository.CampaignCreatorRow{
+			ID: "cc-2", CampaignID: "camp-1", CreatorID: "cr-2",
+			Status: domain.CampaignCreatorStatusInvited, InvitedCount: 1,
+			InvitedAt: &now, CreatedAt: now, UpdatedAt: now,
+		}
+		k.ccRepo.EXPECT().ApplyInvite(mock.Anything, "cc-2").Return(newRow2, nil).Once()
+		k.audit.EXPECT().Create(mock.Anything, mock.Anything).Return(nil).Once()
+
+		k.log.EXPECT().Error(mock.Anything, "campaign batch: telegram sent but persist failed", mock.Anything).Once()
+		k.log.EXPECT().Info(mock.Anything, "campaign batch dispatched", mock.Anything).Once()
+
+		undelivered, err := k.svc.Notify(adminCtx(), "camp-1", []string{"cr-1", "cr-2"})
+		require.NoError(t, err)
+		require.Equal(t, []domain.NotifyFailure{
+			{CreatorID: "cr-1", Reason: domain.NotifyFailureReasonUnknown},
+		}, undelivered)
+	})
+
+	t.Run("missing telegram_user_id reported as unknown without delivery", func(t *testing.T) {
+		t.Parallel()
+		k := setupNotifyKit(t, notifyKitOpts{})
+		now := time.Date(2026, 5, 8, 10, 0, 0, 0, time.UTC)
+
+		k.factory.EXPECT().NewCampaignRepo(k.pool).Return(k.campaigns)
+		k.campaigns.EXPECT().GetByID(mock.Anything, "camp-1").Return(k.liveCampaign("camp-1"), nil)
+
+		row1 := &repository.CampaignCreatorRow{
+			ID: "cc-1", CampaignID: "camp-1", CreatorID: "cr-1",
+			Status: domain.CampaignCreatorStatusPlanned, CreatedAt: now, UpdatedAt: now,
+		}
+		k.factory.EXPECT().NewCampaignCreatorRepo(mock.Anything).Return(k.ccRepo)
+		k.ccRepo.EXPECT().ListByCampaignAndCreators(mock.Anything, "camp-1", []string{"cr-1"}).
+			Return([]*repository.CampaignCreatorRow{row1}, nil)
+
+		k.factory.EXPECT().NewCreatorRepo(k.pool).Return(k.creator)
+		k.creator.EXPECT().GetTelegramUserIDsByIDs(mock.Anything, []string{"cr-1"}).
+			Return(map[string]int64{}, nil)
+
+		k.log.EXPECT().Error(mock.Anything, "campaign batch: missing telegram_user_id", mock.Anything).Once()
+		k.log.EXPECT().Info(mock.Anything, "campaign batch dispatched", mock.Anything).Once()
+
+		undelivered, err := k.svc.Notify(adminCtx(), "camp-1", []string{"cr-1"})
+		require.NoError(t, err)
+		require.Equal(t, []domain.NotifyFailure{
+			{CreatorID: "cr-1", Reason: domain.NotifyFailureReasonUnknown},
+		}, undelivered)
+	})
+}
+
+func TestCampaignCreatorService_RemindInvitation(t *testing.T) {
+	t.Parallel()
+
+	t.Run("happy path bumps reminded counter and writes remind audit", func(t *testing.T) {
+		t.Parallel()
+		k := setupNotifyKit(t, notifyKitOpts{})
+		now := time.Date(2026, 5, 8, 10, 0, 0, 0, time.UTC)
+		earlier := now.Add(-time.Hour)
+
+		k.factory.EXPECT().NewCampaignRepo(k.pool).Return(k.campaigns)
+		k.campaigns.EXPECT().GetByID(mock.Anything, "camp-1").Return(k.liveCampaign("camp-1"), nil)
+
+		invitedRow := &repository.CampaignCreatorRow{
+			ID: "cc-1", CampaignID: "camp-1", CreatorID: "cr-1",
+			Status:       domain.CampaignCreatorStatusInvited,
+			InvitedCount: 1, InvitedAt: &earlier,
+			CreatedAt: earlier, UpdatedAt: earlier,
+		}
+		k.factory.EXPECT().NewCampaignCreatorRepo(mock.Anything).Return(k.ccRepo)
+		k.ccRepo.EXPECT().ListByCampaignAndCreators(mock.Anything, "camp-1", []string{"cr-1"}).
+			Return([]*repository.CampaignCreatorRow{invitedRow}, nil)
+
+		k.factory.EXPECT().NewCreatorRepo(k.pool).Return(k.creator)
+		k.creator.EXPECT().GetTelegramUserIDsByIDs(mock.Anything, []string{"cr-1"}).
+			Return(map[string]int64{"cr-1": 1001}, nil)
+
+		k.notifier.EXPECT().SendCampaignInvite(mock.Anything, int64(1001), telegram.CampaignRemindInvitationText(), k.tmaURL).Return(nil).Once()
+
+		newRow := &repository.CampaignCreatorRow{
+			ID: "cc-1", CampaignID: "camp-1", CreatorID: "cr-1",
+			Status:       domain.CampaignCreatorStatusInvited,
+			InvitedCount: 1, InvitedAt: &earlier,
+			RemindedCount: 1, RemindedAt: &now,
+			CreatedAt: earlier, UpdatedAt: now,
+		}
+		k.pool.EXPECT().Begin(mock.Anything).Return(testTx{}, nil).Once()
+		k.factory.EXPECT().NewAuditRepo(mock.Anything).Return(k.audit)
+		k.ccRepo.EXPECT().ApplyRemind(mock.Anything, "cc-1").Return(newRow, nil).Once()
+
+		k.audit.EXPECT().Create(mock.Anything, mock.Anything).
+			Run(func(_ context.Context, row repository.AuditLogRow) {
+				require.Equal(t, AuditActionCampaignCreatorRemind, row.Action)
+				newSnap := domain.CampaignCreator{}
+				require.NoError(t, json.Unmarshal(row.NewValue, &newSnap))
+				require.Equal(t, 1, newSnap.RemindedCount)
+				require.NotNil(t, newSnap.RemindedAt)
+			}).Return(nil).Once()
+
+		k.log.EXPECT().Info(mock.Anything, "campaign batch dispatched", mock.Anything).Once()
+
+		undelivered, err := k.svc.RemindInvitation(adminCtx(), "camp-1", []string{"cr-1"})
+		require.NoError(t, err)
+		require.Empty(t, undelivered)
+	})
+
+	t.Run("planned creator rejected with wrong_status", func(t *testing.T) {
+		t.Parallel()
+		k := setupNotifyKit(t, notifyKitOpts{})
+		now := time.Date(2026, 5, 8, 10, 0, 0, 0, time.UTC)
+
+		k.factory.EXPECT().NewCampaignRepo(k.pool).Return(k.campaigns)
+		k.campaigns.EXPECT().GetByID(mock.Anything, "camp-1").Return(k.liveCampaign("camp-1"), nil)
+
+		row := &repository.CampaignCreatorRow{
+			ID: "cc-1", CampaignID: "camp-1", CreatorID: "cr-1",
+			Status: domain.CampaignCreatorStatusPlanned, CreatedAt: now, UpdatedAt: now,
+		}
+		k.factory.EXPECT().NewCampaignCreatorRepo(mock.Anything).Return(k.ccRepo)
+		k.ccRepo.EXPECT().ListByCampaignAndCreators(mock.Anything, "camp-1", []string{"cr-1"}).
+			Return([]*repository.CampaignCreatorRow{row}, nil)
+
+		_, err := k.svc.RemindInvitation(adminCtx(), "camp-1", []string{"cr-1"})
+
+		var bie *domain.CampaignCreatorBatchInvalidError
+		require.ErrorAs(t, err, &bie)
+		require.Equal(t, []domain.BatchValidationDetail{{
+			CreatorID: "cr-1", Reason: domain.BatchInvalidReasonWrongStatus,
+			CurrentStatus: domain.CampaignCreatorStatusPlanned,
+		}}, bie.Details)
 	})
 }

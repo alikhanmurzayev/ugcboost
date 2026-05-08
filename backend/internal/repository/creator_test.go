@@ -657,3 +657,50 @@ func TestCreatorRepository_DeleteForTests(t *testing.T) {
 		require.ErrorContains(t, err, "db down")
 	})
 }
+
+func TestCreatorRepository_GetTelegramUserIDsByIDs(t *testing.T) {
+	t.Parallel()
+
+	const sqlStmt = "SELECT id, telegram_user_id FROM creators WHERE id IN ($1,$2)"
+
+	t.Run("empty input returns empty map without DB call", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &creatorRepository{db: mock}
+
+		got, err := repo.GetTelegramUserIDsByIDs(context.Background(), nil)
+		require.NoError(t, err)
+		require.Empty(t, got)
+		require.NoError(t, mock.ExpectationsWereMet())
+	})
+
+	t.Run("returns id->tgUserID map with missing ids absent", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &creatorRepository{db: mock}
+
+		mock.ExpectQuery(sqlStmt).
+			WithArgs("cr-1", "cr-2").
+			WillReturnRows(pgxmock.NewRows([]string{"id", "telegram_user_id"}).
+				AddRow("cr-1", int64(1001)).
+				AddRow("cr-2", int64(1002)))
+
+		got, err := repo.GetTelegramUserIDsByIDs(context.Background(), []string{"cr-1", "cr-2"})
+		require.NoError(t, err)
+		require.Equal(t, map[string]int64{"cr-1": 1001, "cr-2": 1002}, got)
+	})
+
+	t.Run("propagates db error wrapped", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &creatorRepository{db: mock}
+
+		mock.ExpectQuery(sqlStmt).
+			WithArgs("cr-1", "cr-2").
+			WillReturnError(errors.New("db down"))
+
+		_, err := repo.GetTelegramUserIDsByIDs(context.Background(), []string{"cr-1", "cr-2"})
+		require.ErrorContains(t, err, "creator_repository.GetTelegramUserIDsByIDs")
+		require.ErrorContains(t, err, "db down")
+	})
+}

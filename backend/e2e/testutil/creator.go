@@ -36,6 +36,7 @@ type ApprovedCreatorFixture struct {
 	CityCode         string
 	CategoryCodes    []string
 	Socials          []SocialFixture
+	TelegramUserID   int64
 	TelegramUsername *string
 }
 
@@ -75,6 +76,12 @@ func SetupApprovedCreator(t *testing.T, opts CreatorApplicationFixture) Approved
 	require.NotEqual(t, uuid.Nil, creatorID, "SetupApprovedCreator: approve must yield a fresh creator id")
 	RegisterCreatorCleanup(t, creatorID.String())
 
+	// Mark the synthetic chat as test-fake so chunk-12 outbound notify /
+	// remind hits the spy-only path even when the backend runs with a real
+	// bot token. SpyOnlySender ignores the registration; TeeSender skips
+	// the real call. No-op when the test never sends to this chat.
+	RegisterTelegramSpyFakeChat(t, app.TelegramUserID)
+
 	return ApprovedCreatorFixture{
 		CreatorID:        creatorID.String(),
 		AdminToken:       app.AdminToken,
@@ -87,6 +94,7 @@ func SetupApprovedCreator(t *testing.T, opts CreatorApplicationFixture) Approved
 		CityCode:         app.CityCode,
 		CategoryCodes:    append([]string(nil), app.CategoryCodes...),
 		Socials:          append([]SocialFixture(nil), app.Socials...),
+		TelegramUserID:   app.TelegramUserID,
 		TelegramUsername: app.TelegramUsername,
 	}
 }
