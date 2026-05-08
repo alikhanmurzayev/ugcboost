@@ -222,11 +222,21 @@ func TestCampaignCreatorRepository_ListByCampaign(t *testing.T) {
 
 		got, err := repo.ListByCampaign(context.Background(), "camp-1")
 		require.NoError(t, err)
-		require.Len(t, got, 2)
-		require.Equal(t, "cc-1", got[0].ID)
-		require.Equal(t, "cc-2", got[1].ID)
-		require.Equal(t, t1, got[0].CreatedAt)
-		require.Equal(t, t2, got[1].CreatedAt)
+		// Full struct comparison catches column-mapping regressions
+		// (e.g. invited_count <-> reminded_count swap) that per-field
+		// asserts would silently miss.
+		require.Equal(t, []*CampaignCreatorRow{
+			{
+				ID: "cc-1", CampaignID: "camp-1", CreatorID: "cr-1",
+				Status:    domain.CampaignCreatorStatusPlanned,
+				CreatedAt: t1, UpdatedAt: t1,
+			},
+			{
+				ID: "cc-2", CampaignID: "camp-1", CreatorID: "cr-2",
+				Status:    domain.CampaignCreatorStatusPlanned,
+				CreatedAt: t2, UpdatedAt: t2,
+			},
+		}, got)
 	})
 
 	t.Run("empty result returns empty slice", func(t *testing.T) {
@@ -330,9 +340,18 @@ func TestCampaignCreatorRepository_ListByCampaignAndCreators(t *testing.T) {
 
 		got, err := repo.ListByCampaignAndCreators(context.Background(), "camp-1", []string{"cr-1", "cr-2"})
 		require.NoError(t, err)
-		require.Len(t, got, 2)
-		require.Equal(t, "cr-1", got[0].CreatorID)
-		require.Equal(t, domain.CampaignCreatorStatusInvited, got[1].Status)
+		require.Equal(t, []*CampaignCreatorRow{
+			{
+				ID: "cc-1", CampaignID: "camp-1", CreatorID: "cr-1",
+				Status:    domain.CampaignCreatorStatusPlanned,
+				CreatedAt: t1, UpdatedAt: t1,
+			},
+			{
+				ID: "cc-2", CampaignID: "camp-1", CreatorID: "cr-2",
+				Status:    domain.CampaignCreatorStatusInvited,
+				CreatedAt: t1, UpdatedAt: t1,
+			},
+		}, got)
 	})
 
 	t.Run("propagates errors", func(t *testing.T) {
@@ -373,13 +392,13 @@ func TestCampaignCreatorRepository_ApplyInvite(t *testing.T) {
 
 		got, err := repo.ApplyInvite(context.Background(), "cc-1")
 		require.NoError(t, err)
-		require.Equal(t, "cc-1", got.ID)
-		require.Equal(t, domain.CampaignCreatorStatusInvited, got.Status)
-		require.Equal(t, 1, got.InvitedCount)
-		require.NotNil(t, got.InvitedAt)
-		require.Equal(t, 0, got.RemindedCount)
-		require.Nil(t, got.RemindedAt)
-		require.Nil(t, got.DecidedAt)
+		require.Equal(t, &CampaignCreatorRow{
+			ID: "cc-1", CampaignID: "camp-1", CreatorID: "cr-1",
+			Status:       domain.CampaignCreatorStatusInvited,
+			InvitedAt:    &now,
+			InvitedCount: 1,
+			CreatedAt:    now, UpdatedAt: now,
+		}, got)
 	})
 
 	t.Run("propagates errors", func(t *testing.T) {
@@ -421,9 +440,15 @@ func TestCampaignCreatorRepository_ApplyRemind(t *testing.T) {
 
 		got, err := repo.ApplyRemind(context.Background(), "cc-1")
 		require.NoError(t, err)
-		require.Equal(t, domain.CampaignCreatorStatusInvited, got.Status)
-		require.Equal(t, 1, got.RemindedCount)
-		require.NotNil(t, got.RemindedAt)
+		require.Equal(t, &CampaignCreatorRow{
+			ID: "cc-1", CampaignID: "camp-1", CreatorID: "cr-1",
+			Status:        domain.CampaignCreatorStatusInvited,
+			InvitedAt:     &t1,
+			InvitedCount:  1,
+			RemindedAt:    &t2,
+			RemindedCount: 1,
+			CreatedAt:     t1, UpdatedAt: t2,
+		}, got)
 	})
 
 	t.Run("propagates errors", func(t *testing.T) {

@@ -322,7 +322,7 @@ func (s *CampaignCreatorService) dispatchBatch(ctx context.Context, campaignID s
 			})
 			s.logger.Warn(ctx, "campaign batch: telegram delivery failed",
 				"campaign_id", campaignID, "creator_id", cid,
-				"op", string(op), "reason", reason, "error", sendErr.Error())
+				"op", string(op), "reason", reason)
 			continue
 		}
 

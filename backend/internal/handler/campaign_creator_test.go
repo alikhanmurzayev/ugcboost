@@ -590,6 +590,23 @@ func TestServer_NotifyCampaignCreators(t *testing.T) {
 		require.Equal(t, uuid.MustParse(creatorAUUID), uuid.UUID(resp.Data.Undelivered[0].CreatorId))
 		require.Equal(t, api.BotBlocked, resp.Data.Undelivered[0].Reason)
 	})
+
+	t.Run("service generic error → 500", func(t *testing.T) {
+		t.Parallel()
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanNotifyCampaignCreators(mock.Anything).Return(nil)
+		ccSvc := mocks.NewMockCampaignCreatorService(t)
+		ccSvc.EXPECT().Notify(mock.Anything, campaignUUID, []string{creatorAUUID}).
+			Return(nil, errors.New("db unavailable"))
+		log := logmocks.NewMockLogger(t)
+		expectHandlerUnexpectedErrorLog(log, campaignNotifyPath)
+
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, ccSvc, nil, ServerConfig{Version: "test-version"}, log))
+		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, campaignNotifyPath,
+			api.CampaignCreatorBatchInput{CreatorIds: []openapi_types.UUID{uuid.MustParse(creatorAUUID)}})
+		require.Equal(t, http.StatusInternalServerError, w.Code)
+		require.Equal(t, domain.CodeInternal, resp.Error.Code)
+	})
 }
 
 func TestServer_RemindCampaignCreatorsInvitation(t *testing.T) {
@@ -643,5 +660,22 @@ func TestServer_RemindCampaignCreatorsInvitation(t *testing.T) {
 		require.Equal(t, api.WrongStatus, resp.Error.Details[0].Reason)
 		require.NotNil(t, resp.Error.Details[0].CurrentStatus)
 		require.Equal(t, api.Planned, *resp.Error.Details[0].CurrentStatus)
+	})
+
+	t.Run("service generic error → 500", func(t *testing.T) {
+		t.Parallel()
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanRemindCampaignCreators(mock.Anything).Return(nil)
+		ccSvc := mocks.NewMockCampaignCreatorService(t)
+		ccSvc.EXPECT().RemindInvitation(mock.Anything, campaignUUID, []string{creatorAUUID}).
+			Return(nil, errors.New("db unavailable"))
+		log := logmocks.NewMockLogger(t)
+		expectHandlerUnexpectedErrorLog(log, campaignRemindPath)
+
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, ccSvc, nil, ServerConfig{Version: "test-version"}, log))
+		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, campaignRemindPath,
+			api.CampaignCreatorBatchInput{CreatorIds: []openapi_types.UUID{uuid.MustParse(creatorAUUID)}})
+		require.Equal(t, http.StatusInternalServerError, w.Code)
+		require.Equal(t, domain.CodeInternal, resp.Error.Code)
 	})
 }

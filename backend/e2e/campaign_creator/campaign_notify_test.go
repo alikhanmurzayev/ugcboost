@@ -258,6 +258,7 @@ func TestNotifyCampaignCreators(t *testing.T) {
 
 		for _, fx := range []testutil.ApprovedCreatorFixture{creator1, creator2} {
 			msg := waitInviteSent(t, fx.TelegramUserID, startedAt, chunk12InviteText)
+			require.Nil(t, msg.Error, "happy path delivery must not record a spy error")
 			require.NotNil(t, msg.WebAppUrl)
 			require.Equal(t, tmaURL, *msg.WebAppUrl)
 		}

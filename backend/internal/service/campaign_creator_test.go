@@ -283,6 +283,47 @@ func TestCampaignCreatorService_Add(t *testing.T) {
 		require.Equal(t, 2, auditCalls)
 		require.Equal(t, []*domain.CampaignCreator{expected1, expected2}, got)
 	})
+
+	t.Run("sorts creator ids before insertion for deterministic lock order", func(t *testing.T) {
+		// The service clones + sorts creatorIDs so two concurrent batches with
+		// overlapping creators acquire the partial unique index in the same
+		// order and cannot deadlock (PG 40P01). The contract is observable:
+		// repo.Add must be called in ASCII-sorted order regardless of input.
+		t.Parallel()
+		pool := dbmocks.NewMockPool(t)
+		factory := svcmocks.NewMockCampaignCreatorRepoFactory(t)
+		campaigns := repomocks.NewMockCampaignRepo(t)
+		ccRepo := repomocks.NewMockCampaignCreatorRepo(t)
+		audit := repomocks.NewMockAuditRepo(t)
+		log := logmocks.NewMockLogger(t)
+		created := time.Date(2026, 5, 7, 12, 0, 0, 0, time.UTC)
+
+		factory.EXPECT().NewCampaignRepo(pool).Return(campaigns)
+		campaigns.EXPECT().GetByID(mock.Anything, "camp-1").
+			Return(liveCampaignRow("camp-1", created), nil)
+		pool.EXPECT().Begin(mock.Anything).Return(testTx{}, nil)
+		factory.EXPECT().NewCampaignCreatorRepo(mock.Anything).Return(ccRepo)
+		factory.EXPECT().NewAuditRepo(mock.Anything).Return(audit)
+
+		var addOrder []string
+		ccRepo.EXPECT().Add(mock.Anything, "camp-1", mock.AnythingOfType("string"), domain.CampaignCreatorStatusPlanned).
+			Run(func(_ context.Context, _ string, creatorID string, _ string) {
+				addOrder = append(addOrder, creatorID)
+			}).
+			Return(&repository.CampaignCreatorRow{
+				ID: "cc", CampaignID: "camp-1", CreatorID: "cr",
+				Status: domain.CampaignCreatorStatusPlanned, CreatedAt: created, UpdatedAt: created,
+			}, nil).Times(3)
+
+		audit.EXPECT().Create(mock.Anything, mock.Anything).Return(nil).Times(3)
+		log.EXPECT().Debug(mock.Anything, "campaign creators added", mock.Anything).Once()
+
+		svc := NewCampaignCreatorService(pool, factory, svcmocks.NewMockCampaignInviteNotifier(t), log)
+		// Reverse-sorted input — service must reorder to ASCII-ascending.
+		_, err := svc.Add(adminCtx(), "camp-1", []string{"cr-z", "cr-m", "cr-a"})
+		require.NoError(t, err)
+		require.Equal(t, []string{"cr-a", "cr-m", "cr-z"}, addOrder)
+	})
 }
 
 func TestCampaignCreatorService_Remove(t *testing.T) {
@@ -732,14 +773,34 @@ func TestCampaignCreatorService_Notify(t *testing.T) {
 		k.ccRepo.EXPECT().ApplyInvite(mock.Anything, "cc-1").Return(newRow1, nil).Once()
 		k.ccRepo.EXPECT().ApplyInvite(mock.Anything, "cc-2").Return(newRow2, nil).Once()
 
+		oldSnap1, err := json.Marshal(campaignCreatorRowToDomain(oldRow1))
+		require.NoError(t, err)
+		newSnap1, err := json.Marshal(campaignCreatorRowToDomain(newRow1))
+		require.NoError(t, err)
+		oldSnap2, err := json.Marshal(campaignCreatorRowToDomain(oldRow2))
+		require.NoError(t, err)
+		newSnap2, err := json.Marshal(campaignCreatorRowToDomain(newRow2))
+		require.NoError(t, err)
+
 		auditSeen := map[string]bool{}
 		k.audit.EXPECT().Create(mock.Anything, mock.Anything).
 			Run(func(_ context.Context, row repository.AuditLogRow) {
 				require.Equal(t, AuditActionCampaignCreatorInvite, row.Action)
 				require.Equal(t, AuditEntityTypeCampaignCreator, row.EntityType)
-				require.NotNil(t, row.OldValue, "OldValue must carry the pre-invite snapshot")
-				require.NotNil(t, row.NewValue)
+				require.NotNil(t, row.ActorID, "ActorID must carry the admin user id")
+				require.Equal(t, adminCtxUserID, *row.ActorID)
+				require.Equal(t, string(api.Admin), row.ActorRole)
 				require.NotNil(t, row.EntityID)
+				switch *row.EntityID {
+				case "cc-1":
+					require.JSONEq(t, string(oldSnap1), string(row.OldValue))
+					require.JSONEq(t, string(newSnap1), string(row.NewValue))
+				case "cc-2":
+					require.JSONEq(t, string(oldSnap2), string(row.OldValue))
+					require.JSONEq(t, string(newSnap2), string(row.NewValue))
+				default:
+					t.Fatalf("unexpected entity_id: %s", *row.EntityID)
+				}
 				auditSeen[*row.EntityID] = true
 			}).Return(nil).Times(2)
 
@@ -888,7 +949,18 @@ func TestCampaignCreatorService_Notify(t *testing.T) {
 		k.pool.EXPECT().Begin(mock.Anything).Return(testTx{}, nil).Once()
 		k.factory.EXPECT().NewAuditRepo(mock.Anything).Return(k.audit)
 		k.ccRepo.EXPECT().ApplyInvite(mock.Anything, "cc-2").Return(newRow2, nil).Once()
-		k.audit.EXPECT().Create(mock.Anything, mock.Anything).Return(nil).Once()
+
+		// Audit must fire only for cr-2 (the row that actually got delivered).
+		// The .Run callback pins the entity id so a future regression that
+		// writes an audit for the bot_blocked cr-1 is caught immediately
+		// instead of silently passing the .Once() counter.
+		auditSeen := map[string]bool{}
+		k.audit.EXPECT().Create(mock.Anything, mock.Anything).
+			Run(func(_ context.Context, row repository.AuditLogRow) {
+				require.Equal(t, AuditActionCampaignCreatorInvite, row.Action)
+				require.NotNil(t, row.EntityID)
+				auditSeen[*row.EntityID] = true
+			}).Return(nil).Once()
 
 		k.log.EXPECT().Warn(mock.Anything, "campaign batch: telegram delivery failed", mock.Anything).Once()
 		k.log.EXPECT().Info(mock.Anything, "campaign batch dispatched", mock.Anything).Once()
@@ -898,6 +970,7 @@ func TestCampaignCreatorService_Notify(t *testing.T) {
 		require.Equal(t, []domain.NotifyFailure{
 			{CreatorID: "cr-1", Reason: domain.NotifyFailureReasonBotBlocked},
 		}, undelivered)
+		require.Equal(t, map[string]bool{"cc-2": true}, auditSeen)
 	})
 
 	t.Run("soft-deleted campaign returns 404", func(t *testing.T) {
@@ -965,7 +1038,16 @@ func TestCampaignCreatorService_Notify(t *testing.T) {
 			InvitedAt: &now, CreatedAt: now, UpdatedAt: now,
 		}
 		k.ccRepo.EXPECT().ApplyInvite(mock.Anything, "cc-2").Return(newRow2, nil).Once()
-		k.audit.EXPECT().Create(mock.Anything, mock.Anything).Return(nil).Once()
+		// Audit fires only for cr-2 (cr-1 was sent but apply errored, so its
+		// row state is uncertain — by contract we record undelivered and skip
+		// the audit). Pinning entity_id catches a future code-path that
+		// accidentally writes an audit for the unpersisted cr-1.
+		auditSeen := map[string]bool{}
+		k.audit.EXPECT().Create(mock.Anything, mock.Anything).
+			Run(func(_ context.Context, row repository.AuditLogRow) {
+				require.NotNil(t, row.EntityID)
+				auditSeen[*row.EntityID] = true
+			}).Return(nil).Once()
 
 		k.log.EXPECT().Error(mock.Anything, "campaign batch: telegram sent but persist failed", mock.Anything).Once()
 		k.log.EXPECT().Info(mock.Anything, "campaign batch dispatched", mock.Anything).Once()
@@ -975,6 +1057,7 @@ func TestCampaignCreatorService_Notify(t *testing.T) {
 		require.Equal(t, []domain.NotifyFailure{
 			{CreatorID: "cr-1", Reason: domain.NotifyFailureReasonUnknown},
 		}, undelivered)
+		require.Equal(t, map[string]bool{"cc-2": true}, auditSeen)
 	})
 
 	t.Run("missing telegram_user_id reported as unknown without delivery", func(t *testing.T) {

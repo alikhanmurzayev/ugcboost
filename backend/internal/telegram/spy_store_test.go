@@ -103,3 +103,85 @@ func TestRecordFromParams(t *testing.T) {
 type errSentinel struct{ msg string }
 
 func (e errSentinel) Error() string { return e.msg }
+
+func TestSentSpyStore_FailNext(t *testing.T) {
+	t.Parallel()
+
+	t.Run("custom reason is preserved verbatim and is one-shot", func(t *testing.T) {
+		t.Parallel()
+		s := NewSentSpyStore()
+		s.RegisterFailNext(42, "network down")
+
+		reason, ok := s.consumeFailNext(42)
+		require.True(t, ok)
+		require.Equal(t, "network down", reason)
+
+		// One-shot semantics: a second consume on the same chat must miss.
+		reason, ok = s.consumeFailNext(42)
+		require.False(t, ok)
+		require.Empty(t, reason)
+	})
+
+	t.Run("empty reason falls back to canonical Forbidden phrase", func(t *testing.T) {
+		t.Parallel()
+		s := NewSentSpyStore()
+		s.RegisterFailNext(7, "")
+
+		reason, ok := s.consumeFailNext(7)
+		require.True(t, ok)
+		require.Equal(t, "Forbidden: bot was blocked by the user", reason,
+			"the canonical default must match MapTelegramErrorToReason's bot_blocked substring")
+	})
+
+	t.Run("registrations isolated by chat id", func(t *testing.T) {
+		t.Parallel()
+		s := NewSentSpyStore()
+		s.RegisterFailNext(1, "boom-1")
+		s.RegisterFailNext(2, "boom-2")
+
+		// Consuming chat 1 must not disturb chat 2.
+		got1, ok1 := s.consumeFailNext(1)
+		require.True(t, ok1)
+		require.Equal(t, "boom-1", got1)
+
+		got2, ok2 := s.consumeFailNext(2)
+		require.True(t, ok2)
+		require.Equal(t, "boom-2", got2)
+	})
+
+	t.Run("consume returns false when no registration is pending", func(t *testing.T) {
+		t.Parallel()
+		s := NewSentSpyStore()
+		reason, ok := s.consumeFailNext(99)
+		require.False(t, ok)
+		require.Empty(t, reason)
+	})
+
+	t.Run("newSyntheticTGErr returns error whose .Error() is the reason verbatim", func(t *testing.T) {
+		t.Parallel()
+		err := newSyntheticTGErr("Forbidden: bot was blocked by the user")
+		require.EqualError(t, err, "Forbidden: bot was blocked by the user")
+	})
+}
+
+func TestSentSpyStore_FakeChat(t *testing.T) {
+	t.Parallel()
+
+	t.Run("registered chat id reports as fake; unregistered reports as real", func(t *testing.T) {
+		t.Parallel()
+		s := NewSentSpyStore()
+		require.False(t, s.IsFakeChat(123), "fresh store has no fake chats")
+
+		s.RegisterFakeChat(123)
+		require.True(t, s.IsFakeChat(123))
+		require.False(t, s.IsFakeChat(456), "RegisterFakeChat must not affect other chat ids")
+	})
+
+	t.Run("re-registering the same chat is idempotent", func(t *testing.T) {
+		t.Parallel()
+		s := NewSentSpyStore()
+		s.RegisterFakeChat(7)
+		s.RegisterFakeChat(7)
+		require.True(t, s.IsFakeChat(7))
+	})
+}

@@ -364,11 +364,13 @@ func CampaignInviteText() string { return campaignInviteText }
 func CampaignRemindInvitationText() string { return campaignRemindInvitationText }
 
 // MapTelegramErrorToReason classifies a SendMessage error into a
-// domain.NotifyFailureReason* enum value. Forbidden / blocked-by-user /
-// deactivated map to bot_blocked (the creator is unreachable through the
-// bot — admin needs an alternative channel); everything else (network,
-// timeout, 5xx) maps to unknown. nil err returns "" — caller checks before
-// invoking.
+// domain.NotifyFailureReason* enum value. The sentinel branch
+// (`bot.ErrorForbidden`) is the canonical signal that the creator
+// blocked the bot. The string-substring fallback uses tight phrases
+// (`bot was blocked by the user`, `user is deactivated`) tied to the
+// current Telegram API surface so a future SDK rename falls into the
+// safer `unknown` branch instead of misclassifying as `bot_blocked`.
+// nil err returns "" — caller checks before invoking.
 func MapTelegramErrorToReason(err error) string {
 	if err == nil {
 		return ""
@@ -377,8 +379,7 @@ func MapTelegramErrorToReason(err error) string {
 		return domain.NotifyFailureReasonBotBlocked
 	}
 	msg := err.Error()
-	if strings.Contains(msg, "Forbidden") ||
-		strings.Contains(msg, "blocked by the user") ||
+	if strings.Contains(msg, "bot was blocked by the user") ||
 		strings.Contains(msg, "user is deactivated") {
 		return domain.NotifyFailureReasonBotBlocked
 	}

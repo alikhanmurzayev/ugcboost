@@ -669,8 +669,11 @@ func TestMapTelegramErrorToReason(t *testing.T) {
 		{"nil error", nil, ""},
 		{"sentinel forbidden", fmt.Errorf("wrap: %w", bot.ErrorForbidden), "bot_blocked"},
 		{"forbidden text", errors.New("Forbidden: bot was blocked by the user"), "bot_blocked"},
-		{"blocked by user phrase", errors.New("Bad Request: user blocked by the user"), "bot_blocked"},
 		{"user is deactivated phrase", errors.New("Forbidden: user is deactivated"), "bot_blocked"},
+		// Bare "Forbidden" without the bot-was-blocked phrase no longer
+		// matches — the substring is intentionally tight to keep an
+		// SDK rename from silently mis-bucketing unrelated 403s.
+		{"bare forbidden no canonical phrase", errors.New("Forbidden: chat not found"), "unknown"},
 		{"network error", errors.New("connection reset"), "unknown"},
 		{"deadline exceeded", context.DeadlineExceeded, "unknown"},
 	}

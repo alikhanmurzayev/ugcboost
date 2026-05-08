@@ -119,6 +119,23 @@ context:
   возвращал бы "Bad Request: chat not found" и happy-path A4 никогда бы
   не имел `undelivered=[]`. Production-поверхность не задета — fake-chat
   registration работает только при `EnableTestEndpoints=true`.
+- **2026-05-08, second review (extra-bmad-review):** второй раунд step-04
+  с расширенной панелью (3 стандартных + test-auditor +
+  frontend-codegen-auditor + security-auditor + manual-qa). Применено
+  10 patch'ей — точечный substring в `MapTelegramErrorToReason`, full
+  struct comparison в repo unit-тестах, JSONEq snapshot в Notify
+  happy-path audit, `.Run` callback в partial-success / persist-failed
+  audit-кейсах, новый t.Run на `slices.Sort` детерминизм в Add, новые
+  t.Run "service generic error → 500" в Notify/Remind handler tests,
+  spy_store unit-тесты для `RegisterFailNext` / `RegisterFakeChat` /
+  consume-семантики, `require.Nil(msg.Error)` в e2e happy, новый ключ
+  `CAMPAIGN_TMA_URL_LOCKED` в `frontend/web` i18n (UI ранее показывал
+  generic "Произошла ошибка"), убрано `error: sendErr.Error()` из
+  `logger.Warn` (PII-strip — `reason` уже логируется отдельно).
+  7 findings классифицированы как defer и записаны в
+  `_bmad-output/implementation-artifacts/deferred-work.md`. Reject —
+  test-helper overwrites, defense-in-depth для impossible-path,
+  e2e-дублирование handler unit-сценариев.
 
 ## Design Notes
 

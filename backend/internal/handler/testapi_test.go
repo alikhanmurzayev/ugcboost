@@ -515,11 +515,16 @@ func TestTestAPIHandler_TelegramSpyFailNext(t *testing.T) {
 
 		// Next send to chat 555 must come back with the canonical Forbidden
 		// error so MapTelegramErrorToReason classifies it as bot_blocked.
+		// Pin the exact error string — e2e assertions depend on the canonical
+		// substring "bot was blocked by the user", and any drift in that
+		// phrase would silently demote bot_blocked → unknown after the
+		// substring tightening in MapTelegramErrorToReason.
 		_, err := sender.SendMessage(context.Background(), &tgbot.SendMessageParams{
 			ChatID: int64(555),
 			Text:   "ping",
 		})
 		require.Error(t, err)
+		require.EqualError(t, err, "Forbidden: bot was blocked by the user")
 		require.Equal(t, domain.NotifyFailureReasonBotBlocked, telegram.MapTelegramErrorToReason(err))
 
 		// One-shot: subsequent send goes through unchanged.
