@@ -23,7 +23,7 @@ context:
 ## Boundaries & Constraints
 
 **Always:**
-- Auth через статичный токен в `Authorization: <token>` (raw, без `Bearer`-префикса) — TrustMe blueprint § «Установка хуков» жёстко прописывает этот формат, кастомный header невозможен. Сравнение через `subtle.ConstantTimeCompare` со значением `cfg.TrustMeWebhookToken`. Anti-fingerprinting: одинаковый `error.Message` для missing и wrong token.
+- Auth через статичный токен в `Authorization: Bearer <token>` (scheme case-insensitive). Blueprint § «Установка хуков» неточно упоминает raw token, реальный кабинет TrustMe шлёт Bearer-prefixed (подтверждено staging-дампом 2026-05-09). Сравнение через `subtle.ConstantTimeCompare` со значением `cfg.TrustMeWebhookToken`. Anti-fingerprinting: одинаковый `error.Message` для missing и wrong token.
 - Idempotency: UPDATE `contracts` с `WHERE trustme_status_code != $new` — повтор того же события → 0 affected → no-op (no audit, no cc.status update, no notify, no `webhook_received_at` update).
 - Terminal-guard: UPDATE `contracts` с `WHERE trustme_status_code NOT IN (3, 9)` — после `signed`/`signing_declined` любой stale-webhook с другим статусом игнорируется (info-log `stale_webhook_after_terminal`).
 - Audit ВНУТРИ Tx (стандарт `backend-transactions.md`); бот-уведомление service шлёт сам ПОСЛЕ Tx (Variant B, симметрия с `internal/contract/sender_service.go`).
@@ -41,7 +41,7 @@ context:
 - НЕ писать PII в audit_logs payload и stdout-логи (`client`/телефон/ФИО/ИИН/PDF-байты — запрещено).
 - НЕ откатывать терминальные `signed`/`signing_declined` — terminal-guard в SQL.
 - НЕ изменять рантайм-логику chunk 16 (sender_service phases, outbox-крон, миграции) — только аддитивные изменения и godoc-блок над `ContractColumnTrustMe*`.
-- НЕ использовать `Bearer`-префикс в auth-сравнении.
+- НЕ принимать запросы без `Bearer`-префикса в `Authorization` (раз TrustMe реально шлёт его).
 - НЕ записывать `webhook.contract_url` в `contracts.trustme_short_url` (он уже записан в Phase 3 outbox; перезапись избыточна).
 - НЕ коммитить и не мержить автоматически (`feedback_no_commits` / `feedback_no_merge`).
 
@@ -241,5 +241,5 @@ auditRepo.Create(ctx, repository.AuditLogRow{
 - `make test-e2e-backend` — `TestTrustMeWebhook` зелёный со всеми сценариями.
 
 **Manual checks:**
-- На staging (`TRUSTME_MOCK=true`, `TRUSTME_WEBHOOK_TOKEN` задан) — поднять, прогнать happy-path: создать кампанию с шаблоном, добавить креатора, прогнать `agree` + `runOutboxOnce`, через `curl -X POST -H "Authorization: $TRUSTME_WEBHOOK_TOKEN" -d '{"contract_id":"<spy-doc-id>","status":3,"client":"77071234567","contract_url":"..."}'` отправить webhook. Проверить: `cc.status='signed'`, audit-row с правильным payload, бот отправил congrats-сообщение.
+- На staging (`TRUSTME_MOCK=true`, `TRUSTME_WEBHOOK_TOKEN` задан) — поднять, прогнать happy-path: создать кампанию с шаблоном, добавить креатора, прогнать `agree` + `runOutboxOnce`, через `curl -X POST -H "Authorization: Bearer $TRUSTME_WEBHOOK_TOKEN" -d '{"contract_id":"<spy-doc-id>","status":3,"client":"77071234567","contract_url":"..."}'` отправить webhook. Проверить: `cc.status='signed'`, audit-row с правильным payload, бот отправил congrats-сообщение.
 - Прогнать запросом с битым токеном — 401, в access-логе бэкенда видно попытку, payload не принят.

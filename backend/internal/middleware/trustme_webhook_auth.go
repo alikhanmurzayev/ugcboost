@@ -4,6 +4,7 @@ import (
 	"crypto/subtle"
 	"encoding/json"
 	"net/http"
+	"strings"
 
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/logger"
 )
@@ -12,10 +13,15 @@ import (
 // SendPulse middleware so package consts and openapi.yaml stay in lockstep.
 const TrustMeWebhookPath = "/trustme/webhook"
 
+// trustMeBearerPrefix — RFC 6750 scheme. TrustMe шлёт `Authorization: Bearer
+// <token>` per actual prod-cabinet behavior. Scheme match — case-insensitive
+// (RFC 6750 + защита от случайной смены капитализации со стороны TrustMe).
+const trustMeBearerPrefix = "Bearer "
+
 // TrustMeWebhookAuth gates POST /trustme/webhook with a constant-time
-// compare of the static token. Per TrustMe blueprint § «Установка хуков»
-// the header is `Authorization: <token>` (raw, без `Bearer`-префикса) —
-// формат не настраивается на их стороне.
+// compare of the static token. TrustMe wire-format — `Authorization: Bearer
+// <token>` (scheme case-insensitive). Same token заводится в кабинете
+// TrustMe при создании вебхука и в `TRUSTME_WEBHOOK_TOKEN` env var.
 //
 // Wrong or missing Authorization yields 401 with an empty JSON body —
 // same shape as the success 200, so an attacker cannot distinguish the
@@ -38,7 +44,13 @@ func TrustMeWebhookAuth(secret string, log logger.Logger) func(http.Handler) htt
 				writeTrustMeWebhookUnauthorized(w, r, log)
 				return
 			}
-			token := []byte(r.Header.Get(headerAuthorization))
+			header := r.Header.Get(headerAuthorization)
+			if len(header) < len(trustMeBearerPrefix) ||
+				!strings.EqualFold(header[:len(trustMeBearerPrefix)], trustMeBearerPrefix) {
+				writeTrustMeWebhookUnauthorized(w, r, log)
+				return
+			}
+			token := []byte(header[len(trustMeBearerPrefix):])
 			if subtle.ConstantTimeCompare(token, expected) != 1 {
 				writeTrustMeWebhookUnauthorized(w, r, log)
 				return

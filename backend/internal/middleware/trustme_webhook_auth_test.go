@@ -58,7 +58,7 @@ func TestTrustMeWebhookAuth(t *testing.T) {
 		})
 
 		r := httptest.NewRequest(http.MethodPost, TrustMeWebhookPath, nil)
-		r.Header.Set("Authorization", "wrong-token")
+		r.Header.Set("Authorization", "Bearer wrong-token")
 		w := httptest.NewRecorder()
 		TrustMeWebhookAuth(trustMeWebhookTestSecret, log)(next).ServeHTTP(w, r)
 
@@ -66,15 +66,15 @@ func TestTrustMeWebhookAuth(t *testing.T) {
 		require.Equal(t, "{}\n", w.Body.String())
 	})
 
-	t.Run("Bearer prefix rejected — TrustMe header is raw token", func(t *testing.T) {
+	t.Run("raw token without Bearer scheme rejected", func(t *testing.T) {
 		t.Parallel()
 		log := logmocks.NewMockLogger(t)
 		next := http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
-			t.Fatal("next handler should not run on Bearer-prefix")
+			t.Fatal("next handler should not run without Bearer scheme")
 		})
 
 		r := httptest.NewRequest(http.MethodPost, TrustMeWebhookPath, nil)
-		r.Header.Set("Authorization", "Bearer "+trustMeWebhookTestSecret)
+		r.Header.Set("Authorization", trustMeWebhookTestSecret)
 		w := httptest.NewRecorder()
 		TrustMeWebhookAuth(trustMeWebhookTestSecret, log)(next).ServeHTTP(w, r)
 
@@ -89,7 +89,7 @@ func TestTrustMeWebhookAuth(t *testing.T) {
 		})
 
 		r := httptest.NewRequest(http.MethodPost, TrustMeWebhookPath, nil)
-		r.Header.Set("Authorization", trustMeWebhookTestSecret+"x")
+		r.Header.Set("Authorization", "Bearer "+trustMeWebhookTestSecret+"x")
 		w := httptest.NewRecorder()
 		TrustMeWebhookAuth(trustMeWebhookTestSecret, log)(next).ServeHTTP(w, r)
 
@@ -114,7 +114,7 @@ func TestTrustMeWebhookAuth(t *testing.T) {
 		require.Equal(t, "{}\n", w.Body.String())
 	})
 
-	t.Run("valid token passes to next", func(t *testing.T) {
+	t.Run("valid Bearer token passes to next", func(t *testing.T) {
 		t.Parallel()
 		log := logmocks.NewMockLogger(t)
 		called := false
@@ -124,7 +124,25 @@ func TestTrustMeWebhookAuth(t *testing.T) {
 		})
 
 		r := httptest.NewRequest(http.MethodPost, TrustMeWebhookPath, nil)
-		r.Header.Set("Authorization", trustMeWebhookTestSecret)
+		r.Header.Set("Authorization", "Bearer "+trustMeWebhookTestSecret)
+		w := httptest.NewRecorder()
+		TrustMeWebhookAuth(trustMeWebhookTestSecret, log)(next).ServeHTTP(w, r)
+
+		require.True(t, called)
+		require.Equal(t, http.StatusOK, w.Code)
+	})
+
+	t.Run("lowercase bearer scheme accepted (case-insensitive)", func(t *testing.T) {
+		t.Parallel()
+		log := logmocks.NewMockLogger(t)
+		called := false
+		next := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			called = true
+			w.WriteHeader(http.StatusOK)
+		})
+
+		r := httptest.NewRequest(http.MethodPost, TrustMeWebhookPath, nil)
+		r.Header.Set("Authorization", "bearer "+trustMeWebhookTestSecret)
 		w := httptest.NewRecorder()
 		TrustMeWebhookAuth(trustMeWebhookTestSecret, log)(next).ServeHTTP(w, r)
 

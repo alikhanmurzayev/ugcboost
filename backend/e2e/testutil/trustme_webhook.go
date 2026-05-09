@@ -79,9 +79,11 @@ func TrustMeWebhookStatusPayload(contractID string, status int) TrustMeWebhookPa
 }
 
 // PostTrustMeWebhook отправляет payload на POST /trustme/webhook с
-// заголовком Authorization: <token> (raw, без Bearer). Возвращает HTTP
-// статус и тело ответа. Caller сам решает, как трактовать ответ — webhook
-// эндпоинт public, без apiclient-обёртки.
+// заголовком `Authorization: Bearer <token>` — формат, в котором реально
+// шлёт TrustMe (blueprint неточен про raw token). Empty token → header
+// не выставляется, чтоб тестировать missing-token сценарий. Возвращает
+// HTTP статус и тело ответа. Caller сам решает, как трактовать ответ —
+// webhook эндпоинт public, без apiclient-обёртки.
 func PostTrustMeWebhook(t *testing.T, payload TrustMeWebhookPayload, token string) (int, []byte) {
 	t.Helper()
 	body, err := json.Marshal(payload)
@@ -91,7 +93,7 @@ func PostTrustMeWebhook(t *testing.T, payload TrustMeWebhookPayload, token strin
 	require.NoError(t, err)
 	req.Header.Set("Content-Type", "application/json")
 	if token != "" {
-		req.Header.Set("Authorization", token)
+		req.Header.Set("Authorization", "Bearer "+token)
 	}
 	resp, err := HTTPClient(nil).Do(req)
 	require.NoError(t, err)

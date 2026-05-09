@@ -1768,12 +1768,13 @@ paths:
       summary: TrustMe document status webhook
       description: |
         Receives TrustMe document state-change notifications. Auth via static
-        token in `Authorization: <token>` header (raw, без `Bearer`-префикса —
-        per blueprint § «Установка хуков»). Middleware compares constant-time
-        и пишет 401 `{}` напрямую без фингерпринта между missing/wrong.
-        Idempotent повтор того же события возвращает 200 без побочных
-        эффектов; terminal-guard (`signed`/`signing_declined`) защищает
-        от reorder'а.
+        token in `Authorization: Bearer <token>` header — формат настраивается
+        в кабинете TrustMe при создании вебхука (blueprint § «Установка хуков»
+        упоминает raw token, реальный кабинет шлёт Bearer-prefixed). Middleware
+        compares constant-time и пишет 401 `{}` напрямую без фингерпринта
+        между missing/wrong. Idempotent повтор того же события возвращает
+        200 без побочных эффектов; terminal-guard (`signed`/`signing_declined`)
+        защищает от reorder'а.
       tags: [webhooks]
       security: []
       requestBody:

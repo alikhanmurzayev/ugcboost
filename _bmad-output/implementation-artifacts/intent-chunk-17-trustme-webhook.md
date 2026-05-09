@@ -53,7 +53,7 @@ Chunk 17 — `POST /trustme/webhook` (public, статичный bearer-auth, id
 
 2. **Endpoint surface — `POST /trustme/webhook` (public).**
 
-   - **Auth**: header `Authorization: <token>` (raw, без `Bearer`-префикса). Сравнение со статичным `TrustMeWebhookToken` из конфига (constant-time comparison через `subtle.ConstantTimeCompare` per security.md). Это ограничение TrustMe — blueprint § «Установка хуков» (строка 1041) жёстко прописывает `Authorization: {token}`, кастомный header receiver выбрать не может. Совпадает с outbound-форматом, как мы сами шлём в TrustMe (parent intent Decision #2 / `internal/trustme/real_client.go`).
+   - **Auth**: header `Authorization: Bearer <token>` (scheme case-insensitive). Сравнение со статичным `TrustMeWebhookToken` из конфига (constant-time comparison через `subtle.ConstantTimeCompare` per security.md). Blueprint § «Установка хуков» (строка 1041) описывает формат как `Authorization: {token}`, но реальный кабинет TrustMe шлёт Bearer-prefixed (подтверждено staging-дампом 2026-05-09).
    - **Request body** (JSON, OpenAPI schema по blueprint § «Содержимое хука»):
      ```json
      { "contract_id": "string", "status": 0..9, "client": "string", "contract_url": "string" }
@@ -195,7 +195,7 @@ Chunk 17 — `POST /trustme/webhook` (public, статичный bearer-auth, id
 
 8. **E2E-триггер — Variant A (прямой HTTP).**
 
-   `testutil.PostTrustMeWebhook(t *testing.T, payload TrustMeWebhookPayload, token string) *http.Response` — обычный HTTP-запрос с `Authorization: <token>` header'ом на `${API_URL}/trustme/webhook`. Токен берётся из конфига test-окружения (`TRUSTME_WEBHOOK_TOKEN` уставлен в docker-compose / e2e env). Не добавляем `/test/trustme/webhook-fire` test-API endpoint — webhook публичный по дизайну, прямое тестирование точнее воспроизводит реальный поток. Меньше surface для maintenance.
+   `testutil.PostTrustMeWebhook(t *testing.T, payload TrustMeWebhookPayload, token string) *http.Response` — обычный HTTP-запрос с `Authorization: Bearer <token>` header'ом на `${API_URL}/trustme/webhook`. Токен берётся из конфига test-окружения (`TRUSTME_WEBHOOK_TOKEN` уставлен в docker-compose / e2e env). Не добавляем `/test/trustme/webhook-fire` test-API endpoint — webhook публичный по дизайну, прямое тестирование точнее воспроизводит реальный поток. Меньше surface для maintenance.
 
 9. **Конфиг — `TrustMeWebhookToken`.**
 
