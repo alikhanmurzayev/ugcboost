@@ -20,7 +20,7 @@ const tmaTestValidToken = "abc_padding_secrettokenxx"
 
 func newTmaServer(t *testing.T, authzSvc AuthzService, tmaSvc TmaCampaignCreatorService) *Server {
 	t.Helper()
-	return NewServer(nil, nil, authzSvc, nil, nil, nil, nil, nil, tmaSvc, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t))
+	return NewServer(nil, nil, authzSvc, nil, nil, nil, nil, nil, tmaSvc, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t))
 }
 
 func TestServer_TmaAgree(t *testing.T) {
@@ -136,7 +136,7 @@ func TestServer_TmaAgree(t *testing.T) {
 
 		log := logmocks.NewMockLogger(t)
 		expectHandlerUnexpectedErrorLog(log, "/tma/campaigns/"+tmaTestValidToken+"/agree")
-		router := newTestRouter(t, NewServer(nil, nil, authzSvc, nil, nil, nil, nil, nil, tmaSvc, nil, ServerConfig{Version: "test-version"}, log))
+		router := newTestRouter(t, NewServer(nil, nil, authzSvc, nil, nil, nil, nil, nil, tmaSvc, nil, nil, ServerConfig{Version: "test-version"}, log))
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/tma/campaigns/"+tmaTestValidToken+"/agree", nil)
 		require.Equal(t, http.StatusInternalServerError, w.Code)
 		require.Equal(t, domain.CodeInternal, resp.Error.Code)

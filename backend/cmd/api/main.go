@@ -151,6 +151,14 @@ func run() error {
 	}
 	appLogger.Info(ctx, "contract sender scheduled", "every", "10s", "trustme_mock", cfg.TrustMeMock)
 
+	contractWebhookSvc := contract.NewWebhookService(
+		pool,
+		repoFactory,
+		tgRig.Notifier,
+		appLogger,
+		func() time.Time { return time.Now().UTC() },
+	)
+
 	// Seed admin
 	if err := authSvc.SeedAdmin(ctx, cfg.AdminEmail, cfg.AdminPassword); err != nil {
 		return fmt.Errorf("seed admin: %w", err)
@@ -172,9 +180,14 @@ func run() error {
 	// SendPulse webhook bearer auth — gates only the dedicated path; every
 	// other request flows through unchanged.
 	r.Use(middleware.SendPulseAuth(cfg.SendPulseWebhookSecret, appLogger))
+	// TrustMe webhook static-token auth — gates POST /trustme/webhook;
+	// формат `Authorization: Bearer <token>` (как реально шлёт их кабинет,
+	// blueprint § «Установка хуков» неточен). 401 `{}` anti-fingerprint
+	// между missing и wrong.
+	r.Use(middleware.TrustMeWebhookAuth(cfg.TrustMeWebhookToken, appLogger))
 
 	// Create server implementing ServerInterface
-	server := handler.NewServer(authSvc, brandSvc, authzSvc, auditSvc, creatorApplicationSvc, creatorSvc, campaignSvc, campaignCreatorSvc, tmaCampaignCreatorSvc, dictionarySvc, handler.ServerConfig{
+	server := handler.NewServer(authSvc, brandSvc, authzSvc, auditSvc, creatorApplicationSvc, creatorSvc, campaignSvc, campaignCreatorSvc, tmaCampaignCreatorSvc, dictionarySvc, contractWebhookSvc, handler.ServerConfig{
 		Version:               cfg.Version,
 		CookieSecure:          cfg.CookieSecure,
 		TelegramBotUsername:   cfg.TelegramBotUsername,

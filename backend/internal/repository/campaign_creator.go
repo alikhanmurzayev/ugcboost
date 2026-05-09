@@ -65,18 +65,31 @@ var (
 	campaignCreatorInsertMapper  = stom.MustNewStom(CampaignCreatorRow{}).SetTag(string(tagInsert))
 )
 
+// CampaignCreatorWebhookView projects cc.id, cc.status, c.is_deleted and
+// cr.telegram_user_id за один JOIN по contracts.id. Используется webhook-
+// service'ом chunk 17 для дispatch'а terminal-state-transition + post-Tx
+// notify (skipped at c.is_deleted=true).
+type CampaignCreatorWebhookView struct {
+	CampaignCreatorID     string
+	CampaignCreatorStatus string
+	CampaignIsDeleted     bool
+	CreatorTelegramUserID int64
+}
+
 // CampaignCreatorRepo lists every public method of the campaign_creators repo.
 type CampaignCreatorRepo interface {
 	Add(ctx context.Context, campaignID, creatorID, status string) (*CampaignCreatorRow, error)
 	GetByCampaignAndCreator(ctx context.Context, campaignID, creatorID string) (*CampaignCreatorRow, error)
 	GetByIDForUpdate(ctx context.Context, id string) (*CampaignCreatorRow, error)
 	GetByContractID(ctx context.Context, contractID string) (*CampaignCreatorRow, error)
+	GetWithCampaignAndCreatorByContractID(ctx context.Context, contractID string) (*CampaignCreatorWebhookView, error)
 	ListByCampaign(ctx context.Context, campaignID string) ([]*CampaignCreatorRow, error)
 	ListByCampaignAndCreators(ctx context.Context, campaignID string, creatorIDs []string) ([]*CampaignCreatorRow, error)
 	ApplyInvite(ctx context.Context, id string) (*CampaignCreatorRow, error)
 	ApplyRemind(ctx context.Context, id string) (*CampaignCreatorRow, error)
 	ApplyDecision(ctx context.Context, id, status string) (*CampaignCreatorRow, error)
 	UpdateContractIDAndStatus(ctx context.Context, id, contractID, status string) error
+	UpdateStatus(ctx context.Context, id, status string) error
 	ExistsInvitedInCampaign(ctx context.Context, campaignID string) (bool, error)
 	DeleteByID(ctx context.Context, id string) error
 }
@@ -271,6 +284,78 @@ func (r *campaignCreatorRepository) GetByContractID(ctx context.Context, contrac
 		From(TableCampaignCreators).
 		Where(sq.Eq{CampaignCreatorColumnContractID: contractID})
 	return dbutil.One[CampaignCreatorRow](ctx, r.db, q)
+}
+
+// GetWithCampaignAndCreatorByContractID JOIN'ит campaign_creators + campaigns
+// + creators по contracts.id и проектирует cc.id, cc.status, c.is_deleted,
+// cr.telegram_user_id. Webhook-service chunk 17 использует view внутри Tx
+// после LockByTrustMeDocumentID, чтобы решить ветку state-transition и
+// нужен ли post-Tx notify (soft-deleted кампания → notify skipped).
+func (r *campaignCreatorRepository) GetWithCampaignAndCreatorByContractID(ctx context.Context, contractID string) (*CampaignCreatorWebhookView, error) {
+	const ccAlias = "cc"
+	const cAlias = "c"
+	const crAlias = "cr"
+	q := sq.Select(
+		ccAlias+"."+CampaignCreatorColumnID,
+		ccAlias+"."+CampaignCreatorColumnStatus,
+		cAlias+"."+CampaignColumnIsDeleted,
+		crAlias+"."+CreatorColumnTelegramUserID,
+	).
+		From(TableCampaignCreators + " " + ccAlias).
+		Join(TableCampaigns + " " + cAlias + " ON " + cAlias + "." + CampaignColumnID + " = " + ccAlias + "." + CampaignCreatorColumnCampaignID).
+		Join(TableCreators + " " + crAlias + " ON " + crAlias + "." + CreatorColumnID + " = " + ccAlias + "." + CampaignCreatorColumnCreatorID).
+		Where(sq.Eq{ccAlias + "." + CampaignCreatorColumnContractID: contractID})
+
+	sqlStr, args, err := q.ToSql()
+	if err != nil {
+		return nil, err
+	}
+	sqlStr, err = sq.Dollar.ReplacePlaceholders(sqlStr)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := r.db.Query(ctx, sqlStr, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	if !rows.Next() {
+		if err := rows.Err(); err != nil {
+			return nil, err
+		}
+		return nil, sql.ErrNoRows
+	}
+	var view CampaignCreatorWebhookView
+	if err := rows.Scan(
+		&view.CampaignCreatorID,
+		&view.CampaignCreatorStatus,
+		&view.CampaignIsDeleted,
+		&view.CreatorTelegramUserID,
+	); err != nil {
+		return nil, err
+	}
+	return &view, nil
+}
+
+// UpdateStatus flips the campaign_creators row to the supplied status without
+// touching contract_id or counters. Used by chunk-17 webhook service for the
+// terminal `signing → signed` and `signing → signing_declined` transitions.
+// Caller (service) runs it inside the same Tx as the contracts UPDATE и audit
+// insert.
+func (r *campaignCreatorRepository) UpdateStatus(ctx context.Context, id, status string) error {
+	q := sq.Update(TableCampaignCreators).
+		Set(CampaignCreatorColumnStatus, status).
+		Set(CampaignCreatorColumnUpdatedAt, sq.Expr("now()")).
+		Where(sq.Eq{CampaignCreatorColumnID: id})
+	n, err := dbutil.Exec(ctx, r.db, q)
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
 }
 
 // UpdateContractIDAndStatus stamps contract_id + flips the row to the given

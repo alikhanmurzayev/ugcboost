@@ -1374,6 +1374,30 @@ type TmaDecisionResult struct {
 	Status CampaignCreatorStatus `json:"status"`
 }
 
+// TrustMeWebhookRequest TrustMe document state-change payload. Wire-format поля повторяют
+// формат из blueprint § «Содержимое хука» (`contract_id`, `status`,
+// `client`, `contract_url`); реальный смысл указан в `description`
+// каждого поля.
+type TrustMeWebhookRequest struct {
+	// Client Phone of the actor that triggered the change. Игнорируем —
+	// PII, в БД и логи не пишем (security.md).
+	Client *string `json:"client,omitempty"`
+
+	// ContractId TrustMe-side document identifier. У TrustMe непоследовательный
+	// нейминг — `document_id` в response отправки, `id` в /search,
+	// `contract_id` здесь. У нас в БД это `contracts.trustme_document_id`.
+	ContractId string `json:"contract_id"`
+
+	// ContractUrl Full URL to the document. Игнорируем — детерминирован от
+	// `contract_id`, уже записан в `trustme_short_url` после Phase 3.
+	ContractUrl *string `json:"contract_url,omitempty"`
+
+	// Status TrustMe document status code per blueprint § «Получить статус
+	// документа». 3 = подписан, 9 = отказ креатора, остальные —
+	// intermediate / unexpected.
+	Status int `json:"status"`
+}
+
 // UploadCampaignContractTemplateData Result of a successful PUT /campaigns/{id}/contract-template upload.
 // Echoes the placeholders extracted from the freshly stored PDF so the
 // admin UI can render a confirmation block ("found CreatorFIO,
@@ -1524,6 +1548,9 @@ type VerifyCreatorApplicationSocialJSONRequestBody = VerifyCreatorApplicationSoc
 
 // ListCreatorsJSONRequestBody defines body for ListCreators for application/json ContentType.
 type ListCreatorsJSONRequestBody = CreatorsListRequest
+
+// TrustMeWebhookJSONRequestBody defines body for TrustMeWebhook for application/json ContentType.
+type TrustMeWebhookJSONRequestBody = TrustMeWebhookRequest
 
 // SendPulseInstagramWebhookJSONRequestBody defines body for SendPulseInstagramWebhook for application/json ContentType.
 type SendPulseInstagramWebhookJSONRequestBody = SendPulseInstagramWebhookRequest

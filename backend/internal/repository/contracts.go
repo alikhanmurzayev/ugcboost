@@ -25,6 +25,15 @@ const (
 )
 
 // Contracts table and column names.
+//
+// TrustMe naming note: TrustMe API references the same identifier under three
+// different names depending on endpoint — `document_id` in /SendToSignBase64FileExt
+// response, `id` in /search/Contracts, and `contract_id` in webhook payload.
+// In our schema it is always `trustme_document_id`, distinct from the internal
+// `contracts.id` (UUID). `trustme_short_url` is the TrustMe-issued
+// `tct.kz/uploader/<id>` short URL; `trustme_status_code` is the last known
+// status of the document on TrustMe (0..9 per blueprint § «Получить статус
+// документа»).
 const (
 	TableContracts                   = "contracts"
 	ContractColumnID                 = "id"
@@ -47,9 +56,25 @@ const (
 	ContractColumnUpdatedAt          = "updated_at"
 )
 
+// TrustMe terminal status codes per blueprint § «Получить статус документа».
+// 3 = signed (всеми сторонами), 9 = signing_declined (отказ инициирован
+// креатором). Webhook handler treats both as terminal — UPDATE с двойным
+// guard'ом (`!= newStatus AND NOT IN (3,9)`) защищает от reorder'а stale-
+// webhook'ов поверх terminal-state.
+const (
+	TrustMeStatusSigned          = 3
+	TrustMeStatusSigningDeclined = 9
+)
+
 // ContractRow maps to the contracts table. Big bytea blobs (unsigned/signed
 // PDFs) live alongside metadata. Default SELECT does NOT pull PDFs — repos
 // project them only on dedicated reads (orphan recovery).
+//
+// TrustMeDocumentID / TrustMeShortURL / TrustMeStatusCode mirror TrustMe-side
+// state: see the const block above for the naming inconsistency note.
+// TrustMeStatusCode lives on every row (DEFAULT 0 in the migration); the
+// optional pointers (DocumentID, ShortURL) stay NULL until Phase 3 finalize
+// stamps them.
 type ContractRow struct {
 	ID                string     `db:"id"`
 	SubjectKind       string     `db:"subject_kind"          insert:"subject_kind"`
@@ -120,6 +145,8 @@ type ContractRepo interface {
 	UpdateAfterSend(ctx context.Context, id, trustMeDocumentID, trustMeShortURL string, trustMeStatusCode int) error
 	GetOrphanRequisites(ctx context.Context, contractID string) (*OrphanRequisites, error)
 	RecordFailedAttempt(ctx context.Context, contractID, code, message string, nextRetryAt time.Time) error
+	LockByTrustMeDocumentID(ctx context.Context, documentID string) (*ContractRow, error)
+	UpdateAfterWebhook(ctx context.Context, contractID string, newStatus int) (int, error)
 }
 
 type contractRepository struct {
@@ -353,6 +380,61 @@ func (r *contractRepository) RecordFailedAttempt(ctx context.Context, contractID
 		return sql.ErrNoRows
 	}
 	return nil
+}
+
+// LockByTrustMeDocumentID looks up a contracts row by its TrustMe-side
+// document_id and locks it FOR UPDATE for the surrounding transaction.
+// Webhook handler step 1 — blocks concurrent webhook deliveries against the
+// same document until the first commits, so terminal-guard / idempotency in
+// UpdateAfterWebhook are checked against a serialised view of the row.
+//
+// Caller MUST run inside a transaction — outside one FOR UPDATE is a no-op
+// (auto-commit). dbutil.One propagates wrapped sql.ErrNoRows; service maps
+// it to domain.ErrContractWebhookUnknownDocument at the boundary.
+func (r *contractRepository) LockByTrustMeDocumentID(ctx context.Context, documentID string) (*ContractRow, error) {
+	q := sq.Select(contractSelectColumns...).
+		From(TableContracts).
+		Where(sq.Eq{ContractColumnTrustMeDocumentID: documentID}).
+		Suffix("FOR UPDATE")
+	return dbutil.One[ContractRow](ctx, r.db, q)
+}
+
+// UpdateAfterWebhook applies the TrustMe-status webhook update with double
+// guard:
+//
+//   - idempotency-guard (`trustme_status_code != newStatus`) — повтор того
+//     же события → 0 affected → no-op (no audit, no cc.status update, no
+//     notify, no webhook_received_at update).
+//   - terminal-guard (`trustme_status_code NOT IN (3, 9)`) — после
+//     `signed`/`signing_declined` любой stale-webhook с другим status
+//     → 0 affected. Service логирует `stale_webhook_after_terminal`.
+//
+// signed_at / declined_at land alongside trustme_status_code only on the
+// terminal transitions (3 = signed, 9 = signing_declined).
+// webhook_received_at is stamped on every successful match.
+//
+// Returns affected rows count (0 → idempotent or terminal-guard hit, no
+// state-transition / audit / notify follows). Caller wraps the call in a
+// tx alongside cc state-transition and audit insert.
+func (r *contractRepository) UpdateAfterWebhook(ctx context.Context, contractID string, newStatus int) (int, error) {
+	qb := sq.Update(TableContracts).
+		Set(ContractColumnTrustMeStatusCode, newStatus).
+		Set(ContractColumnWebhookReceivedAt, sq.Expr("now()")).
+		Set(ContractColumnUpdatedAt, sq.Expr("now()")).
+		Where(sq.Eq{ContractColumnID: contractID}).
+		Where(sq.NotEq{ContractColumnTrustMeStatusCode: newStatus}).
+		Where(sq.NotEq{ContractColumnTrustMeStatusCode: []int{TrustMeStatusSigned, TrustMeStatusSigningDeclined}})
+	switch newStatus {
+	case TrustMeStatusSigned:
+		qb = qb.Set(ContractColumnSignedAt, sq.Expr("now()"))
+	case TrustMeStatusSigningDeclined:
+		qb = qb.Set(ContractColumnDeclinedAt, sq.Expr("now()"))
+	}
+	n, err := dbutil.Exec(ctx, r.db, qb)
+	if err != nil {
+		return 0, err
+	}
+	return int(n), nil
 }
 
 // GetOrphanRequisites JOIN'ит contracts → campaign_creators → creators по

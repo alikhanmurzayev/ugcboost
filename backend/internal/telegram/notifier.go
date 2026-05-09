@@ -101,17 +101,43 @@ const (
 	campaignInviteWebAppButtonText = "Посмотреть"
 )
 
-// campaignContractSignedText is the post-signing congrat message — sent
-// from chunk 17 once TrustMe confirms the creator signed the contract.
-// Defined here ahead of time so the copy lives in one place and reviewers
-// can audit it before the chunk lands. No notifier method is wired up
-// yet; chunk 17 introduces NotifyCampaignContractSigned and the e2e
-// mirror at the same time.
+// campaignContractSignedText is the post-signing congrat message — sent by
+// chunk 17 webhook once TrustMe confirms the creator signed the contract.
 const campaignContractSignedText = "Ура, мы подписали с вами соглашение ✅ Скоро отправим вам онлайн пригласительный на показы 😍"
 
+// campaignContractDeclinedText — креатору после отказа подписать договор
+// (TrustMe webhook status=9). Стиль одной строкой с эмодзи в конце —
+// симметрично campaignContractSent/Signed Text. Living document, итерируется
+// после первых отправок.
+const campaignContractDeclinedText = "Поняли, в этот раз не подписываем. Если появятся другие подходящие предложения — обязательно вам напишем 💫"
+
 // CampaignContractSignedText exposes the post-signing copy for tests
-// and (later) for the chunk-17 notifier method.
+// and the webhook-service notifier wiring.
 func CampaignContractSignedText() string { return campaignContractSignedText }
+
+// CampaignContractDeclinedText exposes the post-decline copy for tests
+// and the webhook-service notifier wiring.
+func CampaignContractDeclinedText() string { return campaignContractDeclinedText }
+
+// NotifyCampaignContractSigned отправляет креатору поздравительное
+// сообщение после того как TrustMe подтвердил подписание договора. fire-
+// and-forget — стандарт backend-transactions (бот ПОСЛЕ Tx).
+func (n *Notifier) NotifyCampaignContractSigned(ctx context.Context, chatID int64) {
+	n.fire(ctx, "campaign_contract_signed", chatID, &bot.SendMessageParams{
+		ChatID: chatID,
+		Text:   campaignContractSignedText,
+	})
+}
+
+// NotifyCampaignContractDeclined отправляет креатору сообщение после того
+// как TrustMe сообщил об отказе подписать договор (status=9). fire-and-
+// forget — стандарт backend-transactions (бот ПОСЛЕ Tx).
+func (n *Notifier) NotifyCampaignContractDeclined(ctx context.Context, chatID int64) {
+	n.fire(ctx, "campaign_contract_declined", chatID, &bot.SendMessageParams{
+		ChatID: chatID,
+		Text:   campaignContractDeclinedText,
+	})
+}
 
 // campaignContractSentText — креатору после Phase 3 outbox-worker'а: договор
 // ушёл в TrustMe на подпись. Подпись происходит по ссылке, которую TrustMe

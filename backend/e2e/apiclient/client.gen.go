@@ -236,6 +236,11 @@ type ClientInterface interface {
 	// TmaDecline request
 	TmaDecline(ctx context.Context, secretToken TmaSecretTokenPathParam, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// TrustMeWebhookWithBody request with any body
+	TrustMeWebhookWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	TrustMeWebhook(ctx context.Context, body TrustMeWebhookJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// SendPulseInstagramWebhookWithBody request with any body
 	SendPulseInstagramWebhookWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -880,6 +885,30 @@ func (c *Client) TmaAgree(ctx context.Context, secretToken TmaSecretTokenPathPar
 
 func (c *Client) TmaDecline(ctx context.Context, secretToken TmaSecretTokenPathParam, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewTmaDeclineRequest(c.Server, secretToken)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) TrustMeWebhookWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewTrustMeWebhookRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) TrustMeWebhook(ctx context.Context, body TrustMeWebhookJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewTrustMeWebhookRequest(c.Server, body)
 	if err != nil {
 		return nil, err
 	}
@@ -2545,6 +2574,46 @@ func NewTmaDeclineRequest(server string, secretToken TmaSecretTokenPathParam) (*
 	return req, nil
 }
 
+// NewTrustMeWebhookRequest calls the generic TrustMeWebhook builder with application/json body
+func NewTrustMeWebhookRequest(server string, body TrustMeWebhookJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewTrustMeWebhookRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewTrustMeWebhookRequestWithBody generates requests for TrustMeWebhook with any type of body
+func NewTrustMeWebhookRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/trustme/webhook")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 // NewSendPulseInstagramWebhookRequest calls the generic SendPulseInstagramWebhook builder with application/json body
 func NewSendPulseInstagramWebhookRequest(server string, body SendPulseInstagramWebhookJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
@@ -2773,6 +2842,11 @@ type ClientWithResponsesInterface interface {
 
 	// TmaDeclineWithResponse request
 	TmaDeclineWithResponse(ctx context.Context, secretToken TmaSecretTokenPathParam, reqEditors ...RequestEditorFn) (*TmaDeclineResponse, error)
+
+	// TrustMeWebhookWithBodyWithResponse request with any body
+	TrustMeWebhookWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*TrustMeWebhookResponse, error)
+
+	TrustMeWebhookWithResponse(ctx context.Context, body TrustMeWebhookJSONRequestBody, reqEditors ...RequestEditorFn) (*TrustMeWebhookResponse, error)
 
 	// SendPulseInstagramWebhookWithBodyWithResponse request with any body
 	SendPulseInstagramWebhookWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SendPulseInstagramWebhookResponse, error)
@@ -3751,6 +3825,32 @@ func (r TmaDeclineResponse) StatusCode() int {
 	return 0
 }
 
+type TrustMeWebhookResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *EmptyResult
+	JSON401      *EmptyResult
+	JSON404      *ErrorResponse
+	JSON422      *ErrorResponse
+	JSONDefault  *UnexpectedError
+}
+
+// Status returns HTTPResponse.Status
+func (r TrustMeWebhookResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r TrustMeWebhookResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type SendPulseInstagramWebhookResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -4243,6 +4343,23 @@ func (c *ClientWithResponses) TmaDeclineWithResponse(ctx context.Context, secret
 		return nil, err
 	}
 	return ParseTmaDeclineResponse(rsp)
+}
+
+// TrustMeWebhookWithBodyWithResponse request with arbitrary body returning *TrustMeWebhookResponse
+func (c *ClientWithResponses) TrustMeWebhookWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*TrustMeWebhookResponse, error) {
+	rsp, err := c.TrustMeWebhookWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseTrustMeWebhookResponse(rsp)
+}
+
+func (c *ClientWithResponses) TrustMeWebhookWithResponse(ctx context.Context, body TrustMeWebhookJSONRequestBody, reqEditors ...RequestEditorFn) (*TrustMeWebhookResponse, error) {
+	rsp, err := c.TrustMeWebhook(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseTrustMeWebhookResponse(rsp)
 }
 
 // SendPulseInstagramWebhookWithBodyWithResponse request with arbitrary body returning *SendPulseInstagramWebhookResponse
@@ -6144,6 +6261,60 @@ func ParseTmaDeclineResponse(rsp *http.Response) (*TmaDeclineResponse, error) {
 			return nil, err
 		}
 		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON422 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest UnexpectedError
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseTrustMeWebhookResponse parses an HTTP response from a TrustMeWebhookWithResponse call
+func ParseTrustMeWebhookResponse(rsp *http.Response) (*TrustMeWebhookResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &TrustMeWebhookResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest EmptyResult
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest EmptyResult
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
 		var dest ErrorResponse

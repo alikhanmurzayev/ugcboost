@@ -15,13 +15,16 @@ import (
 )
 
 const (
-	contractAllCols            = "created_at, declined_at, id, initiated_at, last_attempted_at, last_error_code, last_error_message, next_retry_at, serial_number, signed_at, subject_kind, trustme_document_id, trustme_short_url, trustme_status_code, updated_at, webhook_received_at"
-	contractInsertSQL          = "INSERT INTO contracts (subject_kind,trustme_status_code) VALUES ($1,$2) RETURNING " + contractAllCols
-	contractClaimSQL           = "SELECT cc.id, cc.campaign_id, cc.creator_id, cr.iin, cr.last_name, cr.first_name, cr.middle_name, cr.phone, c.contract_template_pdf FROM campaign_creators cc JOIN campaigns c ON c.id = cc.campaign_id JOIN creators cr ON cr.id = cc.creator_id WHERE cc.status = $1 AND cc.contract_id IS NULL AND c.is_deleted = $2 AND length(c.contract_template_pdf) > 0 ORDER BY cc.decided_at ASC LIMIT 4 FOR UPDATE OF cc SKIP LOCKED"
-	contractOrphanSQL          = "SELECT id, unsigned_pdf_content FROM contracts WHERE subject_kind = $1 AND trustme_document_id IS NULL AND (next_retry_at IS NULL OR next_retry_at <= now()) ORDER BY next_retry_at ASC NULLS FIRST, initiated_at ASC LIMIT 8"
-	contractUpdateUnsignedSQL  = "UPDATE contracts SET unsigned_pdf_content = $1, updated_at = now() WHERE id = $2"
-	contractUpdateAfterSendSQL = "UPDATE contracts SET trustme_document_id = $1, trustme_short_url = $2, trustme_status_code = $3, updated_at = now() WHERE id = $4 AND trustme_document_id IS NULL"
-	contractRecordFailedSQL    = "UPDATE contracts SET last_error_code = $1, last_error_message = $2, last_attempted_at = now(), next_retry_at = $3, updated_at = now() WHERE id = $4"
+	contractAllCols              = "created_at, declined_at, id, initiated_at, last_attempted_at, last_error_code, last_error_message, next_retry_at, serial_number, signed_at, subject_kind, trustme_document_id, trustme_short_url, trustme_status_code, updated_at, webhook_received_at"
+	contractInsertSQL            = "INSERT INTO contracts (subject_kind,trustme_status_code) VALUES ($1,$2) RETURNING " + contractAllCols
+	contractClaimSQL             = "SELECT cc.id, cc.campaign_id, cc.creator_id, cr.iin, cr.last_name, cr.first_name, cr.middle_name, cr.phone, c.contract_template_pdf FROM campaign_creators cc JOIN campaigns c ON c.id = cc.campaign_id JOIN creators cr ON cr.id = cc.creator_id WHERE cc.status = $1 AND cc.contract_id IS NULL AND c.is_deleted = $2 AND length(c.contract_template_pdf) > 0 ORDER BY cc.decided_at ASC LIMIT 4 FOR UPDATE OF cc SKIP LOCKED"
+	contractOrphanSQL            = "SELECT id, unsigned_pdf_content FROM contracts WHERE subject_kind = $1 AND trustme_document_id IS NULL AND (next_retry_at IS NULL OR next_retry_at <= now()) ORDER BY next_retry_at ASC NULLS FIRST, initiated_at ASC LIMIT 8"
+	contractUpdateUnsignedSQL    = "UPDATE contracts SET unsigned_pdf_content = $1, updated_at = now() WHERE id = $2"
+	contractUpdateAfterSendSQL   = "UPDATE contracts SET trustme_document_id = $1, trustme_short_url = $2, trustme_status_code = $3, updated_at = now() WHERE id = $4 AND trustme_document_id IS NULL"
+	contractRecordFailedSQL      = "UPDATE contracts SET last_error_code = $1, last_error_message = $2, last_attempted_at = now(), next_retry_at = $3, updated_at = now() WHERE id = $4"
+	contractLockByDocSQL         = "SELECT " + contractAllCols + " FROM contracts WHERE trustme_document_id = $1 FOR UPDATE"
+	contractWebhookUpdateBaseSQL = "UPDATE contracts SET trustme_status_code = $1, webhook_received_at = now(), updated_at = now()"
+	contractWebhookGuardSQL      = " WHERE id = $2 AND trustme_status_code <> $3 AND trustme_status_code NOT IN ($4,$5)"
 )
 
 var contractRowCols = []string{
@@ -383,6 +386,132 @@ func TestContractRepository_RecordFailedAttempt(t *testing.T) {
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "db down")
 		require.NotErrorIs(t, err, sql.ErrNoRows)
+	})
+}
+
+func TestContractRepository_LockByTrustMeDocumentID(t *testing.T) {
+	t.Parallel()
+
+	t.Run("scans full row", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &contractRepository{db: mock}
+		now := time.Date(2026, 5, 9, 12, 0, 0, 0, time.UTC)
+		docID := "doc-xyz"
+		shortURL := "https://tct.kz/uploader/doc-xyz"
+
+		mock.ExpectQuery(contractLockByDocSQL).
+			WithArgs(docID).
+			WillReturnRows(pgxmock.NewRows(contractRowCols).
+				AddRow(now, (*time.Time)(nil), "ct-1", now,
+					(*time.Time)(nil), (*string)(nil), (*string)(nil), (*time.Time)(nil),
+					int64(7), (*time.Time)(nil), ContractSubjectKindCampaignCreator,
+					&docID, &shortURL, 0, now, (*time.Time)(nil)))
+
+		got, err := repo.LockByTrustMeDocumentID(context.Background(), docID)
+		require.NoError(t, err)
+		require.Equal(t, "ct-1", got.ID)
+		require.NotNil(t, got.TrustMeDocumentID)
+		require.Equal(t, docID, *got.TrustMeDocumentID)
+	})
+
+	t.Run("not found returns sql.ErrNoRows", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &contractRepository{db: mock}
+
+		mock.ExpectQuery(contractLockByDocSQL).
+			WithArgs("doc-missing").
+			WillReturnRows(pgxmock.NewRows(contractRowCols))
+
+		_, err := repo.LockByTrustMeDocumentID(context.Background(), "doc-missing")
+		require.ErrorIs(t, err, sql.ErrNoRows)
+	})
+
+	t.Run("propagates other errors", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &contractRepository{db: mock}
+
+		mock.ExpectQuery(contractLockByDocSQL).
+			WithArgs("doc-1").
+			WillReturnError(errors.New("db down"))
+
+		_, err := repo.LockByTrustMeDocumentID(context.Background(), "doc-1")
+		require.ErrorContains(t, err, "db down")
+	})
+}
+
+func TestContractRepository_UpdateAfterWebhook(t *testing.T) {
+	t.Parallel()
+
+	t.Run("status=3 stamps signed_at and matches one row", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &contractRepository{db: mock}
+
+		mock.ExpectExec(contractWebhookUpdateBaseSQL+", signed_at = now()"+contractWebhookGuardSQL).
+			WithArgs(3, "ct-1", 3, 3, 9).
+			WillReturnResult(pgxmock.NewResult("UPDATE", 1))
+
+		n, err := repo.UpdateAfterWebhook(context.Background(), "ct-1", 3)
+		require.NoError(t, err)
+		require.Equal(t, 1, n)
+	})
+
+	t.Run("status=9 stamps declined_at", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &contractRepository{db: mock}
+
+		mock.ExpectExec(contractWebhookUpdateBaseSQL+", declined_at = now()"+contractWebhookGuardSQL).
+			WithArgs(9, "ct-1", 9, 3, 9).
+			WillReturnResult(pgxmock.NewResult("UPDATE", 1))
+
+		n, err := repo.UpdateAfterWebhook(context.Background(), "ct-1", 9)
+		require.NoError(t, err)
+		require.Equal(t, 1, n)
+	})
+
+	t.Run("intermediate status omits signed_at/declined_at", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &contractRepository{db: mock}
+
+		mock.ExpectExec(contractWebhookUpdateBaseSQL+contractWebhookGuardSQL).
+			WithArgs(2, "ct-1", 2, 3, 9).
+			WillReturnResult(pgxmock.NewResult("UPDATE", 1))
+
+		n, err := repo.UpdateAfterWebhook(context.Background(), "ct-1", 2)
+		require.NoError(t, err)
+		require.Equal(t, 1, n)
+	})
+
+	t.Run("idempotent — same status returns 0 affected without error", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &contractRepository{db: mock}
+
+		mock.ExpectExec(contractWebhookUpdateBaseSQL+", signed_at = now()"+contractWebhookGuardSQL).
+			WithArgs(3, "ct-1", 3, 3, 9).
+			WillReturnResult(pgxmock.NewResult("UPDATE", 0))
+
+		n, err := repo.UpdateAfterWebhook(context.Background(), "ct-1", 3)
+		require.NoError(t, err)
+		require.Equal(t, 0, n)
+	})
+
+	t.Run("propagates db errors", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &contractRepository{db: mock}
+
+		mock.ExpectExec(contractWebhookUpdateBaseSQL+contractWebhookGuardSQL).
+			WithArgs(1, "ct-1", 1, 3, 9).
+			WillReturnError(errors.New("db down"))
+
+		_, err := repo.UpdateAfterWebhook(context.Background(), "ct-1", 1)
+		require.ErrorContains(t, err, "db down")
 	})
 }
 

@@ -711,3 +711,114 @@ func TestCampaignCreatorRepository_GetByContractID(t *testing.T) {
 		require.ErrorIs(t, err, sql.ErrNoRows)
 	})
 }
+
+func TestCampaignCreatorRepository_GetWithCampaignAndCreatorByContractID(t *testing.T) {
+	t.Parallel()
+
+	const sqlStmt = "SELECT cc.id, cc.status, c.is_deleted, cr.telegram_user_id FROM campaign_creators cc JOIN campaigns c ON c.id = cc.campaign_id JOIN creators cr ON cr.id = cc.creator_id WHERE cc.contract_id = $1"
+
+	t.Run("scans projected columns", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &campaignCreatorRepository{db: mock}
+
+		mock.ExpectQuery(sqlStmt).
+			WithArgs("ct-1").
+			WillReturnRows(pgxmock.NewRows([]string{"id", "status", "is_deleted", "telegram_user_id"}).
+				AddRow("cc-1", domain.CampaignCreatorStatusSigning, false, int64(123456789)))
+
+		got, err := repo.GetWithCampaignAndCreatorByContractID(context.Background(), "ct-1")
+		require.NoError(t, err)
+		require.Equal(t, &CampaignCreatorWebhookView{
+			CampaignCreatorID:     "cc-1",
+			CampaignCreatorStatus: domain.CampaignCreatorStatusSigning,
+			CampaignIsDeleted:     false,
+			CreatorTelegramUserID: 123456789,
+		}, got)
+	})
+
+	t.Run("soft-deleted campaign returns is_deleted=true", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &campaignCreatorRepository{db: mock}
+
+		mock.ExpectQuery(sqlStmt).
+			WithArgs("ct-2").
+			WillReturnRows(pgxmock.NewRows([]string{"id", "status", "is_deleted", "telegram_user_id"}).
+				AddRow("cc-2", domain.CampaignCreatorStatusSigning, true, int64(42)))
+
+		got, err := repo.GetWithCampaignAndCreatorByContractID(context.Background(), "ct-2")
+		require.NoError(t, err)
+		require.True(t, got.CampaignIsDeleted)
+	})
+
+	t.Run("not found returns sql.ErrNoRows", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &campaignCreatorRepository{db: mock}
+
+		mock.ExpectQuery(sqlStmt).
+			WithArgs("missing").
+			WillReturnRows(pgxmock.NewRows([]string{"id", "status", "is_deleted", "telegram_user_id"}))
+
+		_, err := repo.GetWithCampaignAndCreatorByContractID(context.Background(), "missing")
+		require.ErrorIs(t, err, sql.ErrNoRows)
+	})
+
+	t.Run("propagates db errors", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &campaignCreatorRepository{db: mock}
+
+		mock.ExpectQuery(sqlStmt).
+			WithArgs("ct-1").
+			WillReturnError(errors.New("db down"))
+
+		_, err := repo.GetWithCampaignAndCreatorByContractID(context.Background(), "ct-1")
+		require.ErrorContains(t, err, "db down")
+	})
+}
+
+func TestCampaignCreatorRepository_UpdateStatus(t *testing.T) {
+	t.Parallel()
+
+	const sqlStmt = "UPDATE campaign_creators SET status = $1, updated_at = now() WHERE id = $2"
+
+	t.Run("success", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &campaignCreatorRepository{db: mock}
+
+		mock.ExpectExec(sqlStmt).
+			WithArgs(domain.CampaignCreatorStatusSigned, "cc-1").
+			WillReturnResult(pgxmock.NewResult("UPDATE", 1))
+
+		require.NoError(t, repo.UpdateStatus(context.Background(), "cc-1", domain.CampaignCreatorStatusSigned))
+	})
+
+	t.Run("missing row returns sql.ErrNoRows", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &campaignCreatorRepository{db: mock}
+
+		mock.ExpectExec(sqlStmt).
+			WithArgs(domain.CampaignCreatorStatusSigningDeclined, "cc-missing").
+			WillReturnResult(pgxmock.NewResult("UPDATE", 0))
+
+		err := repo.UpdateStatus(context.Background(), "cc-missing", domain.CampaignCreatorStatusSigningDeclined)
+		require.ErrorIs(t, err, sql.ErrNoRows)
+	})
+
+	t.Run("propagates db errors", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &campaignCreatorRepository{db: mock}
+
+		mock.ExpectExec(sqlStmt).
+			WithArgs(domain.CampaignCreatorStatusSigned, "cc-1").
+			WillReturnError(errors.New("db down"))
+
+		err := repo.UpdateStatus(context.Background(), "cc-1", domain.CampaignCreatorStatusSigned)
+		require.ErrorContains(t, err, "db down")
+	})
+}
