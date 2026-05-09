@@ -196,6 +196,7 @@ func (s *ContractSenderService) finalizeKnownOrphan(ctx context.Context, contrac
 	}
 	s.logger.Info(ctx, "contract: phase 0 recovered known document",
 		"contract_id", contractID, "trustme_document_id", search.DocumentID)
+	s.notifyCreator(ctx, requisites.CreatorID, search.ShortURL)
 }
 
 func (s *ContractSenderService) resendOrphan(ctx context.Context, contractID string, unsignedPDF []byte) {

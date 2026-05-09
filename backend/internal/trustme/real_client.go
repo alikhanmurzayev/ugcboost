@@ -9,6 +9,7 @@ import (
 	"io"
 	"mime/multipart"
 	"net/http"
+	"sort"
 	"strings"
 	"time"
 
@@ -130,8 +131,12 @@ func (c *RealClient) SendToSign(ctx context.Context, in SendToSignInput) (*SendT
 		return nil, fmt.Errorf("trustme: close multipart: %w", err)
 	}
 
+	// auto_sign=1 — компания-инициатор (UGCBoost, зашита в токен) подписывает
+	// документ автоматически после загрузки. Платный функционал TrustMe,
+	// согласован с ними; без согласования вернётся 1219 (blueprint § Отправка
+	// документа с автоподписанием).
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
-		c.baseURL+"/SendToSignBase64FileExt/pdf", &body)
+		c.baseURL+"/SendToSignBase64FileExt/pdf?auto_sign=1", &body)
 	if err != nil {
 		return nil, fmt.Errorf("trustme: build send-to-sign request: %w", err)
 	}
@@ -162,7 +167,14 @@ func (c *RealClient) SendToSign(ctx context.Context, in SendToSignInput) (*SendT
 		return nil, fmt.Errorf("trustme: unmarshal send-to-sign data: %w", err)
 	}
 	if data.DocumentID == "" {
-		return nil, errors.New("trustme: send-to-sign returned empty document_id")
+		// Diagnostic: если TrustMe вернул success-wrapper без document_id, важно
+		// видеть, что именно лежит в data — возможно поле называется иначе или
+		// прислано пустым. Логируем имена ключей + technical поля, без значений
+		// (security.md: PII-фрейминг — не пробрасываем сырой body, который
+		// потенциально содержит echo Requisites).
+		dataKeys := dataObjectKeys(wrapper.Data)
+		return nil, fmt.Errorf("trustme: send-to-sign returned empty document_id (status=%q errorText=%q url=%q fileName=%q dataKeys=%v)",
+			wrapper.Status, wrapper.ErrorText, data.URL, data.FileName, dataKeys)
 	}
 	return &SendToSignResult{
 		DocumentID: data.DocumentID,
@@ -285,4 +297,21 @@ func truncate(b []byte) string {
 		return string(b[:max]) + "…"
 	}
 	return string(b)
+}
+
+// dataObjectKeys возвращает отсортированные ключи top-level JSON object'а из
+// raw. Если raw — не object (например []), возвращает пустой слайс. Используется
+// в diagnostic-error при empty document_id, чтобы увидеть, под каким именем
+// TrustMe прислал ID, не светя при этом значения (PII-safety).
+func dataObjectKeys(raw json.RawMessage) []string {
+	var m map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &m); err != nil {
+		return nil
+	}
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
 }

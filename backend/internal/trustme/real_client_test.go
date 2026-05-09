@@ -18,11 +18,13 @@ func TestRealClient_SendToSign(t *testing.T) {
 
 	t.Run("success parses response", func(t *testing.T) {
 		t.Parallel()
-		var receivedToken, receivedContentType string
+		var receivedToken, receivedContentType, receivedPath, receivedQuery string
 		var receivedBody []byte
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			receivedToken = r.Header.Get("Authorization")
 			receivedContentType = r.Header.Get("Content-Type")
+			receivedPath = r.URL.Path
+			receivedQuery = r.URL.RawQuery
 			receivedBody, _ = io.ReadAll(r.Body)
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write([]byte(`{
@@ -49,6 +51,8 @@ func TestRealClient_SendToSign(t *testing.T) {
 		}, got)
 		require.Equal(t, "tokenZ", receivedToken)
 		require.True(t, strings.HasPrefix(receivedContentType, "multipart/form-data"))
+		require.Equal(t, "/SendToSignBase64FileExt/pdf", receivedPath)
+		require.Equal(t, "auto_sign=1", receivedQuery)
 		require.Contains(t, string(receivedBody), `"FIO":"Иванов Иван"`)
 		require.Contains(t, string(receivedBody), `"IIN_BIN":"880101300123"`)
 		require.Contains(t, string(receivedBody), `"PhoneNumber":"+77071234567"`)
@@ -90,6 +94,29 @@ func TestRealClient_SendToSign(t *testing.T) {
 		})
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "503")
+	})
+
+	t.Run("empty document_id surfaces data keys for diagnostics", func(t *testing.T) {
+		t.Parallel()
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{
+				"status":"Ok","errorText":"",
+				"data":{"url":"https://t.tct.kz/uploader/x","document_id":"","fileName":"x.pdf","extraField":"value"}
+			}`))
+		}))
+		defer srv.Close()
+		client := NewRealClient(srv.URL, "tk", srv.Client())
+		_, err := client.SendToSign(context.Background(), SendToSignInput{
+			PDFBase64: "x", AdditionalInfo: "ct-empty", ContractName: "x",
+			Requisites: []Requisite{{FIO: "x", IINBIN: "1", PhoneNumber: "+77"}},
+		})
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "empty document_id")
+		require.Contains(t, err.Error(), "document_id")
+		require.Contains(t, err.Error(), "extraField")
+		require.Contains(t, err.Error(), "x.pdf")
+		require.Contains(t, err.Error(), "https://t.tct.kz/uploader/x")
 	})
 }
 
