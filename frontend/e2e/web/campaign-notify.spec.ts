@@ -12,6 +12,17 @@
  * нашей спиной — фронт показывает inline-validation-error и подтягивает
  * актуальный статус через invalidate).
  *
+ * Chunk 15 расширяет happy-path test'ом счётчиков и timestamps попыток:
+ * после notify в `invited`-секции должны быть видны `invited-count={creatorId}`
+ * со значением `1` и непустой `invited-at={creatorId}`; следом тест жмёт
+ * remind на одного из приглашённых и проверяет, что соответствующие
+ * `reminded-count={creatorId}` и `reminded-at={creatorId}` заполнились
+ * (count = `1`, at — непустая отформатированная дата). Это локирует ключевой
+ * UX-инвариант: admin никогда не должен потерять знание, давно ли молчит
+ * приглашённый креатор и пора ли слать ремайндер. Decided-сценарии
+ * (declined/agreed) покрываются отдельным spec'ом chunk 14 после мержа TMA-
+ * flow.
+ *
  * Setup на каждый тест: seed админа, трёх одобренных креаторов с уникальным
  * runId-префиксом в lastName (чтобы параллельные воркеры не пересекались по
  * списку креаторов), кампания через A1, добавление троих в кампанию через
@@ -138,6 +149,28 @@ test.describe("Admin campaign notify — chunk 13", () => {
       plannedGroup.getByTestId(`row-${creatorC.creatorId}`),
     ).toBeVisible();
 
+    // Counter columns are now visible in the invited section: each notified
+    // creator has invitedCount=1 + a non-empty invitedAt. remindedCount stays
+    // 0 with an em-dash timestamp until remind fires.
+    await expect(
+      page.getByTestId(`campaign-creator-invited-count-${creatorA.creatorId}`),
+    ).toHaveText("1");
+    await expect(
+      page.getByTestId(`campaign-creator-invited-at-${creatorA.creatorId}`),
+    ).not.toHaveText("—");
+    await expect(
+      page.getByTestId(`campaign-creator-invited-count-${creatorB.creatorId}`),
+    ).toHaveText("1");
+    await expect(
+      page.getByTestId(`campaign-creator-invited-at-${creatorB.creatorId}`),
+    ).not.toHaveText("—");
+    await expect(
+      page.getByTestId(`campaign-creator-reminded-count-${creatorA.creatorId}`),
+    ).toHaveText("0");
+    await expect(
+      page.getByTestId(`campaign-creator-reminded-at-${creatorA.creatorId}`),
+    ).toHaveText("—");
+
     // Selection cleared, button disabled again after onSettled.
     await expect(
       page.getByTestId(`campaign-creator-checkbox-${creatorC.creatorId}`),
@@ -145,6 +178,72 @@ test.describe("Admin campaign notify — chunk 13", () => {
     await expect(
       page.getByTestId("campaign-creators-group-action-planned"),
     ).toBeDisabled();
+  });
+
+  test("Remind в invited: ремайндер обновляет reminded-count и reminded-at", async ({
+    page,
+    request,
+  }) => {
+    const { admin, adminToken, creatorA, creatorB, creatorC, campaign } =
+      await setupNotify(request, cleanupStack);
+
+    for (const c of [creatorA, creatorB, creatorC]) {
+      await registerFakeChat(request, API_URL, c.telegram.telegramUserId);
+    }
+
+    // Pre-flip A and B to invited via admin API — keeps the UI test focused
+    // on remind without re-driving the full notify flow through the page.
+    await notifyAsAdmin(
+      request,
+      API_URL,
+      campaign.campaignId,
+      [creatorA.creatorId, creatorB.creatorId],
+      adminToken,
+    );
+
+    await loginAs(page, admin.email, admin.password);
+    await page.goto(`/campaigns/${campaign.campaignId}`);
+
+    const invitedGroup = page.getByTestId("campaign-creators-group-invited");
+    await expect(invitedGroup).toBeVisible();
+    await expect(
+      invitedGroup.getByTestId(`row-${creatorA.creatorId}`),
+    ).toBeVisible();
+
+    // Pre-remind state: invited counters set, reminded counters still zeroed.
+    await expect(
+      page.getByTestId(`campaign-creator-invited-count-${creatorA.creatorId}`),
+    ).toHaveText("1");
+    await expect(
+      page.getByTestId(`campaign-creator-reminded-count-${creatorA.creatorId}`),
+    ).toHaveText("0");
+    await expect(
+      page.getByTestId(`campaign-creator-reminded-at-${creatorA.creatorId}`),
+    ).toHaveText("—");
+
+    await page
+      .getByTestId(`campaign-creator-checkbox-${creatorA.creatorId}`)
+      .check();
+    await page.getByTestId("campaign-creators-group-action-invited").click();
+
+    await expect(
+      page.getByTestId("campaign-creators-group-result-invited-success"),
+    ).toContainText("Доставлен 1");
+
+    // After remind: A's reminded-* are now populated; B (untouched) still has
+    // reminded-count=0 — proves the increment is targeted, not bulk.
+    await expect(
+      page.getByTestId(`campaign-creator-reminded-count-${creatorA.creatorId}`),
+    ).toHaveText("1");
+    await expect(
+      page.getByTestId(`campaign-creator-reminded-at-${creatorA.creatorId}`),
+    ).not.toHaveText("—");
+    await expect(
+      page.getByTestId(`campaign-creator-reminded-count-${creatorB.creatorId}`),
+    ).toHaveText("0");
+    await expect(
+      page.getByTestId(`campaign-creator-reminded-at-${creatorB.creatorId}`),
+    ).toHaveText("—");
   });
 
   test("Partial-success: один в undelivered с именем и причиной bot_blocked", async ({

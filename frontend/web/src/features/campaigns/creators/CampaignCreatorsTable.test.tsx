@@ -11,7 +11,10 @@ const CAMPAIGN_ID = "11111111-1111-1111-1111-111111111111";
 const CREATOR_A = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
 const CREATOR_B = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb";
 
-function makeCC(creatorId: string): CampaignCreator {
+function makeCC(
+  creatorId: string,
+  overrides: Partial<CampaignCreator> = {},
+): CampaignCreator {
   return {
     id: `cc-${creatorId}`,
     campaignId: CAMPAIGN_ID,
@@ -24,6 +27,7 @@ function makeCC(creatorId: string): CampaignCreator {
     decidedAt: null,
     createdAt: "2026-05-07T12:00:00Z",
     updatedAt: "2026-05-07T12:00:00Z",
+    ...overrides,
   };
 }
 
@@ -50,6 +54,7 @@ describe("CampaignCreatorsTable", () => {
     render(
       <CampaignCreatorsTable
         rows={[]}
+        status="planned"
         onRowClick={() => {}}
         emptyMessage="Креаторов пока нет"
       />,
@@ -70,6 +75,7 @@ describe("CampaignCreatorsTable", () => {
     render(
       <CampaignCreatorsTable
         rows={rows}
+        status="planned"
         onRowClick={() => {}}
         emptyMessage=""
       />,
@@ -87,7 +93,12 @@ describe("CampaignCreatorsTable", () => {
     };
 
     render(
-      <CampaignCreatorsTable rows={[row]} onRowClick={onRowClick} emptyMessage="" />,
+      <CampaignCreatorsTable
+        rows={[row]}
+        status="planned"
+        onRowClick={onRowClick}
+        emptyMessage=""
+      />,
     );
 
     await userEvent.click(screen.getByTestId(`row-${CREATOR_A}`));
@@ -104,6 +115,7 @@ describe("CampaignCreatorsTable", () => {
     render(
       <CampaignCreatorsTable
         rows={rows}
+        status="planned"
         onRowClick={() => {}}
         selectedKey={CREATOR_A}
         emptyMessage=""
@@ -126,7 +138,12 @@ describe("CampaignCreatorsTable", () => {
     ];
 
     render(
-      <CampaignCreatorsTable rows={rows} onRowClick={() => {}} emptyMessage="" />,
+      <CampaignCreatorsTable
+        rows={rows}
+        status="planned"
+        onRowClick={() => {}}
+        emptyMessage=""
+      />,
     );
 
     const fullName = screen.getByTestId(
@@ -142,7 +159,12 @@ describe("CampaignCreatorsTable", () => {
     ];
 
     render(
-      <CampaignCreatorsTable rows={rows} onRowClick={() => {}} emptyMessage="" />,
+      <CampaignCreatorsTable
+        rows={rows}
+        status="planned"
+        onRowClick={() => {}}
+        emptyMessage=""
+      />,
     );
 
     expect(
@@ -159,6 +181,7 @@ describe("CampaignCreatorsTable", () => {
     render(
       <CampaignCreatorsTable
         rows={rows}
+        status="planned"
         onRowClick={() => {}}
         onRemove={() => {}}
         emptyMessage=""
@@ -187,6 +210,7 @@ describe("CampaignCreatorsTable", () => {
     render(
       <CampaignCreatorsTable
         rows={[row]}
+        status="planned"
         onRowClick={onRowClick}
         onRemove={onRemove}
         emptyMessage=""
@@ -213,6 +237,7 @@ describe("CampaignCreatorsTable", () => {
     render(
       <CampaignCreatorsTable
         rows={[row]}
+        status="planned"
         onRowClick={onRowClick}
         onRemove={onRemove}
         emptyMessage=""
@@ -231,7 +256,12 @@ describe("CampaignCreatorsTable", () => {
     ];
 
     render(
-      <CampaignCreatorsTable rows={rows} onRowClick={() => {}} emptyMessage="" />,
+      <CampaignCreatorsTable
+        rows={rows}
+        status="planned"
+        onRowClick={() => {}}
+        emptyMessage=""
+      />,
     );
 
     const row = screen.getByTestId(`row-${CREATOR_A}`);
@@ -258,7 +288,12 @@ describe("CampaignCreatorsTable", () => {
     ];
 
     render(
-      <CampaignCreatorsTable rows={rows} onRowClick={() => {}} emptyMessage="" />,
+      <CampaignCreatorsTable
+        rows={rows}
+        status="planned"
+        onRowClick={() => {}}
+        emptyMessage=""
+      />,
     );
 
     const row = screen.getByTestId(`row-${CREATOR_A}`);
@@ -281,7 +316,12 @@ describe("CampaignCreatorsTable — selection", () => {
     ];
 
     render(
-      <CampaignCreatorsTable rows={rows} onRowClick={() => {}} emptyMessage="" />,
+      <CampaignCreatorsTable
+        rows={rows}
+        status="planned"
+        onRowClick={() => {}}
+        emptyMessage=""
+      />,
     );
 
     expect(
@@ -298,6 +338,7 @@ describe("CampaignCreatorsTable — selection", () => {
     render(
       <CampaignCreatorsTable
         rows={rows}
+        status="planned"
         onRowClick={() => {}}
         emptyMessage=""
         checkedCreatorIds={new Set([CREATOR_A])}
@@ -327,6 +368,7 @@ describe("CampaignCreatorsTable — selection", () => {
     render(
       <CampaignCreatorsTable
         rows={rows}
+        status="planned"
         onRowClick={onRowClick}
         emptyMessage=""
         checkedCreatorIds={new Set()}
@@ -352,6 +394,7 @@ describe("CampaignCreatorsTable — selection", () => {
     render(
       <CampaignCreatorsTable
         rows={rows}
+        status="planned"
         onRowClick={() => {}}
         emptyMessage=""
         checkedCreatorIds={new Set()}
@@ -376,6 +419,7 @@ describe("CampaignCreatorsTable — selection", () => {
     render(
       <CampaignCreatorsTable
         rows={rows}
+        status="planned"
         onRowClick={() => {}}
         emptyMessage=""
         checkedCreatorIds={new Set([CREATOR_A])}
@@ -399,6 +443,7 @@ describe("CampaignCreatorsTable — selection", () => {
     render(
       <CampaignCreatorsTable
         rows={rows}
+        status="planned"
         onRowClick={() => {}}
         emptyMessage=""
         checkedCreatorIds={new Set([CREATOR_A])}
@@ -423,6 +468,7 @@ describe("CampaignCreatorsTable — selection", () => {
     render(
       <CampaignCreatorsTable
         rows={rows}
+        status="planned"
         onRowClick={onRowClick}
         emptyMessage=""
         checkedCreatorIds={new Set()}
@@ -440,6 +486,214 @@ describe("CampaignCreatorsTable — selection", () => {
       "data-selected",
       "false",
     );
+  });
+});
+
+describe("CampaignCreatorsTable — counter columns by status", () => {
+  it("planned: no counter/timestamp cells in DOM", () => {
+    const rows: CampaignCreatorRow[] = [
+      {
+        campaignCreator: makeCC(CREATOR_A),
+        creator: makeCreator(CREATOR_A, "Иванова"),
+      },
+    ];
+
+    render(
+      <CampaignCreatorsTable
+        rows={rows}
+        status="planned"
+        onRowClick={() => {}}
+        emptyMessage=""
+      />,
+    );
+
+    expect(
+      screen.queryByTestId(`campaign-creator-invited-count-${CREATOR_A}`),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId(`campaign-creator-invited-at-${CREATOR_A}`),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId(`campaign-creator-reminded-count-${CREATOR_A}`),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId(`campaign-creator-reminded-at-${CREATOR_A}`),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId(`campaign-creator-decided-at-${CREATOR_A}`),
+    ).not.toBeInTheDocument();
+  });
+
+  it("invited (после первого notify): 4 cells with values, 0-remindedCount and null remindedAt render literal '0' and em-dash", () => {
+    const rows: CampaignCreatorRow[] = [
+      {
+        campaignCreator: makeCC(CREATOR_A, {
+          status: "invited",
+          invitedCount: 1,
+          invitedAt: "2026-05-06T14:30:00Z",
+          remindedCount: 0,
+          remindedAt: null,
+        }),
+        creator: makeCreator(CREATOR_A, "Иванова"),
+      },
+    ];
+
+    render(
+      <CampaignCreatorsTable
+        rows={rows}
+        status="invited"
+        onRowClick={() => {}}
+        emptyMessage=""
+      />,
+    );
+
+    expect(
+      screen.getByTestId(`campaign-creator-invited-count-${CREATOR_A}`),
+    ).toHaveTextContent("1");
+    expect(
+      screen.getByTestId(`campaign-creator-invited-at-${CREATOR_A}`),
+    ).toHaveTextContent(/6 мая/);
+    expect(
+      screen.getByTestId(`campaign-creator-reminded-count-${CREATOR_A}`),
+    ).toHaveTextContent("0");
+    expect(
+      screen.getByTestId(`campaign-creator-reminded-at-${CREATOR_A}`),
+    ).toHaveTextContent("—");
+    // No decided column for invited.
+    expect(
+      screen.queryByTestId(`campaign-creator-decided-at-${CREATOR_A}`),
+    ).not.toBeInTheDocument();
+  });
+
+  it("invited (после remind): reminded cells reflect new count + non-empty timestamp", () => {
+    const rows: CampaignCreatorRow[] = [
+      {
+        campaignCreator: makeCC(CREATOR_A, {
+          status: "invited",
+          invitedCount: 1,
+          invitedAt: "2026-05-06T14:30:00Z",
+          remindedCount: 2,
+          remindedAt: "2026-05-07T11:00:00Z",
+        }),
+        creator: makeCreator(CREATOR_A, "Иванова"),
+      },
+    ];
+
+    render(
+      <CampaignCreatorsTable
+        rows={rows}
+        status="invited"
+        onRowClick={() => {}}
+        emptyMessage=""
+      />,
+    );
+
+    expect(
+      screen.getByTestId(`campaign-creator-reminded-count-${CREATOR_A}`),
+    ).toHaveTextContent("2");
+    expect(
+      screen.getByTestId(`campaign-creator-reminded-at-${CREATOR_A}`),
+    ).toHaveTextContent(/7 мая/);
+  });
+
+  it("declined: only invitedCount + decidedAt cells render; reminded columns absent", () => {
+    const rows: CampaignCreatorRow[] = [
+      {
+        campaignCreator: makeCC(CREATOR_A, {
+          status: "declined",
+          invitedCount: 2,
+          invitedAt: "2026-05-06T14:30:00Z",
+          decidedAt: "2026-05-08T10:00:00Z",
+        }),
+        creator: makeCreator(CREATOR_A, "Иванова"),
+      },
+    ];
+
+    render(
+      <CampaignCreatorsTable
+        rows={rows}
+        status="declined"
+        onRowClick={() => {}}
+        emptyMessage=""
+      />,
+    );
+
+    expect(
+      screen.getByTestId(`campaign-creator-invited-count-${CREATOR_A}`),
+    ).toHaveTextContent("2");
+    expect(
+      screen.getByTestId(`campaign-creator-decided-at-${CREATOR_A}`),
+    ).toHaveTextContent(/8 мая/);
+    expect(
+      screen.queryByTestId(`campaign-creator-invited-at-${CREATOR_A}`),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId(`campaign-creator-reminded-count-${CREATOR_A}`),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByTestId(`campaign-creator-reminded-at-${CREATOR_A}`),
+    ).not.toBeInTheDocument();
+  });
+
+  it("agreed: same layout as declined — invitedCount + decidedAt only", () => {
+    const rows: CampaignCreatorRow[] = [
+      {
+        campaignCreator: makeCC(CREATOR_A, {
+          status: "agreed",
+          invitedCount: 1,
+          invitedAt: "2026-05-06T14:30:00Z",
+          decidedAt: "2026-05-08T10:00:00Z",
+        }),
+        creator: makeCreator(CREATOR_A, "Иванова"),
+      },
+    ];
+
+    render(
+      <CampaignCreatorsTable
+        rows={rows}
+        status="agreed"
+        onRowClick={() => {}}
+        emptyMessage=""
+      />,
+    );
+
+    expect(
+      screen.getByTestId(`campaign-creator-invited-count-${CREATOR_A}`),
+    ).toHaveTextContent("1");
+    expect(
+      screen.getByTestId(`campaign-creator-decided-at-${CREATOR_A}`),
+    ).toHaveTextContent(/8 мая/);
+    expect(
+      screen.queryByTestId(`campaign-creator-reminded-count-${CREATOR_A}`),
+    ).not.toBeInTheDocument();
+  });
+
+  it("invited: invalid invitedAt ISO falls back to em-dash without crash", () => {
+    const rows: CampaignCreatorRow[] = [
+      {
+        campaignCreator: makeCC(CREATOR_A, {
+          status: "invited",
+          invitedCount: 1,
+          invitedAt: "not-a-date",
+          remindedCount: 0,
+          remindedAt: null,
+        }),
+        creator: makeCreator(CREATOR_A, "Иванова"),
+      },
+    ];
+
+    render(
+      <CampaignCreatorsTable
+        rows={rows}
+        status="invited"
+        onRowClick={() => {}}
+        emptyMessage=""
+      />,
+    );
+
+    expect(
+      screen.getByTestId(`campaign-creator-invited-at-${CREATOR_A}`),
+    ).toHaveTextContent("—");
   });
 });
 

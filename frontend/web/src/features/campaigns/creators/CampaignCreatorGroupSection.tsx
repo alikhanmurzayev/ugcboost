@@ -189,6 +189,7 @@ export default function CampaignCreatorGroupSection({
       {rows.length > 0 && (
         <CampaignCreatorsTable
           rows={rows}
+          status={status}
           selectedKey={drawerSelectedCreatorId}
           onRowClick={onRowClick}
           onRemove={onRemove}
