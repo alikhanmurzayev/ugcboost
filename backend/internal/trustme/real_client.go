@@ -131,12 +131,13 @@ func (c *RealClient) SendToSign(ctx context.Context, in SendToSignInput) (*SendT
 		return nil, fmt.Errorf("trustme: close multipart: %w", err)
 	}
 
-	// auto_sign=1 — компания-инициатор (UGCBoost, зашита в токен) подписывает
-	// документ автоматически после загрузки. Платный функционал TrustMe,
-	// согласован с ними; без согласования вернётся 1219 (blueprint § Отправка
-	// документа с автоподписанием).
+	// auto_sign — компания-инициатор (UGCBoost, зашита в токен) подписывается
+	// автоматически после загрузки документа. Платный функционал TrustMe
+	// (blueprint § Отправка документа с автоподписанием), требует активации
+	// в их кабинете; без активации возвращается 1219. Сейчас выключено
+	// (auto_sign=0), пока TrustMe не подтвердят, что у нас активировано.
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
-		c.baseURL+"/SendToSignBase64FileExt/pdf?auto_sign=1", &body)
+		c.baseURL+"/SendToSignBase64FileExt/pdf?auto_sign=0", &body)
 	if err != nil {
 		return nil, fmt.Errorf("trustme: build send-to-sign request: %w", err)
 	}
@@ -160,7 +161,7 @@ func (c *RealClient) SendToSign(ctx context.Context, in SendToSignInput) (*SendT
 		return nil, fmt.Errorf("trustme: unmarshal send-to-sign: %w", err)
 	}
 	if !strings.EqualFold(wrapper.Status, "Ok") {
-		return nil, fmt.Errorf("trustme: send-to-sign status=%s: %s", wrapper.Status, wrapper.ErrorText)
+		return nil, fmt.Errorf("trustme: send-to-sign status=%s: %s", wrapper.Status, FormatErrorText(wrapper.ErrorText))
 	}
 	var data sendToSignData
 	if err := json.Unmarshal(wrapper.Data, &data); err != nil {
@@ -174,7 +175,7 @@ func (c *RealClient) SendToSign(ctx context.Context, in SendToSignInput) (*SendT
 		// потенциально содержит echo Requisites).
 		dataKeys := dataObjectKeys(wrapper.Data)
 		return nil, fmt.Errorf("trustme: send-to-sign returned empty document_id (status=%q errorText=%q url=%q fileName=%q dataKeys=%v)",
-			wrapper.Status, wrapper.ErrorText, data.URL, data.FileName, dataKeys)
+			wrapper.Status, FormatErrorText(wrapper.ErrorText), data.URL, data.FileName, dataKeys)
 	}
 	return &SendToSignResult{
 		DocumentID: data.DocumentID,
@@ -246,7 +247,7 @@ func (c *RealClient) SearchContractByAdditionalInfo(ctx context.Context, additio
 		return nil, fmt.Errorf("trustme: unmarshal search: %w", err)
 	}
 	if !strings.EqualFold(wrapper.Status, "Ok") {
-		return nil, fmt.Errorf("trustme: search status=%s: %s", wrapper.Status, wrapper.ErrorText)
+		return nil, fmt.Errorf("trustme: search status=%s: %s", wrapper.Status, FormatErrorText(wrapper.ErrorText))
 	}
 	var items []searchContractItem
 	if len(wrapper.Data) > 0 {

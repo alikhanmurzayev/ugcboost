@@ -52,7 +52,7 @@ func TestRealClient_SendToSign(t *testing.T) {
 		require.Equal(t, "tokenZ", receivedToken)
 		require.True(t, strings.HasPrefix(receivedContentType, "multipart/form-data"))
 		require.Equal(t, "/SendToSignBase64FileExt/pdf", receivedPath)
-		require.Equal(t, "auto_sign=1", receivedQuery)
+		require.Equal(t, "auto_sign=0", receivedQuery)
 		require.Contains(t, string(receivedBody), `"FIO":"Иванов Иван"`)
 		require.Contains(t, string(receivedBody), `"IIN_BIN":"880101300123"`)
 		require.Contains(t, string(receivedBody), `"PhoneNumber":"+77071234567"`)
@@ -60,7 +60,7 @@ func TestRealClient_SendToSign(t *testing.T) {
 		require.Contains(t, string(receivedBody), "JVBERi0xLg==")
 	})
 
-	t.Run("error status returns error", func(t *testing.T) {
+	t.Run("error status returns error with code description", func(t *testing.T) {
 		t.Parallel()
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
@@ -79,6 +79,7 @@ func TestRealClient_SendToSign(t *testing.T) {
 		})
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "1208")
+		require.Contains(t, err.Error(), "Реквезиты не соотвествуют формату")
 	})
 
 	t.Run("non-200 returns error", func(t *testing.T) {
