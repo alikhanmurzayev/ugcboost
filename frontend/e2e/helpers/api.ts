@@ -716,7 +716,7 @@ export async function seedCampaign(
   const uuid = randomUUID();
   const name = opts.name ?? `e2e-campaign-${uuid.slice(0, 8)}`;
   const tmaUrl =
-    opts.tmaUrl ?? `https://t.me/ugcboost_bot/app?startapp=${uuid.slice(0, 8)}`;
+    opts.tmaUrl ?? `https://tma.ugcboost.kz/tz/${uuid.replaceAll("-", "")}`;
   const body: CampaignInput = { name, tmaUrl };
   const resp = await request.post(`${apiUrl}/campaigns`, {
     headers: { Authorization: `Bearer ${adminToken}` },

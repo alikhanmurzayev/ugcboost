@@ -138,7 +138,7 @@ test.describe("Admin campaign detail & edit", () => {
 
     const uuid = randomUUID();
     const newName = `e2e-edit-${uuid}`;
-    const newTmaUrl = `https://t.me/ugcboost_bot/app?startapp=${uuid.slice(0, 8)}`;
+    const newTmaUrl = `https://tma.ugcboost.kz/tz/${uuid.replaceAll("-", "")}`;
 
     await loginAs(page, admin.email, admin.password);
     await page.goto(`/campaigns/${seeded.campaignId}`);

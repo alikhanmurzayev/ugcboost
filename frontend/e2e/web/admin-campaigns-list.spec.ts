@@ -95,7 +95,7 @@ test.describe("Admin campaigns list", () => {
     for (const label of labels) {
       const camp = await seedCampaign(request, API_URL, adminToken, {
         name: `e2e-${uuid}-${label}`,
-        tmaUrl: `https://t.me/ugcboost_bot/app?startapp=${uuid.slice(0, 8)}-${label.toLowerCase()}`,
+        tmaUrl: `https://tma.ugcboost.kz/tz/${uuid.replaceAll("-", "")}-${label.toLowerCase()}`,
       });
       seeded.push(camp);
       cleanupStack.push(camp.cleanup);
@@ -145,7 +145,7 @@ test.describe("Admin campaigns list", () => {
     for (const label of labels) {
       const camp = await seedCampaign(request, API_URL, adminToken, {
         name: `e2e-${uuid}-${label}`,
-        tmaUrl: `https://t.me/ugcboost_bot/app?startapp=${uuid.slice(0, 8)}-${label.toLowerCase()}`,
+        tmaUrl: `https://tma.ugcboost.kz/tz/${uuid.replaceAll("-", "")}-${label.toLowerCase()}`,
       });
       cleanupStack.push(camp.cleanup);
     }
@@ -214,7 +214,7 @@ test.describe("Admin campaigns list", () => {
     const uuid = randomUUID();
     const camp = await seedCampaign(request, API_URL, adminToken, {
       name: `e2e-${uuid}-Single`,
-      tmaUrl: `https://t.me/ugcboost_bot/app?startapp=${uuid.slice(0, 8)}`,
+      tmaUrl: `https://tma.ugcboost.kz/tz/${uuid.replaceAll("-", "")}`,
     });
     cleanupStack.push(camp.cleanup);
 
