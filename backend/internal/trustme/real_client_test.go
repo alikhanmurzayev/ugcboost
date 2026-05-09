@@ -52,7 +52,7 @@ func TestRealClient_SendToSign(t *testing.T) {
 		require.Equal(t, "tokenZ", receivedToken)
 		require.True(t, strings.HasPrefix(receivedContentType, "multipart/form-data"))
 		require.Equal(t, "/SendToSignBase64FileExt/pdf", receivedPath)
-		require.Equal(t, "auto_sign=0", receivedQuery)
+		require.Equal(t, "auto_sign=1", receivedQuery)
 		require.Contains(t, string(receivedBody), `"FIO":"Иванов Иван"`)
 		require.Contains(t, string(receivedBody), `"IIN_BIN":"880101300123"`)
 		require.Contains(t, string(receivedBody), `"PhoneNumber":"+77071234567"`)

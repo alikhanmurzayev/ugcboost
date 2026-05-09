@@ -137,13 +137,13 @@ func (c *RealClient) SendToSign(ctx context.Context, in SendToSignInput) (*SendT
 		return nil, fmt.Errorf("trustme: close multipart: %w", err)
 	}
 
-	// auto_sign — компания-инициатор (UGCBoost, зашита в токен) подписывается
+	// auto_sign=1 — компания-инициатор (UGCBoost, зашита в токен) подписывается
 	// автоматически после загрузки документа. Платный функционал TrustMe
-	// (blueprint § Отправка документа с автоподписанием), требует активации
-	// в их кабинете; без активации возвращается 1219. Сейчас выключено
-	// (auto_sign=0), пока TrustMe не подтвердят, что у нас активировано.
+	// (blueprint § Отправка документа с автоподписанием); активация на их
+	// стороне подтверждена. Если они отключат — вернётся 1219, и worker уйдёт
+	// в backoff-цикл по recordFailedAttempt.
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
-		c.baseURL+"/SendToSignBase64FileExt/pdf?auto_sign=0", &body)
+		c.baseURL+"/SendToSignBase64FileExt/pdf?auto_sign=1", &body)
 	if err != nil {
 		return nil, fmt.Errorf("trustme: build send-to-sign request: %w", err)
 	}
