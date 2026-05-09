@@ -14,15 +14,13 @@ import (
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/logger"
 )
 
-// LiberationSerif-Regular.ttf — embedded TTF, метрики совместимы с Times New
-// Roman (которые Google Docs использует для русского). Через embed.FS файл
-// попадает в бинарь — на системные шрифты не полагаемся (Docker-image может
-// быть minimal).
+// LiberationSerif-Regular.ttf embedded в бинарь — Docker-образ minimal, на
+// системные шрифты не полагаемся. Метрики совместимы с Times New Roman.
 //
 //go:embed fonts/LiberationSerif-Regular.ttf
 var liberationSerifTTF []byte
 
-// ContractData — три типизированных поля per Decision #13.
+// ContractData — типизированные поля overlay'а per Decision #13.
 type ContractData struct {
 	CreatorFIO string
 	CreatorIIN string
@@ -42,35 +40,31 @@ func (d ContractData) get(name string) string {
 	}
 }
 
-// Параметры overlay-рендера (зафиксированы экспериментом, см. intent v2 §
-// «Параметры overlay-рендера»).
+// Параметры overlay-рендера (зафиксированы экспериментом, см. intent v2
+// § «Параметры overlay-рендера»).
 const (
 	pageWidth    = 596.0
 	pageHeight   = 842.0
 	ascentRatio  = 0.75
 	descentRatio = 0.27
 	pad          = 1.0
-	// overflowSlack — допуск для warn-on-overflow: 5% сверх bbox считаются
-	// нормой (anti-alias halo + микро-дрейф kerning'а). Только при превышении
-	// этого порога пишем warning лог.
+	// overflowSlack — 5% сверх bbox считаются нормой (anti-alias halo +
+	// kerning микро-дрейф). Превышение → warn-only лог.
 	overflowSlack = 1.05
 )
 
-// Renderer накладывает overlay на шаблон договора per Decision #12.
+// Renderer накладывает overlay на шаблон договора (Decision #12).
 type Renderer interface {
 	Render(template []byte, data ContractData) ([]byte, error)
 }
 
-// RealRenderer — продакшн-реализация на signintech/gopdf + ledongthuc/pdf
-// (через RealExtractor). Без сети, без CGo.
+// RealRenderer — продакшн на signintech/gopdf + ledongthuc/pdf, без сети, без CGo.
 type RealRenderer struct {
 	extractor Extractor
 	logger    logger.Logger
 }
 
-// NewRealRenderer собирает рендерер. extractor=nil → новый RealExtractor.
-// log=nil допустим — overflow-warning'и тогда не пишутся (но render продолжает
-// работать, см. Open Forks в intent-trustme-contract-v2).
+// NewRealRenderer собирает рендерер. log=nil — overflow-warn'ы не пишутся.
 func NewRealRenderer(extractor Extractor, log logger.Logger) *RealRenderer {
 	if extractor == nil {
 		extractor = NewRealExtractor()
@@ -78,9 +72,8 @@ func NewRealRenderer(extractor Extractor, log logger.Logger) *RealRenderer {
 	return &RealRenderer{extractor: extractor, logger: log}
 }
 
-// Render накладывает overlay поверх template и возвращает результат.
-// signintech/gopdf требует ImportPage по file path — проксируем template
-// через temp-файл, который удаляем сразу после WritePdf'а.
+// Render. signintech/gopdf требует ImportPage по path — проксируем template
+// через temp-файл (удаляется defer'ом).
 func (r *RealRenderer) Render(template []byte, data ContractData) ([]byte, error) {
 	if len(template) == 0 {
 		return nil, fmt.Errorf("contract: empty template")
@@ -163,11 +156,8 @@ func (r *RealRenderer) Render(template []byte, data ContractData) ([]byte, error
 	return buf.Bytes(), nil
 }
 
-// warnOnOverflow логирует Warn, если value визуально не влезает в bbox
-// плейсхолдера (gopdf.MeasureTextWidth > width). PII (само value) не пишем —
-// только rune count, имя плейсхолдера, page и геометрия. Текущая политика —
-// warn-only (см. Open Forks в intent-v2): креатор всё равно подписывает
-// договор, оператор разбирает кейсы overflow по логам вручную.
+// warnOnOverflow — Warn, если value не влезает в bbox. PII не пишем (только
+// rune count + геометрия). Политика warn-only (Open Forks intent-v2).
 func (r *RealRenderer) warnOnOverflow(out *gopdf.GoPdf, ph Placeholder, page int, value string, bboxWidth float64) {
 	if r.logger == nil {
 		return

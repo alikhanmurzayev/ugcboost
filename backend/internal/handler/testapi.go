@@ -342,12 +342,9 @@ func (h *TestAPIHandler) TrustMeRunOutboxOnce(ctx context.Context, _ testapi.Tru
 	return testapi.TrustMeRunOutboxOnce204Response{}, nil
 }
 
-// TrustMeSpyList handles GET /test/trustme/spy-list. Returns recorded
-// SendToSign attempts with PII fingerprinted (security.md hard rule —
-// raw FIO/IIN/Phone are forbidden in any response body). E2E asserts on
-// fingerprint stability: same input → same fingerprint.
-//
-// trustMeSpy=nil → 404 (real client on staging — no spy data to expose).
+// TrustMeSpyList handles GET /test/trustme/spy-list. Endpoint gated
+// EnableTestEndpoints (404 в проде); сырые FIO/IIN/Phone безопасно — ПД
+// сюда не попадают, синтетические e2e фикстуры.
 func (h *TestAPIHandler) TrustMeSpyList(_ context.Context, _ testapi.TrustMeSpyListRequestObject) (testapi.TrustMeSpyListResponseObject, error) {
 	if h.trustMeSpy == nil {
 		return nil, domain.ErrNotFound
@@ -356,13 +353,14 @@ func (h *TestAPIHandler) TrustMeSpyList(_ context.Context, _ testapi.TrustMeSpyL
 	out := make([]testapi.TrustMeSentRecord, 0, len(records))
 	for _, r := range records {
 		item := testapi.TrustMeSentRecord{
-			AdditionalInfo:   r.AdditionalInfo,
-			ContractName:     r.ContractName,
-			FioFingerprint:   r.FIOFingerprint,
-			IinFingerprint:   r.IINFingerprint,
-			PhoneFingerprint: r.PhoneFingerprint,
-			PdfSha256:        r.PDFSha256,
-			SentAt:           r.SentAt,
+			AdditionalInfo: r.AdditionalInfo,
+			ContractName:   r.ContractName,
+			NumberDial:     r.NumberDial,
+			Fio:            r.FIO,
+			Iin:            r.IIN,
+			Phone:          r.Phone,
+			PdfSha256:      r.PDFSha256,
+			SentAt:         r.SentAt,
 		}
 		if r.DocumentID != "" {
 			docID := r.DocumentID

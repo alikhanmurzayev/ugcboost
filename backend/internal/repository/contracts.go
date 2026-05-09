@@ -42,6 +42,7 @@ const (
 	ContractColumnLastErrorCode      = "last_error_code"
 	ContractColumnLastErrorMessage   = "last_error_message"
 	ContractColumnLastAttemptedAt    = "last_attempted_at"
+	ContractColumnSerialNumber       = "serial_number"
 	ContractColumnCreatedAt          = "created_at"
 	ContractColumnUpdatedAt          = "updated_at"
 )
@@ -63,6 +64,7 @@ type ContractRow struct {
 	LastErrorCode     *string    `db:"last_error_code"`
 	LastErrorMessage  *string    `db:"last_error_message"`
 	LastAttemptedAt   *time.Time `db:"last_attempted_at"`
+	SerialNumber      int64      `db:"serial_number"`
 	CreatedAt         time.Time  `db:"created_at"`
 	UpdatedAt         time.Time  `db:"updated_at"`
 }
@@ -96,9 +98,8 @@ type OrphanRow struct {
 	UnsignedPDFContent []byte
 }
 
-// OrphanRequisites — данные креатора по contract_id для Phase 0 resend.
-// Worker'у нужны FIO/IIN/Phone чтобы заполнить trustme.Requisite при
-// повторной отправке (claim row уже принадлежит конкретному cc → creator).
+// OrphanRequisites — данные креатора + serial_number по contract_id для
+// Phase 0 resend.
 type OrphanRequisites struct {
 	CampaignCreatorID string
 	CreatorID         string
@@ -107,6 +108,7 @@ type OrphanRequisites struct {
 	CreatorFirstName  string
 	CreatorMiddleName *string
 	CreatorPhone      string
+	SerialNumber      int64
 }
 
 // ContractRepo lists every public method of the contracts repository.
@@ -354,9 +356,8 @@ func (r *contractRepository) RecordFailedAttempt(ctx context.Context, contractID
 }
 
 // GetOrphanRequisites JOIN'ит contracts → campaign_creators → creators по
-// contract_id и возвращает creator-данные для Phase 0 resend. Используется,
-// когда unsigned_pdf уже persisted, но trustme_document_id IS NULL — нужно
-// повторно собрать trustme.Requisite{FIO, IINBIN, PhoneNumber}.
+// contract_id. Phase 0 resend подкладывает FIO/IIN/Phone и serial_number в
+// trustme.SendToSignInput.
 func (r *contractRepository) GetOrphanRequisites(ctx context.Context, contractID string) (*OrphanRequisites, error) {
 	const ctAlias = "ct"
 	const ccAlias = "cc"
@@ -369,6 +370,7 @@ func (r *contractRepository) GetOrphanRequisites(ctx context.Context, contractID
 		crAlias+"."+CreatorColumnFirstName,
 		crAlias+"."+CreatorColumnMiddleName,
 		crAlias+"."+CreatorColumnPhone,
+		ctAlias+"."+ContractColumnSerialNumber,
 	).
 		From(TableContracts + " " + ctAlias).
 		Join(TableCampaignCreators + " " + ccAlias + " ON " + ccAlias + "." + CampaignCreatorColumnContractID + " = " + ctAlias + "." + ContractColumnID).
@@ -407,6 +409,7 @@ func (r *contractRepository) GetOrphanRequisites(ctx context.Context, contractID
 		&out.CreatorFirstName,
 		&middleName,
 		&out.CreatorPhone,
+		&out.SerialNumber,
 	); err != nil {
 		return nil, err
 	}

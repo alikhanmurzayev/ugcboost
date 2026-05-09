@@ -11,15 +11,13 @@ import (
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/trustme"
 )
 
-// Client — SpyOnlyClient. Реализует trustme.Client через локальное хранилище
-// без сетевых вызовов. Используется local + staging + во всех e2e тестах.
+// Client — SpyOnlyClient. Реализует trustme.Client через in-memory store.
 type Client struct {
 	store *SpyStore
 	now   func() time.Time
 }
 
-// NewClient собирает spy-клиент. nowFn опциональный — для детерминированных
-// SentAt в тестах; nil → time.Now().UTC().
+// NewClient собирает spy. nowFn опциональный (детерминированные SentAt).
 func NewClient(store *SpyStore, nowFn func() time.Time) *Client {
 	if store == nil {
 		panic("trustme/spy: NewClient requires non-nil store")
@@ -30,36 +28,37 @@ func NewClient(store *SpyStore, nowFn func() time.Time) *Client {
 	return &Client{store: store, now: nowFn}
 }
 
-// SendToSign имитирует TrustMe: генерирует document_id = "spy-" +
-// hash(additionalInfo)[:10], short_url — соответствующий URL. RegisterFailNext
-// возвращает синтетическую ошибку и пишет запись с Err.
+// SendToSign имитирует TrustMe: detereministic document_id = "spy-" +
+// hash(additionalInfo)[:10]. RegisterFailNext возвращает синтетическую ошибку.
 func (c *Client) SendToSign(ctx context.Context, in trustme.SendToSignInput) (*trustme.SendToSignResult, error) {
 	first := pickFirstRequisite(in.Requisites)
 	if reason, ok := c.store.consumeFailNext(in.AdditionalInfo); ok {
 		c.store.Record(SentRecord{
-			AdditionalInfo:   in.AdditionalInfo,
-			ContractName:     in.ContractName,
-			FIOFingerprint:   Fingerprint(first.FIO),
-			IINFingerprint:   Fingerprint(first.IINBIN),
-			PhoneFingerprint: Fingerprint(first.PhoneNumber),
-			PDFSha256:        HashPDFBase64(in.PDFBase64),
-			SentAt:           c.now(),
-			Err:              reason,
+			AdditionalInfo: in.AdditionalInfo,
+			ContractName:   in.ContractName,
+			NumberDial:     in.NumberDial,
+			FIO:            first.FIO,
+			IIN:            first.IINBIN,
+			Phone:          first.PhoneNumber,
+			PDFSha256:      HashPDFBase64(in.PDFBase64),
+			SentAt:         c.now(),
+			Err:            reason,
 		})
 		return nil, errors.New(reason)
 	}
 	docID := documentIDFromAdditionalInfo(in.AdditionalInfo)
 	shortURL := "https://test.trustme.kz/uploader/" + docID
 	c.store.Record(SentRecord{
-		DocumentID:       docID,
-		ShortURL:         shortURL,
-		AdditionalInfo:   in.AdditionalInfo,
-		ContractName:     in.ContractName,
-		FIOFingerprint:   Fingerprint(first.FIO),
-		IINFingerprint:   Fingerprint(first.IINBIN),
-		PhoneFingerprint: Fingerprint(first.PhoneNumber),
-		PDFSha256:        HashPDFBase64(in.PDFBase64),
-		SentAt:           c.now(),
+		DocumentID:     docID,
+		ShortURL:       shortURL,
+		AdditionalInfo: in.AdditionalInfo,
+		ContractName:   in.ContractName,
+		NumberDial:     in.NumberDial,
+		FIO:            first.FIO,
+		IIN:            first.IINBIN,
+		Phone:          first.PhoneNumber,
+		PDFSha256:      HashPDFBase64(in.PDFBase64),
+		SentAt:         c.now(),
 	})
 	return &trustme.SendToSignResult{
 		DocumentID: docID,
@@ -68,9 +67,7 @@ func (c *Client) SendToSign(ctx context.Context, in trustme.SendToSignInput) (*t
 	}, nil
 }
 
-// SearchContractByAdditionalInfo возвращает документ из knownDocuments,
-// если RegisterDocument был вызван для этого additionalInfo; иначе
-// trustme.ErrTrustMeNotFound.
+// SearchContractByAdditionalInfo — RegisterDocument, иначе ErrTrustMeNotFound.
 func (c *Client) SearchContractByAdditionalInfo(ctx context.Context, additionalInfo string) (*trustme.SearchContractResult, error) {
 	if additionalInfo == "" {
 		return nil, errors.New("trustme/spy: empty additionalInfo")
@@ -86,9 +83,8 @@ func (c *Client) SearchContractByAdditionalInfo(ctx context.Context, additionalI
 	}, nil
 }
 
-// DownloadContractFile спай возвращает синтетические байты «spy-signed-<docID>».
-// Реальная подпись добавится chunk 17 webhook-flow'ом — здесь сигнатура
-// фиксируется только для совместимости интерфейса.
+// DownloadContractFile — синтетические байты для совместимости интерфейса
+// (chunk 17 webhook flow).
 func (c *Client) DownloadContractFile(ctx context.Context, documentID string) ([]byte, error) {
 	if documentID == "" {
 		return nil, errors.New("trustme/spy: empty document_id")
@@ -96,7 +92,6 @@ func (c *Client) DownloadContractFile(ctx context.Context, documentID string) ([
 	return []byte(fmt.Sprintf("spy-signed-%s", documentID)), nil
 }
 
-// pickFirstRequisite возвращает первый ряд requisites или пустой Requisite.
 func pickFirstRequisite(rqs []trustme.Requisite) trustme.Requisite {
 	if len(rqs) == 0 {
 		return trustme.Requisite{}
@@ -104,9 +99,8 @@ func pickFirstRequisite(rqs []trustme.Requisite) trustme.Requisite {
 	return rqs[0]
 }
 
-// documentIDFromAdditionalInfo — детерминированный «spy-<10hex>». Тот же
-// additionalInfo даёт тот же docID — нужно для re-send-после-сбоя сценария
-// (sha256 идентичный, document_id идентичный).
+// documentIDFromAdditionalInfo — детерминированный spy-<10hex>. Один и тот
+// же additionalInfo → тот же docID (важно для re-send сценария).
 func documentIDFromAdditionalInfo(additionalInfo string) string {
 	sum := sha256.Sum256([]byte("trustme-spy:" + additionalInfo))
 	return "spy-" + hex.EncodeToString(sum[:5])

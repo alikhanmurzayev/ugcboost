@@ -5,28 +5,24 @@
 // со подписанным initData, затем мы синхронно дёргаем
 // ContractSenderService.RunOnce через /test/trustme/run-outbox-once вместо
 // ожидания @every 10s крон-тика. Все вызовы TrustMe идут в SpyOnlyClient
-// (TRUSTME_MOCK=true в тестовой среде), записи доступны через
-// /test/trustme/spy-list — оттуда читаем sha256-фингерпринт PDF и
-// фингерпринты PII-полей (raw FIO/IIN/Phone и raw PDF в response не
-// эспонируются: security.md hard rule). На happy-path тест ожидает один
-// SendToSign-вызов, audit-row campaign_creator.contract_initiated с
-// actor_id=NULL и entity_id=cc.ID, и сохранённый ненулевой PDFSha256.
-// На fail-and-recovery (spy-fail-next ставит синтетический сбой первой
-// попытки) — два SendToSign-вызова с идентичным PDFSha256 (без re-render
-// на recovery). Скоупы «empty template» и «known orphan finalize» закрыты
-// repo/unit-уровнем — здесь лишь t.Skip с явной ссылкой на покрывающий
-// тест.
+// (TRUSTME_MOCK=true в тестовой среде); записи доступны через
+// /test/trustme/spy-list. Endpoint gated EnableTestEndpoints (404 в проде),
+// поэтому spy возвращает сырые FIO/IIN/Phone — фикстуры синтетические.
+// На happy-path тест ожидает один SendToSign-вызов с NumberDial формата
+// UGC-{n}, audit-row campaign_creator.contract_initiated с actor_id=NULL и
+// entity_id=cc.ID, ненулевой PDFSha256. На fail-and-recovery (spy-fail-next
+// синтетически фейлит первую попытку) — два SendToSign'а с идентичным
+// PDFSha256 (resend без re-render). Сценарии «empty template» и «known
+// orphan finalize» закрыты repo/unit-уровнем — здесь t.Skip с явной ссылкой.
 //
 // Setup для каждого сценария — testutil.SetupCampaignWithInvitedCreator
-// (готовая «приглашённая» пара) с уникальным suffix в email/handle,
-// чтобы тесты были изолированы под `t.Parallel()`. Cleanup — defer-LIFO
-// через E2E_CLEANUP=true.
+// (готовая «приглашённая» пара) с уникальным suffix в email/handle, чтобы
+// тесты были изолированы под t.Parallel(). Cleanup — defer-LIFO через
+// E2E_CLEANUP=true.
 package contract
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"io"
 	"net/http"
 	"testing"
@@ -39,20 +35,7 @@ import (
 	"github.com/alikhanmurzayev/ugcboost/backend/e2e/testutil"
 )
 
-// fingerprint16 — реплика `internal/trustme/spy.Fingerprint`: первые 8 байт
-// sha256(value), hex (16 chars). E2e module не может импортировать internal,
-// поэтому копия. Должна совпадать с production алгоритмом, иначе фильтрация
-// spy-list по IIN/FIO/Phone не будет находить записи.
-func fingerprint16(value string) string {
-	if value == "" {
-		return ""
-	}
-	sum := sha256.Sum256([]byte(value))
-	return hex.EncodeToString(sum[:8])
-}
-
-// tmaPostAgree — тонкая обёртка над POST /tma/campaigns/{secret_token}/agree.
-// Отдельная функция, чтобы каждый t.Run не повторял boilerplate.
+// tmaPostAgree — POST /tma/campaigns/{secret_token}/agree с авторизацией tma.
 func tmaPostAgree(t *testing.T, secretToken, initData string) (int, []byte) {
 	t.Helper()
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost,
@@ -67,8 +50,7 @@ func tmaPostAgree(t *testing.T, secretToken, initData string) (int, []byte) {
 	return resp.StatusCode, body
 }
 
-// runOutboxOnce триггерит контракт-worker через test-API. Возвращает 204
-// или фейлит тест.
+// runOutboxOnce триггерит контракт-worker через test-API.
 func runOutboxOnce(t *testing.T) {
 	t.Helper()
 	tc := testutil.NewTestClient(t)
@@ -100,10 +82,7 @@ func spyFailNext(t *testing.T, additionalInfo string, count int) {
 	require.Equal(t, http.StatusNoContent, resp.StatusCode())
 }
 
-// pdfShaIsHex64 — sanity-чек: spy положил полный hex sha256 (64 chars). PDF
-// сам не экспонируется (PII в overlay'е), поэтому parseability проверяет
-// unit-тест RealRenderer, а e2e — только что worker действительно посчитал
-// sha256 от non-empty PDF и положил в response.
+// pdfShaIsHex64 — sanity-чек: spy положил полный hex sha256 (64 chars).
 func pdfShaIsHex64(t *testing.T, sha string) {
 	t.Helper()
 	require.Len(t, sha, 64)
@@ -113,11 +92,14 @@ func pdfShaIsHex64(t *testing.T, sha string) {
 	}
 }
 
+// TestContractSending не использует t.Parallel() ни на корне, ни внутри:
+// happy и recovery тики делят один SpyOnlyClient (process-wide) — параллельный
+// запуск приводит к race-консьюму wildcard spy-fail-next и пропускам Phase 1
+// claim'ов между параллельными тиками. Sequential — single-process гарантия
+// того, что никто не «съедает» наш fail-next и не подхватывает наш agreed
+// раньше нашего runOutboxOnce.
 func TestContractSending(t *testing.T) {
-	t.Parallel()
-
 	t.Run("happy path agreed → outbox runs → signing + spy record", func(t *testing.T) {
-		t.Parallel()
 		fx := testutil.SetupCampaignWithInvitedCreator(t)
 		initData := testutil.SignInitData(t, fx.TelegramUserID, testutil.SignInitDataOpts{})
 
@@ -126,14 +108,12 @@ func TestContractSending(t *testing.T) {
 
 		runOutboxOnce(t)
 
-		// Filter spy-list строго по IINFingerprint от уникального IIN этого
-		// теста — UniqueIIN() гарантирует уникальность между параллельными
-		// тестами, поэтому только наша запись попадёт в matching.
-		expectedIINFP := fingerprint16(fx.CreatorIIN)
+		// Изолируем нашу запись по уникальному IIN — testutil.UniqueIIN()
+		// гарантирует уникальность между параллельными тестами.
 		records := spyList(t)
 		var matching []testclient.TrustMeSentRecord
 		for _, r := range records {
-			if r.IinFingerprint == expectedIINFP {
+			if r.Iin == fx.CreatorIIN {
 				matching = append(matching, r)
 			}
 		}
@@ -142,17 +122,16 @@ func TestContractSending(t *testing.T) {
 		ours := matching[0]
 		require.NotNil(t, ours.DocumentId)
 		require.NotEmpty(t, *ours.DocumentId)
-		require.Equal(t, fingerprint16(fx.CreatorFIO), ours.FioFingerprint)
-		require.Equal(t, expectedIINFP, ours.IinFingerprint)
-		require.Equal(t, fingerprint16("+77071234567"), ours.PhoneFingerprint,
-			"normalized phone fingerprint must match — ApprovedCreatorFixture phone always +77071234567")
+		require.Equal(t, fx.CreatorFIO, ours.Fio)
+		require.Equal(t, fx.CreatorIIN, ours.Iin)
+		require.Equal(t, fx.CreatorPhone, ours.Phone)
+		require.Regexp(t, `^UGC-\d+$`, ours.NumberDial,
+			"NumberDial должен иметь формат UGC-{serial}")
 		require.Nil(t, ours.Err, "happy path must not record err")
 		pdfShaIsHex64(t, ours.PdfSha256)
 
 		// Audit-row campaign_creator.contract_initiated с actor_id=NULL и
-		// entity_id=cc.ID. Фильтр по cc.ID стал точным после fix B (раньше
-		// ошибочно entity_id=contract.ID — read-side queries по cc не
-		// находили строку).
+		// entity_id=cc.ID.
 		entry := testutil.FindAuditEntry(t, fx.AdminClient, fx.AdminToken,
 			"campaign_creator", fx.CampaignCreatorID, "campaign_creator.contract_initiated")
 		require.Nil(t, entry.ActorId)
@@ -178,29 +157,14 @@ func TestContractSending(t *testing.T) {
 	})
 
 	t.Run("empty template → not picked up", func(t *testing.T) {
-		t.Parallel()
-		// E2E-сценарий невозможен через UI flow: chunk 12 notify-guard
-		// блокирует invite креатора на кампанию без contract_template_pdf
-		// (CONTRACT_TEMPLATE_REQUIRED), значит status=`agreed` без шаблона
-		// можно создать только direct-DB-mutation, что не предусмотрено
-		// тест-API. Фильтр `length(c.contract_template_pdf) > 0` в Phase 1
-		// SELECT покрыт через `TestContractRepository_SelectAgreedForClaim`
-		// (SQL-strict-equal на pgxmock-уровне).
 		t.Skip("scenario unreachable through UI flow — repo-level test verifies SQL filter")
 	})
 
 	t.Run("soft-deleted campaign tombstone", func(t *testing.T) {
-		t.Parallel()
-		// Soft-delete кампании отсутствует в публичном/тестовом API (только
-		// hard-delete через /test/cleanup-entity, которое не выставляет
-		// is_deleted=true). Фильтр `c.is_deleted = false` в Phase 1 SELECT
-		// покрыт `TestContractRepository_SelectAgreedForClaim` через
-		// strict-SQL pgxmock match.
 		t.Skip("scenario unreachable through public API — repo-level test verifies SQL filter")
 	})
 
 	t.Run("send fail → orphan recovered with same PDF (sha256 invariant)", func(t *testing.T) {
-		t.Parallel()
 		fx := testutil.SetupCampaignWithInvitedCreator(t)
 		initData := testutil.SignInitData(t, fx.TelegramUserID, testutil.SignInitDataOpts{})
 
@@ -217,17 +181,13 @@ func TestContractSending(t *testing.T) {
 		runOutboxOnce(t)
 
 		// Tick #2: Phase 0 поднимает orphan → search вернёт ErrTrustMeNotFound
-		// → resend с persisted PDF. Sha256 должен совпасть — это ключевой
-		// invariant спеки line 116.
+		// → resend с persisted PDF. Sha256 должен совпасть.
 		runOutboxOnce(t)
 
-		// Filter spy-list строго по IINFingerprint этого теста — точная
-		// изоляция между параллельными e2e через UniqueIIN.
-		expectedIINFP := fingerprint16(fx.CreatorIIN)
 		records := spyList(t)
 		var ours []testclient.TrustMeSentRecord
 		for _, r := range records {
-			if r.IinFingerprint == expectedIINFP {
+			if r.Iin == fx.CreatorIIN {
 				ours = append(ours, r)
 			}
 		}
@@ -240,23 +200,16 @@ func TestContractSending(t *testing.T) {
 		require.NotNil(t, ours[1].DocumentId)
 		require.NotEmpty(t, *ours[1].DocumentId)
 
-		// Sha256 PDF идентичный — Phase 0 resend без re-render (intent
-		// Decision #10 «PDF уже в БД»). Server уже посчитал sha256 от
-		// исходного base64; e2e сравнивает напрямую.
+		// Sha256 PDF идентичный — Phase 0 resend без re-render (Decision #10).
 		require.Equal(t, ours[0].PdfSha256, ours[1].PdfSha256,
 			"PdfSha256 must equal between fail and recovery (no re-render)")
 		require.Equal(t, ours[0].AdditionalInfo, ours[1].AdditionalInfo,
 			"additionalInfo (=contract.id) must equal between attempts")
+		require.Equal(t, ours[0].NumberDial, ours[1].NumberDial,
+			"NumberDial (UGC-{serial}) одинаковый — serial_number один на ряд")
 	})
 
 	t.Run("known orphan finalize without re-send", func(t *testing.T) {
-		t.Parallel()
-		// Сценарий «TrustMe знает наш orphan» требует чтобы между Phase 1
-		// commit и Phase 2c send в БД остался ряд с trustme_document_id=NULL.
-		// Воспроизвести через test-API нельзя без direct-mutation contracts.
-		// `TestContractSenderService_Phase0_KnownDoc_Finalize` unit-тест
-		// проверяет ветвь полностью: search → finalize-without-resend +
-		// сохранение search.ContractStatus + audit с cc_id.
 		t.Skip("covered by unit TestContractSenderService_Phase0_KnownDoc_Finalize")
 	})
 }

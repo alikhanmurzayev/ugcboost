@@ -237,23 +237,25 @@ type TrustMeSentRecord struct {
 	// Err Error string when fail-next caused this attempt to fail.
 	Err *string `json:"err,omitempty"`
 
-	// FioFingerprint sha256 prefix (first 16 hex chars) of the first Requisite.FIO. PII
-	// is hashed before exposure per security.md hard rule. Same FIO →
-	// same fingerprint, so e2e can assert via `domain/spy.Fingerprint("Иванов ...")`.
-	FioFingerprint string `json:"fioFingerprint"`
+	// Fio Raw первый Requisite.FIO. Test endpoint доступен только при
+	// EnableTestEndpoints=true (404 в проде); реальные ПД сюда не
+	// попадают, e2e фикстуры синтетические.
+	Fio string `json:"fio"`
 
-	// IinFingerprint sha256 prefix of the first Requisite.IIN_BIN.
-	IinFingerprint string `json:"iinFingerprint"`
+	// Iin Raw первый Requisite.IIN_BIN.
+	Iin string `json:"iin"`
 
-	// PdfSha256 Full hex sha256 (64 chars) of base64-encoded PDF that was sent. Raw
-	// PDF is NOT exposed — rendered overlay contains FIO/IIN/IssuedDate
-	// (PII), security.md forbids PII in any response body. e2e compares
-	// sha256 to assert PDF stability across retries.
+	// NumberDial TrustMe details.NumberDial — UGC-{contracts.serial_number}.
+	NumberDial string `json:"numberDial"`
+
+	// PdfSha256 Full hex sha256 (64 chars) of base64 PDF. PDF не возвращаем
+	// (overlay содержит overlay'енные значения; и тяжёлый payload).
+	// E2e сравнивает sha256 retry'ев.
 	PdfSha256 string `json:"pdfSha256"`
 
-	// PhoneFingerprint sha256 prefix of the first Requisite.PhoneNumber (already E.164).
-	PhoneFingerprint string    `json:"phoneFingerprint"`
-	SentAt           time.Time `json:"sentAt"`
+	// Phone Raw первый Requisite.PhoneNumber (уже E.164).
+	Phone  string    `json:"phone"`
+	SentAt time.Time `json:"sentAt"`
 
 	// ShortUrl Short URL (empty when send failed).
 	ShortUrl *string `json:"shortUrl,omitempty"`

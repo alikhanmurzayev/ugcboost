@@ -10,7 +10,6 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/url"
-	"sort"
 	"strings"
 	"time"
 
@@ -18,17 +17,12 @@ import (
 )
 
 const (
-	// rateLimitRPS is per-blueprint requirement: «Не более 4 запросов в
-	// секунду». golang.org/x/time/rate.Limiter с Burst=1 даёт sliding-window
-	// без накопления budget'а.
-	rateLimitRPS = 4
-	// defaultTimeout — TrustMe staging иногда отдаёт 10+ сек на large PDF;
-	// 60 сек — потолок.
+	// rateLimitRPS — blueprint cap: «не более 4 запросов в секунду».
+	rateLimitRPS   = 4
 	defaultTimeout = 60 * time.Second
 )
 
-// RealClient — HTTP-реализация Client против test.trustme.kz (или production
-// host'а, когда выдадут). Обёрнут rate-limiter'ом (4 RPS per blueprint).
+// RealClient — HTTP-реализация Client поверх test.trustme.kz (или прода).
 type RealClient struct {
 	baseURL    string
 	token      string
@@ -36,8 +30,8 @@ type RealClient struct {
 	limiter    *rate.Limiter
 }
 
-// NewRealClient создаёт клиента под живой TrustMe. baseURL — без trailing
-// slash; token — статичный. nil-httpClient → http.DefaultClient.
+// NewRealClient собирает клиента. baseURL — без trailing slash. nil http.Client
+// → дефолт с 60s timeout.
 func NewRealClient(baseURL, token string, httpClient *http.Client) *RealClient {
 	if httpClient == nil {
 		httpClient = &http.Client{Timeout: defaultTimeout}
@@ -82,8 +76,7 @@ type sendToSignDetails struct {
 }
 
 // MarshalJSON для Requisite — TrustMe ждёт PascalCase ключи (CompanyName,
-// FIO, IIN_BIN, PhoneNumber). wire отличается от Requisite только json-тегами,
-// поэтому Go-конверсия структуры в структуру допустима.
+// FIO, IIN_BIN, PhoneNumber).
 func (r Requisite) MarshalJSON() ([]byte, error) {
 	type wire struct {
 		CompanyName string `json:"CompanyName,omitempty"`
@@ -96,25 +89,21 @@ func (r Requisite) MarshalJSON() ([]byte, error) {
 
 type sendToSignData struct {
 	URL string `json:"url"`
-	// TrustMe в реальности возвращает поле `id`, а blueprint обещает
-	// `document_id` (см. § Отправка документа на подписание в формате BASE64,
-	// Response 200 example). Принимаем оба варианта — приоритет у `document_id`,
-	// fallback на `id`. Совпадает с тем, что возвращает search/Contracts (тоже
-	// `id`), так что договор имеет один и тот же идентификатор обеими ручками.
-	DocumentID string `json:"document_id"`
-	ID         string `json:"id"`
-	FileName   string `json:"fileName"`
+	// Реальный TrustMe возвращает `id`, а не `document_id` из blueprint.
+	// Совпадает с search/Contracts → одинаковый идентификатор.
+	ID       string `json:"id"`
+	FileName string `json:"fileName"`
 }
 
-// SendToSign отправляет multipart/form-data POST на
-// /SendToSignBase64FileExt/pdf. Возвращает выданный TrustMe document_id +
-// short_url + file_name из data.url/document_id/fileName.
+// SendToSign — POST /SendToSignBase64FileExt/pdf, multipart/form-data с
+// FileBase64 + details JSON + contract_name.
 func (c *RealClient) SendToSign(ctx context.Context, in SendToSignInput) (*SendToSignResult, error) {
 	if err := c.wait(ctx); err != nil {
 		return nil, err
 	}
 
 	details := sendToSignDetails{
+		NumberDial:     in.NumberDial,
 		AdditionalInfo: in.AdditionalInfo,
 		Requisites:     in.Requisites,
 	}
@@ -138,11 +127,9 @@ func (c *RealClient) SendToSign(ctx context.Context, in SendToSignInput) (*SendT
 		return nil, fmt.Errorf("trustme: close multipart: %w", err)
 	}
 
-	// auto_sign — компания-инициатор (UGCBoost, зашита в токен) подписывается
-	// автоматически после загрузки документа. Платный функционал TrustMe
-	// (blueprint § Отправка документа с автоподписанием), требует активации
-	// в их кабинете; без активации возвращается 1219. Сейчас выключено
-	// (auto_sign=0) — переключим обратно, когда у TrustMe заработает.
+	// auto_sign=0: контрагент (креатор) подписывает первым, наша подпись
+	// автоматически добавляется после. auto_sign=1 нужен только если бы мы
+	// слали уже-подписанный документ, у нас не такой flow.
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
 		c.baseURL+"/SendToSignBase64FileExt/pdf?auto_sign=0", &body)
 	if err != nil {
@@ -177,21 +164,12 @@ func (c *RealClient) SendToSign(ctx context.Context, in SendToSignInput) (*SendT
 	if err := json.Unmarshal(wrapper.Data, &data); err != nil {
 		return nil, fmt.Errorf("trustme: unmarshal send-to-sign data: %w", err)
 	}
-	if data.DocumentID == "" {
-		data.DocumentID = data.ID
-	}
-	if data.DocumentID == "" {
-		// Diagnostic: если TrustMe вернул success-wrapper без id и document_id,
-		// важно видеть, что именно лежит в data — возможно поле называется ещё
-		// иначе. Логируем имена ключей + technical поля, без значений
-		// (security.md: PII-фрейминг — не пробрасываем сырой body, который
-		// потенциально содержит echo Requisites).
-		dataKeys := dataObjectKeys(wrapper.Data)
-		return nil, fmt.Errorf("trustme: send-to-sign returned empty document_id (status=%q errorText=%q url=%q fileName=%q dataKeys=%v)",
-			wrapper.Status, FormatErrorText(wrapper.ErrorText), data.URL, data.FileName, dataKeys)
+	if data.ID == "" {
+		return nil, fmt.Errorf("trustme: send-to-sign returned empty id (status=%q errorText=%q)",
+			wrapper.Status, FormatErrorText(wrapper.ErrorText))
 	}
 	return &SendToSignResult{
-		DocumentID: data.DocumentID,
+		DocumentID: data.ID,
 		ShortURL:   data.URL,
 		FileName:   data.FileName,
 	}, nil
@@ -216,11 +194,8 @@ type searchContractItem struct {
 	AdditionalInfo string `json:"additionalInfo"`
 }
 
-// SearchContractByAdditionalInfo — POST /search/Contracts с фильтром
-// fieldName="additionalInfo". Возвращает первый совпавший элемент;
-// ErrTrustMeNotFound — если массив пустой. Используется outbox-worker'ом в
-// Phase 0 recovery: если TrustMe знает наш additionalInfo, finalize'им без
-// re-send'а; если нет — перепосылаем.
+// SearchContractByAdditionalInfo — POST /search/Contracts. Phase 0
+// recovery: known → finalize, ErrTrustMeNotFound → перепосылка.
 func (c *RealClient) SearchContractByAdditionalInfo(ctx context.Context, additionalInfo string) (*SearchContractResult, error) {
 	if additionalInfo == "" {
 		return nil, errors.New("trustme: empty additionalInfo")
@@ -308,14 +283,10 @@ func (c *RealClient) DownloadContractFile(ctx context.Context, documentID string
 	return io.ReadAll(resp.Body)
 }
 
-// summarizeNon200 формирует диагностическую строку для error-message при HTTP
-// non-200 от TrustMe. Сначала пытается распарсить body как структурированный
-// apiResponse — если получилось, отдаёт `status="..." errorText="..."` через
-// FormatErrorText (имя кода ошибки + расшифровка). Если body — не наш формат
-// (HTML от reverse-proxy, gateway-error и т.п.), отдаём только первые 64
-// байта raw без эха возможного PII в URL/path. См. security.md § PII в
-// error.Message — error.Message попадает в response body нашего сервиса и в
-// `contracts.last_error_message`, поэтому raw response body эхо-нюхать нельзя.
+// summarizeNon200 — диагностика error.Message при HTTP non-200. Парсит body
+// как apiResponse → `status="..." errorText="..."`; иначе — первые 64 байта
+// raw. Не пробрасываем весь body: он попадает в contracts.last_error_message
+// и может содержать echo Requisites (PII).
 func summarizeNon200(b []byte) string {
 	if len(b) == 0 {
 		return ""
@@ -329,21 +300,4 @@ func summarizeNon200(b []byte) string {
 		return string(b[:max]) + "…"
 	}
 	return string(b)
-}
-
-// dataObjectKeys возвращает отсортированные ключи top-level JSON object'а из
-// raw. Если raw — не object (например []), возвращает пустой слайс. Используется
-// в diagnostic-error при empty document_id, чтобы увидеть, под каким именем
-// TrustMe прислал ID, не светя при этом значения (PII-safety).
-func dataObjectKeys(raw json.RawMessage) []string {
-	var m map[string]json.RawMessage
-	if err := json.Unmarshal(raw, &m); err != nil {
-		return nil
-	}
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	return keys
 }

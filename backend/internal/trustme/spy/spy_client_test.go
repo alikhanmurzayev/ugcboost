@@ -27,6 +27,7 @@ func TestSpyClient_SendToSign_Records(t *testing.T) {
 		PDFBase64:      "JVBERi0xLg==",
 		AdditionalInfo: "ct-1",
 		ContractName:   "Договор UGC #1",
+		NumberDial:     "UGC-7",
 		Requisites: []trustme.Requisite{
 			{
 				CompanyName: "Креатор",
@@ -50,21 +51,20 @@ func TestSpyClient_SendToSign_Records(t *testing.T) {
 	records := store.List()
 	require.Len(t, records, 2)
 	require.Equal(t, "ct-1", records[0].AdditionalInfo)
-	// PII полях больше не raw — security.md hard rule. Сравниваем
-	// фингерпринты через ту же Fingerprint функцию.
-	require.Equal(t, Fingerprint("Иванов Иван Иванович"), records[0].FIOFingerprint)
-	require.Equal(t, Fingerprint("880101300123"), records[0].IINFingerprint)
-	require.Equal(t, Fingerprint("+77071234567"), records[0].PhoneFingerprint)
+	require.Equal(t, "UGC-7", records[0].NumberDial)
+	require.Equal(t, "Иванов Иван Иванович", records[0].FIO)
+	require.Equal(t, "880101300123", records[0].IIN)
+	require.Equal(t, "+77071234567", records[0].Phone)
 	require.Equal(t, HashPDFBase64("JVBERi0xLg=="), records[0].PDFSha256)
 	require.Empty(t, records[0].Err)
 }
 
-func TestFingerprint_Empty(t *testing.T) {
+func TestHashPDFBase64_Empty(t *testing.T) {
 	t.Parallel()
-	require.Equal(t, "", Fingerprint(""))
-	require.Equal(t, Fingerprint("X"), Fingerprint("X"))
-	require.NotEqual(t, Fingerprint("A"), Fingerprint("B"))
-	require.Len(t, Fingerprint("X"), 16)
+	require.Equal(t, "", HashPDFBase64(""))
+	require.Equal(t, HashPDFBase64("X"), HashPDFBase64("X"))
+	require.NotEqual(t, HashPDFBase64("A"), HashPDFBase64("B"))
+	require.Len(t, HashPDFBase64("X"), 64)
 }
 
 func TestSpyClient_SendToSign_FailNext(t *testing.T) {

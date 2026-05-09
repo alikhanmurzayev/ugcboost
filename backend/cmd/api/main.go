@@ -68,18 +68,31 @@ func run() error {
 	}
 	appLogger.Info(ctx, "database connected")
 
-	// Cron scheduler. SkipIfStillRunning защищает от overlapping ticks: если
-	// предыдущий @every 10s контракт-worker ещё не вернулся (медленный
-	// TrustMe), следующий тик пропускается, иначе они начинают
-	// дублировать Phase 0.
+	// Cron scheduler. cron.Recover ловит panic'и job'ов и логирует stack —
+	// второй слой защиты поверх defer/recover внутри RunOnce'а.
+	// SkipIfStillRunning пропускает тик, если предыдущий ещё бежит.
 	scheduler := cron.New(
 		cron.WithSeconds(),
-		cron.WithChain(cron.SkipIfStillRunning(cron.DefaultLogger)),
+		cron.WithChain(
+			cron.Recover(cron.DefaultLogger),
+			cron.SkipIfStillRunning(cron.DefaultLogger),
+		),
 	)
 	scheduler.Start()
-	cl.Add("cron", func(_ context.Context) error {
+
+	// workerCtx — контекст cron-job'ов (HTTP/SQL внутри RunOnce). При shutdown
+	// сначала отменяем его (ниже cl.Add("cron-cancel", ...) — выполняется до
+	// scheduler.Stop в LIFO), активный тик просыпается из pool.Query / Do.
+	workerCtx, workerCancel := context.WithCancel(context.Background())
+	defer workerCancel()
+
+	cl.Add("cron-stop", func(_ context.Context) error {
 		ctx := scheduler.Stop()
 		<-ctx.Done()
+		return nil
+	})
+	cl.Add("cron-cancel", func(_ context.Context) error {
+		workerCancel()
 		return nil
 	})
 	appLogger.Info(ctx, "cron scheduler started")
@@ -132,7 +145,7 @@ func run() error {
 		time.Duration(cfg.TrustMeRetryBackoffSeconds)*time.Second,
 	)
 	if _, err := scheduler.AddFunc("@every 10s", func() {
-		contractSenderSvc.RunOnce(context.Background())
+		contractSenderSvc.RunOnce(workerCtx)
 	}); err != nil {
 		return fmt.Errorf("schedule contract sender: %w", err)
 	}

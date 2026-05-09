@@ -396,21 +396,22 @@ export interface components {
             /** @description contracts.id passed in AdditionalInfo when SendToSign was invoked. */
             additionalInfo: string;
             contractName: string;
+            /** @description TrustMe details.NumberDial — UGC-{contracts.serial_number}. */
+            numberDial: string;
             /**
-             * @description sha256 prefix (first 16 hex chars) of the first Requisite.FIO. PII
-             *     is hashed before exposure per security.md hard rule. Same FIO →
-             *     same fingerprint, so e2e can assert via `domain/spy.Fingerprint("Иванов ...")`.
+             * @description Raw первый Requisite.FIO. Test endpoint доступен только при
+             *     EnableTestEndpoints=true (404 в проде); реальные ПД сюда не
+             *     попадают, e2e фикстуры синтетические.
              */
-            fioFingerprint: string;
-            /** @description sha256 prefix of the first Requisite.IIN_BIN. */
-            iinFingerprint: string;
-            /** @description sha256 prefix of the first Requisite.PhoneNumber (already E.164). */
-            phoneFingerprint: string;
+            fio: string;
+            /** @description Raw первый Requisite.IIN_BIN. */
+            iin: string;
+            /** @description Raw первый Requisite.PhoneNumber (уже E.164). */
+            phone: string;
             /**
-             * @description Full hex sha256 (64 chars) of base64-encoded PDF that was sent. Raw
-             *     PDF is NOT exposed — rendered overlay contains FIO/IIN/IssuedDate
-             *     (PII), security.md forbids PII in any response body. e2e compares
-             *     sha256 to assert PDF stability across retries.
+             * @description Full hex sha256 (64 chars) of base64 PDF. PDF не возвращаем
+             *     (overlay содержит overlay'енные значения; и тяжёлый payload).
+             *     E2e сравнивает sha256 retry'ев.
              */
             pdfSha256: string;
             /** Format: date-time */

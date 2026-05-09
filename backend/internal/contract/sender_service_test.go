@@ -119,16 +119,17 @@ func expectAuditRow(t *testing.T, rig *senderRig, action, ccID, expectedPayloadJ
 		}).Return(nil)
 }
 
-// happyClaim — фикстура заявки, которая попадает в Phase 1 SELECT.
+// happyClaim — фикстура заявки. ФИО сохранено в lowercase, чтобы заодно
+// зафиксировать composeFIO capitalize (выходит «Иванов Иван Иванович»).
 func happyClaim() *repository.AgreedClaimRow {
 	return &repository.AgreedClaimRow{
 		CampaignCreatorID:   "cc-1",
 		CampaignID:          "camp-1",
 		CreatorID:           "cr-1",
 		CreatorIIN:          "880101300123",
-		CreatorLastName:     "Иванов",
-		CreatorFirstName:    "Иван",
-		CreatorMiddleName:   pointer.ToString("Иванович"),
+		CreatorLastName:     "иванов",
+		CreatorFirstName:    "иван",
+		CreatorMiddleName:   pointer.ToString("иванович"),
 		CreatorPhone:        "+7 707 123 45 67",
 		ContractTemplatePDF: []byte("fake-template"),
 	}
@@ -149,8 +150,9 @@ func TestContractSenderService_RunOnce_HappyPath(t *testing.T) {
 		SubjectKind:       repository.ContractSubjectKindCampaignCreator,
 		TrustMeStatusCode: 0,
 	}).Return(&repository.ContractRow{
-		ID:          "ct-1",
-		SubjectKind: repository.ContractSubjectKindCampaignCreator,
+		ID:           "ct-1",
+		SubjectKind:  repository.ContractSubjectKindCampaignCreator,
+		SerialNumber: 42,
 	}, nil)
 	rig.cc.EXPECT().UpdateContractIDAndStatus(mock.Anything, "cc-1", "ct-1", "signing").Return(nil)
 	rig.renderer.EXPECT().Render(mock.Anything, mock.MatchedBy(func(d contract.ContractData) bool {
@@ -161,6 +163,7 @@ func TestContractSenderService_RunOnce_HappyPath(t *testing.T) {
 	rig.contracts.EXPECT().UpdateUnsignedPDF(mock.Anything, "ct-1", []byte("rendered-pdf")).Return(nil)
 	rig.tm.EXPECT().SendToSign(mock.Anything, mock.MatchedBy(func(in trustme.SendToSignInput) bool {
 		return in.AdditionalInfo == "ct-1" &&
+			in.NumberDial == "UGC-42" &&
 			len(in.Requisites) == 1 &&
 			in.Requisites[0].FIO == "Иванов Иван Иванович" &&
 			in.Requisites[0].IINBIN == "880101300123" &&
@@ -254,9 +257,11 @@ func TestContractSenderService_Phase0_Resend_WithRealRequisites(t *testing.T) {
 		CreatorFirstName:  "Иван",
 		CreatorMiddleName: pointer.ToString("Иванович"),
 		CreatorPhone:      "8 707 123 45 67",
+		SerialNumber:      77,
 	}, nil)
 	rig.tm.EXPECT().SendToSign(mock.Anything, mock.MatchedBy(func(in trustme.SendToSignInput) bool {
 		return in.AdditionalInfo == "ct-orphan" &&
+			in.NumberDial == "UGC-77" &&
 			in.Requisites[0].FIO == "Иванов Иван Иванович" &&
 			in.Requisites[0].IINBIN == "880101300123" &&
 			in.Requisites[0].PhoneNumber == "+77071234567" &&

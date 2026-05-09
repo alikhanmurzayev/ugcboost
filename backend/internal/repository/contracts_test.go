@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	contractAllCols            = "created_at, declined_at, id, initiated_at, last_attempted_at, last_error_code, last_error_message, next_retry_at, signed_at, subject_kind, trustme_document_id, trustme_short_url, trustme_status_code, updated_at, webhook_received_at"
+	contractAllCols            = "created_at, declined_at, id, initiated_at, last_attempted_at, last_error_code, last_error_message, next_retry_at, serial_number, signed_at, subject_kind, trustme_document_id, trustme_short_url, trustme_status_code, updated_at, webhook_received_at"
 	contractInsertSQL          = "INSERT INTO contracts (subject_kind,trustme_status_code) VALUES ($1,$2) RETURNING " + contractAllCols
 	contractClaimSQL           = "SELECT cc.id, cc.campaign_id, cc.creator_id, cr.iin, cr.last_name, cr.first_name, cr.middle_name, cr.phone, c.contract_template_pdf FROM campaign_creators cc JOIN campaigns c ON c.id = cc.campaign_id JOIN creators cr ON cr.id = cc.creator_id WHERE cc.status = $1 AND cc.contract_id IS NULL AND c.is_deleted = $2 AND length(c.contract_template_pdf) > 0 ORDER BY cc.decided_at ASC LIMIT 4 FOR UPDATE OF cc SKIP LOCKED"
 	contractOrphanSQL          = "SELECT id, unsigned_pdf_content FROM contracts WHERE subject_kind = $1 AND trustme_document_id IS NULL AND (next_retry_at IS NULL OR next_retry_at <= now()) ORDER BY next_retry_at ASC NULLS FIRST, initiated_at ASC LIMIT 8"
@@ -27,7 +27,7 @@ const (
 var contractRowCols = []string{
 	"created_at", "declined_at", "id", "initiated_at",
 	"last_attempted_at", "last_error_code", "last_error_message", "next_retry_at",
-	"signed_at", "subject_kind", "trustme_document_id",
+	"serial_number", "signed_at", "subject_kind", "trustme_document_id",
 	"trustme_short_url", "trustme_status_code", "updated_at",
 	"webhook_received_at",
 }
@@ -46,7 +46,7 @@ func TestContractRepository_Insert(t *testing.T) {
 			WillReturnRows(pgxmock.NewRows(contractRowCols).
 				AddRow(now, (*time.Time)(nil), "ct-1", now,
 					(*time.Time)(nil), (*string)(nil), (*string)(nil), (*time.Time)(nil),
-					(*time.Time)(nil), ContractSubjectKindCampaignCreator,
+					int64(42), (*time.Time)(nil), ContractSubjectKindCampaignCreator,
 					(*string)(nil), (*string)(nil), 0, now, (*time.Time)(nil)))
 
 		got, err := repo.Insert(context.Background(), ContractRow{
@@ -59,6 +59,7 @@ func TestContractRepository_Insert(t *testing.T) {
 			SubjectKind:       ContractSubjectKindCampaignCreator,
 			TrustMeStatusCode: 0,
 			InitiatedAt:       now,
+			SerialNumber:      42,
 			CreatedAt:         now,
 			UpdatedAt:         now,
 		}, got)
@@ -238,7 +239,7 @@ func TestContractRepository_SelectOrphansForRecovery(t *testing.T) {
 func TestContractRepository_GetOrphanRequisites(t *testing.T) {
 	t.Parallel()
 
-	const sqlStmt = "SELECT cc.id, cc.creator_id, cr.iin, cr.last_name, cr.first_name, cr.middle_name, cr.phone FROM contracts ct JOIN campaign_creators cc ON cc.contract_id = ct.id JOIN creators cr ON cr.id = cc.creator_id WHERE ct.id = $1"
+	const sqlStmt = "SELECT cc.id, cc.creator_id, cr.iin, cr.last_name, cr.first_name, cr.middle_name, cr.phone, ct.serial_number FROM contracts ct JOIN campaign_creators cc ON cc.contract_id = ct.id JOIN creators cr ON cr.id = cc.creator_id WHERE ct.id = $1"
 
 	t.Run("scans creator data", func(t *testing.T) {
 		t.Parallel()
@@ -249,8 +250,8 @@ func TestContractRepository_GetOrphanRequisites(t *testing.T) {
 		mock.ExpectQuery(sqlStmt).
 			WithArgs("ct-1").
 			WillReturnRows(pgxmock.NewRows([]string{
-				"id", "creator_id", "iin", "last_name", "first_name", "middle_name", "phone",
-			}).AddRow("cc-1", "cr-1", "880101300123", "Иванов", "Иван", &middle, "+77071234567"))
+				"id", "creator_id", "iin", "last_name", "first_name", "middle_name", "phone", "serial_number",
+			}).AddRow("cc-1", "cr-1", "880101300123", "Иванов", "Иван", &middle, "+77071234567", int64(77)))
 
 		got, err := repo.GetOrphanRequisites(context.Background(), "ct-1")
 		require.NoError(t, err)
@@ -262,6 +263,7 @@ func TestContractRepository_GetOrphanRequisites(t *testing.T) {
 		require.NotNil(t, got.CreatorMiddleName)
 		require.Equal(t, "Иванович", *got.CreatorMiddleName)
 		require.Equal(t, "+77071234567", got.CreatorPhone)
+		require.Equal(t, int64(77), got.SerialNumber)
 	})
 
 	t.Run("not found returns sql.ErrNoRows", func(t *testing.T) {
@@ -272,7 +274,7 @@ func TestContractRepository_GetOrphanRequisites(t *testing.T) {
 		mock.ExpectQuery(sqlStmt).
 			WithArgs("ct-missing").
 			WillReturnRows(pgxmock.NewRows([]string{
-				"id", "creator_id", "iin", "last_name", "first_name", "middle_name", "phone",
+				"id", "creator_id", "iin", "last_name", "first_name", "middle_name", "phone", "serial_number",
 			}))
 
 		_, err := repo.GetOrphanRequisites(context.Background(), "ct-missing")

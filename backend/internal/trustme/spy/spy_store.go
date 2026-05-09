@@ -1,7 +1,6 @@
-// Package spy реализует in-memory mock TrustMe-клиента: SpyOnlyClient + ring
-// store записанных запросов. Используется на local + staging + во всех e2e
-// тестах. Per Decision #17 intent-trustme-contract-v2: TrustMe не имеет
-// sandbox, поэтому Tee-режим не делаем.
+// Package spy — in-memory mock TrustMe-клиента: SpyOnlyClient + ring store
+// SendToSign-вызовов. Local + staging + e2e. Per Decision #17 intent v2 —
+// у TrustMe нет sandbox, поэтому Tee нет.
 package spy
 
 import (
@@ -11,50 +10,31 @@ import (
 	"time"
 )
 
-// storeCapacity — ring 5000 по образцу telegram (см.
-// `internal/telegram/spy_store.go:14`). Под ~50 параллельных staging e2e
-// тестов с большим запасом.
+// storeCapacity — ring 5000 (как telegram spy_store). Под ~50 параллельных
+// staging e2e тестов с запасом.
 const storeCapacity = 5000
 
-// SentRecord — снимок одного исходящего SendToSign-запроса для test-API.
-// PII (ФИО/ИИН/Телефон) хранится как sha256-фингерпринт (security.md hard
-// rule запрещает PII в любых response bodies — даже test-only ручек). Raw
-// PII живёт только в момент вызова SendToSign и не персистится.
-//
-// PDFSha256 — hex sha256 от исходного base64 PDF, который мы отправили в
-// TrustMe. Сам PDF не сохраняется ни в memory ring, ни в API-ответ:
-// rendered PDF содержит овellay'енные значения (ФИО/ИИН/IssuedDate), а
-// security.md запрещает экспонировать PII в response bodies любых ручек,
-// включая test-only. Ring капы 5000 × ~30-200KB PDF = ~1GB RAM на
-// долгоживущем процессе — отказ от хранения PDF также убирает этот баг.
+// SentRecord — снимок одного исходящего SendToSign'а для test-API. Хранит
+// сырые FIO/IIN/Phone — test endpoint gated EnableTestEndpoints (404 в
+// проде), реальные ПД сюда не попадают, синтетические e2e-фикстуры безопасно
+// возвращать как есть. PDF не храним целиком (5000 × ~100KB = ~500MB), только
+// sha256 для assert'а identity между retry'ями.
 type SentRecord struct {
-	DocumentID       string
-	ShortURL         string
-	AdditionalInfo   string
-	ContractName     string
-	FIOFingerprint   string
-	IINFingerprint   string
-	PhoneFingerprint string
-	PDFSha256        string
-	SentAt           time.Time
-	Err              string
+	DocumentID     string
+	ShortURL       string
+	AdditionalInfo string
+	ContractName   string
+	NumberDial     string
+	FIO            string
+	IIN            string
+	Phone          string
+	PDFSha256      string
+	SentAt         time.Time
+	Err            string
 }
 
-// Fingerprint возвращает первые 16 hex-символов sha256(value). Используется
-// для опубликовываемых через test-API снимков SentRecord — security.md
-// запрещает PII в response bodies, но e2e нужно сравнение «тот же ли FIO/IIN».
-func Fingerprint(value string) string {
-	if value == "" {
-		return ""
-	}
-	sum := sha256.Sum256([]byte(value))
-	return hex.EncodeToString(sum[:8])
-}
-
-// HashPDFBase64 — полный hex sha256 от base64-encoded PDF. В отличие от
-// Fingerprint (8 байт = 16 hex для sub-second collision-free), здесь полная
-// 32-байтная hash сохраняется: e2e сравнивает PDF retry'ев на побайтную
-// идентичность.
+// HashPDFBase64 — полный hex sha256 от base64-encoded PDF. e2e сравнивает
+// побайтовую идентичность retry'ев.
 func HashPDFBase64(pdfBase64 string) string {
 	if pdfBase64 == "" {
 		return ""
@@ -63,16 +43,15 @@ func HashPDFBase64(pdfBase64 string) string {
 	return hex.EncodeToString(sum[:])
 }
 
-// failNextEntry — запланированная ошибка, фалит ровно один следующий
-// SendToSign по additionalInfo (или N штук подряд).
+// failNextEntry — синтетический сбой следующего SendToSign по
+// additionalInfo (или N подряд).
 type failNextEntry struct {
 	reason string
 	count  int
 }
 
-// SpyStore — потокобезопасное хранилище SentRecord + регистраций fail-next +
-// «known»-документов (для имитации Phase 0 recovery, когда TrustMe «знает»
-// наш orphan).
+// SpyStore — потокобезопасное хранилище записей + fail-next + known-документов
+// (Phase 0 finalize-without-resend сценарий).
 type SpyStore struct {
 	mu             sync.Mutex
 	records        []SentRecord
@@ -96,11 +75,9 @@ func NewSpyStore() *SpyStore {
 	}
 }
 
-// RegisterFailNext очерёдывает синтетический сбой для следующих `count`
-// SendToSign'ов с указанным additionalInfo. Если additionalInfo == ""
-// (wildcard), фейлит следующие `count` вызовов независимо от additionalInfo —
-// нужно для e2e Phase 0 recovery теста, где contract_id неизвестен заранее.
-// count<=0 → 1.
+// RegisterFailNext очерёдывает синтетический сбой следующих `count` SendToSign'ов
+// с указанным additionalInfo. Empty additionalInfo → wildcard (Phase 0
+// recovery e2e: contract_id неизвестен заранее). count<=0 → 1.
 func (s *SpyStore) RegisterFailNext(additionalInfo, reason string, count int) {
 	if count <= 0 {
 		count = 1
@@ -118,9 +95,8 @@ func (s *SpyStore) RegisterFailNext(additionalInfo, reason string, count int) {
 	s.failNext[additionalInfo] = &failNextEntry{reason: reason, count: count}
 }
 
-// RegisterDocument имитирует «TrustMe уже принял этот документ» — следующий
-// SearchContractByAdditionalInfo вернёт зарегистрированный документ.
-// Используется e2e-сценарием Phase 0 finalize-without-resend.
+// RegisterDocument — «TrustMe уже принял этот документ». Используется в e2e
+// Phase 0 finalize-without-resend.
 func (s *SpyStore) RegisterDocument(additionalInfo, documentID, shortURL string, contractStatus int) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -131,8 +107,7 @@ func (s *SpyStore) RegisterDocument(additionalInfo, documentID, shortURL string,
 	}
 }
 
-// Clear сбрасывает все записанные SentRecord + failNext + known. Используется
-// e2e между сценариями — обычно через test-api /test/trustme/spy-clear.
+// Clear сбрасывает records + failNext + known.
 func (s *SpyStore) Clear() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -143,7 +118,7 @@ func (s *SpyStore) Clear() {
 	s.known = make(map[string]knownDocument)
 }
 
-// Record добавляет запись в ring. Старые вытесняются FIFO.
+// Record добавляет запись. Старые вытесняются FIFO.
 func (s *SpyStore) Record(rec SentRecord) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -162,9 +137,8 @@ func (s *SpyStore) List() []SentRecord {
 	return out
 }
 
-// consumeFailNext возвращает (reason, true), если для additionalInfo
-// зарегистрирован fail (либо wildcard). Декрементирует counter; когда дошёл
-// до 0 — удаляет entry. Specific match имеет приоритет над wildcard.
+// consumeFailNext возвращает (reason, true), если для additionalInfo есть
+// fail-запрос (включая wildcard). Specific match имеет приоритет над wildcard.
 func (s *SpyStore) consumeFailNext(additionalInfo string) (string, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

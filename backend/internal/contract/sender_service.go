@@ -6,8 +6,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/dbutil"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/domain"
@@ -17,31 +20,22 @@ import (
 )
 
 const (
-	// claimBatchSize ограничивает Phase 1 SELECT — низкие объёмы (~100/EFW)
-	// + 4 RPS rate-limit на TrustMe, четыре договора за тик.
-	claimBatchSize = 4
-	// recoveryBatchSize шире claim'а — Phase 0 побочный, и search-вызовы
-	// дешевле send-to-sign.
+	// claimBatchSize синхронизирован с TrustMe rate-limit 4 RPS — четыре
+	// договора за тик.
+	claimBatchSize    = 4
 	recoveryBatchSize = 8
-	// almatyTimezone — Asia/Almaty per Decision #13. Загружается лениво,
-	// fallback на UTC если tz-database в образе отсутствует.
+	// almatyTimezone — Asia/Almaty per Decision #13.
 	almatyTimezone = "Asia/Almaty"
-	// audit-action имена в БД формируются как "campaign_creator." + suffix —
-	// suffix-ы локальные, чтобы не тащить пакет service в contract. Полные
-	// строки совпадают с service.AuditActionCampaignCreatorContract*.
-	auditActionInitiated       = "contract_initiated"
-	auditActionOrphanRecovered = "contract_orphan_recovered"
-	// auditEntityTypeCampaignCreator зашит локально, чтобы пакет contract не
-	// зависел от service.AuditEntityType*. Идентичная строка живёт в
-	// service/audit_constants.go.
+	// audit-action имена локально продублированы, чтобы contract не тянул
+	// service. Должны совпадать со service.AuditActionCampaignCreatorContract*.
+	auditActionInitiated           = "contract_initiated"
+	auditActionOrphanRecovered     = "contract_orphan_recovered"
 	auditEntityTypeCampaignCreator = "campaign_creator"
 	auditActorRoleSystem           = "system"
-	// defaultContractName — имя по умолчанию для TrustMe ContractName поля.
-	// Конфигурируемо станет, когда появятся per-campaign шаблоны имён.
-	defaultContractName = "Договор UGC"
-	// trustMeCreatorCompanyName — Requisite.CompanyName для физлица-креатора;
-	// per intent Decision #13 «литерал «Креатор» (или ФИО)».
+	defaultContractName            = "Договор UGC"
+	// trustMeCreatorCompanyName per intent Decision #13.
 	trustMeCreatorCompanyName = "Креатор"
+	contractNumberPrefix      = "UGC-"
 )
 
 // ContractSenderRepoFactory — подмножество RepoFactory, нужное worker'у.
@@ -51,24 +45,20 @@ type ContractSenderRepoFactory interface {
 	NewAuditRepo(db dbutil.DB) repository.AuditRepo
 }
 
-// CreatorNotifier отправляет «договор отправлен на подпись» в Telegram.
-// Реализация — fire-and-forget goroutine в Telegram.Notifier; ошибки
-// уходят в notifier-логи. shortURL не передаём: TrustMe сам пришлёт SMS
-// со ссылкой, и в Telegram-сообщении мы её не дублируем.
+// CreatorNotifier — Telegram-уведомление «договор отправлен». Реализация
+// fire-and-forget; shortURL не передаём, TrustMe сам присылает SMS.
 type CreatorNotifier interface {
 	NotifyContractSent(ctx context.Context, creatorTelegramUserID int64)
 }
 
-// CreatorTelegramResolver резолвит telegram_user_id по creator_id. Используется
-// для бот-уведомления после COMMIT Phase 3. Через CreatorRepo напрямую — не
-// засоряем sender service знанием про domain объекты creators.
+// CreatorTelegramResolver резолвит telegram_user_id по creator_id для
+// post-commit бот-уведомления.
 type CreatorTelegramResolver interface {
 	GetTelegramUserIDsByIDs(ctx context.Context, ids []string) (map[string]int64, error)
 }
 
-// ContractSenderService — outbox-worker. RunOnce исполняет один тик: Phase 0
-// recovery → Phase 1 claim → Phase 2 render+persist+send → Phase 3 finalize.
-// Все сетевые вызовы — вне Tx.
+// ContractSenderService — outbox-worker. RunOnce: Phase 0 recovery → Phase 1
+// claim → Phase 2 render+persist+send → Phase 3 finalize. Сетевые вызовы вне Tx.
 type ContractSenderService struct {
 	pool            dbutil.Pool
 	repoFactory     ContractSenderRepoFactory
@@ -110,13 +100,10 @@ func NewContractSenderService(
 	}
 }
 
-// RunOnce — один тик worker'а. Не возвращает ошибки наружу: каждая фаза
-// логирует свои сбои и идёт дальше; cron-scheduler ничего не должен делать
-// с ошибкой, кроме как log + ждать следующего тика.
-//
-// Defer/recover защищает крон-горутину от panic'ов внутри signintech/gopdf
-// или ledongthuc/pdf на битых шаблонах: обвал одного тика не должен ронять
-// scheduler.
+// RunOnce — один тик. Ошибки наружу не пробрасываются (cron-scheduler сам
+// решает только когда триггерить следующий тик). defer/recover страхует от
+// panic'ов внутри gopdf/ledongthuc на битых PDF — sender'у нельзя ронять весь
+// scheduler. На уровне самого scheduler'а второй слой защиты — cron.Recover.
 func (s *ContractSenderService) RunOnce(ctx context.Context) {
 	if ctx == nil {
 		ctx = context.Background()
@@ -130,9 +117,9 @@ func (s *ContractSenderService) RunOnce(ctx context.Context) {
 	s.processAgreed(ctx)
 }
 
-// recoverOrphans (Phase 0): для contracts с trustme_document_id IS NULL
-// делает search в TrustMe; если known — finalize, если unknown с PDF —
-// re-send без re-render, если unknown без PDF — render+persist+send.
+// recoverOrphans (Phase 0): для contracts с trustme_document_id IS NULL —
+// search в TrustMe; known → finalize, unknown с PDF → re-send без re-render,
+// unknown без PDF → log+backoff (manual intervention).
 func (s *ContractSenderService) recoverOrphans(ctx context.Context) {
 	contractsRepo := s.repoFactory.NewContractsRepo(s.pool)
 	orphans, err := contractsRepo.SelectOrphansForRecovery(ctx, recoveryBatchSize)
@@ -155,8 +142,6 @@ func (s *ContractSenderService) recoverOne(ctx context.Context, orphan *reposito
 		// fall through — TrustMe не знает, перепосылаем
 	default:
 		s.logger.Error(ctx, "contract: phase 0 search", "contract_id", orphan.ContractID, "err", err)
-		// Без recordFailedAttempt каждый битый search — log spam каждые 10s
-		// на каждый orphan. Backoff даёт паузу + last_error_* для диагностики.
 		s.recordFailedAttempt(ctx, orphan.ContractID, err)
 		return
 	}
@@ -166,14 +151,8 @@ func (s *ContractSenderService) recoverOne(ctx context.Context, orphan *reposito
 		return
 	}
 
-	// Phase 2b упал до persist'а — повторяем render+persist+send как новый
-	// claim (но уже claim'нутый ряд). Здесь нужны creator+campaign-данные;
-	// SelectAgreedForClaim не поможет, нужен дополнительный запрос —
-	// поэтому в проде такой кейс крайне редок (Phase 2b — единичный
-	// UPDATE), и принимаем риск что на этом тике recover'нём только
-	// finalize/resend ветви, а полный re-render сделает следующий цикл
-	// после ручного восстановления `unsigned_pdf_content`. Backoff не даёт
-	// log-spam'у каждые 10 секунд: оператор видит warning раз в retryBackoff.
+	// Phase 2b упал до persist'а — unsigned_pdf отсутствует, нужно ручное
+	// восстановление. Backoff на next_retry_at не даёт log-спама на каждом тике.
 	s.logger.Error(ctx, "contract: phase 0 orphan without unsigned pdf — manual intervention needed",
 		"contract_id", orphan.ContractID)
 	s.recordFailedAttempt(ctx, orphan.ContractID, errors.New("manual intervention: orphan without unsigned pdf"))
@@ -222,6 +201,7 @@ func (s *ContractSenderService) resendOrphan(ctx context.Context, contractID str
 		PDFBase64:      base64.StdEncoding.EncodeToString(unsignedPDF),
 		AdditionalInfo: contractID,
 		ContractName:   defaultContractName,
+		NumberDial:     formatContractNumber(requisites.SerialNumber),
 		Requisites: []trustme.Requisite{{
 			CompanyName: trustMeCreatorCompanyName,
 			FIO:         composeFIO(requisites.CreatorLastName, requisites.CreatorFirstName, requisites.CreatorMiddleName),
@@ -257,9 +237,10 @@ func (s *ContractSenderService) processAgreed(ctx context.Context) {
 
 // claim — состояние от Phase 1, переходящее в Phase 2/3.
 type claim struct {
-	ContractID  string
-	CC          *repository.AgreedClaimRow
-	UnsignedPDF []byte
+	ContractID   string
+	SerialNumber int64
+	CC           *repository.AgreedClaimRow
+	UnsignedPDF  []byte
 }
 
 func (s *ContractSenderService) claimAgreedBatch(ctx context.Context) ([]claim, error) {
@@ -284,8 +265,9 @@ func (s *ContractSenderService) claimAgreedBatch(ctx context.Context) ([]claim, 
 				return fmt.Errorf("update cc: %w", err)
 			}
 			out = append(out, claim{
-				ContractID: contract.ID,
-				CC:         row,
+				ContractID:   contract.ID,
+				SerialNumber: contract.SerialNumber,
+				CC:           row,
 			})
 		}
 		return nil
@@ -322,6 +304,7 @@ func (s *ContractSenderService) processClaim(ctx context.Context, c claim) {
 		PDFBase64:      base64.StdEncoding.EncodeToString(pdf),
 		AdditionalInfo: c.ContractID,
 		ContractName:   defaultContractName,
+		NumberDial:     formatContractNumber(c.SerialNumber),
 		Requisites: []trustme.Requisite{{
 			CompanyName: trustMeCreatorCompanyName,
 			FIO:         composeFIO(c.CC.CreatorLastName, c.CC.CreatorFirstName, c.CC.CreatorMiddleName),
@@ -335,12 +318,10 @@ func (s *ContractSenderService) processClaim(ctx context.Context, c claim) {
 		return
 	}
 
-	// Phase 3 — finalize
+	// Phase 3 — finalize. При сбое document_id у TrustMe уже выдан, но
+	// локально не записан — Phase 0 next tick подберёт через search.
 	if err := s.finalize(ctx, c.ContractID, c.CC.CampaignCreatorID, res, auditActionInitiated); err != nil {
 		s.logger.Error(ctx, "contract: phase 3 finalize", "contract_id", c.ContractID, "err", err)
-		// TrustMe document_id уже выдан, но локально не записан. Phase 0 next
-		// tick найдёт через search → finalize-known. Backoff не даёт сразу
-		// биться в search; через retryBackoff Phase 0 подберёт.
 		s.recordFailedAttempt(ctx, c.ContractID, err)
 		return
 	}
@@ -353,8 +334,7 @@ func (s *ContractSenderService) finalize(ctx context.Context, contractID, ccID s
 	return dbutil.WithTx(ctx, s.pool, func(tx dbutil.DB) error {
 		contractsRepo := s.repoFactory.NewContractsRepo(tx)
 		auditRepo := s.repoFactory.NewAuditRepo(tx)
-		// trustme_status_code остаётся 0 после успешного SendToSign — TrustMe
-		// возвращает первичный документ в статусе «не подписан».
+		// trustme_status_code=0 — первичный «не подписан».
 		if err := contractsRepo.UpdateAfterSend(ctx, contractID, res.DocumentID, res.ShortURL, 0); err != nil {
 			return fmt.Errorf("update after send: %w", err)
 		}
@@ -369,12 +349,9 @@ func (s *ContractSenderService) finalize(ctx context.Context, contractID, ccID s
 	})
 }
 
-// recordAudit пишет audit-row для contract-event. EntityType="campaign_creator"
-// + EntityID=ccID (а НЕ contractID): action — это событие в жизненном цикле
-// заявки креатора, и future read-side queries `WHERE entity_type=$ AND
-// entity_id=$cc_id` обязаны находить эти строки. contract_id+document_id
-// живут в JSON payload для дополнительной диагностики, а не в индексных
-// колонках.
+// recordAudit — EntityType="campaign_creator" + EntityID=ccID (а НЕ
+// contractID): action в жизненном цикле заявки креатора, read-side queries
+// фильтруют по cc.ID. contract_id/document_id уходят в JSON payload.
 func (s *ContractSenderService) recordAudit(ctx context.Context, repo repository.AuditRepo, contractID, ccID, action string, search *trustme.SearchContractResult) error {
 	payload := map[string]string{
 		"contract_id": contractID,
@@ -400,12 +377,9 @@ func (s *ContractSenderService) recordAudit(ctx context.Context, repo repository
 	})
 }
 
-// recordFailedAttempt фиксирует на orphan'е причину последнего сбоя и
-// сдвигает next_retry_at на retryBackoff. Извлекает trustme.Error.Code, если
-// ошибка типизированная (status=Error от TrustMe), иначе оставляет код
-// пустым (сетевые сбои, таймауты, decode-ошибки). Не возвращает ошибку
-// наверх — на этом этапе worker уже зарегал Error в логах, и дальнейшее
-// поведение определяется ретрай-циклом, не этим UPDATE'ом.
+// recordFailedAttempt — last_error_* + next_retry_at += retryBackoff. Code
+// извлекается только если err — *trustme.Error; сетевые сбои оставляют ""
+// в last_error_code.
 func (s *ContractSenderService) recordFailedAttempt(ctx context.Context, contractID string, sendErr error) {
 	var code string
 	var trustMeErr *trustme.Error
@@ -436,9 +410,37 @@ func (s *ContractSenderService) notifyCreator(ctx context.Context, creatorID str
 }
 
 func composeFIO(last, first string, middle *string) string {
-	parts := []string{last, first}
-	if middle != nil && strings.TrimSpace(*middle) != "" {
-		parts = append(parts, *middle)
+	parts := []string{capitalizeFirstRune(last), capitalizeFirstRune(first)}
+	if middle != nil {
+		if m := strings.TrimSpace(*middle); m != "" {
+			parts = append(parts, capitalizeFirstRune(m))
+		}
 	}
 	return strings.Join(parts, " ")
+}
+
+// capitalizeFirstRune приводит первую руну к верхнему регистру (русский,
+// казахский, латиница работают через unicode.ToUpper). Остальные руны
+// не трогаем — оставляем как ввёл пользователь (двойные «иванов-петров»
+// или uppercase в середине не нормализуем).
+func capitalizeFirstRune(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return s
+	}
+	r, sz := utf8.DecodeRuneInString(s)
+	if r == utf8.RuneError {
+		return s
+	}
+	upper := unicode.ToUpper(r)
+	if upper == r {
+		return s
+	}
+	return string(upper) + s[sz:]
+}
+
+// formatContractNumber переводит contracts.serial_number в TrustMe NumberDial
+// формата UGC-{n}.
+func formatContractNumber(serial int64) string {
+	return contractNumberPrefix + strconv.FormatInt(serial, 10)
 }

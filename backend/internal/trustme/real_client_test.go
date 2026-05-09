@@ -29,7 +29,7 @@ func TestRealClient_SendToSign(t *testing.T) {
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write([]byte(`{
 				"status":"Ok","errorText":"",
-				"data":{"url":"https://t.tct.kz/uploader/abc","document_id":"abc","fileName":"abc.pdf"}
+				"data":{"url":"https://t.tct.kz/uploader/abc","id":"abc","fileName":"abc.pdf"}
 			}`))
 		}))
 		defer srv.Close()
@@ -39,6 +39,7 @@ func TestRealClient_SendToSign(t *testing.T) {
 			PDFBase64:      "JVBERi0xLg==",
 			AdditionalInfo: "ct-1",
 			ContractName:   "Договор",
+			NumberDial:     "UGC-42",
 			Requisites: []Requisite{{
 				FIO: "Иванов Иван", IINBIN: "880101300123", PhoneNumber: "+77071234567",
 			}},
@@ -57,6 +58,7 @@ func TestRealClient_SendToSign(t *testing.T) {
 		require.Contains(t, string(receivedBody), `"IIN_BIN":"880101300123"`)
 		require.Contains(t, string(receivedBody), `"PhoneNumber":"+77071234567"`)
 		require.Contains(t, string(receivedBody), `"AdditionalInfo":"ct-1"`)
+		require.Contains(t, string(receivedBody), `"NumberDial":"UGC-42"`)
 		require.Contains(t, string(receivedBody), "JVBERi0xLg==")
 	})
 
@@ -97,34 +99,13 @@ func TestRealClient_SendToSign(t *testing.T) {
 		require.Contains(t, err.Error(), "503")
 	})
 
-	t.Run("falls back to id field when document_id missing", func(t *testing.T) {
-		t.Parallel()
-		// TrustMe в проде возвращает success-wrapper с полем `id`, не
-		// `document_id` как обещает blueprint. Мы принимаем оба.
-		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{
-				"status":"Ok","errorText":"",
-				"data":{"url":"https://t.tct.kz/uploader/abc","id":"abc","fileName":"abc.pdf"}
-			}`))
-		}))
-		defer srv.Close()
-		client := NewRealClient(srv.URL, "tk", srv.Client())
-		got, err := client.SendToSign(context.Background(), SendToSignInput{
-			PDFBase64: "x", AdditionalInfo: "ct-id-only", ContractName: "x",
-			Requisites: []Requisite{{FIO: "x", IINBIN: "1", PhoneNumber: "+77"}},
-		})
-		require.NoError(t, err)
-		require.Equal(t, "abc", got.DocumentID)
-	})
-
-	t.Run("empty document_id surfaces data keys for diagnostics", func(t *testing.T) {
+	t.Run("empty id returns error", func(t *testing.T) {
 		t.Parallel()
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = w.Write([]byte(`{
 				"status":"Ok","errorText":"",
-				"data":{"url":"https://t.tct.kz/uploader/x","document_id":"","id":"","fileName":"x.pdf","extraField":"value"}
+				"data":{"url":"https://t.tct.kz/uploader/x","id":"","fileName":"x.pdf"}
 			}`))
 		}))
 		defer srv.Close()
@@ -134,11 +115,7 @@ func TestRealClient_SendToSign(t *testing.T) {
 			Requisites: []Requisite{{FIO: "x", IINBIN: "1", PhoneNumber: "+77"}},
 		})
 		require.Error(t, err)
-		require.Contains(t, err.Error(), "empty document_id")
-		require.Contains(t, err.Error(), "document_id")
-		require.Contains(t, err.Error(), "extraField")
-		require.Contains(t, err.Error(), "x.pdf")
-		require.Contains(t, err.Error(), "https://t.tct.kz/uploader/x")
+		require.Contains(t, err.Error(), "empty id")
 	})
 }
 

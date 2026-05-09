@@ -97,15 +97,16 @@ func TestTestAPIHandler_TrustMeSpyList(t *testing.T) {
 		now := time.Date(2026, 5, 9, 12, 0, 0, 0, time.UTC)
 		rig := newTrustMeRig(t, true, true)
 		rig.spy.EXPECT().List().Return([]trustmeport.SentRecord{{
-			DocumentID:       "doc-1",
-			ShortURL:         "https://t.tct.kz/uploader/doc-1",
-			AdditionalInfo:   "ct-1",
-			ContractName:     "Договор UGC",
-			FIOFingerprint:   "fingerprint-fio",
-			IINFingerprint:   "fingerprint-iin",
-			PhoneFingerprint: "fingerprint-phone",
-			PDFSha256:        "deadbeef00000000000000000000000000000000000000000000000000000000",
-			SentAt:           now,
+			DocumentID:     "doc-1",
+			ShortURL:       "https://t.tct.kz/uploader/doc-1",
+			AdditionalInfo: "ct-1",
+			ContractName:   "Договор UGC",
+			NumberDial:     "UGC-42",
+			FIO:            "Иванов Иван Иванович",
+			IIN:            "880101300123",
+			Phone:          "+77071234567",
+			PDFSha256:      "deadbeef00000000000000000000000000000000000000000000000000000000",
+			SentAt:         now,
 		}}).Once()
 
 		w, resp := doJSON[testapi.TrustMeSpyListResult](t, rig.router, http.MethodGet, "/test/trustme/spy-list", nil)
@@ -119,9 +120,10 @@ func TestTestAPIHandler_TrustMeSpyList(t *testing.T) {
 		require.Equal(t, "https://t.tct.kz/uploader/doc-1", *got.ShortUrl)
 		require.Equal(t, "ct-1", got.AdditionalInfo)
 		require.Equal(t, "Договор UGC", got.ContractName)
-		require.Equal(t, "fingerprint-fio", got.FioFingerprint)
-		require.Equal(t, "fingerprint-iin", got.IinFingerprint)
-		require.Equal(t, "fingerprint-phone", got.PhoneFingerprint)
+		require.Equal(t, "UGC-42", got.NumberDial)
+		require.Equal(t, "Иванов Иван Иванович", got.Fio)
+		require.Equal(t, "880101300123", got.Iin)
+		require.Equal(t, "+77071234567", got.Phone)
 		require.Equal(t, "deadbeef00000000000000000000000000000000000000000000000000000000", got.PdfSha256)
 		require.True(t, got.SentAt.Equal(now))
 		require.Nil(t, got.Err)
