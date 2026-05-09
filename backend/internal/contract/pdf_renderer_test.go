@@ -45,7 +45,7 @@ func TestRealRenderer_Render_FillsPlaceholders(t *testing.T) {
 	t.Parallel()
 
 	tpl := loadTemplate(t)
-	r := NewRealRenderer(nil)
+	r := NewRealRenderer(nil, nil)
 
 	out, err := r.Render(tpl, ContractData{
 		CreatorFIO: "Иванов Иван Иванович",
@@ -66,7 +66,7 @@ func TestRealRenderer_Render_FillsPlaceholders(t *testing.T) {
 
 func TestRealRenderer_Render_EmptyTemplate(t *testing.T) {
 	t.Parallel()
-	r := NewRealRenderer(nil)
+	r := NewRealRenderer(nil, nil)
 	_, err := r.Render(nil, ContractData{})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "empty template")
@@ -75,7 +75,7 @@ func TestRealRenderer_Render_EmptyTemplate(t *testing.T) {
 func TestRealRenderer_Render_SkipMissingValues(t *testing.T) {
 	t.Parallel()
 	tpl := loadTemplate(t)
-	r := NewRealRenderer(nil)
+	r := NewRealRenderer(nil, nil)
 
 	// IssuedDate empty — overlay just leaves the placeholder text untouched.
 	out, err := r.Render(tpl, ContractData{

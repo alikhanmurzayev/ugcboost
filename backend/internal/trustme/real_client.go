@@ -9,6 +9,7 @@ import (
 	"io"
 	"mime/multipart"
 	"net/http"
+	"net/url"
 	"sort"
 	"strings"
 	"time"
@@ -159,7 +160,7 @@ func (c *RealClient) SendToSign(ctx context.Context, in SendToSignInput) (*SendT
 		return nil, fmt.Errorf("trustme: read send-to-sign body: %w", err)
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("trustme: send-to-sign http %d: %s", resp.StatusCode, truncate(respBody))
+		return nil, fmt.Errorf("trustme: send-to-sign http %d: %s", resp.StatusCode, summarizeNon200(respBody))
 	}
 
 	var wrapper apiResponse[sendToSignData]
@@ -252,7 +253,7 @@ func (c *RealClient) SearchContractByAdditionalInfo(ctx context.Context, additio
 		return nil, fmt.Errorf("trustme: read search body: %w", err)
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("trustme: search http %d: %s", resp.StatusCode, truncate(respBody))
+		return nil, fmt.Errorf("trustme: search http %d: %s", resp.StatusCode, summarizeNon200(respBody))
 	}
 	var wrapper apiResponse[[]searchContractItem]
 	if err := json.Unmarshal(respBody, &wrapper); err != nil {
@@ -291,7 +292,7 @@ func (c *RealClient) DownloadContractFile(ctx context.Context, documentID string
 		return nil, err
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
-		c.baseURL+"/doc/DownloadContractFile/"+documentID, nil)
+		c.baseURL+"/doc/DownloadContractFile/"+url.PathEscape(documentID), nil)
 	if err != nil {
 		return nil, fmt.Errorf("trustme: build download request: %w", err)
 	}
@@ -302,13 +303,28 @@ func (c *RealClient) DownloadContractFile(ctx context.Context, documentID string
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("trustme: download http %d: %s", resp.StatusCode, truncate(body))
+		return nil, fmt.Errorf("trustme: download http %d: %s", resp.StatusCode, summarizeNon200(body))
 	}
 	return io.ReadAll(resp.Body)
 }
 
-func truncate(b []byte) string {
-	const max = 256
+// summarizeNon200 формирует диагностическую строку для error-message при HTTP
+// non-200 от TrustMe. Сначала пытается распарсить body как структурированный
+// apiResponse — если получилось, отдаёт `status="..." errorText="..."` через
+// FormatErrorText (имя кода ошибки + расшифровка). Если body — не наш формат
+// (HTML от reverse-proxy, gateway-error и т.п.), отдаём только первые 64
+// байта raw без эха возможного PII в URL/path. См. security.md § PII в
+// error.Message — error.Message попадает в response body нашего сервиса и в
+// `contracts.last_error_message`, поэтому raw response body эхо-нюхать нельзя.
+func summarizeNon200(b []byte) string {
+	if len(b) == 0 {
+		return ""
+	}
+	var probe apiResponse[json.RawMessage]
+	if err := json.Unmarshal(b, &probe); err == nil && (probe.Status != "" || probe.ErrorText != "") {
+		return fmt.Sprintf("status=%q errorText=%q", probe.Status, FormatErrorText(probe.ErrorText))
+	}
+	const max = 64
 	if len(b) > max {
 		return string(b[:max]) + "…"
 	}

@@ -125,7 +125,7 @@ func run() error {
 		pool,
 		repoFactory,
 		trustMeRig.Client,
-		contract.NewRealRenderer(nil),
+		contract.NewRealRenderer(nil, appLogger),
 		repoFactory.NewCreatorRepo(pool),
 		tgRig.Notifier,
 		appLogger,

@@ -155,6 +155,9 @@ func (s *ContractSenderService) recoverOne(ctx context.Context, orphan *reposito
 		// fall through — TrustMe не знает, перепосылаем
 	default:
 		s.logger.Error(ctx, "contract: phase 0 search", "contract_id", orphan.ContractID, "err", err)
+		// Без recordFailedAttempt каждый битый search — log spam каждые 10s
+		// на каждый orphan. Backoff даёт паузу + last_error_* для диагностики.
+		s.recordFailedAttempt(ctx, orphan.ContractID, err)
 		return
 	}
 
@@ -169,10 +172,11 @@ func (s *ContractSenderService) recoverOne(ctx context.Context, orphan *reposito
 	// поэтому в проде такой кейс крайне редок (Phase 2b — единичный
 	// UPDATE), и принимаем риск что на этом тике recover'нём только
 	// finalize/resend ветви, а полный re-render сделает следующий цикл
-	// после ручного восстановления `unsigned_pdf_content`. Пока — error
-	// log + skip.
+	// после ручного восстановления `unsigned_pdf_content`. Backoff не даёт
+	// log-spam'у каждые 10 секунд: оператор видит warning раз в retryBackoff.
 	s.logger.Error(ctx, "contract: phase 0 orphan without unsigned pdf — manual intervention needed",
 		"contract_id", orphan.ContractID)
+	s.recordFailedAttempt(ctx, orphan.ContractID, errors.New("manual intervention: orphan without unsigned pdf"))
 }
 
 func (s *ContractSenderService) finalizeKnownOrphan(ctx context.Context, contractID string, search *trustme.SearchContractResult) {
@@ -180,6 +184,7 @@ func (s *ContractSenderService) finalizeKnownOrphan(ctx context.Context, contrac
 	requisites, err := contractsRepo.GetOrphanRequisites(ctx, contractID)
 	if err != nil {
 		s.logger.Error(ctx, "contract: phase 0 finalize lookup", "contract_id", contractID, "err", err)
+		s.recordFailedAttempt(ctx, contractID, err)
 		return
 	}
 
@@ -196,6 +201,7 @@ func (s *ContractSenderService) finalizeKnownOrphan(ctx context.Context, contrac
 	})
 	if err != nil {
 		s.logger.Error(ctx, "contract: phase 0 finalize-known", "contract_id", contractID, "err", err)
+		s.recordFailedAttempt(ctx, contractID, err)
 		return
 	}
 	s.logger.Info(ctx, "contract: phase 0 recovered known document",
@@ -208,6 +214,7 @@ func (s *ContractSenderService) resendOrphan(ctx context.Context, contractID str
 	requisites, err := contractsRepo.GetOrphanRequisites(ctx, contractID)
 	if err != nil {
 		s.logger.Error(ctx, "contract: phase 0 resend lookup", "contract_id", contractID, "err", err)
+		s.recordFailedAttempt(ctx, contractID, err)
 		return
 	}
 
@@ -230,6 +237,7 @@ func (s *ContractSenderService) resendOrphan(ctx context.Context, contractID str
 	}
 	if err := s.finalize(ctx, contractID, requisites.CampaignCreatorID, res, auditActionOrphanRecovered); err != nil {
 		s.logger.Error(ctx, "contract: phase 0 resend finalize", "contract_id", contractID, "err", err)
+		s.recordFailedAttempt(ctx, contractID, err)
 		return
 	}
 	s.notifyCreator(ctx, requisites.CreatorID)
@@ -297,6 +305,7 @@ func (s *ContractSenderService) processClaim(ctx context.Context, c claim) {
 	})
 	if err != nil {
 		s.logger.Error(ctx, "contract: phase 2a render", "contract_id", c.ContractID, "err", err)
+		s.recordFailedAttempt(ctx, c.ContractID, err)
 		return
 	}
 
@@ -304,6 +313,7 @@ func (s *ContractSenderService) processClaim(ctx context.Context, c claim) {
 	contractsRepo := s.repoFactory.NewContractsRepo(s.pool)
 	if err := contractsRepo.UpdateUnsignedPDF(ctx, c.ContractID, pdf); err != nil {
 		s.logger.Error(ctx, "contract: phase 2b persist", "contract_id", c.ContractID, "err", err)
+		s.recordFailedAttempt(ctx, c.ContractID, err)
 		return
 	}
 
@@ -328,6 +338,10 @@ func (s *ContractSenderService) processClaim(ctx context.Context, c claim) {
 	// Phase 3 — finalize
 	if err := s.finalize(ctx, c.ContractID, c.CC.CampaignCreatorID, res, auditActionInitiated); err != nil {
 		s.logger.Error(ctx, "contract: phase 3 finalize", "contract_id", c.ContractID, "err", err)
+		// TrustMe document_id уже выдан, но локально не записан. Phase 0 next
+		// tick найдёт через search → finalize-known. Backoff не даёт сразу
+		// биться в search; через retryBackoff Phase 0 подберёт.
+		s.recordFailedAttempt(ctx, c.ContractID, err)
 		return
 	}
 
@@ -355,6 +369,12 @@ func (s *ContractSenderService) finalize(ctx context.Context, contractID, ccID s
 	})
 }
 
+// recordAudit пишет audit-row для contract-event. EntityType="campaign_creator"
+// + EntityID=ccID (а НЕ contractID): action — это событие в жизненном цикле
+// заявки креатора, и future read-side queries `WHERE entity_type=$ AND
+// entity_id=$cc_id` обязаны находить эти строки. contract_id+document_id
+// живут в JSON payload для дополнительной диагностики, а не в индексных
+// колонках.
 func (s *ContractSenderService) recordAudit(ctx context.Context, repo repository.AuditRepo, contractID, ccID, action string, search *trustme.SearchContractResult) error {
 	payload := map[string]string{
 		"contract_id": contractID,
@@ -369,7 +389,7 @@ func (s *ContractSenderService) recordAudit(ctx context.Context, repo repository
 	if err != nil {
 		return err
 	}
-	entityID := contractID
+	entityID := ccID
 	return repo.Create(ctx, repository.AuditLogRow{
 		ActorID:    nil,
 		ActorRole:  auditActorRoleSystem,

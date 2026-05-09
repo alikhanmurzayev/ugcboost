@@ -55,7 +55,7 @@ func TestSpyClient_SendToSign_Records(t *testing.T) {
 	require.Equal(t, Fingerprint("Иванов Иван Иванович"), records[0].FIOFingerprint)
 	require.Equal(t, Fingerprint("880101300123"), records[0].IINFingerprint)
 	require.Equal(t, Fingerprint("+77071234567"), records[0].PhoneFingerprint)
-	require.Equal(t, "JVBERi0xLg==", records[0].PDFBase64)
+	require.Equal(t, HashPDFBase64("JVBERi0xLg=="), records[0].PDFSha256)
 	require.Empty(t, records[0].Err)
 }
 

@@ -72,7 +72,7 @@ func (a *trustMeSpyAdapter) List() []trustmeport.SentRecord {
 			FIOFingerprint:   r.FIOFingerprint,
 			IINFingerprint:   r.IINFingerprint,
 			PhoneFingerprint: r.PhoneFingerprint,
-			PDFBase64:        r.PDFBase64,
+			PDFSha256:        r.PDFSha256,
 			SentAt:           r.SentAt,
 			Err:              r.Err,
 		}

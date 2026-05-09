@@ -2,12 +2,16 @@ package contract
 
 import (
 	"bytes"
+	"context"
 	_ "embed"
 	"fmt"
 	"os"
+	"unicode/utf8"
 
 	"github.com/ledongthuc/pdf"
 	"github.com/signintech/gopdf"
+
+	"github.com/alikhanmurzayev/ugcboost/backend/internal/logger"
 )
 
 // LiberationSerif-Regular.ttf — embedded TTF, метрики совместимы с Times New
@@ -46,6 +50,10 @@ const (
 	ascentRatio  = 0.75
 	descentRatio = 0.27
 	pad          = 1.0
+	// overflowSlack — допуск для warn-on-overflow: 5% сверх bbox считаются
+	// нормой (anti-alias halo + микро-дрейф kerning'а). Только при превышении
+	// этого порога пишем warning лог.
+	overflowSlack = 1.05
 )
 
 // Renderer накладывает overlay на шаблон договора per Decision #12.
@@ -57,14 +65,17 @@ type Renderer interface {
 // (через RealExtractor). Без сети, без CGo.
 type RealRenderer struct {
 	extractor Extractor
+	logger    logger.Logger
 }
 
 // NewRealRenderer собирает рендерер. extractor=nil → новый RealExtractor.
-func NewRealRenderer(extractor Extractor) *RealRenderer {
+// log=nil допустим — overflow-warning'и тогда не пишутся (но render продолжает
+// работать, см. Open Forks в intent-trustme-contract-v2).
+func NewRealRenderer(extractor Extractor, log logger.Logger) *RealRenderer {
 	if extractor == nil {
 		extractor = NewRealExtractor()
 	}
-	return &RealRenderer{extractor: extractor}
+	return &RealRenderer{extractor: extractor, logger: log}
 }
 
 // Render накладывает overlay поверх template и возвращает результат.
@@ -136,6 +147,7 @@ func (r *RealRenderer) Render(template []byte, data ContractData) ([]byte, error
 			if err := out.SetFont("body", "", ph.FontSize); err != nil {
 				return nil, fmt.Errorf("contract: set font: %w", err)
 			}
+			r.warnOnOverflow(&out, ph, pn, value, width)
 			out.SetX(ph.XMin)
 			out.SetY(yGlyphTop)
 			if err := out.Cell(nil, value); err != nil {
@@ -149,6 +161,29 @@ func (r *RealRenderer) Render(template []byte, data ContractData) ([]byte, error
 		return nil, fmt.Errorf("contract: write pdf: %w", err)
 	}
 	return buf.Bytes(), nil
+}
+
+// warnOnOverflow логирует Warn, если value визуально не влезает в bbox
+// плейсхолдера (gopdf.MeasureTextWidth > width). PII (само value) не пишем —
+// только rune count, имя плейсхолдера, page и геометрия. Текущая политика —
+// warn-only (см. Open Forks в intent-v2): креатор всё равно подписывает
+// договор, оператор разбирает кейсы overflow по логам вручную.
+func (r *RealRenderer) warnOnOverflow(out *gopdf.GoPdf, ph Placeholder, page int, value string, bboxWidth float64) {
+	if r.logger == nil {
+		return
+	}
+	w, err := out.MeasureTextWidth(value)
+	if err != nil || w <= bboxWidth*overflowSlack {
+		return
+	}
+	r.logger.Warn(context.Background(), "contract: pdf overlay value overflows placeholder bbox",
+		"placeholder", ph.Name,
+		"page", page,
+		"value_runes", utf8.RuneCountInString(value),
+		"value_width_pt", w,
+		"bbox_width_pt", bboxWidth,
+		"font_size", ph.FontSize,
+	)
 }
 
 func maxPage(placeholders []Placeholder) int {

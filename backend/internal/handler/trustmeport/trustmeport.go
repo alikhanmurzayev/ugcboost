@@ -13,9 +13,10 @@ import (
 // trustme/spy.SentRecord, чтобы handler не импортировал spy package и
 // adapter в cmd/api конвертировал между ними.
 //
-// PII fields (FIO/IIN/Phone) намеренно отсутствуют — security.md hard rule
-// запрещает PII в response bodies любых endpoint'ов. Вместо raw value test
-// API экспонирует sha256-fingerprint префикс.
+// PII fields (FIO/IIN/Phone) и PDFBase64 намеренно отсутствуют — security.md
+// hard rule запрещает PII в response bodies любых endpoint'ов; rendered PDF
+// содержит overlay'енные ФИО/ИИН/IssuedDate. Вместо raw value test API
+// экспонирует sha256-fingerprint префикс / полный sha256 hash PDF.
 type SentRecord struct {
 	DocumentID       string
 	ShortURL         string
@@ -24,7 +25,7 @@ type SentRecord struct {
 	FIOFingerprint   string
 	IINFingerprint   string
 	PhoneFingerprint string
-	PDFBase64        string
+	PDFSha256        string
 	SentAt           time.Time
 	Err              string
 }

@@ -1,65 +1,54 @@
 // Package contract — E2E тесты outbox-worker'а TrustMe (chunk 16).
 //
-// TestContractSending проходит сценарии отправки договора через
-// ContractSenderService.RunOnce, который мы дёргаем синхронно через
-// /test/trustme/run-outbox-once вместо ожидания @every 10s крон-тика.
-// Все вызовы TrustMe идут в SpyOnlyClient (TRUSTME_MOCK=true в test
-// окружении), записи доступны через /test/trustme/spy-list.
+// TestContractSending проходит chunk 16 outbox-flow от лица креатора:
+// заявка переводится в `agreed` через POST /tma/campaigns/{secret_token}/agree
+// со подписанным initData, затем мы синхронно дёргаем
+// ContractSenderService.RunOnce через /test/trustme/run-outbox-once вместо
+// ожидания @every 10s крон-тика. Все вызовы TrustMe идут в SpyOnlyClient
+// (TRUSTME_MOCK=true в тестовой среде), записи доступны через
+// /test/trustme/spy-list — оттуда читаем sha256-фингерпринт PDF и
+// фингерпринты PII-полей (raw FIO/IIN/Phone и raw PDF в response не
+// эспонируются: security.md hard rule). На happy-path тест ожидает один
+// SendToSign-вызов, audit-row campaign_creator.contract_initiated с
+// actor_id=NULL и entity_id=cc.ID, и сохранённый ненулевой PDFSha256.
+// На fail-and-recovery (spy-fail-next ставит синтетический сбой первой
+// попытки) — два SendToSign-вызова с идентичным PDFSha256 (без re-render
+// на recovery). Скоупы «empty template» и «known orphan finalize» закрыты
+// repo/unit-уровнем — здесь лишь t.Skip с явной ссылкой на покрывающий
+// тест.
 //
-// Happy: после tma agree → run-outbox-once запись campaign_creators
-// переходит в `signing` с ненулевым contract_id, в spy-list ровно одна
-// запись с правильными additionalInfo / FIO / IIN / нормализованным
-// phone и parseable base64-PDF (через ledongthuc/pdf), audit-action
-// campaign_creator.contract_initiated с actor_id=NULL и UUID-полями в
-// payload.
-//
-// Empty template: кампания без шаблона PDF не подбирается Phase 1
-// SELECT'ом — `cc.status` остаётся `agreed`, в spy-list пусто.
-//
-// Soft-deleted кампания: между agreed и тиком worker'а админ
-// soft-удаляет кампанию (через test-API hard-delete недоступен), ряд
-// `agreed` остаётся tombstone'ом, worker не подбирает.
-//
-// TrustMe failure → recovery: spy-fail-next ставит синтетическую
-// ошибку, первый run-outbox-once оставляет orphan (`unsigned_pdf
-// NOT NULL`, `trustme_document_id IS NULL`). Второй run-outbox-once
-// поднимает orphan через Phase 0 и шлёт повторно с тем же sha256
-// PDF — spy-list имеет ровно две записи (первая с err,
-// вторая успешная) с одинаковым PDFBase64.
-//
-// Known orphan: spy-register-document симулирует «TrustMe знает
-// наш orphan» — Phase 0 search-find делает finalize без re-send'а.
-// После очистки spy-list через /test/trustme/spy-clear повторный
-// run-outbox-once не шлёт SendToSign повторно.
-//
-// Сетап для каждого сценария — testutil.SetupCampaignWithInvitedCreator
-// (готовая «приглашённая» пара) + tma-agree через signed initData,
-// затем явный run-outbox-once. Cleanup LIFO через E2E_CLEANUP=true.
+// Setup для каждого сценария — testutil.SetupCampaignWithInvitedCreator
+// (готовая «приглашённая» пара) с уникальным suffix в email/handle,
+// чтобы тесты были изолированы под `t.Parallel()`. Cleanup — defer-LIFO
+// через E2E_CLEANUP=true.
 package contract
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha256"
-	"encoding/base64"
 	"encoding/hex"
 	"io"
 	"net/http"
 	"testing"
 
-	"github.com/ledongthuc/pdf"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/alikhanmurzayev/ugcboost/backend/e2e/apiclient"
 	"github.com/alikhanmurzayev/ugcboost/backend/e2e/testclient"
 	"github.com/alikhanmurzayev/ugcboost/backend/e2e/testutil"
 )
 
-func sha256Hex(t *testing.T, b64 string) string {
-	t.Helper()
-	pdfBytes, err := base64.StdEncoding.DecodeString(b64)
-	require.NoError(t, err)
-	sum := sha256.Sum256(pdfBytes)
-	return hex.EncodeToString(sum[:])
+// fingerprint16 — реплика `internal/trustme/spy.Fingerprint`: первые 8 байт
+// sha256(value), hex (16 chars). E2e module не может импортировать internal,
+// поэтому копия. Должна совпадать с production алгоритмом, иначе фильтрация
+// spy-list по IIN/FIO/Phone не будет находить записи.
+func fingerprint16(value string) string {
+	if value == "" {
+		return ""
+	}
+	sum := sha256.Sum256([]byte(value))
+	return hex.EncodeToString(sum[:8])
 }
 
 // tmaPostAgree — тонкая обёртка над POST /tma/campaigns/{secret_token}/agree.
@@ -72,7 +61,7 @@ func tmaPostAgree(t *testing.T, secretToken, initData string) (int, []byte) {
 	req.Header.Set("Authorization", "tma "+initData)
 	resp, err := testutil.HTTPClient(nil).Do(req)
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	body, err := io.ReadAll(resp.Body)
 	require.NoError(t, err)
 	return resp.StatusCode, body
@@ -99,14 +88,6 @@ func spyList(t *testing.T) []testclient.TrustMeSentRecord {
 	return resp.JSON200.Data.Items
 }
 
-func spyClear(t *testing.T) {
-	t.Helper()
-	tc := testutil.NewTestClient(t)
-	resp, err := tc.TrustMeSpyClearWithResponse(context.Background())
-	require.NoError(t, err)
-	require.Equal(t, http.StatusNoContent, resp.StatusCode())
-}
-
 func spyFailNext(t *testing.T, additionalInfo string, count int) {
 	t.Helper()
 	tc := testutil.NewTestClient(t)
@@ -119,26 +100,17 @@ func spyFailNext(t *testing.T, additionalInfo string, count int) {
 	require.Equal(t, http.StatusNoContent, resp.StatusCode())
 }
 
-func spyRegisterDocument(t *testing.T, additionalInfo, documentID string) {
+// pdfShaIsHex64 — sanity-чек: spy положил полный hex sha256 (64 chars). PDF
+// сам не экспонируется (PII в overlay'е), поэтому parseability проверяет
+// unit-тест RealRenderer, а e2e — только что worker действительно посчитал
+// sha256 от non-empty PDF и положил в response.
+func pdfShaIsHex64(t *testing.T, sha string) {
 	t.Helper()
-	tc := testutil.NewTestClient(t)
-	body := testclient.TrustMeSpyRegisterDocumentRequest{
-		AdditionalInfo: additionalInfo,
-		DocumentId:     documentID,
+	require.Len(t, sha, 64)
+	for _, r := range sha {
+		require.Truef(t, (r >= '0' && r <= '9') || (r >= 'a' && r <= 'f'),
+			"PdfSha256 must be lowercase hex, got %q", sha)
 	}
-	resp, err := tc.TrustMeSpyRegisterDocumentWithResponse(context.Background(), body)
-	require.NoError(t, err)
-	require.Equal(t, http.StatusNoContent, resp.StatusCode())
-}
-
-// pdfReadable — лёгкий sanity-чек: spy положил parseable base64 PDF.
-func pdfReadable(t *testing.T, b64 string) {
-	t.Helper()
-	pdfBytes, err := base64.StdEncoding.DecodeString(b64)
-	require.NoError(t, err)
-	require.NotEmpty(t, pdfBytes)
-	_, err = pdf.NewReader(bytes.NewReader(pdfBytes), int64(len(pdfBytes)))
-	require.NoError(t, err)
 }
 
 func TestContractSending(t *testing.T) {
@@ -154,42 +126,55 @@ func TestContractSending(t *testing.T) {
 
 		runOutboxOnce(t)
 
-		// Spy теперь публикует фингерпринты PII-полей вместо raw — фильтруем
-		// по факту наличия записи с заполненным fingerprint'ом.
+		// Filter spy-list строго по IINFingerprint от уникального IIN этого
+		// теста — UniqueIIN() гарантирует уникальность между параллельными
+		// тестами, поэтому только наша запись попадёт в matching.
+		expectedIINFP := fingerprint16(fx.CreatorIIN)
 		records := spyList(t)
 		var matching []testclient.TrustMeSentRecord
 		for _, r := range records {
-			if r.AdditionalInfo != "" && r.PhoneFingerprint != "" {
+			if r.IinFingerprint == expectedIINFP {
 				matching = append(matching, r)
 			}
 		}
-		require.NotEmpty(t, matching, "expected at least one TrustMe record for happy path")
+		require.Len(t, matching, 1, "expected exactly one TrustMe record for our IIN")
 
-		// Берём первую запись с непустым document_id и без error — это успешный
-		// SendToSign. Под параллельным cron'ом ровно одна не гарантирована.
-		var ours *testclient.TrustMeSentRecord
-		for i := range matching {
-			r := &matching[i]
-			if r.DocumentId != nil && *r.DocumentId != "" && (r.Err == nil || *r.Err == "") {
-				ours = r
+		ours := matching[0]
+		require.NotNil(t, ours.DocumentId)
+		require.NotEmpty(t, *ours.DocumentId)
+		require.Equal(t, fingerprint16(fx.CreatorFIO), ours.FioFingerprint)
+		require.Equal(t, expectedIINFP, ours.IinFingerprint)
+		require.Equal(t, fingerprint16("+77071234567"), ours.PhoneFingerprint,
+			"normalized phone fingerprint must match — ApprovedCreatorFixture phone always +77071234567")
+		require.Nil(t, ours.Err, "happy path must not record err")
+		pdfShaIsHex64(t, ours.PdfSha256)
+
+		// Audit-row campaign_creator.contract_initiated с actor_id=NULL и
+		// entity_id=cc.ID. Фильтр по cc.ID стал точным после fix B (раньше
+		// ошибочно entity_id=contract.ID — read-side queries по cc не
+		// находили строку).
+		entry := testutil.FindAuditEntry(t, fx.AdminClient, fx.AdminToken,
+			"campaign_creator", fx.CampaignCreatorID, "campaign_creator.contract_initiated")
+		require.Nil(t, entry.ActorId)
+
+		// cc.status flipped to signing после Phase 3 finalize. Енам в
+		// openapi.yaml пока без `signing` (chunk 18 territory) — поэтому
+		// сравниваем со string literal.
+		listResp, err := fx.AdminClient.ListCampaignCreatorsWithResponse(context.Background(),
+			uuid.MustParse(fx.CampaignID), testutil.WithAuth(fx.AdminToken))
+		require.NoError(t, err)
+		require.Equal(t, http.StatusOK, listResp.StatusCode())
+		require.NotNil(t, listResp.JSON200)
+		var ccItem *apiclient.CampaignCreator
+		for i := range listResp.JSON200.Data.Items {
+			if listResp.JSON200.Data.Items[i].Id.String() == fx.CampaignCreatorID {
+				ccItem = &listResp.JSON200.Data.Items[i]
 				break
 			}
 		}
-		require.NotNil(t, ours)
-		require.NotEmpty(t, *ours.DocumentId)
-		require.NotEmpty(t, ours.FioFingerprint)
-		require.Len(t, ours.IinFingerprint, 16)   // 16 hex chars per Fingerprint()
-		require.Len(t, ours.PhoneFingerprint, 16) // 16 hex chars per Fingerprint()
-		pdfReadable(t, ours.PdfBase64)
-
-		// Audit-row campaign_creator.contract_initiated с actor_id=NULL.
-		entry := testutil.FindAuditEntry(t, fx.AdminClient, fx.AdminToken,
-			"campaign_creator", "", "campaign_creator.contract_initiated")
-		require.Nil(t, entry.ActorId)
-
-		// Verify cc status flipped to signing via list endpoint; no other
-		// state changed.
-		require.NotEmpty(t, fx.CampaignCreatorID)
+		require.NotNil(t, ccItem, "campaign_creator must be in list")
+		require.Equal(t, apiclient.CampaignCreatorStatus("signing"), ccItem.Status,
+			"cc status must flip from agreed → signing after worker tick")
 	})
 
 	t.Run("empty template → not picked up", func(t *testing.T) {
@@ -236,38 +221,32 @@ func TestContractSending(t *testing.T) {
 		// invariant спеки line 116.
 		runOutboxOnce(t)
 
-		// Spy-list проверка по additionalInfo — фильтруем запись от
-		// concurrent-test'ов и cron-тиков параллельных тестов.
+		// Filter spy-list строго по IINFingerprint этого теста — точная
+		// изоляция между параллельными e2e через UniqueIIN.
+		expectedIINFP := fingerprint16(fx.CreatorIIN)
 		records := spyList(t)
 		var ours []testclient.TrustMeSentRecord
 		for _, r := range records {
-			if r.PhoneFingerprint == "" {
-				continue
-			}
-			ours = append(ours, r)
-		}
-		require.NotEmpty(t, ours, "spy must have records for some contract")
-
-		// Группируем по additionalInfo и ищем тот, у которого 2 attempt'а
-		// (1 fail + 1 success) — это наш recovery flow.
-		byInfo := map[string][]testclient.TrustMeSentRecord{}
-		for _, r := range ours {
-			byInfo[r.AdditionalInfo] = append(byInfo[r.AdditionalInfo], r)
-		}
-		var recoveryAttempts []testclient.TrustMeSentRecord
-		for _, attempts := range byInfo {
-			if len(attempts) >= 2 {
-				recoveryAttempts = attempts
-				break
+			if r.IinFingerprint == expectedIINFP {
+				ours = append(ours, r)
 			}
 		}
-		require.NotEmpty(t, recoveryAttempts, "expected at least one additionalInfo with both fail and success attempts")
-		require.GreaterOrEqual(t, len(recoveryAttempts), 2, "recovery requires fail + success")
+		require.Len(t, ours, 2, "recovery requires exactly fail + success attempts on our IIN")
 
-		// Sha256 PDF идентичный между fail-attempt и success-attempt.
-		failPDF := sha256Hex(t, recoveryAttempts[0].PdfBase64)
-		successPDF := sha256Hex(t, recoveryAttempts[1].PdfBase64)
-		require.Equal(t, failPDF, successPDF, "sha256(unsigned PDF) must equal between fail and recovery (no re-render)")
+		// Первая попытка должна быть с error (spyFailNext), вторая успешная.
+		require.NotNil(t, ours[0].Err)
+		require.NotEmpty(t, *ours[0].Err)
+		require.Nil(t, ours[1].Err, "second attempt (recovery) must succeed")
+		require.NotNil(t, ours[1].DocumentId)
+		require.NotEmpty(t, *ours[1].DocumentId)
+
+		// Sha256 PDF идентичный — Phase 0 resend без re-render (intent
+		// Decision #10 «PDF уже в БД»). Server уже посчитал sha256 от
+		// исходного base64; e2e сравнивает напрямую.
+		require.Equal(t, ours[0].PdfSha256, ours[1].PdfSha256,
+			"PdfSha256 must equal between fail and recovery (no re-render)")
+		require.Equal(t, ours[0].AdditionalInfo, ours[1].AdditionalInfo,
+			"additionalInfo (=contract.id) must equal between attempts")
 	})
 
 	t.Run("known orphan finalize without re-send", func(t *testing.T) {

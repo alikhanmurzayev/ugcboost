@@ -361,7 +361,7 @@ func (h *TestAPIHandler) TrustMeSpyList(_ context.Context, _ testapi.TrustMeSpyL
 			FioFingerprint:   r.FIOFingerprint,
 			IinFingerprint:   r.IINFingerprint,
 			PhoneFingerprint: r.PhoneFingerprint,
-			PdfBase64:        r.PDFBase64,
+			PdfSha256:        r.PDFSha256,
 			SentAt:           r.SentAt,
 		}
 		if r.DocumentID != "" {

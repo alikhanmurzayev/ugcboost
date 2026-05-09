@@ -504,7 +504,7 @@ components:
 
     TrustMeSentRecord:
       type: object
-      required: [additionalInfo, contractName, fioFingerprint, iinFingerprint, phoneFingerprint, pdfBase64, sentAt]
+      required: [additionalInfo, contractName, fioFingerprint, iinFingerprint, phoneFingerprint, pdfSha256, sentAt]
       properties:
         documentId:
           type: string
@@ -529,9 +529,13 @@ components:
         phoneFingerprint:
           type: string
           description: sha256 prefix of the first Requisite.PhoneNumber (already E.164).
-        pdfBase64:
+        pdfSha256:
           type: string
-          description: Base64-encoded PDF that was sent (verbatim copy).
+          description: |
+            Full hex sha256 (64 chars) of base64-encoded PDF that was sent. Raw
+            PDF is NOT exposed — rendered overlay contains FIO/IIN/IssuedDate
+            (PII), security.md forbids PII in any response body. e2e compares
+            sha256 to assert PDF stability across retries.
         sentAt:
           type: string
           format: date-time

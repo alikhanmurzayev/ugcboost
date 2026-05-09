@@ -2,126 +2,101 @@ package handler
 
 import (
 	"context"
-	"encoding/json"
 	"net/http"
-	"net/http/httptest"
-	"strings"
-	"sync"
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	"github.com/alikhanmurzayev/ugcboost/backend/internal/api"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/dbutil/mocks"
+	"github.com/alikhanmurzayev/ugcboost/backend/internal/domain"
 	hmocks "github.com/alikhanmurzayev/ugcboost/backend/internal/handler/mocks"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/handler/trustmeport"
+	trustmeportmocks "github.com/alikhanmurzayev/ugcboost/backend/internal/handler/trustmeport/mocks"
 	logmocks "github.com/alikhanmurzayev/ugcboost/backend/internal/logger/mocks"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/telegram"
+	"github.com/alikhanmurzayev/ugcboost/backend/internal/testapi"
 )
 
-// fakeRunner implements trustmeport.OutboxRunner — records that RunOnce was called.
-type fakeRunner struct {
-	mu    sync.Mutex
-	calls int
+// trustMeRig — handler-router + все mockery-моки. trustMeRunner / trustMeSpy
+// можно передавать nil, чтобы воспроизвести prod-конфигурацию (test endpoints
+// disabled).
+type trustMeRig struct {
+	router    http.Handler
+	runner    *trustmeportmocks.MockOutboxRunner
+	spy       *trustmeportmocks.MockSpyStore
+	logger    *logmocks.MockLogger
+	hasRunner bool
+	hasSpy    bool
 }
 
-func (f *fakeRunner) RunOnce(_ context.Context) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.calls++
-}
-
-// fakeSpyStore implements trustmeport.SpyStore for tests.
-type fakeSpyStore struct {
-	mu       sync.Mutex
-	records  []trustmeport.SentRecord
-	cleared  int
-	failNext []failArgs
-	docs     []docArgs
-}
-
-type failArgs struct {
-	additionalInfo string
-	reason         string
-	count          int
-}
-
-type docArgs struct {
-	additionalInfo string
-	documentID     string
-	shortURL       string
-	contractStatus int
-}
-
-func (f *fakeSpyStore) List() []trustmeport.SentRecord {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	out := make([]trustmeport.SentRecord, len(f.records))
-	copy(out, f.records)
-	return out
-}
-
-func (f *fakeSpyStore) Clear() {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.cleared++
-	f.records = nil
-}
-
-func (f *fakeSpyStore) RegisterFailNext(additionalInfo, reason string, count int) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.failNext = append(f.failNext, failArgs{additionalInfo, reason, count})
-}
-
-func (f *fakeSpyStore) RegisterDocument(additionalInfo, documentID, shortURL string, contractStatus int) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.docs = append(f.docs, docArgs{additionalInfo, documentID, shortURL, contractStatus})
-}
-
-func newTrustMeTestHandler(t *testing.T, runner trustmeport.OutboxRunner, spy trustmeport.SpyStore) http.Handler {
+func newTrustMeRig(t *testing.T, withRunner, withSpy bool) *trustMeRig {
 	t.Helper()
 	auth := hmocks.NewMockTestAPIAuthService(t)
 	pool := mocks.NewMockPool(t)
 	repos := hmocks.NewMockTestAPICleanupRepoFactory(t)
 	store := hmocks.NewMockTokenStore(t)
 	log := logmocks.NewMockLogger(t)
-	return newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store,
+
+	rig := &trustMeRig{
+		logger:    log,
+		hasRunner: withRunner,
+		hasSpy:    withSpy,
+	}
+	var runner trustmeport.OutboxRunner
+	if withRunner {
+		rig.runner = trustmeportmocks.NewMockOutboxRunner(t)
+		runner = rig.runner
+	}
+	var spy trustmeport.SpyStore
+	if withSpy {
+		rig.spy = trustmeportmocks.NewMockSpyStore(t)
+		spy = rig.spy
+	}
+	rig.router = newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store,
 		telegram.NewHandler(nil, log), telegram.NewSentSpyStore(), "",
 		runner, spy, log))
+	return rig
 }
 
-func TestTrustMeRunOutboxOnce_RunsAndReturns204(t *testing.T) {
+func TestTestAPIHandler_TrustMeRunOutboxOnce(t *testing.T) {
 	t.Parallel()
-	runner := &fakeRunner{}
-	spy := &fakeSpyStore{}
-	router := newTrustMeTestHandler(t, runner, spy)
 
-	req := httptest.NewRequest(http.MethodPost, "/test/trustme/run-outbox-once", nil)
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
+	t.Run("runs and returns 204", func(t *testing.T) {
+		t.Parallel()
+		rig := newTrustMeRig(t, true, true)
+		var captured context.Context
+		rig.runner.EXPECT().RunOnce(mock.Anything).Run(func(ctx context.Context) {
+			captured = ctx
+		}).Once()
 
-	require.Equal(t, http.StatusNoContent, w.Code)
-	require.Equal(t, 1, runner.calls)
+		w, _ := doJSON[any](t, rig.router, http.MethodPost, "/test/trustme/run-outbox-once", nil)
+
+		require.Equal(t, http.StatusNoContent, w.Code)
+		require.NotNil(t, captured, "RunOnce must receive non-nil ctx propagated from request")
+	})
+
+	t.Run("nil runner returns 404", func(t *testing.T) {
+		t.Parallel()
+		rig := newTrustMeRig(t, false, false)
+
+		w, resp := doJSON[api.ErrorResponse](t, rig.router, http.MethodPost, "/test/trustme/run-outbox-once", nil)
+
+		require.Equal(t, http.StatusNotFound, w.Code)
+		require.Equal(t, domain.CodeNotFound, resp.Error.Code)
+	})
 }
 
-func TestTrustMeRunOutboxOnce_NoRunner_ReturnsValidation(t *testing.T) {
+func TestTestAPIHandler_TrustMeSpyList(t *testing.T) {
 	t.Parallel()
-	router := newTrustMeTestHandler(t, nil, nil)
 
-	req := httptest.NewRequest(http.MethodPost, "/test/trustme/run-outbox-once", nil)
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-
-	require.NotEqual(t, http.StatusNoContent, w.Code)
-}
-
-func TestTrustMeSpyList_ReturnsRecords(t *testing.T) {
-	t.Parallel()
-	now := time.Date(2026, 5, 9, 12, 0, 0, 0, time.UTC)
-	spy := &fakeSpyStore{records: []trustmeport.SentRecord{
-		{
+	t.Run("returns records as typed schema", func(t *testing.T) {
+		t.Parallel()
+		now := time.Date(2026, 5, 9, 12, 0, 0, 0, time.UTC)
+		rig := newTrustMeRig(t, true, true)
+		rig.spy.EXPECT().List().Return([]trustmeport.SentRecord{{
 			DocumentID:       "doc-1",
 			ShortURL:         "https://t.tct.kz/uploader/doc-1",
 			AdditionalInfo:   "ct-1",
@@ -129,114 +104,128 @@ func TestTrustMeSpyList_ReturnsRecords(t *testing.T) {
 			FIOFingerprint:   "fingerprint-fio",
 			IINFingerprint:   "fingerprint-iin",
 			PhoneFingerprint: "fingerprint-phone",
-			PDFBase64:        "JVBERi0xLg==",
+			PDFSha256:        "deadbeef00000000000000000000000000000000000000000000000000000000",
 			SentAt:           now,
-		},
-	}}
-	router := newTrustMeTestHandler(t, &fakeRunner{}, spy)
+		}}).Once()
 
-	req := httptest.NewRequest(http.MethodGet, "/test/trustme/spy-list", nil)
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
+		w, resp := doJSON[testapi.TrustMeSpyListResult](t, rig.router, http.MethodGet, "/test/trustme/spy-list", nil)
 
-	require.Equal(t, http.StatusOK, w.Code)
-	var resp struct {
-		Data struct {
-			Items []map[string]any `json:"items"`
-		} `json:"data"`
-	}
-	require.NoError(t, json.NewDecoder(w.Body).Decode(&resp))
-	require.Len(t, resp.Data.Items, 1)
-	require.Equal(t, "ct-1", resp.Data.Items[0]["additionalInfo"])
-	require.Equal(t, "doc-1", resp.Data.Items[0]["documentId"])
+		require.Equal(t, http.StatusOK, w.Code)
+		require.Len(t, resp.Data.Items, 1)
+		got := resp.Data.Items[0]
+		require.NotNil(t, got.DocumentId)
+		require.Equal(t, "doc-1", *got.DocumentId)
+		require.NotNil(t, got.ShortUrl)
+		require.Equal(t, "https://t.tct.kz/uploader/doc-1", *got.ShortUrl)
+		require.Equal(t, "ct-1", got.AdditionalInfo)
+		require.Equal(t, "Договор UGC", got.ContractName)
+		require.Equal(t, "fingerprint-fio", got.FioFingerprint)
+		require.Equal(t, "fingerprint-iin", got.IinFingerprint)
+		require.Equal(t, "fingerprint-phone", got.PhoneFingerprint)
+		require.Equal(t, "deadbeef00000000000000000000000000000000000000000000000000000000", got.PdfSha256)
+		require.True(t, got.SentAt.Equal(now))
+		require.Nil(t, got.Err)
+	})
+
+	t.Run("nil spy returns 404", func(t *testing.T) {
+		t.Parallel()
+		rig := newTrustMeRig(t, true, false)
+
+		w, resp := doJSON[api.ErrorResponse](t, rig.router, http.MethodGet, "/test/trustme/spy-list", nil)
+
+		require.Equal(t, http.StatusNotFound, w.Code)
+		require.Equal(t, domain.CodeNotFound, resp.Error.Code)
+	})
 }
 
-func TestTrustMeSpyClear_204(t *testing.T) {
+func TestTestAPIHandler_TrustMeSpyClear(t *testing.T) {
 	t.Parallel()
-	spy := &fakeSpyStore{records: []trustmeport.SentRecord{{AdditionalInfo: "x"}}}
-	router := newTrustMeTestHandler(t, &fakeRunner{}, spy)
 
-	req := httptest.NewRequest(http.MethodPost, "/test/trustme/spy-clear", nil)
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
+	t.Run("clears and returns 204", func(t *testing.T) {
+		t.Parallel()
+		rig := newTrustMeRig(t, true, true)
+		rig.spy.EXPECT().Clear().Once()
+
+		w, _ := doJSON[any](t, rig.router, http.MethodPost, "/test/trustme/spy-clear", nil)
+
+		require.Equal(t, http.StatusNoContent, w.Code)
+	})
+
+	t.Run("nil spy returns 404", func(t *testing.T) {
+		t.Parallel()
+		rig := newTrustMeRig(t, true, false)
+
+		w, resp := doJSON[api.ErrorResponse](t, rig.router, http.MethodPost, "/test/trustme/spy-clear", nil)
+
+		require.Equal(t, http.StatusNotFound, w.Code)
+		require.Equal(t, domain.CodeNotFound, resp.Error.Code)
+	})
+}
+
+func TestTestAPIHandler_TrustMeSpyFailNext(t *testing.T) {
+	t.Parallel()
+	rig := newTrustMeRig(t, true, true)
+	rig.spy.EXPECT().RegisterFailNext("ct-1", "boom", 2).Once()
+
+	w, _ := doJSON[any](t, rig.router, http.MethodPost, "/test/trustme/spy-fail-next",
+		testapi.TrustMeSpyFailNextRequest{
+			AdditionalInfo: "ct-1",
+			Reason:         pointerStr("boom"),
+			Count:          pointerInt(2),
+		})
 
 	require.Equal(t, http.StatusNoContent, w.Code)
-	require.Equal(t, 1, spy.cleared)
 }
 
-func TestTrustMeSpyFailNext(t *testing.T) {
+func TestTestAPIHandler_TrustMeSpyRegisterDocument(t *testing.T) {
 	t.Parallel()
-	spy := &fakeSpyStore{}
-	router := newTrustMeTestHandler(t, &fakeRunner{}, spy)
 
-	req := httptest.NewRequest(http.MethodPost, "/test/trustme/spy-fail-next",
-		strings.NewReader(`{"additionalInfo":"ct-1","reason":"boom","count":2}`))
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
+	t.Run("default short URL synthesized from documentId", func(t *testing.T) {
+		t.Parallel()
+		rig := newTrustMeRig(t, true, true)
+		rig.spy.EXPECT().RegisterDocument("ct-1", "doc-X",
+			"https://test.trustme.kz/uploader/doc-X", 2).Once()
 
-	require.Equal(t, http.StatusNoContent, w.Code)
-	require.Len(t, spy.failNext, 1)
-	require.Equal(t, "ct-1", spy.failNext[0].additionalInfo)
-	require.Equal(t, "boom", spy.failNext[0].reason)
-	require.Equal(t, 2, spy.failNext[0].count)
+		w, _ := doJSON[any](t, rig.router, http.MethodPost, "/test/trustme/spy-register-document",
+			testapi.TrustMeSpyRegisterDocumentRequest{
+				AdditionalInfo: "ct-1",
+				DocumentId:     "doc-X",
+				ContractStatus: pointerInt(2),
+			})
+
+		require.Equal(t, http.StatusNoContent, w.Code)
+	})
+
+	t.Run("custom short URL passed through", func(t *testing.T) {
+		t.Parallel()
+		rig := newTrustMeRig(t, true, true)
+		rig.spy.EXPECT().RegisterDocument("ct-1", "doc-X",
+			"https://custom/doc-X", 0).Once()
+
+		w, _ := doJSON[any](t, rig.router, http.MethodPost, "/test/trustme/spy-register-document",
+			testapi.TrustMeSpyRegisterDocumentRequest{
+				AdditionalInfo: "ct-1",
+				DocumentId:     "doc-X",
+				ShortUrl:       pointerStr("https://custom/doc-X"),
+			})
+
+		require.Equal(t, http.StatusNoContent, w.Code)
+	})
+
+	t.Run("nil spy returns 404", func(t *testing.T) {
+		t.Parallel()
+		rig := newTrustMeRig(t, true, false)
+
+		w, resp := doJSON[api.ErrorResponse](t, rig.router, http.MethodPost, "/test/trustme/spy-register-document",
+			testapi.TrustMeSpyRegisterDocumentRequest{
+				AdditionalInfo: "ct-1",
+				DocumentId:     "doc-X",
+			})
+
+		require.Equal(t, http.StatusNotFound, w.Code)
+		require.Equal(t, domain.CodeNotFound, resp.Error.Code)
+	})
 }
 
-func TestTrustMeSpyRegisterDocument(t *testing.T) {
-	t.Parallel()
-	spy := &fakeSpyStore{}
-	router := newTrustMeTestHandler(t, &fakeRunner{}, spy)
-
-	req := httptest.NewRequest(http.MethodPost, "/test/trustme/spy-register-document",
-		strings.NewReader(`{"additionalInfo":"ct-1","documentId":"doc-X","contractStatus":2}`))
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-
-	require.Equal(t, http.StatusNoContent, w.Code)
-	require.Len(t, spy.docs, 1)
-	require.Equal(t, "ct-1", spy.docs[0].additionalInfo)
-	require.Equal(t, "doc-X", spy.docs[0].documentID)
-	require.Equal(t, 2, spy.docs[0].contractStatus)
-	require.Equal(t, "https://test.trustme.kz/uploader/doc-X", spy.docs[0].shortURL)
-}
-
-func TestTrustMeSpyClear_NoSpy_ReturnsValidation(t *testing.T) {
-	t.Parallel()
-	router := newTrustMeTestHandler(t, &fakeRunner{}, nil)
-
-	req := httptest.NewRequest(http.MethodPost, "/test/trustme/spy-clear", nil)
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-
-	require.NotEqual(t, http.StatusNoContent, w.Code)
-}
-
-func TestTrustMeSpyRegisterDocument_NoSpy_ReturnsValidation(t *testing.T) {
-	t.Parallel()
-	router := newTrustMeTestHandler(t, &fakeRunner{}, nil)
-
-	req := httptest.NewRequest(http.MethodPost, "/test/trustme/spy-register-document",
-		strings.NewReader(`{"additionalInfo":"ct-1","documentId":"doc-X"}`))
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-
-	require.NotEqual(t, http.StatusNoContent, w.Code)
-}
-
-func TestTrustMeSpyRegisterDocument_CustomShortURL(t *testing.T) {
-	t.Parallel()
-	spy := &fakeSpyStore{}
-	router := newTrustMeTestHandler(t, &fakeRunner{}, spy)
-
-	req := httptest.NewRequest(http.MethodPost, "/test/trustme/spy-register-document",
-		strings.NewReader(`{"additionalInfo":"ct-1","documentId":"doc-X","shortUrl":"https://custom/doc-X"}`))
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
-
-	require.Equal(t, http.StatusNoContent, w.Code)
-	require.Len(t, spy.docs, 1)
-	require.Equal(t, "https://custom/doc-X", spy.docs[0].shortURL)
-}
+func pointerStr(s string) *string { return &s }
+func pointerInt(i int) *int       { return &i }

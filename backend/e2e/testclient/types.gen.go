@@ -238,8 +238,11 @@ type TrustMeSentRecord struct {
 	// IinFingerprint sha256 prefix of the first Requisite.IIN_BIN.
 	IinFingerprint string `json:"iinFingerprint"`
 
-	// PdfBase64 Base64-encoded PDF that was sent (verbatim copy).
-	PdfBase64 string `json:"pdfBase64"`
+	// PdfSha256 Full hex sha256 (64 chars) of base64-encoded PDF that was sent. Raw
+	// PDF is NOT exposed — rendered overlay contains FIO/IIN/IssuedDate
+	// (PII), security.md forbids PII in any response body. e2e compares
+	// sha256 to assert PDF stability across retries.
+	PdfSha256 string `json:"pdfSha256"`
 
 	// PhoneFingerprint sha256 prefix of the first Requisite.PhoneNumber (already E.164).
 	PhoneFingerprint string    `json:"phoneFingerprint"`

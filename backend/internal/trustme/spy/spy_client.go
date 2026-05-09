@@ -42,7 +42,7 @@ func (c *Client) SendToSign(ctx context.Context, in trustme.SendToSignInput) (*t
 			FIOFingerprint:   Fingerprint(first.FIO),
 			IINFingerprint:   Fingerprint(first.IINBIN),
 			PhoneFingerprint: Fingerprint(first.PhoneNumber),
-			PDFBase64:        in.PDFBase64,
+			PDFSha256:        HashPDFBase64(in.PDFBase64),
 			SentAt:           c.now(),
 			Err:              reason,
 		})
@@ -58,7 +58,7 @@ func (c *Client) SendToSign(ctx context.Context, in trustme.SendToSignInput) (*t
 		FIOFingerprint:   Fingerprint(first.FIO),
 		IINFingerprint:   Fingerprint(first.IINBIN),
 		PhoneFingerprint: Fingerprint(first.PhoneNumber),
-		PDFBase64:        in.PDFBase64,
+		PDFSha256:        HashPDFBase64(in.PDFBase64),
 		SentAt:           c.now(),
 	})
 	return &trustme.SendToSignResult{

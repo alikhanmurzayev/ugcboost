@@ -406,8 +406,13 @@ export interface components {
             iinFingerprint: string;
             /** @description sha256 prefix of the first Requisite.PhoneNumber (already E.164). */
             phoneFingerprint: string;
-            /** @description Base64-encoded PDF that was sent (verbatim copy). */
-            pdfBase64: string;
+            /**
+             * @description Full hex sha256 (64 chars) of base64-encoded PDF that was sent. Raw
+             *     PDF is NOT exposed — rendered overlay contains FIO/IIN/IssuedDate
+             *     (PII), security.md forbids PII in any response body. e2e compares
+             *     sha256 to assert PDF stability across retries.
+             */
+            pdfSha256: string;
             /** Format: date-time */
             sentAt: string;
             /** @description Error string when fail-next caused this attempt to fail. */

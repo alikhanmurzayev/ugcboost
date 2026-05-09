@@ -366,6 +366,22 @@ func TestContractRepository_RecordFailedAttempt(t *testing.T) {
 			"ct-missing", "", "net err", next)
 		require.ErrorIs(t, err, sql.ErrNoRows)
 	})
+
+	t.Run("propagates other errors with context wrap", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &contractRepository{db: mock}
+		next := time.Date(2026, 5, 9, 12, 5, 0, 0, time.UTC)
+
+		mock.ExpectExec(contractRecordFailedSQL).
+			WithArgs("", "msg", next, "ct-1").
+			WillReturnError(errors.New("db down"))
+
+		err := repo.RecordFailedAttempt(context.Background(), "ct-1", "", "msg", next)
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "db down")
+		require.NotErrorIs(t, err, sql.ErrNoRows)
+	})
 }
 
 func TestContractRepository_UpdateAfterSend(t *testing.T) {

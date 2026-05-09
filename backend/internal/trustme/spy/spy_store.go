@@ -21,10 +21,12 @@ const storeCapacity = 5000
 // rule запрещает PII в любых response bodies — даже test-only ручек). Raw
 // PII живёт только в момент вызова SendToSign и не персистится.
 //
-// PDFBase64 кладётся как есть — это и есть то, что мы реально ушлём в
-// TrustMe. Содержимое PDF рассматривается как нон-PII (договор + overlay
-// со значениями); если в overlay'е окажется PII (ФИО/ИИН), они физически
-// внутри PDF, но не в JSON-полях ответа — что согласуется с security.md.
+// PDFSha256 — hex sha256 от исходного base64 PDF, который мы отправили в
+// TrustMe. Сам PDF не сохраняется ни в memory ring, ни в API-ответ:
+// rendered PDF содержит овellay'енные значения (ФИО/ИИН/IssuedDate), а
+// security.md запрещает экспонировать PII в response bodies любых ручек,
+// включая test-only. Ring капы 5000 × ~30-200KB PDF = ~1GB RAM на
+// долгоживущем процессе — отказ от хранения PDF также убирает этот баг.
 type SentRecord struct {
 	DocumentID       string
 	ShortURL         string
@@ -33,7 +35,7 @@ type SentRecord struct {
 	FIOFingerprint   string
 	IINFingerprint   string
 	PhoneFingerprint string
-	PDFBase64        string
+	PDFSha256        string
 	SentAt           time.Time
 	Err              string
 }
@@ -47,6 +49,18 @@ func Fingerprint(value string) string {
 	}
 	sum := sha256.Sum256([]byte(value))
 	return hex.EncodeToString(sum[:8])
+}
+
+// HashPDFBase64 — полный hex sha256 от base64-encoded PDF. В отличие от
+// Fingerprint (8 байт = 16 hex для sub-second collision-free), здесь полная
+// 32-байтная hash сохраняется: e2e сравнивает PDF retry'ев на побайтную
+// идентичность.
+func HashPDFBase64(pdfBase64 string) string {
+	if pdfBase64 == "" {
+		return ""
+	}
+	sum := sha256.Sum256([]byte(pdfBase64))
+	return hex.EncodeToString(sum[:])
 }
 
 // failNextEntry — запланированная ошибка, фалит ровно один следующий
