@@ -180,6 +180,10 @@ func run() error {
 	// SendPulse webhook bearer auth — gates only the dedicated path; every
 	// other request flows through unchanged.
 	r.Use(middleware.SendPulseAuth(cfg.SendPulseWebhookSecret, appLogger))
+	// TEMPORARY: dump full raw TrustMe webhook request (headers + body) before
+	// the auth check, чтобы продебажить почему реальный TrustMe-трафик ловит
+	// 401 на стейдже. Удалить после диагностики.
+	r.Use(middleware.TrustMeWebhookDebugDump(appLogger))
 	// TrustMe webhook static-token auth — gates POST /trustme/webhook; per
 	// blueprint § «Установка хуков» формат `Authorization: <token>` (raw,
 	// без Bearer). 401 `{}` anti-fingerprint между missing и wrong.
