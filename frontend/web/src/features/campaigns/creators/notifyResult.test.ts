@@ -69,6 +69,12 @@ describe("parseSettled", () => {
     expect(result.validationDetails).toEqual([]);
   });
 
+  it("returns contract_template_required for 422 CONTRACT_TEMPLATE_REQUIRED", () => {
+    const err = new ApiError(422, "CONTRACT_TEMPLATE_REQUIRED", "msg");
+    const result = parseSettled(undefined, err, 1, NAMES);
+    expect(result).toEqual({ kind: "contract_template_required" });
+  });
+
   it("returns validation_unknown for 422 with a different code", () => {
     const err = new ApiError(422, "INVALID_BODY", "bad");
     const result = parseSettled(undefined, err, 1, NAMES);
