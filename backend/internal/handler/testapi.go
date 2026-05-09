@@ -13,6 +13,7 @@ import (
 
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/dbutil"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/domain"
+	"github.com/alikhanmurzayev/ugcboost/backend/internal/handler/trustmeport"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/logger"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/middleware"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/repository"
@@ -55,6 +56,8 @@ type TestAPIHandler struct {
 	tgHandler        *telegram.Handler
 	telegramSpy      *telegram.SentSpyStore
 	telegramBotToken string
+	trustMeRunner    trustmeport.OutboxRunner
+	trustMeSpy       trustmeport.SpyStore
 	logger           logger.Logger
 }
 
@@ -69,6 +72,8 @@ func NewTestAPIHandler(
 	tgHandler *telegram.Handler,
 	telegramSpy *telegram.SentSpyStore,
 	telegramBotToken string,
+	trustMeRunner trustmeport.OutboxRunner,
+	trustMeSpy trustmeport.SpyStore,
 	log logger.Logger,
 ) *TestAPIHandler {
 	return &TestAPIHandler{
@@ -79,6 +84,8 @@ func NewTestAPIHandler(
 		tgHandler:        tgHandler,
 		telegramSpy:      telegramSpy,
 		telegramBotToken: telegramBotToken,
+		trustMeRunner:    trustMeRunner,
+		trustMeSpy:       trustMeSpy,
 		logger:           log,
 	}
 }
@@ -322,4 +329,106 @@ func (h *TestAPIHandler) SignTMAInitData(_ context.Context, request testapi.Sign
 	return testapi.SignTMAInitData200JSONResponse{
 		Data: testapi.SignTMAInitDataData{InitData: initData},
 	}, nil
+}
+
+// TrustMeRunOutboxOnce handles POST /test/trustme/run-outbox-once. Synchronous
+// driver of one outbox tick — e2e tests do not wait for the @every 10s cron
+// tick. trustMeRunner=nil → 404 (test endpoint disabled, per spec line 118).
+func (h *TestAPIHandler) TrustMeRunOutboxOnce(ctx context.Context, _ testapi.TrustMeRunOutboxOnceRequestObject) (testapi.TrustMeRunOutboxOnceResponseObject, error) {
+	if h.trustMeRunner == nil {
+		return nil, domain.ErrNotFound
+	}
+	h.trustMeRunner.RunOnce(ctx)
+	return testapi.TrustMeRunOutboxOnce204Response{}, nil
+}
+
+// TrustMeSpyList handles GET /test/trustme/spy-list. Endpoint gated
+// EnableTestEndpoints (404 в проде); сырые FIO/IIN/Phone безопасно — ПД
+// сюда не попадают, синтетические e2e фикстуры.
+func (h *TestAPIHandler) TrustMeSpyList(_ context.Context, _ testapi.TrustMeSpyListRequestObject) (testapi.TrustMeSpyListResponseObject, error) {
+	if h.trustMeSpy == nil {
+		return nil, domain.ErrNotFound
+	}
+	records := h.trustMeSpy.List()
+	out := make([]testapi.TrustMeSentRecord, 0, len(records))
+	for _, r := range records {
+		item := testapi.TrustMeSentRecord{
+			AdditionalInfo: r.AdditionalInfo,
+			ContractName:   r.ContractName,
+			NumberDial:     r.NumberDial,
+			Fio:            r.FIO,
+			Iin:            r.IIN,
+			Phone:          r.Phone,
+			PdfSha256:      r.PDFSha256,
+			SentAt:         r.SentAt,
+		}
+		if r.DocumentID != "" {
+			docID := r.DocumentID
+			item.DocumentId = &docID
+		}
+		if r.ShortURL != "" {
+			short := r.ShortURL
+			item.ShortUrl = &short
+		}
+		if r.Err != "" {
+			errCopy := r.Err
+			item.Err = &errCopy
+		}
+		out = append(out, item)
+	}
+	return testapi.TrustMeSpyList200JSONResponse{
+		Data: testapi.TrustMeSpyListData{Items: out},
+	}, nil
+}
+
+// TrustMeSpyClear handles POST /test/trustme/spy-clear.
+func (h *TestAPIHandler) TrustMeSpyClear(_ context.Context, _ testapi.TrustMeSpyClearRequestObject) (testapi.TrustMeSpyClearResponseObject, error) {
+	if h.trustMeSpy == nil {
+		return nil, domain.ErrNotFound
+	}
+	h.trustMeSpy.Clear()
+	return testapi.TrustMeSpyClear204Response{}, nil
+}
+
+// TrustMeSpyFailNext handles POST /test/trustme/spy-fail-next. Empty
+// additionalInfo — wildcard, fails next `count` SendToSign'ов независимо от
+// additionalInfo. Используется e2e Phase 0 recovery test где contract_id
+// присваивается worker'ом и не известен заранее.
+func (h *TestAPIHandler) TrustMeSpyFailNext(_ context.Context, request testapi.TrustMeSpyFailNextRequestObject) (testapi.TrustMeSpyFailNextResponseObject, error) {
+	if h.trustMeSpy == nil {
+		return nil, domain.ErrNotFound
+	}
+	if request.Body == nil {
+		return nil, domain.NewValidationError(domain.CodeValidation, "body is required")
+	}
+	reason := ""
+	if request.Body.Reason != nil {
+		reason = *request.Body.Reason
+	}
+	count := 1
+	if request.Body.Count != nil && *request.Body.Count > 0 {
+		count = *request.Body.Count
+	}
+	h.trustMeSpy.RegisterFailNext(request.Body.AdditionalInfo, reason, count)
+	return testapi.TrustMeSpyFailNext204Response{}, nil
+}
+
+// TrustMeSpyRegisterDocument handles POST /test/trustme/spy-register-document.
+func (h *TestAPIHandler) TrustMeSpyRegisterDocument(_ context.Context, request testapi.TrustMeSpyRegisterDocumentRequestObject) (testapi.TrustMeSpyRegisterDocumentResponseObject, error) {
+	if h.trustMeSpy == nil {
+		return nil, domain.ErrNotFound
+	}
+	if request.Body == nil || request.Body.AdditionalInfo == "" || request.Body.DocumentId == "" {
+		return nil, domain.NewValidationError(domain.CodeValidation, "additionalInfo and documentId are required")
+	}
+	shortURL := "https://test.trustme.kz/uploader/" + request.Body.DocumentId
+	if request.Body.ShortUrl != nil && *request.Body.ShortUrl != "" {
+		shortURL = *request.Body.ShortUrl
+	}
+	status := 0
+	if request.Body.ContractStatus != nil {
+		status = *request.Body.ContractStatus
+	}
+	h.trustMeSpy.RegisterDocument(request.Body.AdditionalInfo, request.Body.DocumentId, shortURL, status)
+	return testapi.TrustMeSpyRegisterDocument204Response{}, nil
 }

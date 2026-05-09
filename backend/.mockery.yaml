@@ -13,3 +13,6 @@ packages:
   github.com/alikhanmurzayev/ugcboost/backend/internal/authz:
   github.com/alikhanmurzayev/ugcboost/backend/internal/logger:
   github.com/alikhanmurzayev/ugcboost/backend/internal/telegram:
+  github.com/alikhanmurzayev/ugcboost/backend/internal/trustme:
+  github.com/alikhanmurzayev/ugcboost/backend/internal/contract:
+  github.com/alikhanmurzayev/ugcboost/backend/internal/handler/trustmeport:

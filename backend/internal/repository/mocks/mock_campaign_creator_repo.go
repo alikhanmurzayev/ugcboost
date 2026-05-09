@@ -525,6 +525,74 @@ func (_c *MockCampaignCreatorRepo_GetByCampaignAndCreator_Call) RunAndReturn(run
 	return _c
 }
 
+// GetByContractID provides a mock function for the type MockCampaignCreatorRepo
+func (_mock *MockCampaignCreatorRepo) GetByContractID(ctx context.Context, contractID string) (*repository.CampaignCreatorRow, error) {
+	ret := _mock.Called(ctx, contractID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetByContractID")
+	}
+
+	var r0 *repository.CampaignCreatorRow
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) (*repository.CampaignCreatorRow, error)); ok {
+		return returnFunc(ctx, contractID)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) *repository.CampaignCreatorRow); ok {
+		r0 = returnFunc(ctx, contractID)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*repository.CampaignCreatorRow)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string) error); ok {
+		r1 = returnFunc(ctx, contractID)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockCampaignCreatorRepo_GetByContractID_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetByContractID'
+type MockCampaignCreatorRepo_GetByContractID_Call struct {
+	*mock.Call
+}
+
+// GetByContractID is a helper method to define mock.On call
+//   - ctx context.Context
+//   - contractID string
+func (_e *MockCampaignCreatorRepo_Expecter) GetByContractID(ctx interface{}, contractID interface{}) *MockCampaignCreatorRepo_GetByContractID_Call {
+	return &MockCampaignCreatorRepo_GetByContractID_Call{Call: _e.mock.On("GetByContractID", ctx, contractID)}
+}
+
+func (_c *MockCampaignCreatorRepo_GetByContractID_Call) Run(run func(ctx context.Context, contractID string)) *MockCampaignCreatorRepo_GetByContractID_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockCampaignCreatorRepo_GetByContractID_Call) Return(campaignCreatorRow *repository.CampaignCreatorRow, err error) *MockCampaignCreatorRepo_GetByContractID_Call {
+	_c.Call.Return(campaignCreatorRow, err)
+	return _c
+}
+
+func (_c *MockCampaignCreatorRepo_GetByContractID_Call) RunAndReturn(run func(ctx context.Context, contractID string) (*repository.CampaignCreatorRow, error)) *MockCampaignCreatorRepo_GetByContractID_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // GetByIDForUpdate provides a mock function for the type MockCampaignCreatorRepo
 func (_mock *MockCampaignCreatorRepo) GetByIDForUpdate(ctx context.Context, id string) (*repository.CampaignCreatorRow, error) {
 	ret := _mock.Called(ctx, id)
@@ -731,6 +799,75 @@ func (_c *MockCampaignCreatorRepo_ListByCampaignAndCreators_Call) Return(campaig
 }
 
 func (_c *MockCampaignCreatorRepo_ListByCampaignAndCreators_Call) RunAndReturn(run func(ctx context.Context, campaignID string, creatorIDs []string) ([]*repository.CampaignCreatorRow, error)) *MockCampaignCreatorRepo_ListByCampaignAndCreators_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// UpdateContractIDAndStatus provides a mock function for the type MockCampaignCreatorRepo
+func (_mock *MockCampaignCreatorRepo) UpdateContractIDAndStatus(ctx context.Context, id string, contractID string, status string) error {
+	ret := _mock.Called(ctx, id, contractID, status)
+
+	if len(ret) == 0 {
+		panic("no return value specified for UpdateContractIDAndStatus")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, string) error); ok {
+		r0 = returnFunc(ctx, id, contractID, status)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockCampaignCreatorRepo_UpdateContractIDAndStatus_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'UpdateContractIDAndStatus'
+type MockCampaignCreatorRepo_UpdateContractIDAndStatus_Call struct {
+	*mock.Call
+}
+
+// UpdateContractIDAndStatus is a helper method to define mock.On call
+//   - ctx context.Context
+//   - id string
+//   - contractID string
+//   - status string
+func (_e *MockCampaignCreatorRepo_Expecter) UpdateContractIDAndStatus(ctx interface{}, id interface{}, contractID interface{}, status interface{}) *MockCampaignCreatorRepo_UpdateContractIDAndStatus_Call {
+	return &MockCampaignCreatorRepo_UpdateContractIDAndStatus_Call{Call: _e.mock.On("UpdateContractIDAndStatus", ctx, id, contractID, status)}
+}
+
+func (_c *MockCampaignCreatorRepo_UpdateContractIDAndStatus_Call) Run(run func(ctx context.Context, id string, contractID string, status string)) *MockCampaignCreatorRepo_UpdateContractIDAndStatus_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 string
+		if args[2] != nil {
+			arg2 = args[2].(string)
+		}
+		var arg3 string
+		if args[3] != nil {
+			arg3 = args[3].(string)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3,
+		)
+	})
+	return _c
+}
+
+func (_c *MockCampaignCreatorRepo_UpdateContractIDAndStatus_Call) Return(err error) *MockCampaignCreatorRepo_UpdateContractIDAndStatus_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockCampaignCreatorRepo_UpdateContractIDAndStatus_Call) RunAndReturn(run func(ctx context.Context, id string, contractID string, status string) error) *MockCampaignCreatorRepo_UpdateContractIDAndStatus_Call {
 	_c.Call.Return(run)
 	return _c
 }

@@ -12,6 +12,8 @@ external_docs:
   postman: docs/external/trustme/postman-collection.json
 revisions:
   - "2026-05-09: intent создан после серии экспериментов с overlay-рендером в `_bmad-output/experiments/pdf-overlay/`. PDF-pipeline = pure-Go overlay (`signintech/gopdf` + `ledongthuc/pdf`); источник контента — готовый PDF от Аиданы, загружаемый в `campaigns.contract_template_pdf BYTEA`; `ContractData` — 3 поля (`CreatorFIO`, `CreatorIIN`, `IssuedDate`); формат `IssuedDate` — «D» месяц YYYY г."
+  - "2026-05-09 (chunk 16 spec-mode): уточнения для предстоящего PR chunk 16. (а) TeeClient отменён — у TrustMe нет sandbox, на staging/local только SpyOnly, в проде только Real, переключение через TRUSTME_MOCK env var; (б) concurrent worker strategy зафиксирована как Variant A: Phase 1 защищён SKIP LOCKED, Phase 0 без доп.защиты (риск Phase 0-дубля принят, runbook на ручную очистку через ЛК TrustMe); (в) добавлены партиальные индексы idx_campaign_creators_outbox и idx_contracts_orphan для Phase 1 / Phase 0 SELECT'ов; (г) test-API surface уточнён — добавлен синхронный /test/trustme/run-outbox-once для e2e (без ожидания крон-тика) и /test/trustme/spy-register-document для имитации Phase 0 recovery; (д) audit-actions: campaign_creator.contract_initiated (Phase 3 happy) и campaign_creator.contract_orphan_recovered (Phase 0 finalize), payload — UUID'ы только."
+  - "2026-05-09 (extra-bmad-review chunk 16): дополнительно зафиксировано в Decision #10 Variant A — Phase 0 race может дать дубль Telegram-уведомления + audit row под N×pod, accept'ed как MVP trade-off (не фиксим в chunk 16); добавлено в Open Forks — auto_sign=0 hardcoded из-за неактивированной TrustMe-side фичи (Decision #6 будет восстановлен когда TrustMe активирует), и PDF bbox overflow на длинном ФИО/ИИН — warn-only лог (без обрыва render'а)."
 ---
 
 # Intent v2: TrustMe-контракт на каждый `(campaign, creator)`
@@ -145,7 +147,17 @@ revisions:
 
     **⚠ Риск Phase 0 recovery — фильтр `search/Contracts` по `additionalInfo`.** Метод `POST /search/Contracts` существует в blueprint (стр. 912), но структура `searchData[]` для фильтра по `additionalInfo` в blueprint размыта. **Нужна проверка против sandbox** на ранней стадии chunk 16. Если фильтр по `additionalInfo` не работает — план B на MVP: оптимистично перепосылать orphan'ов с тем же `additionalInfo`, принять риск дублей на TrustMe-side (объёмы низкие ~100 на EFW, очистка дубля через ЛК TrustMe — runbook). План B зафиксировать в спеке chunk 16 после теста sandbox.
 
-    Бесконечный retry без backoff (объёмы низкие — на EFW ~100 договоров за всю кампанию). `SKIP LOCKED` защищает от race при HA / blue-green. Никаких промежуточных статусов `signing_pending`/`signing_failed` — `agreed` без `contract_id` = «в outbox»; `signing` с `trustme_document_id IS NULL` = «в recovery». Graceful shutdown — встроенно в существующий `cl.Add("cron", scheduler.Stop)`: при SIGTERM ждёт текущий batch. Risk дубля СМС если упадём между ответом TrustMe и COMMIT Phase 3 — задокументирован, runbook «отозвать дубль через ЛК TrustMe» отдельно. Пример паттерна batch-обработки — `backend/cmd/scripts/notify-pending-creators`.
+    Бесконечный retry без backoff (объёмы низкие — на EFW ~100 договоров за всю кампанию). Никаких промежуточных статусов `signing_pending`/`signing_failed` — `agreed` без `contract_id` = «в outbox»; `signing` с `trustme_document_id IS NULL` = «в recovery». Graceful shutdown — встроенно в существующий `cl.Add("cron", scheduler.Stop)`: при SIGTERM ждёт текущий batch. Пример паттерна batch-обработки — `backend/cmd/scripts/notify-pending-creators`.
+
+    **Concurrent worker strategy — Variant A (минимальная защита).** В проде N≥2 pod'ов `cmd/api`, каждый запускает свой scheduler с одним и тем же cron-job'ом. Защиты:
+    - **Phase 1 (`agreed → signing`) защищён `SELECT ... FOR UPDATE SKIP LOCKED`** — Postgres-native гарантия от двойного claim'а одного ряда. Worker A блокирует ряды [1..4], Worker B видит их залоченными и забирает [5..8]. Внутри Tx — INSERT contracts + UPDATE campaign_creators SET contract_id=X, status='signing'; после COMMIT эти ряды отфильтровываются на любых subsequent тиках через WHERE-клозу `cc.status='agreed' AND cc.contract_id IS NULL`. Дубли исключены by design.
+    - **Phase 0 (recovery orphan'ов) — без доп.защиты.** Network-вызов в `search/Contracts` ВНЕ Tx, два worker'а могут подобрать тот же orphan и оба перепослать в TrustMe. Принимаем риск: окно дубля узкое (требует одновременного попадания на Phase 0 после реального сбоя Phase 2c), объёмы ~100 контрактов на EFW. Runbook на проде — ручная очистка дублей через ЛК TrustMe. Альтернативы (leader-election через `pg_try_advisory_lock` или TTL-lease на `contracts.recovery_started_at`) — overkill для текущей нагрузки; зафиксированы в backlog'е на случай роста.
+    - **Risk дубля СМС если упадём между ответом TrustMe и COMMIT Phase 3** — задокументирован, тот же runbook.
+    - **Risk дубля Telegram-уведомления + audit row на Phase 0 race** — два worker'а независимо подбирают один orphan (search/Contracts ВНЕ Tx). `UpdateAfterSend` идемпотентный (n=0 без error благодаря `WHERE trustme_document_id IS NULL`), но code path после finalize-Tx пишет `campaign_creator.contract_orphan_recovered` audit row + шлёт `notifyCreator` независимо от того, был ли реально обновлён ряд. Под N≥2 pod'ов креатор может получить «Мы отправили вам соглашение на подпись 📄» 2× (или 3×), audit накопит дублирующие записи. **Принимаем как MVP trade-off**: вероятность race-окна низкая (требует одновременного попадания на Phase 0 после реального сбоя Phase 2c), креатор не сильно страдает от лишнего сообщения, audit-дубли отфильтровываются на read-side по `(entity_type, entity_id, action)` если потребуется. Фиксим (через `(int64, error)` в `UpdateAfterSend` + skip post-Tx side-effects при n=0, либо `creator_notified_at` колонку) когда выползет реальный N×pod деплой и/или объёмы вырастут.
+
+    **Партиальные индексы для производительности SELECT'ов worker'а** (создаются миграцией chunk 16 одновременно с `contracts` table):
+    - `CREATE INDEX idx_campaign_creators_outbox ON campaign_creators (decided_at) WHERE status = 'agreed' AND contract_id IS NULL;` — оптимизирует Phase 1 SELECT.
+    - `CREATE INDEX idx_contracts_orphan ON contracts (subject_kind, initiated_at) WHERE trustme_document_id IS NULL;` — оптимизирует Phase 0 SELECT.
 
 11. **Источник контента — `campaigns.contract_template_pdf BYTEA NOT NULL DEFAULT '\x'`.** Готовый PDF, который Аидана сделала в Google Docs (с тремя плейсхолдерами в формате `{{Name}}`) и загрузила в админке через PDF-upload компонент. Markdown / HTML / templating-движки в pipeline не участвуют.
 
@@ -210,23 +222,28 @@ revisions:
 
 16. **PII вне stdout-логов (security.md hard rule).** Логируем UUID'ы (`creator_id`, `campaign_id`, `trustme_document_id`), HTTP-метаданные, status codes. **НЕ логируем** ФИО, ИИН, телефон, адрес, содержимое `contract_template_pdf` или `unsigned_pdf_content`. Если нужна диагностика шаблона — sha256-fingerprint первых N байт, не сам контент. В `audit_logs` (БД) — допустимо по проектному правилу `Audit vs stdout-логи`. В `error.Message` (response body) — анти-fingerprinting: одинаковый текст для разных причин отказа, без утечки внутренних данных.
 
-17. **Spy-паттерн для TrustMe.** По образцу `internal/telegram` три класса: (a) `Client` interface — методы реальной интеграции; (b) `RealClient` — HTTP-клиент против настоящего TrustMe; (c) `SpyOnlyClient` (только пишет в `SentSpyStore`, не ходит в сеть; используется при `TRUSTME_MOCK=true`) и `TeeClient` (пишет в spy + дёргает `RealClient`; используется при `EnableTestEndpoints=true && TRUSTME_MOCK=false` — staging mode «реально шлём + e2e может проверить»).
+17. **Spy-паттерн для TrustMe — два клиента, без Tee.** В отличие от `internal/telegram` (где Tee = staging real + spy), у TrustMe **нет sandbox-окружения** — реальные подписи = реальные деньги/договоры, гонять e2e на проде нельзя. Поэтому Tee-режим не делаем. Только два клиента:
+    - `Client` interface — методы реальной интеграции (`SendToSign`, `SearchContractByAdditionalInfo`, `DownloadContractFile`).
+    - `RealClient` (HTTP против `TRUSTME_BASE_URL`, токен в `Authorization` без Bearer, rate-limit 4 RPS per blueprint requirement).
+    - `SpyOnlyClient` (in-memory ring 5000, детерминированные ответы вида `document_id = "spy-" + hash(additionalInfo)`, не ходит в сеть).
 
-    `internal/trustme/spy_store.go`: `SentRecord{TrustMeDocumentID, ContractData, AdditionalInfo, SentAt, Err}` + `RegisterFailNext(docID, reason)` для имитации 5xx + `RegisterCallback(docID, status)` для имитации разных webhook-исходов на e2e-страховке. Capacity по образцу telegram (5000 ring).
+    Выбор клиента — `TRUSTME_MOCK` env var: `true` → SpyOnly (default на local + staging), `false` → Real (default в проде; на staging вручную для one-off real-теста с прод-токеном).
 
-    Test-API endpoints для spy-управления — рядом с существующими в `internal/testapi/` (по образцу `/test/telegram/spy-*`). Доступны только при `EnableTestEndpoints=true`.
+    `internal/trustme/spy_store.go`: `SentRecord{TrustMeDocumentID, AdditionalInfo, FIO, IIN, PhoneNumber, PDFBase64, SentAt, Err}` + `RegisterFailNext(reason, count)` для имитации 5xx/timeout + `RegisterDocument(additionalInfo, documentID)` для имитации Phase 0 recovery (когда TrustMe «знает» наш orphan). Capacity по образцу telegram (5000 ring).
+
+    Test-API endpoints для spy-управления — рядом с существующими в `internal/testapi/` (по образцу `/test/telegram/spy-*`): `/test/trustme/run-outbox-once` (синхронный прогон `ContractSenderService.RunOnce` без ожидания крон-тика), `/spy-list`, `/spy-clear`, `/spy-fail-next`, `/spy-register-document`. Доступны только при `EnableTestEndpoints=true`.
 
 18. **API surface — два новых endpoint'а для шаблона PDF.**
 
-    - **`PUT /campaigns/{id}/contract-template`** — multipart upload, form-data field `file`, `Content-Type: application/pdf`. Создание или замена шаблона. Auth — admin-only. Ответы:
-      - 200 — `{"hash": "<sha256>"}` (для дальнейшего отображения в админке: «загружен шаблон ###»).
+    - **`PUT /campaigns/{id}/contract-template`** — request body `application/pdf` (raw bytes, без multipart). Создание или замена шаблона. Auth — admin-only. Ответы:
+      - 200 — `{"hash": "<sha256>", "placeholders": [<name>, ...]}` (hash для отображения «загружен шаблон ###», placeholders — для preview-блока в админке).
       - 422 — `CodeContractRequired` / `CodeContractInvalidPDF` / `CodeContractMissingPlaceholder` / `CodeContractUnknownPlaceholder` / `CodeContractTemplateLocked`.
       - 404 — `CodeCampaignNotFound`.
-    - **`GET /campaigns/{id}/contract-template`** — download PDF, `Content-Type: application/pdf`. Auth — admin-only. Ответ — body = PDF bytes; 404 если шаблон не загружен (`length(contract_template_pdf) == 0`).
+    - **`GET /campaigns/{id}/contract-template`** — download PDF, response `Content-Type: application/pdf`. Auth — admin-only. Body = PDF bytes; 404 `CodeContractTemplateNotFound` если шаблон не загружен (`length(contract_template_pdf) == 0`).
 
-    Альтернатива — base64 в существующем `PATCH /campaigns/{id}` JSON. Отвергнута: PDF до ~5 МБ раздуется на 33% в base64 (до 6.7 МБ), плюс binary-в-JSON через openapi-codegen — уродливый шаблон. Multipart чище.
+    Альтернатива — base64 в существующем `PATCH /campaigns/{id}` JSON. Отвергнута: PDF до ~5 МБ раздуется на 33% в base64 (до 6.7 МБ), плюс binary-в-JSON через openapi-codegen — уродливый шаблон. Альтернатива multipart/form-data — отвергнута для чистоты openapi: одно бинарное поле не требует form-data, raw `application/pdf` body описывается в OpenAPI одной строкой `schema: {type: string, format: binary}` и тривиально читается через `io.Reader` на бэке / `Blob` на фронте. CRUD полей кампании (`name`, `tma_url`) идёт через JSON `PATCH /campaigns/{id}` как раньше; шаблон обрабатывается отдельным контуром.
 
-    **OpenAPI extension.** Multipart-upload в `oapi-codegen` поддерживается, но требует ручного описания `requestBody.content."multipart/form-data"`. В spec'е chunk 16 фиксируем точные имена полей и mime types.
+    **OpenAPI / codegen.** Если `oapi-codegen` strict-server несовместим с `application/pdf` raw body для PUT — обходим через chi-handler рядом со strict-server'ом (паттерн как в `/test/*`). На frontend — `openapi-fetch` GET с `responseType=blob`; если не поддерживается — raw `fetch` с комментарием почему (стандарт `frontend-api.md`).
 
 ## Параметры overlay-рендера (фиксируем после эксперимента)
 
@@ -398,6 +415,8 @@ Email **не нужен** — TrustMe для физлица-подписанта
 - OpenAPI-схема для `POST /trustme/webhook` payload (есть в blueprint, переписать в openapi.yaml).
 - OpenAPI-схема для `PUT /campaigns/{id}/contract-template` (multipart) и `GET /campaigns/{id}/contract-template` (binary response). Пример multipart upload в существующих ручках — отсутствует, описание делаем с нуля по oapi-codegen documentation (Decision #18).
 - Sandbox-тест `POST /search/Contracts` фильтра по `additionalInfo` — runbook на старте chunk 16 (Decision #10 Phase 0 risk).
+- **`auto_sign` параметр в `/SendToSignBase64FileExt/pdf?auto_sign={0|1}`** (deviation от Decision #6) — TrustMe-side активация платной фичи auto-sign задерживается. На время задержки в коде хардкоднуто `auto_sign=0`; status=3 будет наступать только когда оператор подпишет на их стороне (либо когда TrustMe активирует фичу). Fold обратно в Decision #6 (вернуть `auto_sign=1` или вообще убрать параметр) — когда TrustMe подтвердит активацию.
+- **PDF bbox overflow** — длинное ФИО/ИИН визуально наезжает на соседнее поле в PDF. На текущей итерации — warn-only лог, render не прерывается, креатор может подписать визуально сломанный договор. Если проявится на реальном кейсе и креатор оспорит подпись — переключиться на error+recordFailedAttempt (поднять оператору) либо truncate-with-ellipsis (legal-ОК если согласовано).
 
 ## Нарезка на 2 PR-чанка
 

@@ -40,10 +40,18 @@ func SignInitData(t *testing.T, telegramUserID int64, opts SignInitDataOpts) str
 
 // TmaCampaignFixture bundles the persisted state of a TMA-flow setup —
 // everything tma_test.go needs to drive agree/decline scenarios end-to-end.
+//
+// CreatorIIN/CreatorFIO/CreatorPhone эспонируются из ApprovedCreatorFixture,
+// чтобы chunk-16 e2e (`/contract`) могли фильтровать spy-list по
+// фингерпринтам уникальных полей креатора (UniqueIIN гарантирует уникальность
+// между параллельными тестами) — это убирает race на shared spy-store.
 type TmaCampaignFixture struct {
 	CampaignID        string
 	CreatorID         string
 	CampaignCreatorID string
+	CreatorIIN        string
+	CreatorFIO        string
+	CreatorPhone      string
 	SecretToken       string
 	TmaURL            string
 	TelegramUserID    int64
@@ -130,10 +138,17 @@ func SetupCampaignWithInvitedCreator(t *testing.T) TmaCampaignFixture {
 		Timeout:     5 * time.Second,
 	})
 
+	fio := creator.LastName + " " + creator.FirstName
+	if creator.MiddleName != nil && *creator.MiddleName != "" {
+		fio += " " + *creator.MiddleName
+	}
 	return TmaCampaignFixture{
 		CampaignID:        campaignID,
 		CreatorID:         creator.CreatorID,
 		CampaignCreatorID: campaignCreatorID,
+		CreatorIIN:        creator.IIN,
+		CreatorFIO:        fio,
+		CreatorPhone:      creator.Phone,
 		SecretToken:       tmaToken,
 		TmaURL:            tmaURL,
 		TelegramUserID:    creator.TelegramUserID,

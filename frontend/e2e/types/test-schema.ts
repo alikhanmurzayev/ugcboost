@@ -182,6 +182,117 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/test/trustme/run-outbox-once": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Synchronously run one tick of the contract outbox-worker
+         * @description Invokes ContractSenderService.RunOnce in-process so e2e suites do not
+         *     wait for the @every 10s cron tick. Returns 204 once the tick finishes.
+         *     NEVER enabled in production.
+         */
+        post: operations["trustMeRunOutboxOnce"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/test/trustme/spy-list": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read recorded outbound TrustMe SendToSign requests
+         * @description Returns SentRecord rows captured by the in-process spy store every
+         *     time the backend's TrustMe client is invoked. Used by e2e suites to
+         *     assert that overlay PDF + requisites were sent correctly. NEVER
+         *     enabled in production.
+         */
+        get: operations["trustMeSpyList"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/test/trustme/spy-clear": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Clear the TrustMe spy store
+         * @description Drops all recorded SendToSign attempts + fail-next + known-document
+         *     registrations. Used between e2e scenarios. NEVER enabled in production.
+         */
+        post: operations["trustMeSpyClear"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/test/trustme/spy-fail-next": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Force the next TrustMe SendToSign for additionalInfo to fail
+         * @description Registers a synthetic failure for the next `count` SendToSign calls
+         *     with the given AdditionalInfo. Used to exercise Phase 2c failure +
+         *     Phase 0 recovery in e2e. NEVER enabled in production.
+         */
+        post: operations["trustMeSpyFailNext"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/test/trustme/spy-register-document": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Pre-register a TrustMe-known document for Phase 0 recovery
+         * @description Imitates "TrustMe already accepted this document" — the next
+         *     SearchContractByAdditionalInfo for the given additionalInfo returns
+         *     the registered document instead of ErrTrustMeNotFound. Used by e2e
+         *     Phase 0 finalize-without-resend scenario. NEVER enabled in production.
+         */
+        post: operations["trustMeSpyRegisterDocument"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -276,6 +387,65 @@ export interface components {
              *     classifies it as bot_blocked.
              */
             reason?: string;
+        };
+        TrustMeSentRecord: {
+            /** @description trustme_document_id assigned by the spy (empty when send was forced to fail). */
+            documentId?: string;
+            /** @description Short URL (empty when send failed). */
+            shortUrl?: string;
+            /** @description contracts.id passed in AdditionalInfo when SendToSign was invoked. */
+            additionalInfo: string;
+            contractName: string;
+            /** @description TrustMe details.NumberDial — UGC-{contracts.serial_number}. */
+            numberDial: string;
+            /**
+             * @description Raw первый Requisite.FIO. Test endpoint доступен только при
+             *     EnableTestEndpoints=true (404 в проде); реальные ПД сюда не
+             *     попадают, e2e фикстуры синтетические.
+             */
+            fio: string;
+            /** @description Raw первый Requisite.IIN_BIN. */
+            iin: string;
+            /** @description Raw первый Requisite.PhoneNumber (уже E.164). */
+            phone: string;
+            /**
+             * @description Full hex sha256 (64 chars) of base64 PDF. PDF не возвращаем
+             *     (overlay содержит overlay'енные значения; и тяжёлый payload).
+             *     E2e сравнивает sha256 retry'ев.
+             */
+            pdfSha256: string;
+            /** Format: date-time */
+            sentAt: string;
+            /** @description Error string when fail-next caused this attempt to fail. */
+            err?: string;
+        };
+        TrustMeSpyListData: {
+            items: components["schemas"]["TrustMeSentRecord"][];
+        };
+        TrustMeSpyListResult: {
+            data: components["schemas"]["TrustMeSpyListData"];
+        };
+        TrustMeSpyFailNextRequest: {
+            /**
+             * @description contracts.id whose next SendToSign should fail. Empty string —
+             *     wildcard, fails next `count` SendToSign'ов независимо от
+             *     additionalInfo (нужно e2e Phase 0 recovery, где contract_id
+             *     ещё не существует на момент регистрации failure).
+             */
+            additionalInfo: string;
+            /** @description Optional override for the error string the spy returns. */
+            reason?: string;
+            /** @description How many subsequent calls to fail. Defaults to 1. */
+            count?: number;
+        };
+        TrustMeSpyRegisterDocumentRequest: {
+            additionalInfo: string;
+            /** @description trustme_document_id the spy returns from search/Contracts. */
+            documentId: string;
+            /** @description shortUrl the spy returns. Defaults to a synthetic URL. */
+            shortUrl?: string;
+            /** @description TrustMe contract_status to attach. Defaults to 0. */
+            contractStatus?: number;
         };
         SignTMAInitDataRequest: {
             /**
@@ -563,6 +733,124 @@ export interface operations {
         };
         responses: {
             /** @description Failure registered */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    trustMeRunOutboxOnce: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Tick complete */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    trustMeSpyList: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Recorded TrustMe SendToSign attempts */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TrustMeSpyListResult"];
+                };
+            };
+        };
+    };
+    trustMeSpyClear: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Spy store cleared */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    trustMeSpyFailNext: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TrustMeSpyFailNextRequest"];
+            };
+        };
+        responses: {
+            /** @description Failure registered */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    trustMeSpyRegisterDocument: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TrustMeSpyRegisterDocumentRequest"];
+            };
+        };
+        responses: {
+            /** @description Document registered */
             204: {
                 headers: {
                     [name: string]: unknown;

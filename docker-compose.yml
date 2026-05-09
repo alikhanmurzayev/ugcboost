@@ -42,6 +42,10 @@ services:
       # Overrides for Docker networking
       PORT: "8082"
       DATABASE_URL: postgres://ugcboost:ugcboost_dev@postgres:5432/ugcboost?sslmode=disable
+      # E2e contract recovery flow ожидает повторный SendToSign в пределах
+      # одного теста (два @every 10s тика подряд). Default 300s в config —
+      # для прода; в local/CI ставим 0, чтобы Phase 0 retry сразу.
+      TRUSTME_RETRY_BACKOFF_SECONDS: "0"
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:8082/healthz"]
       interval: 2s

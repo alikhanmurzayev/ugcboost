@@ -26,10 +26,13 @@ type CampaignCreator struct {
 // CampaignCreator status values. Stored as TEXT + CHECK in the schema; the
 // service is the single writer, so these constants are the source of truth.
 const (
-	CampaignCreatorStatusPlanned  = "planned"
-	CampaignCreatorStatusInvited  = "invited"
-	CampaignCreatorStatusDeclined = "declined"
-	CampaignCreatorStatusAgreed   = "agreed"
+	CampaignCreatorStatusPlanned         = "planned"
+	CampaignCreatorStatusInvited         = "invited"
+	CampaignCreatorStatusDeclined        = "declined"
+	CampaignCreatorStatusAgreed          = "agreed"
+	CampaignCreatorStatusSigning         = "signing"
+	CampaignCreatorStatusSigned          = "signed"
+	CampaignCreatorStatusSigningDeclined = "signing_declined"
 )
 
 // ErrCreatorAlreadyInCampaign is raised when a 23505 fires on

@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -20,6 +21,7 @@ import (
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/config"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/contract"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/handler"
+	"github.com/alikhanmurzayev/ugcboost/backend/internal/handler/trustmeport"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/logger"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/middleware"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/repository"
@@ -66,12 +68,31 @@ func run() error {
 	}
 	appLogger.Info(ctx, "database connected")
 
-	// Cron scheduler
-	scheduler := cron.New(cron.WithSeconds())
+	// Cron scheduler. cron.Recover ловит panic'и job'ов и логирует stack —
+	// второй слой защиты поверх defer/recover внутри RunOnce'а.
+	// SkipIfStillRunning пропускает тик, если предыдущий ещё бежит.
+	scheduler := cron.New(
+		cron.WithSeconds(),
+		cron.WithChain(
+			cron.Recover(cron.DefaultLogger),
+			cron.SkipIfStillRunning(cron.DefaultLogger),
+		),
+	)
 	scheduler.Start()
-	cl.Add("cron", func(_ context.Context) error {
+
+	// workerCtx — контекст cron-job'ов (HTTP/SQL внутри RunOnce). При shutdown
+	// сначала отменяем его (ниже cl.Add("cron-cancel", ...) — выполняется до
+	// scheduler.Stop в LIFO), активный тик просыпается из pool.Query / Do.
+	workerCtx, workerCancel := context.WithCancel(context.Background())
+	defer workerCancel()
+
+	cl.Add("cron-stop", func(_ context.Context) error {
 		ctx := scheduler.Stop()
 		<-ctx.Done()
+		return nil
+	})
+	cl.Add("cron-cancel", func(_ context.Context) error {
+		workerCancel()
 		return nil
 	})
 	appLogger.Info(ctx, "cron scheduler started")
@@ -97,6 +118,11 @@ func run() error {
 	}
 	registerNotifyWaiter(tgRig.Notifier, cl)
 
+	trustMeRig, err := setupTrustMe(cfg)
+	if err != nil {
+		return err
+	}
+
 	campaignSvc := service.NewCampaignService(pool, repoFactory, contract.NewRealExtractor(), appLogger)
 	campaignCreatorSvc := service.NewCampaignCreatorService(pool, repoFactory, tgRig.Notifier, appLogger)
 	tmaCampaignCreatorSvc := service.NewTmaCampaignCreatorService(pool, repoFactory, appLogger)
@@ -107,6 +133,23 @@ func run() error {
 
 	tgHandler := telegram.NewHandler(creatorApplicationTelegramSvc, appLogger)
 	startTelegramRunner(ctx, cfg, tgHandler, appLogger, cl)
+
+	contractSenderSvc := contract.NewContractSenderService(
+		pool,
+		repoFactory,
+		trustMeRig.Client,
+		contract.NewRealRenderer(nil, appLogger),
+		repoFactory.NewCreatorRepo(pool),
+		tgRig.Notifier,
+		appLogger,
+		time.Duration(cfg.TrustMeRetryBackoffSeconds)*time.Second,
+	)
+	if _, err := scheduler.AddFunc("@every 10s", func() {
+		contractSenderSvc.RunOnce(workerCtx)
+	}); err != nil {
+		return fmt.Errorf("schedule contract sender: %w", err)
+	}
+	appLogger.Info(ctx, "contract sender scheduled", "every", "10s", "trustme_mock", cfg.TrustMeMock)
 
 	// Seed admin
 	if err := authSvc.SeedAdmin(ctx, cfg.AdminEmail, cfg.AdminPassword); err != nil {
@@ -159,7 +202,12 @@ func run() error {
 	// endpoint uses the repo factory directly — the hard-delete for users
 	// is test-only and intentionally not exposed through any service.
 	if cfg.EnableTestEndpoints {
-		testHandler := handler.NewTestAPIHandler(authSvc, pool, repoFactory, resetTokenStore, tgHandler, tgRig.Spy, cfg.TelegramBotToken, appLogger)
+		var trustMeSpyAdapter trustmeport.SpyStore
+		if trustMeRig.SpyStore != nil {
+			trustMeSpyAdapter = newTrustMeSpyAdapter(trustMeRig.SpyStore)
+		}
+		testHandler := handler.NewTestAPIHandler(authSvc, pool, repoFactory, resetTokenStore, tgHandler, tgRig.Spy, cfg.TelegramBotToken,
+			contractSenderSvc, trustMeSpyAdapter, appLogger)
 		testapi.HandlerWithOptions(handler.NewStrictTestAPIHandler(testHandler), testapi.ChiServerOptions{
 			BaseRouter:       r,
 			ErrorHandlerFunc: handler.HandleParamError(appLogger),

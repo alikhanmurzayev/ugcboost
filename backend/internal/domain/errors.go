@@ -95,6 +95,12 @@ const (
 	CodeContractTemplateRequired = "CONTRACT_TEMPLATE_REQUIRED"
 )
 
+// ErrContractTrustMeDocumentIDTaken — defensive translation of
+// `contracts_trustme_document_id_unique` (23505). Should never fire under
+// normal flow (TrustMe issues distinct ids) but kept so a Postgres-level
+// race is observable as a domain sentinel rather than a raw pg error.
+var ErrContractTrustMeDocumentIDTaken = errors.New("contract trustme_document_id already taken")
+
 // TMA decision + secret_token codes — surfaced by /tma/* endpoints and by
 // POST/PATCH /campaigns when the admin-provided tma_url fails the
 // secret-token-format check or collides with another live campaign.

@@ -90,3 +90,8 @@ func (f *RepoFactory) NewCampaignRepo(db dbutil.DB) CampaignRepo {
 func (f *RepoFactory) NewCampaignCreatorRepo(db dbutil.DB) CampaignCreatorRepo {
 	return &campaignCreatorRepository{db: db}
 }
+
+// NewContractsRepo creates a contracts repository bound to the given DB.
+func (f *RepoFactory) NewContractsRepo(db dbutil.DB) ContractRepo {
+	return &contractRepository{db: db}
+}
