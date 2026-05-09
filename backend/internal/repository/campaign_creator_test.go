@@ -520,18 +520,30 @@ func TestCampaignCreatorRepository_GetByIDForUpdate(t *testing.T) {
 		mock := newPgxmock(t)
 		repo := &campaignCreatorRepository{db: mock}
 		createdAt := time.Date(2026, 5, 7, 12, 0, 0, 0, time.UTC)
+		invitedAt := time.Date(2026, 5, 7, 13, 0, 0, 0, time.UTC)
 
 		mock.ExpectQuery(sqlStmt).
 			WithArgs("cc-1").
 			WillReturnRows(pgxmock.NewRows(campaignCreatorRowCols).
 				AddRow("camp-1", createdAt, "cr-1", (*time.Time)(nil), "cc-1",
-					(*time.Time)(nil), 0, (*time.Time)(nil), 0,
+					&invitedAt, 1, (*time.Time)(nil), 0,
 					domain.CampaignCreatorStatusInvited, createdAt))
 
 		got, err := repo.GetByIDForUpdate(context.Background(), "cc-1")
 		require.NoError(t, err)
-		require.Equal(t, "cc-1", got.ID)
-		require.Equal(t, domain.CampaignCreatorStatusInvited, got.Status)
+		require.Equal(t, &CampaignCreatorRow{
+			ID:            "cc-1",
+			CampaignID:    "camp-1",
+			CreatorID:     "cr-1",
+			Status:        domain.CampaignCreatorStatusInvited,
+			InvitedAt:     &invitedAt,
+			InvitedCount:  1,
+			RemindedAt:    nil,
+			RemindedCount: 0,
+			DecidedAt:     nil,
+			CreatedAt:     createdAt,
+			UpdatedAt:     createdAt,
+		}, got)
 	})
 
 	t.Run("not found propagates sql.ErrNoRows", func(t *testing.T) {
@@ -571,19 +583,31 @@ func TestCampaignCreatorRepository_ApplyDecision(t *testing.T) {
 		mock := newPgxmock(t)
 		repo := &campaignCreatorRepository{db: mock}
 		createdAt := time.Date(2026, 5, 7, 12, 0, 0, 0, time.UTC)
+		invitedAt := time.Date(2026, 5, 7, 12, 30, 0, 0, time.UTC)
 		decidedAt := time.Date(2026, 5, 7, 13, 0, 0, 0, time.UTC)
 
 		mock.ExpectQuery(sqlStmt).
 			WithArgs(domain.CampaignCreatorStatusAgreed, "cc-1").
 			WillReturnRows(pgxmock.NewRows(campaignCreatorRowCols).
 				AddRow("camp-1", createdAt, "cr-1", &decidedAt, "cc-1",
-					(*time.Time)(nil), 1, (*time.Time)(nil), 0,
+					&invitedAt, 1, (*time.Time)(nil), 0,
 					domain.CampaignCreatorStatusAgreed, decidedAt))
 
 		got, err := repo.ApplyDecision(context.Background(), "cc-1", domain.CampaignCreatorStatusAgreed)
 		require.NoError(t, err)
-		require.Equal(t, domain.CampaignCreatorStatusAgreed, got.Status)
-		require.NotNil(t, got.DecidedAt)
+		require.Equal(t, &CampaignCreatorRow{
+			ID:            "cc-1",
+			CampaignID:    "camp-1",
+			CreatorID:     "cr-1",
+			Status:        domain.CampaignCreatorStatusAgreed,
+			InvitedAt:     &invitedAt,
+			InvitedCount:  1,
+			RemindedAt:    nil,
+			RemindedCount: 0,
+			DecidedAt:     &decidedAt,
+			CreatedAt:     createdAt,
+			UpdatedAt:     decidedAt,
+		}, got)
 	})
 
 	t.Run("propagates errors", func(t *testing.T) {

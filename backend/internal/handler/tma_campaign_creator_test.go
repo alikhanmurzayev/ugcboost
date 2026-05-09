@@ -100,7 +100,13 @@ func TestServer_TmaAgree(t *testing.T) {
 				CampaignCreatorID: "cc-1",
 			}, nil)
 		tmaSvc := mocks.NewMockTmaCampaignCreatorService(t)
-		tmaSvc.EXPECT().ApplyDecision(mock.Anything, mock.Anything, domain.CampaignCreatorDecisionAgree).
+		tmaSvc.EXPECT().ApplyDecision(mock.Anything,
+			service.TmaDecisionAuth{
+				CampaignID:        "camp-1",
+				CreatorID:         "cr-1",
+				CampaignCreatorID: "cc-1",
+			},
+			domain.CampaignCreatorDecisionAgree).
 			Return(domain.CampaignCreatorDecisionResult{}, domain.ErrCampaignCreatorDeclinedNeedReinvite)
 
 		router := newTestRouter(t, newTmaServer(t, authzSvc, tmaSvc))
@@ -113,9 +119,19 @@ func TestServer_TmaAgree(t *testing.T) {
 		t.Parallel()
 		authzSvc := mocks.NewMockAuthzService(t)
 		authzSvc.EXPECT().AuthorizeTMACampaignDecision(mock.Anything, tmaTestValidToken).
-			Return(authz.TMACampaignDecisionAuth{}, nil)
+			Return(authz.TMACampaignDecisionAuth{
+				CreatorID:         "cr-1",
+				CampaignID:        "camp-1",
+				CampaignCreatorID: "cc-1",
+			}, nil)
 		tmaSvc := mocks.NewMockTmaCampaignCreatorService(t)
-		tmaSvc.EXPECT().ApplyDecision(mock.Anything, mock.Anything, domain.CampaignCreatorDecisionAgree).
+		tmaSvc.EXPECT().ApplyDecision(mock.Anything,
+			service.TmaDecisionAuth{
+				CampaignID:        "camp-1",
+				CreatorID:         "cr-1",
+				CampaignCreatorID: "cc-1",
+			},
+			domain.CampaignCreatorDecisionAgree).
 			Return(domain.CampaignCreatorDecisionResult{}, errors.New("db down"))
 
 		log := logmocks.NewMockLogger(t)
@@ -124,6 +140,36 @@ func TestServer_TmaAgree(t *testing.T) {
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/tma/campaigns/"+tmaTestValidToken+"/agree", nil)
 		require.Equal(t, http.StatusInternalServerError, w.Code)
 		require.Equal(t, domain.CodeInternal, resp.Error.Code)
+	})
+
+	t.Run("idempotent agree returns 200 with already_decided=true", func(t *testing.T) {
+		t.Parallel()
+		authzSvc := mocks.NewMockAuthzService(t)
+		authzSvc.EXPECT().AuthorizeTMACampaignDecision(mock.Anything, tmaTestValidToken).
+			Return(authz.TMACampaignDecisionAuth{
+				CreatorID:         "cr-1",
+				CampaignID:        "camp-1",
+				CampaignCreatorID: "cc-1",
+			}, nil)
+
+		tmaSvc := mocks.NewMockTmaCampaignCreatorService(t)
+		tmaSvc.EXPECT().ApplyDecision(mock.Anything,
+			service.TmaDecisionAuth{
+				CampaignID:        "camp-1",
+				CreatorID:         "cr-1",
+				CampaignCreatorID: "cc-1",
+			},
+			domain.CampaignCreatorDecisionAgree).
+			Return(domain.CampaignCreatorDecisionResult{
+				Status:         domain.CampaignCreatorStatusAgreed,
+				AlreadyDecided: true,
+			}, nil)
+
+		router := newTestRouter(t, newTmaServer(t, authzSvc, tmaSvc))
+		w, resp := doJSON[api.TmaDecisionResult](t, router, http.MethodPost, "/tma/campaigns/"+tmaTestValidToken+"/agree", nil)
+		require.Equal(t, http.StatusOK, w.Code)
+		require.Equal(t, api.CampaignCreatorStatus(domain.CampaignCreatorStatusAgreed), resp.Status)
+		require.True(t, resp.AlreadyDecided)
 	})
 }
 
@@ -189,7 +235,13 @@ func TestServer_TmaDecline(t *testing.T) {
 				CampaignCreatorID: "cc-1",
 			}, nil)
 		tmaSvc := mocks.NewMockTmaCampaignCreatorService(t)
-		tmaSvc.EXPECT().ApplyDecision(mock.Anything, mock.Anything, domain.CampaignCreatorDecisionDecline).
+		tmaSvc.EXPECT().ApplyDecision(mock.Anything,
+			service.TmaDecisionAuth{
+				CampaignID:        "camp-1",
+				CreatorID:         "cr-1",
+				CampaignCreatorID: "cc-1",
+			},
+			domain.CampaignCreatorDecisionDecline).
 			Return(domain.CampaignCreatorDecisionResult{}, domain.ErrCampaignCreatorAlreadyAgreed)
 
 		router := newTestRouter(t, newTmaServer(t, authzSvc, tmaSvc))
@@ -209,7 +261,13 @@ func TestServer_TmaDecline(t *testing.T) {
 			}, nil)
 
 		tmaSvc := mocks.NewMockTmaCampaignCreatorService(t)
-		tmaSvc.EXPECT().ApplyDecision(mock.Anything, mock.Anything, domain.CampaignCreatorDecisionDecline).
+		tmaSvc.EXPECT().ApplyDecision(mock.Anything,
+			service.TmaDecisionAuth{
+				CampaignID:        "camp-1",
+				CreatorID:         "cr-1",
+				CampaignCreatorID: "cc-1",
+			},
+			domain.CampaignCreatorDecisionDecline).
 			Return(domain.CampaignCreatorDecisionResult{
 				Status:         domain.CampaignCreatorStatusDeclined,
 				AlreadyDecided: true,
@@ -218,6 +276,7 @@ func TestServer_TmaDecline(t *testing.T) {
 		router := newTestRouter(t, newTmaServer(t, authzSvc, tmaSvc))
 		w, resp := doJSON[api.TmaDecisionResult](t, router, http.MethodPost, "/tma/campaigns/"+tmaTestValidToken+"/decline", nil)
 		require.Equal(t, http.StatusOK, w.Code)
+		require.Equal(t, api.CampaignCreatorStatus(domain.CampaignCreatorStatusDeclined), resp.Status)
 		require.True(t, resp.AlreadyDecided)
 	})
 }

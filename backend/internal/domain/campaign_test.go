@@ -79,6 +79,8 @@ func TestExtractSecretToken(t *testing.T) {
 		{"trailing slash trimmed", "https://tma.ugcboost.kz/tz/abc_padding_secrettokenxx/", "abc_padding_secrettokenxx"},
 		{"happy URL", "https://tma.ugcboost.kz/tz/abc_padding_secrettokenxx", "abc_padding_secrettokenxx"},
 		{"unparseable input → empty", "://", ""},
+		{"scheme without host → empty", "https://", ""},
+		{"scheme + host without path → empty", "https://tma.ugcboost.kz", ""},
 	}
 	for _, tc := range cases {
 		tc := tc

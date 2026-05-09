@@ -91,14 +91,6 @@ import (
 	"github.com/alikhanmurzayev/ugcboost/backend/e2e/testutil"
 )
 
-// freshValidTmaURL returns a deterministically valid tma_url whose last path
-// segment is unique per call. Required because campaigns.secret_token has a
-// partial UNIQUE INDEX (live, non-deleted) and parallel tests would otherwise
-// trip TMA_URL_CONFLICT when both seed against the same constant URL.
-func freshValidTmaURL() string {
-	return "https://tma.ugcboost.kz/tz/" + strings.ReplaceAll(uuid.NewString(), "-", "")
-}
-
 func TestCampaignCRUD(t *testing.T) {
 	t.Parallel()
 
@@ -109,7 +101,7 @@ func TestCampaignCRUD(t *testing.T) {
 		// middleware short-circuit.
 		resp := testutil.PostRaw(t, "/campaigns", apiclient.CampaignInput{
 			Name:   "Promo-" + testutil.UniqueEmail("unauth"),
-			TmaUrl: freshValidTmaURL(),
+			TmaUrl: testutil.FreshValidTmaURL(),
 		})
 		defer resp.Body.Close()
 		require.Equal(t, http.StatusUnauthorized, resp.StatusCode)
@@ -123,7 +115,7 @@ func TestCampaignCRUD(t *testing.T) {
 
 		resp, err := mgrClient.CreateCampaignWithResponse(context.Background(), apiclient.CreateCampaignJSONRequestBody{
 			Name:   "Promo-" + testutil.UniqueEmail("mgrtries"),
-			TmaUrl: freshValidTmaURL(),
+			TmaUrl: testutil.FreshValidTmaURL(),
 		}, testutil.WithAuth(mgrToken))
 		require.NoError(t, err)
 		require.Equal(t, http.StatusForbidden, resp.StatusCode())
@@ -136,7 +128,7 @@ func TestCampaignCRUD(t *testing.T) {
 		c, token, _ := testutil.SetupAdminClient(t)
 		resp, err := c.CreateCampaignWithResponse(context.Background(), apiclient.CreateCampaignJSONRequestBody{
 			Name:   "   ",
-			TmaUrl: freshValidTmaURL(),
+			TmaUrl: testutil.FreshValidTmaURL(),
 		}, testutil.WithAuth(token))
 		require.NoError(t, err)
 		require.Equal(t, http.StatusUnprocessableEntity, resp.StatusCode())
@@ -150,7 +142,7 @@ func TestCampaignCRUD(t *testing.T) {
 		c, token, _ := testutil.SetupAdminClient(t)
 		resp, err := c.CreateCampaignWithResponse(context.Background(), apiclient.CreateCampaignJSONRequestBody{
 			Name:   strings.Repeat("A", 256),
-			TmaUrl: freshValidTmaURL(),
+			TmaUrl: testutil.FreshValidTmaURL(),
 		}, testutil.WithAuth(token))
 		require.NoError(t, err)
 		require.Equal(t, http.StatusUnprocessableEntity, resp.StatusCode())
@@ -203,7 +195,7 @@ func TestCampaignCRUD(t *testing.T) {
 		t.Parallel()
 		c, token, _ := testutil.SetupAdminClient(t)
 		name := "Promo-" + testutil.UniqueEmail("happy")
-		tma := freshValidTmaURL()
+		tma := testutil.FreshValidTmaURL()
 
 		resp, err := c.CreateCampaignWithResponse(context.Background(), apiclient.CreateCampaignJSONRequestBody{
 			Name:   name,
@@ -286,7 +278,7 @@ func TestCampaignCRUD(t *testing.T) {
 		t.Parallel()
 		c, token, _ := testutil.SetupAdminClient(t)
 		name := "Promo-" + testutil.UniqueEmail("getok")
-		tma := freshValidTmaURL()
+		tma := testutil.FreshValidTmaURL()
 		before := time.Now()
 
 		createResp, err := c.CreateCampaignWithResponse(context.Background(), apiclient.CreateCampaignJSONRequestBody{
@@ -321,7 +313,7 @@ func TestCampaignCRUD(t *testing.T) {
 			uuid.MustParse("00000000-0000-0000-0000-000000000003"),
 			apiclient.UpdateCampaignJSONRequestBody{
 				Name:   "Promo-" + testutil.UniqueEmail("upunauth"),
-				TmaUrl: freshValidTmaURL(),
+				TmaUrl: testutil.FreshValidTmaURL(),
 			})
 		require.NoError(t, err)
 		require.Equal(t, http.StatusUnauthorized, resp.StatusCode())
@@ -340,7 +332,7 @@ func TestCampaignCRUD(t *testing.T) {
 			uuid.MustParse("00000000-0000-0000-0000-000000000004"),
 			apiclient.UpdateCampaignJSONRequestBody{
 				Name:   "Promo-" + testutil.UniqueEmail("upmgrbody"),
-				TmaUrl: freshValidTmaURL(),
+				TmaUrl: testutil.FreshValidTmaURL(),
 			}, testutil.WithAuth(mgrToken))
 		require.NoError(t, err)
 		require.Equal(t, http.StatusForbidden, resp.StatusCode())
@@ -355,7 +347,7 @@ func TestCampaignCRUD(t *testing.T) {
 			uuid.MustParse("00000000-0000-0000-0000-deadbeef0001"),
 			apiclient.UpdateCampaignJSONRequestBody{
 				Name:   "Promo-" + testutil.UniqueEmail("up404"),
-				TmaUrl: freshValidTmaURL(),
+				TmaUrl: testutil.FreshValidTmaURL(),
 			}, testutil.WithAuth(token))
 		require.NoError(t, err)
 		require.Equal(t, http.StatusNotFound, resp.StatusCode())
@@ -369,7 +361,7 @@ func TestCampaignCRUD(t *testing.T) {
 		c, token, _ := testutil.SetupAdminClient(t)
 		resp, err := c.UpdateCampaignWithResponse(context.Background(),
 			uuid.MustParse("00000000-0000-0000-0000-000000000005"),
-			apiclient.UpdateCampaignJSONRequestBody{Name: "   ", TmaUrl: freshValidTmaURL()},
+			apiclient.UpdateCampaignJSONRequestBody{Name: "   ", TmaUrl: testutil.FreshValidTmaURL()},
 			testutil.WithAuth(token))
 		require.NoError(t, err)
 		require.Equal(t, http.StatusUnprocessableEntity, resp.StatusCode())
@@ -383,7 +375,7 @@ func TestCampaignCRUD(t *testing.T) {
 		c, token, _ := testutil.SetupAdminClient(t)
 		resp, err := c.UpdateCampaignWithResponse(context.Background(),
 			uuid.MustParse("00000000-0000-0000-0000-000000000006"),
-			apiclient.UpdateCampaignJSONRequestBody{Name: strings.Repeat("A", 256), TmaUrl: freshValidTmaURL()},
+			apiclient.UpdateCampaignJSONRequestBody{Name: strings.Repeat("A", 256), TmaUrl: testutil.FreshValidTmaURL()},
 			testutil.WithAuth(token))
 		require.NoError(t, err)
 		require.Equal(t, http.StatusUnprocessableEntity, resp.StatusCode())
@@ -430,7 +422,7 @@ func TestCampaignCRUD(t *testing.T) {
 		nameB := "Promo-B-" + testutil.UniqueEmail("upcollideB")
 
 		respA, err := c.CreateCampaignWithResponse(context.Background(), apiclient.CreateCampaignJSONRequestBody{
-			Name: nameA, TmaUrl: freshValidTmaURL(),
+			Name: nameA, TmaUrl: testutil.FreshValidTmaURL(),
 		}, testutil.WithAuth(token))
 		require.NoError(t, err)
 		require.Equal(t, http.StatusCreated, respA.StatusCode())
@@ -439,7 +431,7 @@ func TestCampaignCRUD(t *testing.T) {
 		testutil.RegisterCampaignCleanup(t, idA.String())
 
 		respB, err := c.CreateCampaignWithResponse(context.Background(), apiclient.CreateCampaignJSONRequestBody{
-			Name: nameB, TmaUrl: freshValidTmaURL(),
+			Name: nameB, TmaUrl: testutil.FreshValidTmaURL(),
 		}, testutil.WithAuth(token))
 		require.NoError(t, err)
 		require.Equal(t, http.StatusCreated, respB.StatusCode())
@@ -449,7 +441,7 @@ func TestCampaignCRUD(t *testing.T) {
 
 		// PATCH B name=A — sequential, no race; partial-unique index trips.
 		updateResp, err := c.UpdateCampaignWithResponse(context.Background(), idB,
-			apiclient.UpdateCampaignJSONRequestBody{Name: nameA, TmaUrl: freshValidTmaURL()},
+			apiclient.UpdateCampaignJSONRequestBody{Name: nameA, TmaUrl: testutil.FreshValidTmaURL()},
 			testutil.WithAuth(token))
 		require.NoError(t, err)
 		require.Equal(t, http.StatusConflict, updateResp.StatusCode())
@@ -517,7 +509,7 @@ func TestCampaignCRUD(t *testing.T) {
 	t.Run("create duplicate tmaUrl returns 422 TMA_URL_CONFLICT", func(t *testing.T) {
 		t.Parallel()
 		c, token, _ := testutil.SetupAdminClient(t)
-		tma := freshValidTmaURL()
+		tma := testutil.FreshValidTmaURL()
 
 		respA, err := c.CreateCampaignWithResponse(context.Background(), apiclient.CreateCampaignJSONRequestBody{
 			Name:   "Promo-A-" + testutil.UniqueEmail("dupurlA"),
@@ -541,8 +533,8 @@ func TestCampaignCRUD(t *testing.T) {
 	t.Run("update to taken tmaUrl returns 422 TMA_URL_CONFLICT", func(t *testing.T) {
 		t.Parallel()
 		c, token, _ := testutil.SetupAdminClient(t)
-		tmaA := freshValidTmaURL()
-		tmaB := freshValidTmaURL()
+		tmaA := testutil.FreshValidTmaURL()
+		tmaB := testutil.FreshValidTmaURL()
 
 		respA, err := c.CreateCampaignWithResponse(context.Background(), apiclient.CreateCampaignJSONRequestBody{
 			Name:   "Promo-A-" + testutil.UniqueEmail("upcoldurlA"),
@@ -603,7 +595,7 @@ func TestCreateCampaign_RaceUniqueName(t *testing.T) {
 			<-start
 			resp, err := c.CreateCampaignWithResponse(context.Background(), apiclient.CreateCampaignJSONRequestBody{
 				Name:   name,
-				TmaUrl: freshValidTmaURL(),
+				TmaUrl: testutil.FreshValidTmaURL(),
 			}, testutil.WithAuth(token))
 			require.NoError(t, err)
 			switch resp.StatusCode() {
@@ -645,7 +637,7 @@ func TestCreateCampaign_RaceUniqueName(t *testing.T) {
 func TestCreateCampaign_RaceUniqueSecretToken(t *testing.T) {
 	t.Parallel()
 	c, token, _ := testutil.SetupAdminClient(t)
-	tma := freshValidTmaURL()
+	tma := testutil.FreshValidTmaURL()
 
 	var (
 		wg          sync.WaitGroup
@@ -707,7 +699,7 @@ func newCampaignMarker() string {
 // the round-trip without depending on a shared constant.
 func seedCampaign(t *testing.T, c *apiclient.ClientWithResponses, token, name string) (uuid.UUID, string) {
 	t.Helper()
-	tma := freshValidTmaURL()
+	tma := testutil.FreshValidTmaURL()
 	resp, err := c.CreateCampaignWithResponse(context.Background(), apiclient.CreateCampaignJSONRequestBody{
 		Name:   name,
 		TmaUrl: tma,
@@ -915,7 +907,7 @@ func TestCampaignList(t *testing.T) {
 		patchResp, err := c.UpdateCampaignWithResponse(context.Background(), early,
 			apiclient.UpdateCampaignJSONRequestBody{
 				Name:   marker + "-early-bumped",
-				TmaUrl: freshValidTmaURL(),
+				TmaUrl: testutil.FreshValidTmaURL(),
 			}, testutil.WithAuth(token))
 		require.NoError(t, err)
 		require.Equal(t, http.StatusNoContent, patchResp.StatusCode())

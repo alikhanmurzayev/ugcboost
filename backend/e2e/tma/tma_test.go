@@ -16,9 +16,12 @@
 // TestTmaDecisionFromPlanned проверяет 422 CAMPAIGN_CREATOR_NOT_INVITED
 // для row в статусе planned (creator добавлен через A1, но без A4 notify).
 //
-// TestTmaDecisionUnauthorized проходит четыре варианта 401: отсутствующий
-// заголовок, неверный scheme, истёкший auth_date, auth_date в будущем,
-// HMAC mismatch. Все возвращают generic body с CodeUnauthorized.
+// TestTmaDecisionUnauthorized проходит шесть вариантов 401: отсутствующий
+// заголовок, неверный scheme (Bearer вместо tma), пустой hash, garbage
+// initData, истёкший auth_date, auth_date в будущем и HMAC mismatch
+// (initData подписан другим bot_token). Все возвращают идентичный generic
+// body с CodeUnauthorized — middleware не разглашает причину провала, чтобы
+// атакующий не мог отличить «битый формат» от «неверная подпись».
 //
 // TestTmaDecisionRegexReject404 проверяет ранний reject в handler: путь с
 // secret_token короче 16 символов получает 404 CAMPAIGN_NOT_FOUND до любого
@@ -26,10 +29,18 @@
 // regex срабатывает до AuthzService.GetBySecretToken).
 //
 // TestTmaDecisionForbidden и TestTmaDecisionCampaignNotFound покрывают
-// 403 (creator не в кампании) и 404 (soft-deleted кампания) ветки
-// AuthzService. Для 403 — creator зарегистрирован в одной кампании, но
-// инициирует решение для secret_token другой. Для 404 — admin-DELETE
-// помечает кампанию soft-deleted, и тот же initData больше не находит её.
+// 403 (creator не в кампании) и 404 (regex-valid но несуществующий
+// secret_token) ветки AuthzService. Для 403 — creator зарегистрирован в
+// одной кампании, но инициирует решение для secret_token другой.
+//
+// TestTmaDecisionAntiFingerprint сравнивает три ветки попарно: «creator не
+// зарегистрирован» (TG-user без creator-row), «creator зарегистрирован, но
+// не в этой кампании» и «secret_token не существует». Все три обязаны
+// возвращать одинаковый response body — иначе атакующий по разнице ответов
+// узнает, существует ли creator-row под его TG-id или есть ли invited link.
+// Soft-deleted кампания формально даёт ту же 404-ветку, но e2e не имеет
+// бизнес/тест-ручки soft-delete'а — покрытие is_deleted-фильтра живёт на
+// repo-уровне (`TestCampaignRepository_GetBySecretToken`).
 //
 // Setup для каждого теста независимо собирает кампанию + invited creator
 // через testutil.SetupCampaignWithInvitedCreator; cleanup идёт через
@@ -38,6 +49,8 @@ package tma
 
 import (
 	"context"
+	"encoding/json"
+	"io"
 	"net/http"
 	"testing"
 	"time"
@@ -59,34 +72,50 @@ const (
 // HTTP keeps the test code mirroring the real Telegram WebApp surface.
 func tmaPost(t *testing.T, secretToken, action, initData string) (status int, body []byte) {
 	t.Helper()
+	return tmaPostWithScheme(t, secretToken, action, "tma", initData)
+}
+
+// tmaPostWithScheme lets negative tests pick a non-`tma` Authorization scheme
+// (or a malformed initData literal) — the middleware rejection path is the
+// same regardless of why the header is invalid.
+func tmaPostWithScheme(t *testing.T, secretToken, action, scheme, payload string) (status int, body []byte) {
+	t.Helper()
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost,
 		testutil.BaseURL+tmaPathPrefix+secretToken+"/"+action, nil)
 	require.NoError(t, err)
-	if initData != "" {
-		req.Header.Set("Authorization", "tma "+initData)
+	if scheme != "" || payload != "" {
+		header := scheme
+		if scheme != "" && payload != "" {
+			header += " "
+		}
+		header += payload
+		req.Header.Set("Authorization", header)
 	}
 	resp, err := testutil.HTTPClient(nil).Do(req)
 	require.NoError(t, err)
 	defer resp.Body.Close()
-	body = readAll(t, resp)
+	body, err = io.ReadAll(resp.Body)
+	require.NoError(t, err)
 	return resp.StatusCode, body
 }
 
-func readAll(t *testing.T, resp *http.Response) []byte {
+// decodeDecision decodes the response body as the typed apiclient
+// TmaDecisionResult. Body-string `Contains` was an anti-pattern: a schema
+// drift (e.g. `status` migrating into `data.status`) would still match
+// substring-wise. This helper makes the contract explicit.
+func decodeDecision(t *testing.T, body []byte) apiclient.TmaDecisionResult {
 	t.Helper()
-	const max = 64 * 1024
-	buf := make([]byte, 0, 1024)
-	tmp := make([]byte, 1024)
-	for len(buf) < max {
-		n, err := resp.Body.Read(tmp)
-		if n > 0 {
-			buf = append(buf, tmp[:n]...)
-		}
-		if err != nil {
-			break
-		}
-	}
-	return buf
+	var got apiclient.TmaDecisionResult
+	require.NoErrorf(t, json.Unmarshal(body, &got), "decode TmaDecisionResult: %s", string(body))
+	return got
+}
+
+// decodeError decodes the response body as the typed apiclient ErrorResponse.
+func decodeError(t *testing.T, body []byte) apiclient.ErrorResponse {
+	t.Helper()
+	var got apiclient.ErrorResponse
+	require.NoErrorf(t, json.Unmarshal(body, &got), "decode ErrorResponse: %s", string(body))
+	return got
 }
 
 func TestTmaDecisionFlow(t *testing.T) {
@@ -99,12 +128,12 @@ func TestTmaDecisionFlow(t *testing.T) {
 
 		status, body := tmaPost(t, fx.SecretToken, "agree", initData)
 		require.Equalf(t, http.StatusOK, status, "first agree body=%s", string(body))
-		require.Contains(t, string(body), `"status":"agreed"`)
-		require.Contains(t, string(body), `"alreadyDecided":false`)
+		first := decodeDecision(t, body)
+		require.Equal(t, apiclient.CampaignCreatorStatus(apiclient.Agreed), first.Status)
+		require.False(t, first.AlreadyDecided)
 
 		// Audit row: action=campaign_creator_agree, actor_id=NULL (TMA flow
 		// has no admin actor), payload carries (campaign_id, creator_id).
-		// Spec §Acceptance demands this verification at e2e layer.
 		entry := testutil.FindAuditEntry(t, fx.AdminClient, fx.AdminToken,
 			"campaign_creator", fx.CampaignCreatorID, "campaign_creator_agree")
 		require.Nil(t, entry.ActorId, "TMA decision audit row must have actor_id=NULL")
@@ -113,7 +142,9 @@ func TestTmaDecisionFlow(t *testing.T) {
 		// Idempotent repeat — must NOT add a second audit row.
 		status, body = tmaPost(t, fx.SecretToken, "agree", initData)
 		require.Equalf(t, http.StatusOK, status, "repeat agree body=%s", string(body))
-		require.Contains(t, string(body), `"alreadyDecided":true`)
+		repeat := decodeDecision(t, body)
+		require.Equal(t, apiclient.CampaignCreatorStatus(apiclient.Agreed), repeat.Status)
+		require.True(t, repeat.AlreadyDecided)
 
 		entries := testutil.ListAuditEntriesByAction(t, fx.AdminClient, fx.AdminToken,
 			"campaign_creator", fx.CampaignCreatorID, "campaign_creator_agree")
@@ -128,7 +159,8 @@ func TestTmaDecisionFlow(t *testing.T) {
 		_, _ = tmaPost(t, fx.SecretToken, "agree", initData)
 		status, body := tmaPost(t, fx.SecretToken, "decline", initData)
 		require.Equal(t, http.StatusUnprocessableEntity, status)
-		require.Contains(t, string(body), `"code":"CAMPAIGN_CREATOR_ALREADY_AGREED"`)
+		errResp := decodeError(t, body)
+		require.Equal(t, "CAMPAIGN_CREATOR_ALREADY_AGREED", errResp.Error.Code)
 	})
 }
 
@@ -142,12 +174,15 @@ func TestTmaDecisionDeclineFlow(t *testing.T) {
 
 		status, body := tmaPost(t, fx.SecretToken, "decline", initData)
 		require.Equalf(t, http.StatusOK, status, "first decline body=%s", string(body))
-		require.Contains(t, string(body), `"status":"declined"`)
-		require.Contains(t, string(body), `"alreadyDecided":false`)
+		first := decodeDecision(t, body)
+		require.Equal(t, apiclient.CampaignCreatorStatus(apiclient.Declined), first.Status)
+		require.False(t, first.AlreadyDecided)
 
 		status, body = tmaPost(t, fx.SecretToken, "decline", initData)
 		require.Equalf(t, http.StatusOK, status, "repeat decline body=%s", string(body))
-		require.Contains(t, string(body), `"alreadyDecided":true`)
+		repeat := decodeDecision(t, body)
+		require.Equal(t, apiclient.CampaignCreatorStatus(apiclient.Declined), repeat.Status)
+		require.True(t, repeat.AlreadyDecided)
 	})
 
 	t.Run("agree from declined → 422 CAMPAIGN_CREATOR_DECLINED_NEED_REINVITE", func(t *testing.T) {
@@ -158,7 +193,8 @@ func TestTmaDecisionDeclineFlow(t *testing.T) {
 		_, _ = tmaPost(t, fx.SecretToken, "decline", initData)
 		status, body := tmaPost(t, fx.SecretToken, "agree", initData)
 		require.Equal(t, http.StatusUnprocessableEntity, status)
-		require.Contains(t, string(body), `"code":"CAMPAIGN_CREATOR_DECLINED_NEED_REINVITE"`)
+		errResp := decodeError(t, body)
+		require.Equal(t, "CAMPAIGN_CREATOR_DECLINED_NEED_REINVITE", errResp.Error.Code)
 	})
 }
 
@@ -166,16 +202,35 @@ func TestTmaDecisionUnauthorized(t *testing.T) {
 	t.Parallel()
 	fx := testutil.SetupCampaignWithInvitedCreator(t)
 
-	t.Run("missing header → 401", func(t *testing.T) {
+	t.Run("missing header → 401 generic", func(t *testing.T) {
 		t.Parallel()
-		status, body := tmaPost(t, fx.SecretToken, "agree", "")
+		status, body := tmaPostWithScheme(t, fx.SecretToken, "agree", "", "")
 		require.Equal(t, http.StatusUnauthorized, status)
-		require.Contains(t, string(body), `"code":"UNAUTHORIZED"`)
+		errResp := decodeError(t, body)
+		require.Equal(t, "UNAUTHORIZED", errResp.Error.Code)
+	})
+
+	t.Run("wrong scheme → 401 generic", func(t *testing.T) {
+		t.Parallel()
+		initData := testutil.SignInitData(t, fx.TelegramUserID, testutil.SignInitDataOpts{})
+		status, body := tmaPostWithScheme(t, fx.SecretToken, "agree", "Bearer", initData)
+		require.Equal(t, http.StatusUnauthorized, status)
+		errResp := decodeError(t, body)
+		require.Equal(t, "UNAUTHORIZED", errResp.Error.Code)
 	})
 
 	t.Run("garbage initData → 401", func(t *testing.T) {
 		t.Parallel()
 		status, _ := tmaPost(t, fx.SecretToken, "agree", "garbage_payload")
+		require.Equal(t, http.StatusUnauthorized, status)
+	})
+
+	t.Run("empty hash → 401", func(t *testing.T) {
+		t.Parallel()
+		// Valid auth_date and minimal user payload but the `hash=` field
+		// is empty — middleware must reject without leaking the reason.
+		header := "auth_date=" + time.Now().Format("20060102") + `&user={"id":1}&hash=`
+		status, _ := tmaPost(t, fx.SecretToken, "agree", header)
 		require.Equal(t, http.StatusUnauthorized, status)
 	})
 
@@ -194,6 +249,21 @@ func TestTmaDecisionUnauthorized(t *testing.T) {
 		status, _ := tmaPost(t, fx.SecretToken, "agree", initData)
 		require.Equal(t, http.StatusUnauthorized, status)
 	})
+
+	t.Run("HMAC mismatch (last char of hash flipped) → 401", func(t *testing.T) {
+		t.Parallel()
+		initData := testutil.SignInitData(t, fx.TelegramUserID, testutil.SignInitDataOpts{})
+		// SignInitData returns a query string ending with `&hash=<hex>`.
+		// Flip the last char so the hex remains well-formed but the hash
+		// no longer matches — middleware must reach the constant-time
+		// compare and reject.
+		mutated := flipLastByte(initData)
+		require.NotEqual(t, initData, mutated, "test setup must actually mutate the hash")
+		status, body := tmaPost(t, fx.SecretToken, "agree", mutated)
+		require.Equal(t, http.StatusUnauthorized, status)
+		errResp := decodeError(t, body)
+		require.Equal(t, "UNAUTHORIZED", errResp.Error.Code)
+	})
 }
 
 func TestTmaDecisionRegexReject404(t *testing.T) {
@@ -205,7 +275,8 @@ func TestTmaDecisionRegexReject404(t *testing.T) {
 		t.Parallel()
 		status, body := tmaPost(t, "short", "agree", initData)
 		require.Equal(t, http.StatusNotFound, status)
-		require.Contains(t, string(body), `"code":"CAMPAIGN_NOT_FOUND"`)
+		errResp := decodeError(t, body)
+		require.Equal(t, "CAMPAIGN_NOT_FOUND", errResp.Error.Code)
 	})
 }
 
@@ -219,7 +290,8 @@ func TestTmaDecisionForbidden(t *testing.T) {
 
 	status, body := tmaPost(t, fxB.SecretToken, "agree", initData)
 	require.Equal(t, http.StatusForbidden, status)
-	require.Contains(t, string(body), `"code":"TMA_FORBIDDEN"`)
+	errResp := decodeError(t, body)
+	require.Equal(t, "TMA_FORBIDDEN", errResp.Error.Code)
 }
 
 func TestTmaDecisionCampaignNotFound(t *testing.T) {
@@ -232,7 +304,57 @@ func TestTmaDecisionCampaignNotFound(t *testing.T) {
 	bogusToken := "bogus_unknown_secrettokenxx"
 	status, body := tmaPost(t, bogusToken, "agree", initData)
 	require.Equal(t, http.StatusNotFound, status)
-	require.Contains(t, string(body), `"code":"CAMPAIGN_NOT_FOUND"`)
+	errResp := decodeError(t, body)
+	require.Equal(t, "CAMPAIGN_NOT_FOUND", errResp.Error.Code)
+}
+
+func TestTmaDecisionAntiFingerprint(t *testing.T) {
+	t.Parallel()
+	// Three branches that, ideologically, must respond identically:
+	//
+	//   * not-registered creator: TG-user without a creators-row →
+	//     middleware passes (telegram_user_id only), AuthzService finds
+	//     role missing in ctx → ErrTMAForbidden.
+	//   * creator-not-in-this-campaign: TG-user has a creator-row but
+	//     belongs to another campaign → ErrTMAForbidden.
+	//   * unknown-secret-token: regex-valid token that never existed →
+	//     ErrCampaignNotFound (different status/code by design).
+	//
+	// The first two share status+code+message; the third returns 404 by
+	// design. Asserting the first two are byte-identical and the third
+	// has a stable distinct shape locks the anti-fingerprint contract:
+	// any future drift between not-registered vs not-in-campaign would
+	// leak to an attacker which TG-id is already a creator on the
+	// platform.
+	fxOwn := testutil.SetupCampaignWithInvitedCreator(t)
+	fxOther := testutil.SetupCampaignWithInvitedCreator(t)
+
+	// Synthetic Telegram user-id that does not exist as a creator row.
+	notRegisteredTGID := int64(900_000_0099) + time.Now().UnixNano()%1_000
+	initDataAnon := testutil.SignInitData(t, notRegisteredTGID, testutil.SignInitDataOpts{})
+	statusAnon, bodyAnon := tmaPost(t, fxOwn.SecretToken, "agree", initDataAnon)
+
+	// Creator who is registered but invited only into fxOther.
+	initDataOther := testutil.SignInitData(t, fxOther.TelegramUserID, testutil.SignInitDataOpts{})
+	statusOtherCC, bodyOther := tmaPost(t, fxOwn.SecretToken, "agree", initDataOther)
+
+	require.Equal(t, statusAnon, statusOtherCC,
+		"not-registered and not-in-campaign must share HTTP status (anti-fingerprint)")
+	require.Equal(t, http.StatusForbidden, statusAnon)
+
+	errAnon := decodeError(t, bodyAnon)
+	errOther := decodeError(t, bodyOther)
+	require.Equal(t, errAnon, errOther,
+		"not-registered vs not-in-campaign error bodies must be byte-equal")
+	require.Equal(t, "TMA_FORBIDDEN", errAnon.Error.Code)
+
+	// The unknown-secret-token branch is documented as 404 — separate from
+	// the 403 fingerprint family. Asserted to keep the contract explicit.
+	statusBogus, bodyBogus := tmaPost(t,
+		"bogus_unknown_secrettokenxx", "agree", initDataOther)
+	require.Equal(t, http.StatusNotFound, statusBogus)
+	errBogus := decodeError(t, bodyBogus)
+	require.Equal(t, "CAMPAIGN_NOT_FOUND", errBogus.Error.Code)
 }
 
 func TestTmaDecisionFromPlanned(t *testing.T) {
@@ -274,5 +396,35 @@ func TestTmaDecisionFromPlanned(t *testing.T) {
 
 	status, body := tmaPost(t, tmaToken, "agree", initData)
 	require.Equal(t, http.StatusUnprocessableEntity, status)
-	require.Contains(t, string(body), `"code":"CAMPAIGN_CREATOR_NOT_INVITED"`)
+	errResp := decodeError(t, body)
+	require.Equal(t, "CAMPAIGN_CREATOR_NOT_INVITED", errResp.Error.Code)
+}
+
+// flipLastByte mutates the final character of s — for crafting a hash that
+// is structurally valid hex but does not match the computed HMAC. Used by
+// the HMAC-mismatch negative case.
+func flipLastByte(s string) string {
+	if s == "" {
+		return s
+	}
+	b := []byte(s)
+	last := b[len(b)-1]
+	switch {
+	case last == '0':
+		last = '1'
+	case last >= '1' && last <= '9':
+		last--
+	case last == 'a':
+		last = 'b'
+	case last >= 'b' && last <= 'f':
+		last--
+	case last == 'A':
+		last = 'B'
+	case last >= 'B' && last <= 'F':
+		last--
+	default:
+		last = '0'
+	}
+	b[len(b)-1] = last
+	return string(b)
 }

@@ -226,7 +226,7 @@ func TestNotifyCampaignCreators(t *testing.T) {
 	t.Run("happy: invites all and writes audit + spy hits per creator", func(t *testing.T) {
 		t.Parallel()
 		adminClient, adminToken, _ := testutil.SetupAdminClient(t)
-		tmaURL := freshValidTmaURL()
+		tmaURL := testutil.FreshValidTmaURL()
 		campaignID := setupCampaignWithTmaURL(t, adminClient, adminToken,
 			"ccA4-happy-"+testutil.UniqueEmail("camp"), tmaURL)
 
@@ -411,7 +411,7 @@ func TestUpdateCampaignTmaURLLock(t *testing.T) {
 	t.Run("lock fires when tma_url changes after invite", func(t *testing.T) {
 		t.Parallel()
 		adminClient, adminToken, _ := testutil.SetupAdminClient(t)
-		tmaURL := freshValidTmaURL()
+		tmaURL := testutil.FreshValidTmaURL()
 		campaignID := setupCampaignWithTmaURL(t, adminClient, adminToken,
 			"ccTmaLock-"+testutil.UniqueEmail("camp"), tmaURL)
 		creator := testutil.SetupApprovedCreator(t, defaultCreatorOpts(testutil.UniqueIIN()[6:]))
@@ -427,7 +427,7 @@ func TestUpdateCampaignTmaURLLock(t *testing.T) {
 		patchResp, err := adminClient.UpdateCampaignWithResponse(context.Background(), campaignID,
 			apiclient.UpdateCampaignJSONRequestBody{
 				Name:   "Renamed " + testutil.UniqueEmail("camp"),
-				TmaUrl: freshValidTmaURL(),
+				TmaUrl: testutil.FreshValidTmaURL(),
 			}, testutil.WithAuth(adminToken))
 		require.NoError(t, err)
 		require.Equal(t, http.StatusUnprocessableEntity, patchResp.StatusCode())
@@ -444,7 +444,7 @@ func TestUpdateCampaignTmaURLLock(t *testing.T) {
 	t.Run("name-only patch passes after invite", func(t *testing.T) {
 		t.Parallel()
 		adminClient, adminToken, _ := testutil.SetupAdminClient(t)
-		tmaURL := freshValidTmaURL()
+		tmaURL := testutil.FreshValidTmaURL()
 		campaignID := setupCampaignWithTmaURL(t, adminClient, adminToken,
 			"ccTmaNoop-"+testutil.UniqueEmail("camp"), tmaURL)
 		creator := testutil.SetupApprovedCreator(t, defaultCreatorOpts(testutil.UniqueIIN()[6:]))

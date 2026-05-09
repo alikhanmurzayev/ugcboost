@@ -76,6 +76,13 @@ export const campaigns: Record<string, CampaignBrief> = {
   },
 };
 
+// secretTokenFormat mirrors the backend's `^[A-Za-z0-9_-]{16,256}$`. Used
+// here as a frontend short-circuit: any token that fails this regex cannot
+// reach a real campaign on the backend, so we render NotFoundPage straight
+// away instead of showing a generic brief + CTA. This shrinks the
+// phishing-link UX surface.
+const secretTokenFormat = /^[A-Za-z0-9_-]{16,256}$/;
+
 // genericBrief is the fallback for tokens we don't have a hand-crafted
 // brief for yet — backend has the real campaign + invitation, but the brief
 // content (about, reels, mentions) lives only in this static map until we
@@ -97,6 +104,7 @@ function genericBrief(token: string): CampaignBrief {
   };
 }
 
-export function getCampaignByToken(token: string): CampaignBrief {
+export function getCampaignByToken(token: string): CampaignBrief | undefined {
+  if (!secretTokenFormat.test(token)) return undefined;
   return campaigns[token] ?? genericBrief(token);
 }

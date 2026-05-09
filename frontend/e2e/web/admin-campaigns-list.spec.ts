@@ -95,7 +95,7 @@ test.describe("Admin campaigns list", () => {
     for (const label of labels) {
       const camp = await seedCampaign(request, API_URL, adminToken, {
         name: `e2e-${uuid}-${label}`,
-        tmaUrl: `https://tma.ugcboost.kz/tz/${uuid.replaceAll("-", "")}-${label.toLowerCase()}`,
+        tmaUrl: `https://tma.ugcboost.kz/tz/${uuid.replaceAll("-", "")}`,
       });
       seeded.push(camp);
       cleanupStack.push(camp.cleanup);
@@ -145,7 +145,7 @@ test.describe("Admin campaigns list", () => {
     for (const label of labels) {
       const camp = await seedCampaign(request, API_URL, adminToken, {
         name: `e2e-${uuid}-${label}`,
-        tmaUrl: `https://tma.ugcboost.kz/tz/${uuid.replaceAll("-", "")}-${label.toLowerCase()}`,
+        tmaUrl: `https://tma.ugcboost.kz/tz/${uuid.replaceAll("-", "")}`,
       });
       cleanupStack.push(camp.cleanup);
     }

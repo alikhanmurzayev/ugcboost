@@ -14,6 +14,7 @@ import type {
 } from "./types";
 import { useAgreeDecision, useDeclineDecision } from "./useDecision";
 import { decisionErrorMessage } from "../../shared/i18n/errors";
+import { CAMPAIGN_CREATOR_STATUS } from "../../shared/constants/campaignCreatorStatus";
 
 type ConfirmTarget = "accept" | "decline" | null;
 
@@ -41,10 +42,10 @@ export function CampaignBriefPage() {
   }
 
   const decisionResult = agree.data ?? decline.data;
-  if (decisionResult?.status === "agreed") {
+  if (decisionResult?.status === CAMPAIGN_CREATOR_STATUS.AGREED) {
     return <AcceptedView alreadyDecided={decisionResult.alreadyDecided} />;
   }
-  if (decisionResult?.status === "declined") {
+  if (decisionResult?.status === CAMPAIGN_CREATOR_STATUS.DECLINED) {
     return <DeclinedView alreadyDecided={decisionResult.alreadyDecided} />;
   }
 
@@ -148,6 +149,7 @@ export function CampaignBriefPage() {
             {submitError && (
               <p
                 data-testid="tma-decision-error"
+                data-error-code={submitError.code}
                 className="rounded-md bg-red-50 px-4 py-2 text-center text-sm text-red-700"
               >
                 {decisionErrorMessage(submitError.code)}

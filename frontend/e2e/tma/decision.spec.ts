@@ -1,26 +1,28 @@
 /**
  * TMA decision flow E2E — креатор-сторона.
  *
- * Каждый тест:
- *   1. Сидит admin'а, approved-креатора, кампанию → A1 (add) → A4 (notify),
- *      чтобы получить кампанию с invited campaign_creator-строкой и валидным
- *      secret_token.
- *   2. Подписывает initData через POST /test/tma/sign-init-data — backend
- *      возвращает HMAC-валидный query-string для синтетического Telegram-
- *      пользователя. Тот же initData инжектится в URL hash через
- *      addInitScript, чтобы @telegram-apps/sdk-react видел его на старте.
- *   3. Идёт на /:secretToken, проходит NDA gate, нажимает Согласиться/
- *      Отказаться → подтверждает в ConfirmDialog → ассерт на конечный экран.
+ * Каждый тест строит свежий стек данных от лица креатора и админа: сидим
+ * admin'а, approved-креатора и кампанию через API-хелперы, потом A1 (add)
+ * + A4 (notify) переводят campaign_creator-строку в `invited`. Подписанный
+ * initData приходит из POST /test/tma/sign-init-data и инжектится в URL
+ * hash через `addInitScript`, чтобы @telegram-apps/sdk-react подхватил его
+ * на старте. Дальше тест идёт на /:secretToken, проходит NDA gate
+ * (idempotent — на повторе чекбокса уже нет, хелпер тихо no-op'ит) и
+ * взаимодействует с CTA через ConfirmDialog.
  *
- * Из spec'а покрываем:
- *   - happy: invited → agree → AcceptedView (без already-decided баннера).
- *   - happy: invited → decline → DeclinedView (без already-decided баннера).
- *   - идемпотентность: agree два раза подряд → второй раз AcceptedView с
- *     `tma-already-decided-banner`.
- *   - state machine 422: declined → agree → ошибка (need re-invite).
+ * Покрытие соответствует spec-creator-campaign-decision.md: happy-path
+ * invited → agree приводит на AcceptedView без `tma-already-decided-banner`,
+ * симметричный invited → decline — на DeclinedView. Идемпотентность
+ * проверяется повторным agree после reload — тот же экран AcceptedView, но
+ * с видимым баннером. State-machine 422 закрывается сценарием declined →
+ * agree: backend отвечает CAMPAIGN_CREATOR_DECLINED_NEED_REINVITE, фронт
+ * рендерит inline-ошибку. Ассерт цепляется за `data-error-code` атрибут
+ * (стандарт `frontend-testing-e2e.md` § Локаторы запрещает text-based
+ * assert'ы на i18n-зависимый копирайт).
  *
- * Cleanup — LIFO: campaign_creator (DELETE /campaigns/{id}/creators/{cid}) →
- * creator → application → campaign. Каждый шаг идемпотентный (404 = OK).
+ * Cleanup идёт LIFO: campaign_creator (DELETE /campaigns/{id}/creators/{cid})
+ * → creator → application → campaign. Каждый шаг идемпотентный (404 = OK).
+ * При `E2E_CLEANUP=false` стек остаётся для разбора упавшего сценария.
  */
 import { test, expect, type Page } from "@playwright/test";
 
@@ -132,10 +134,13 @@ async function gotoDecisionPage(page: Page, fx: InvitedFixture) {
 
 async function acceptNda(page: Page) {
   const checkbox = page.getByTestId("nda-checkbox");
-  if (await checkbox.count()) {
-    await checkbox.check();
-    await page.getByTestId("nda-accept-button").click();
-  }
+  // NDA is a one-shot gate — on a reload of the same flow it may be gone
+  // already. Use isVisible with a short timeout so we never race between
+  // count() and check(): if the gate is up we accept it, if not we no-op.
+  const visible = await checkbox.isVisible({ timeout: 500 }).catch(() => false);
+  if (!visible) return;
+  await checkbox.check();
+  await page.getByTestId("nda-accept-button").click();
 }
 
 test.describe("TMA decision flow", () => {
@@ -213,7 +218,11 @@ test.describe("TMA decision flow", () => {
     await page.getByTestId("campaign-accept-button").click();
     await page.getByTestId("accept-confirm").click();
 
-    await expect(page.getByTestId("tma-decision-error")).toBeVisible();
-    await expect(page.getByTestId("tma-decision-error")).toContainText("повторного приглашения");
+    const errorBanner = page.getByTestId("tma-decision-error");
+    await expect(errorBanner).toBeVisible();
+    await expect(errorBanner).toHaveAttribute(
+      "data-error-code",
+      "CAMPAIGN_CREATOR_DECLINED_NEED_REINVITE",
+    );
   });
 });

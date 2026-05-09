@@ -119,6 +119,8 @@ func decideTransition(current string, decision domain.CampaignCreatorDecision) (
 			return domain.CampaignCreatorStatusAgreed, true, nil
 		case domain.CampaignCreatorDecisionDecline:
 			return domain.CampaignCreatorStatusDeclined, true, nil
+		default:
+			return "", false, fmt.Errorf("unexpected campaign_creator decision %q", decision)
 		}
 	case domain.CampaignCreatorStatusAgreed:
 		if decision == domain.CampaignCreatorDecisionAgree {

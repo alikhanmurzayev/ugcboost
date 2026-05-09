@@ -23,7 +23,7 @@ export const tmaInitDataMiddleware: Middleware = {
     try {
       initData = retrieveRawInitData();
     } catch {
-      initData = readInitDataFromHash();
+      // SDK not initialized yet — fall through to hash reader.
     }
     if (!initData) {
       initData = readInitDataFromHash();
@@ -31,6 +31,10 @@ export const tmaInitDataMiddleware: Middleware = {
     if (initData) {
       request.headers.set("Authorization", `tma ${initData}`);
     }
+    // No initData → request goes out without Authorization; backend responds
+    // 401 TMA_UNAUTHORIZED, surfaced inline via decisionErrorMessage. We do
+    // not throw here — exceptions inside openapi-fetch middleware bubble as
+    // TypeError instead of a typed DecisionError.
     return request;
   },
 };

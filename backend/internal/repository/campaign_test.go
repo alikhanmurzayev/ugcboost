@@ -157,7 +157,15 @@ func TestCampaignRepository_GetByID(t *testing.T) {
 
 		got, err := repo.GetByID(context.Background(), "c-2")
 		require.NoError(t, err)
-		require.True(t, got.IsDeleted, "GetByID must return soft-deleted rows untouched — admin contract")
+		require.Equal(t, &CampaignRow{
+			ID:          "c-2",
+			Name:        "Promo Y",
+			TmaURL:      "https://tma.ugcboost.kz/tz/y_padding_secrettokenxxxx",
+			SecretToken: pointer.ToString("y_padding_secrettokenxxxx"),
+			IsDeleted:   true,
+			CreatedAt:   createdAt,
+			UpdatedAt:   createdAt,
+		}, got)
 	})
 
 	t.Run("not found propagates sql.ErrNoRows", func(t *testing.T) {
@@ -205,9 +213,15 @@ func TestCampaignRepository_GetBySecretToken(t *testing.T) {
 
 		got, err := repo.GetBySecretToken(context.Background(), "abc_padding_secrettokenxx")
 		require.NoError(t, err)
-		require.Equal(t, "c-1", got.ID)
-		require.NotNil(t, got.SecretToken)
-		require.Equal(t, "abc_padding_secrettokenxx", *got.SecretToken)
+		require.Equal(t, &CampaignRow{
+			ID:          "c-1",
+			Name:        "Promo X",
+			TmaURL:      "https://tma.ugcboost.kz/tz/abc_padding_secrettokenxx",
+			SecretToken: pointer.ToString("abc_padding_secrettokenxx"),
+			IsDeleted:   false,
+			CreatedAt:   createdAt,
+			UpdatedAt:   createdAt,
+		}, got)
 	})
 
 	t.Run("soft-deleted filtered out — sql.ErrNoRows", func(t *testing.T) {
