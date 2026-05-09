@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/AlekSi/pointer"
 	"github.com/pashagolub/pgxmock/v4"
@@ -162,7 +163,7 @@ func TestContractSenderService_RunOnce_HappyPath(t *testing.T) {
 
 	svc := NewContractSenderService(pool, factory, tm,
 		&stubRenderer{pdf: []byte("rendered-pdf")},
-		resolver, notifier, logmocks.NewMockLogger(t))
+		resolver, notifier, logmocks.NewMockLogger(t), time.Hour)
 
 	svc.RunOnce(context.Background())
 
@@ -204,7 +205,7 @@ func TestContractSenderService_RunOnce_RenderFails(t *testing.T) {
 
 	svc := NewContractSenderService(pool, factory, tm,
 		&stubRenderer{err: errors.New("bad PDF")},
-		&stubResolver{}, &stubNotifier{}, logger)
+		&stubResolver{}, &stubNotifier{}, logger, time.Hour)
 	svc.RunOnce(context.Background())
 
 	require.Zero(t, tm.sendCalls)
@@ -230,13 +231,16 @@ func TestContractSenderService_RunOnce_SendFailsLeavesOrphan(t *testing.T) {
 	contractsRepo.EXPECT().Insert(mock.Anything, mock.Anything).Return(&repository.ContractRow{ID: "ct-1"}, nil)
 	ccRepo.EXPECT().UpdateContractIDAndStatus(mock.Anything, "cc-1", "ct-1", "signing").Return(nil)
 	contractsRepo.EXPECT().UpdateUnsignedPDF(mock.Anything, "ct-1", mock.Anything).Return(nil)
+	// Phase 2c send fail → recordFailedAttempt: untyped error → code пустой,
+	// message — текст ошибки, next_retry_at = now() + retryBackoff.
+	contractsRepo.EXPECT().RecordFailedAttempt(mock.Anything, "ct-1", "", "502", mock.AnythingOfType("time.Time")).Return(nil)
 
 	tm := &stubTrustMe{sendErr: errors.New("502")}
 	logger := logmocks.NewMockLogger(t)
 	logger.EXPECT().Error(mock.Anything, "contract: phase 2c send", mock.Anything).Return()
 
 	svc := NewContractSenderService(pool, factory, tm,
-		&stubRenderer{pdf: []byte("p")}, &stubResolver{}, &stubNotifier{}, logger)
+		&stubRenderer{pdf: []byte("p")}, &stubResolver{}, &stubNotifier{}, logger, time.Hour)
 	svc.RunOnce(context.Background())
 
 	require.Equal(t, 1, tm.sendCalls)
@@ -287,7 +291,7 @@ func TestContractSenderService_Phase0_Resend_WithRealRequisites(t *testing.T) {
 	resolver := &stubResolver{mapping: map[string]int64{"cr-orphan": 555}}
 
 	svc := NewContractSenderService(pool, factory, tm,
-		&stubRenderer{}, resolver, notifier, logmocks.NewMockLogger(t))
+		&stubRenderer{}, resolver, notifier, logmocks.NewMockLogger(t), time.Hour)
 	svc.RunOnce(context.Background())
 
 	require.Equal(t, 1, tm.searchCalls)
@@ -326,7 +330,7 @@ func TestContractSenderService_Phase0_OrphanWithoutPDF_LogsAndSkips(t *testing.T
 		mock.Anything).Return()
 
 	svc := NewContractSenderService(pool, factory, tm,
-		&stubRenderer{}, &stubResolver{}, &stubNotifier{}, logger)
+		&stubRenderer{}, &stubResolver{}, &stubNotifier{}, logger, time.Hour)
 	svc.RunOnce(context.Background())
 
 	require.Zero(t, tm.sendCalls)
@@ -374,7 +378,7 @@ func TestContractSenderService_Phase0_KnownDoc_Finalize(t *testing.T) {
 	logger.EXPECT().Info(mock.Anything, "contract: phase 0 recovered known document", mock.Anything).Return()
 
 	svc := NewContractSenderService(pool, factory, tm,
-		&stubRenderer{}, &stubResolver{}, &stubNotifier{}, logger)
+		&stubRenderer{}, &stubResolver{}, &stubNotifier{}, logger, time.Hour)
 	svc.RunOnce(context.Background())
 
 	require.Equal(t, 1, tm.searchCalls)

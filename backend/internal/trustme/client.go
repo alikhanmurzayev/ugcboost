@@ -56,6 +56,18 @@ type SearchContractResult struct {
 // recovery вместо nil-результата для явного branch'а в worker'е.
 var ErrTrustMeNotFound = errors.New("trustme: contract not found")
 
+// Error — типизированная ошибка TrustMe API: API вернул status=Error с
+// каким-то errorText кодом. Code — это сам код («1219», «1208»), Message
+// — formatted string с расшифровкой через FormatErrorText. Используется
+// outbox-worker'ом, чтобы записать last_error_code в БД при retry-failures
+// без парсинга текста ошибки.
+type Error struct {
+	Code    string
+	Message string
+}
+
+func (e *Error) Error() string { return e.Message }
+
 // Client — minimal subset поверхности TrustMe API, нужный outbox-worker'у
 // и webhook-handler'у. Реализаций две: RealClient (HTTP) и SpyOnlyClient
 // (детерминированный in-memory). Клиент сам делает rate-limit (4 RPS per

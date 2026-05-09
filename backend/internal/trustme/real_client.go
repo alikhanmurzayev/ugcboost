@@ -161,7 +161,10 @@ func (c *RealClient) SendToSign(ctx context.Context, in SendToSignInput) (*SendT
 		return nil, fmt.Errorf("trustme: unmarshal send-to-sign: %w", err)
 	}
 	if !strings.EqualFold(wrapper.Status, "Ok") {
-		return nil, fmt.Errorf("trustme: send-to-sign status=%s: %s", wrapper.Status, FormatErrorText(wrapper.ErrorText))
+		return nil, &Error{
+			Code:    wrapper.ErrorText,
+			Message: fmt.Sprintf("trustme: send-to-sign status=%s: %s", wrapper.Status, FormatErrorText(wrapper.ErrorText)),
+		}
 	}
 	var data sendToSignData
 	if err := json.Unmarshal(wrapper.Data, &data); err != nil {
@@ -247,7 +250,10 @@ func (c *RealClient) SearchContractByAdditionalInfo(ctx context.Context, additio
 		return nil, fmt.Errorf("trustme: unmarshal search: %w", err)
 	}
 	if !strings.EqualFold(wrapper.Status, "Ok") {
-		return nil, fmt.Errorf("trustme: search status=%s: %s", wrapper.Status, FormatErrorText(wrapper.ErrorText))
+		return nil, &Error{
+			Code:    wrapper.ErrorText,
+			Message: fmt.Sprintf("trustme: search status=%s: %s", wrapper.Status, FormatErrorText(wrapper.ErrorText)),
+		}
 	}
 	var items []searchContractItem
 	if len(wrapper.Data) > 0 {

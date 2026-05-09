@@ -38,6 +38,10 @@ const (
 	ContractColumnSignedAt           = "signed_at"
 	ContractColumnDeclinedAt         = "declined_at"
 	ContractColumnWebhookReceivedAt  = "webhook_received_at"
+	ContractColumnNextRetryAt        = "next_retry_at"
+	ContractColumnLastErrorCode      = "last_error_code"
+	ContractColumnLastErrorMessage   = "last_error_message"
+	ContractColumnLastAttemptedAt    = "last_attempted_at"
 	ContractColumnCreatedAt          = "created_at"
 	ContractColumnUpdatedAt          = "updated_at"
 )
@@ -55,6 +59,10 @@ type ContractRow struct {
 	SignedAt          *time.Time `db:"signed_at"`
 	DeclinedAt        *time.Time `db:"declined_at"`
 	WebhookReceivedAt *time.Time `db:"webhook_received_at"`
+	NextRetryAt       *time.Time `db:"next_retry_at"`
+	LastErrorCode     *string    `db:"last_error_code"`
+	LastErrorMessage  *string    `db:"last_error_message"`
+	LastAttemptedAt   *time.Time `db:"last_attempted_at"`
 	CreatedAt         time.Time  `db:"created_at"`
 	UpdatedAt         time.Time  `db:"updated_at"`
 }
@@ -109,6 +117,7 @@ type ContractRepo interface {
 	UpdateUnsignedPDF(ctx context.Context, id string, pdf []byte) error
 	UpdateAfterSend(ctx context.Context, id, trustMeDocumentID, trustMeShortURL string, trustMeStatusCode int) error
 	GetOrphanRequisites(ctx context.Context, contractID string) (*OrphanRequisites, error)
+	RecordFailedAttempt(ctx context.Context, contractID, code, message string, nextRetryAt time.Time) error
 }
 
 type contractRepository struct {
@@ -220,7 +229,11 @@ func (r *contractRepository) SelectAgreedForClaim(ctx context.Context, limit int
 
 // SelectOrphansForRecovery returns contracts rows where the previous tick
 // claimed the row but failed to land a TrustMe document ID. Phase 0 picks
-// these up out of band and reconciles via TrustMe search.
+// these up out of band and reconciles via TrustMe search. Per-row backoff
+// (next_retry_at) keeps a poison row from blocking fresh slots: failed
+// attempts push next_retry_at forward by cfg.TrustMeRetryBackoffSeconds,
+// rows whose next_retry_at is still in the future are skipped this tick.
+// NULLS FIRST keeps brand-new orphans (never attempted) ahead of retries.
 func (r *contractRepository) SelectOrphansForRecovery(ctx context.Context, limit int) ([]*OrphanRow, error) {
 	if limit <= 0 {
 		return nil, nil
@@ -229,6 +242,11 @@ func (r *contractRepository) SelectOrphansForRecovery(ctx context.Context, limit
 		From(TableContracts).
 		Where(sq.Eq{ContractColumnSubjectKind: ContractSubjectKindCampaignCreator}).
 		Where(sq.Eq{ContractColumnTrustMeDocumentID: nil}).
+		Where(sq.Or{
+			sq.Eq{ContractColumnNextRetryAt: nil},
+			sq.Expr(ContractColumnNextRetryAt + " <= now()"),
+		}).
+		OrderBy(ContractColumnNextRetryAt + " ASC NULLS FIRST").
 		OrderBy(ContractColumnInitiatedAt + " ASC").
 		Limit(uint64(limit))
 
@@ -308,6 +326,29 @@ func (r *contractRepository) UpdateAfterSend(ctx context.Context, id, trustMeDoc
 			return domain.ErrContractTrustMeDocumentIDTaken
 		}
 		return err
+	}
+	return nil
+}
+
+// RecordFailedAttempt фиксирует неудачный TrustMe-вызов на orphan'е: код от
+// API (или "" для сетевых сбоев), formatted error message и следующий
+// next_retry_at. Phase 0 SelectOrphansForRecovery уважает next_retry_at,
+// чтобы кривой orphan уходил в backoff и не блокировал свежие. Single
+// UPDATE, без транзакционной обёртки.
+func (r *contractRepository) RecordFailedAttempt(ctx context.Context, contractID, code, message string, nextRetryAt time.Time) error {
+	q := sq.Update(TableContracts).
+		Set(ContractColumnLastErrorCode, code).
+		Set(ContractColumnLastErrorMessage, message).
+		Set(ContractColumnLastAttemptedAt, sq.Expr("now()")).
+		Set(ContractColumnNextRetryAt, nextRetryAt).
+		Set(ContractColumnUpdatedAt, sq.Expr("now()")).
+		Where(sq.Eq{ContractColumnID: contractID})
+	n, err := dbutil.Exec(ctx, r.db, q)
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return sql.ErrNoRows
 	}
 	return nil
 }

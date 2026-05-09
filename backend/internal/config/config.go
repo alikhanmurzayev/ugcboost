@@ -65,6 +65,13 @@ type Config struct {
 	// ходит в сеть); для прода RealClient их валидирует при старте.
 	TrustMeBaseURL string `env:"TRUSTME_BASE_URL" envDefault:"https://test.trustme.kz/trust_contract_public_apis"`
 	TrustMeToken   string `env:"TRUSTME_TOKEN" envDefault:""`
+	// TrustMeRetryBackoffSeconds — пауза перед повторной попыткой Phase 0
+	// recovery, если предыдущий SendToSign упал. Константный, не
+	// экспоненциальный. Default 300 (5 минут): достаточно длинно, чтобы
+	// кривой orphan (плохой ИИН, 1219 и т.п.) не блокировал слоты для
+	// свежих контрактов; достаточно коротко, чтобы транзиентные сбои
+	// сами догонялись в обозримое время.
+	TrustMeRetryBackoffSeconds int `env:"TRUSTME_RETRY_BACKOFF_SECONDS" envDefault:"300"`
 
 	// Telegram bot — used when assembling deep-link returned to creators
 	// after a public application is accepted (https://t.me/<username>?start=<application_id>).

@@ -6,6 +6,7 @@ package mocks
 
 import (
 	"context"
+	"time"
 
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/repository"
 	mock "github.com/stretchr/testify/mock"
@@ -170,6 +171,81 @@ func (_c *MockContractRepo_Insert_Call) Return(contractRow *repository.ContractR
 }
 
 func (_c *MockContractRepo_Insert_Call) RunAndReturn(run func(ctx context.Context, row repository.ContractRow) (*repository.ContractRow, error)) *MockContractRepo_Insert_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// RecordFailedAttempt provides a mock function for the type MockContractRepo
+func (_mock *MockContractRepo) RecordFailedAttempt(ctx context.Context, contractID string, code string, message string, nextRetryAt time.Time) error {
+	ret := _mock.Called(ctx, contractID, code, message, nextRetryAt)
+
+	if len(ret) == 0 {
+		panic("no return value specified for RecordFailedAttempt")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, string, time.Time) error); ok {
+		r0 = returnFunc(ctx, contractID, code, message, nextRetryAt)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockContractRepo_RecordFailedAttempt_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'RecordFailedAttempt'
+type MockContractRepo_RecordFailedAttempt_Call struct {
+	*mock.Call
+}
+
+// RecordFailedAttempt is a helper method to define mock.On call
+//   - ctx context.Context
+//   - contractID string
+//   - code string
+//   - message string
+//   - nextRetryAt time.Time
+func (_e *MockContractRepo_Expecter) RecordFailedAttempt(ctx interface{}, contractID interface{}, code interface{}, message interface{}, nextRetryAt interface{}) *MockContractRepo_RecordFailedAttempt_Call {
+	return &MockContractRepo_RecordFailedAttempt_Call{Call: _e.mock.On("RecordFailedAttempt", ctx, contractID, code, message, nextRetryAt)}
+}
+
+func (_c *MockContractRepo_RecordFailedAttempt_Call) Run(run func(ctx context.Context, contractID string, code string, message string, nextRetryAt time.Time)) *MockContractRepo_RecordFailedAttempt_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 string
+		if args[2] != nil {
+			arg2 = args[2].(string)
+		}
+		var arg3 string
+		if args[3] != nil {
+			arg3 = args[3].(string)
+		}
+		var arg4 time.Time
+		if args[4] != nil {
+			arg4 = args[4].(time.Time)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3,
+			arg4,
+		)
+	})
+	return _c
+}
+
+func (_c *MockContractRepo_RecordFailedAttempt_Call) Return(err error) *MockContractRepo_RecordFailedAttempt_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockContractRepo_RecordFailedAttempt_Call) RunAndReturn(run func(ctx context.Context, contractID string, code string, message string, nextRetryAt time.Time) error) *MockContractRepo_RecordFailedAttempt_Call {
 	_c.Call.Return(run)
 	return _c
 }

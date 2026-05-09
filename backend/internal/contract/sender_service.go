@@ -78,6 +78,7 @@ type ContractSenderService struct {
 	logger          logger.Logger
 	now             func() time.Time
 	loc             *time.Location
+	retryBackoff    time.Duration
 }
 
 func NewContractSenderService(
@@ -88,6 +89,7 @@ func NewContractSenderService(
 	creatorResolver CreatorTelegramResolver,
 	notifier CreatorNotifier,
 	log logger.Logger,
+	retryBackoff time.Duration,
 ) *ContractSenderService {
 	loc, err := time.LoadLocation(almatyTimezone)
 	if err != nil {
@@ -103,6 +105,7 @@ func NewContractSenderService(
 		logger:          log,
 		now:             func() time.Time { return time.Now().UTC() },
 		loc:             loc,
+		retryBackoff:    retryBackoff,
 	}
 }
 
@@ -221,6 +224,7 @@ func (s *ContractSenderService) resendOrphan(ctx context.Context, contractID str
 	res, err := s.trustMeClient.SendToSign(ctx, in)
 	if err != nil {
 		s.logger.Error(ctx, "contract: phase 0 resend send", "contract_id", contractID, "err", err)
+		s.recordFailedAttempt(ctx, contractID, err)
 		return
 	}
 	if err := s.finalize(ctx, contractID, requisites.CampaignCreatorID, res, auditActionOrphanRecovered); err != nil {
@@ -316,6 +320,7 @@ func (s *ContractSenderService) processClaim(ctx context.Context, c claim) {
 	})
 	if err != nil {
 		s.logger.Error(ctx, "contract: phase 2c send", "contract_id", c.ContractID, "err", err)
+		s.recordFailedAttempt(ctx, c.ContractID, err)
 		return
 	}
 
@@ -372,6 +377,25 @@ func (s *ContractSenderService) recordAudit(ctx context.Context, repo repository
 		EntityID:   &entityID,
 		NewValue:   body,
 	})
+}
+
+// recordFailedAttempt фиксирует на orphan'е причину последнего сбоя и
+// сдвигает next_retry_at на retryBackoff. Извлекает trustme.Error.Code, если
+// ошибка типизированная (status=Error от TrustMe), иначе оставляет код
+// пустым (сетевые сбои, таймауты, decode-ошибки). Не возвращает ошибку
+// наверх — на этом этапе worker уже зарегал Error в логах, и дальнейшее
+// поведение определяется ретрай-циклом, не этим UPDATE'ом.
+func (s *ContractSenderService) recordFailedAttempt(ctx context.Context, contractID string, sendErr error) {
+	var code string
+	var trustMeErr *trustme.Error
+	if errors.As(sendErr, &trustMeErr) {
+		code = trustMeErr.Code
+	}
+	contractsRepo := s.repoFactory.NewContractsRepo(s.pool)
+	nextRetryAt := s.now().Add(s.retryBackoff)
+	if err := contractsRepo.RecordFailedAttempt(ctx, contractID, code, sendErr.Error(), nextRetryAt); err != nil {
+		s.logger.Error(ctx, "contract: record failed attempt", "contract_id", contractID, "err", err)
+	}
 }
 
 func (s *ContractSenderService) notifyCreator(ctx context.Context, creatorID, shortURL string) {

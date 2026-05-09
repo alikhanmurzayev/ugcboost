@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -128,6 +129,7 @@ func run() error {
 		repoFactory.NewCreatorRepo(pool),
 		tgRig.Notifier,
 		appLogger,
+		time.Duration(cfg.TrustMeRetryBackoffSeconds)*time.Second,
 	)
 	if _, err := scheduler.AddFunc("@every 10s", func() {
 		contractSenderSvc.RunOnce(context.Background())

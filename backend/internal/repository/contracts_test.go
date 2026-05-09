@@ -15,16 +15,18 @@ import (
 )
 
 const (
-	contractAllCols            = "created_at, declined_at, id, initiated_at, signed_at, subject_kind, trustme_document_id, trustme_short_url, trustme_status_code, updated_at, webhook_received_at"
+	contractAllCols            = "created_at, declined_at, id, initiated_at, last_attempted_at, last_error_code, last_error_message, next_retry_at, signed_at, subject_kind, trustme_document_id, trustme_short_url, trustme_status_code, updated_at, webhook_received_at"
 	contractInsertSQL          = "INSERT INTO contracts (subject_kind,trustme_status_code) VALUES ($1,$2) RETURNING " + contractAllCols
 	contractClaimSQL           = "SELECT cc.id, cc.campaign_id, cc.creator_id, cr.iin, cr.last_name, cr.first_name, cr.middle_name, cr.phone, c.contract_template_pdf FROM campaign_creators cc JOIN campaigns c ON c.id = cc.campaign_id JOIN creators cr ON cr.id = cc.creator_id WHERE cc.status = $1 AND cc.contract_id IS NULL AND c.is_deleted = $2 AND length(c.contract_template_pdf) > 0 ORDER BY cc.decided_at ASC LIMIT 4 FOR UPDATE OF cc SKIP LOCKED"
-	contractOrphanSQL          = "SELECT id, unsigned_pdf_content FROM contracts WHERE subject_kind = $1 AND trustme_document_id IS NULL ORDER BY initiated_at ASC LIMIT 8"
+	contractOrphanSQL          = "SELECT id, unsigned_pdf_content FROM contracts WHERE subject_kind = $1 AND trustme_document_id IS NULL AND (next_retry_at IS NULL OR next_retry_at <= now()) ORDER BY next_retry_at ASC NULLS FIRST, initiated_at ASC LIMIT 8"
 	contractUpdateUnsignedSQL  = "UPDATE contracts SET unsigned_pdf_content = $1, updated_at = now() WHERE id = $2"
 	contractUpdateAfterSendSQL = "UPDATE contracts SET trustme_document_id = $1, trustme_short_url = $2, trustme_status_code = $3, updated_at = now() WHERE id = $4 AND trustme_document_id IS NULL"
+	contractRecordFailedSQL    = "UPDATE contracts SET last_error_code = $1, last_error_message = $2, last_attempted_at = now(), next_retry_at = $3, updated_at = now() WHERE id = $4"
 )
 
 var contractRowCols = []string{
 	"created_at", "declined_at", "id", "initiated_at",
+	"last_attempted_at", "last_error_code", "last_error_message", "next_retry_at",
 	"signed_at", "subject_kind", "trustme_document_id",
 	"trustme_short_url", "trustme_status_code", "updated_at",
 	"webhook_received_at",
@@ -43,6 +45,7 @@ func TestContractRepository_Insert(t *testing.T) {
 			WithArgs(ContractSubjectKindCampaignCreator, 0).
 			WillReturnRows(pgxmock.NewRows(contractRowCols).
 				AddRow(now, (*time.Time)(nil), "ct-1", now,
+					(*time.Time)(nil), (*string)(nil), (*string)(nil), (*time.Time)(nil),
 					(*time.Time)(nil), ContractSubjectKindCampaignCreator,
 					(*string)(nil), (*string)(nil), 0, now, (*time.Time)(nil)))
 
@@ -329,6 +332,39 @@ func TestContractRepository_UpdateUnsignedPDF(t *testing.T) {
 
 		err := repo.UpdateUnsignedPDF(context.Background(), "ct-1", []byte{0x01})
 		require.ErrorContains(t, err, "db down")
+	})
+}
+
+func TestContractRepository_RecordFailedAttempt(t *testing.T) {
+	t.Parallel()
+
+	t.Run("success persists code, message, next_retry_at", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &contractRepository{db: mock}
+		next := time.Date(2026, 5, 9, 12, 5, 0, 0, time.UTC)
+
+		mock.ExpectExec(contractRecordFailedSQL).
+			WithArgs("1219", "trustme: send-to-sign status=Error: 1219 (...)", next, "ct-1").
+			WillReturnResult(pgxmock.NewResult("UPDATE", 1))
+
+		require.NoError(t, repo.RecordFailedAttempt(context.Background(),
+			"ct-1", "1219", "trustme: send-to-sign status=Error: 1219 (...)", next))
+	})
+
+	t.Run("missing row returns sql.ErrNoRows", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &contractRepository{db: mock}
+		next := time.Date(2026, 5, 9, 12, 5, 0, 0, time.UTC)
+
+		mock.ExpectExec(contractRecordFailedSQL).
+			WithArgs("", "net err", next, "ct-missing").
+			WillReturnResult(pgxmock.NewResult("UPDATE", 0))
+
+		err := repo.RecordFailedAttempt(context.Background(),
+			"ct-missing", "", "net err", next)
+		require.ErrorIs(t, err, sql.ErrNoRows)
 	})
 }
 
