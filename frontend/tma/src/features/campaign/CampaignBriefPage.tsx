@@ -67,7 +67,7 @@ export function CampaignBriefPage() {
   const handleCancel = () => setConfirm(null);
 
   return (
-    <div className="min-h-screen bg-surface pb-12">
+    <div className="min-h-screen bg-surface pb-44">
       <div
         aria-hidden={!ndaAccepted}
         className={
@@ -133,35 +133,46 @@ export function CampaignBriefPage() {
           </Section>
         )}
 
-        <div className="flex flex-col gap-3 pt-2">
-          <button
-            type="button"
-            onClick={handleAcceptClick}
-            disabled={submitting}
-            className="w-full rounded-button bg-primary py-3 text-base font-semibold text-white transition-colors hover:bg-primary-600 active:bg-primary-700 disabled:opacity-60"
-            data-testid="campaign-accept-button"
-          >
-            Согласиться
-          </button>
-          <button
-            type="button"
-            onClick={handleDeclineClick}
-            disabled={submitting}
-            className="w-full rounded-button border border-surface-300 bg-surface-50 py-3 text-base font-semibold text-gray-700 transition-colors hover:bg-surface-200 disabled:opacity-60"
-            data-testid="campaign-decline-button"
-          >
-            Отказаться
-          </button>
-          {submitError && (
-            <p
-              data-testid="tma-decision-error"
-              className="rounded-md bg-red-50 px-4 py-2 text-center text-sm text-red-700"
-            >
-              {decisionErrorMessage(submitError.code)}
-            </p>
-          )}
-        </div>
       </main>
+      </div>
+      <div
+        aria-hidden={!ndaAccepted}
+        className={
+          "pointer-events-none fixed inset-x-0 bottom-0 z-40 " +
+          (ndaAccepted ? "" : "select-none blur-md")
+        }
+      >
+        <div className="h-8 bg-gradient-to-b from-transparent to-surface" />
+        <div className="bg-surface pb-[calc(env(safe-area-inset-bottom)+1rem)]">
+          <div className="pointer-events-auto mx-auto max-w-xl space-y-3 px-4">
+            {submitError && (
+              <p
+                data-testid="tma-decision-error"
+                className="rounded-md bg-red-50 px-4 py-2 text-center text-sm text-red-700"
+              >
+                {decisionErrorMessage(submitError.code)}
+              </p>
+            )}
+            <button
+              type="button"
+              onClick={handleAcceptClick}
+              disabled={submitting}
+              className="w-full rounded-full bg-primary py-4 text-base font-semibold text-white shadow-xl shadow-primary/30 transition-all hover:bg-primary-600 hover:shadow-2xl active:bg-primary-700 active:shadow-md disabled:opacity-60"
+              data-testid="campaign-accept-button"
+            >
+              Согласиться
+            </button>
+            <button
+              type="button"
+              onClick={handleDeclineClick}
+              disabled={submitting}
+              className="block w-full text-center text-sm font-medium text-gray-400 underline-offset-2 transition-colors hover:text-gray-600 hover:underline disabled:opacity-60"
+              data-testid="campaign-decline-button"
+            >
+              Отказаться
+            </button>
+          </div>
+        </div>
       </div>
       {!ndaAccepted && <NdaGate onAccept={() => setNdaAccepted(true)} />}
       {ndaAccepted && confirm === "accept" && (
