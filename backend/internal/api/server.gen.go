@@ -1383,6 +1383,30 @@ type TmaDecisionResult struct {
 	Status CampaignCreatorStatus `json:"status"`
 }
 
+// TrustMeWebhookRequest TrustMe document state-change payload. Wire-format поля повторяют
+// формат из blueprint § «Содержимое хука» (`contract_id`, `status`,
+// `client`, `contract_url`); реальный смысл указан в `description`
+// каждого поля.
+type TrustMeWebhookRequest struct {
+	// Client Phone of the actor that triggered the change. Игнорируем —
+	// PII, в БД и логи не пишем (security.md).
+	Client *string `json:"client,omitempty"`
+
+	// ContractId TrustMe-side document identifier. У TrustMe непоследовательный
+	// нейминг — `document_id` в response отправки, `id` в /search,
+	// `contract_id` здесь. У нас в БД это `contracts.trustme_document_id`.
+	ContractId string `json:"contract_id"`
+
+	// ContractUrl Full URL to the document. Игнорируем — детерминирован от
+	// `contract_id`, уже записан в `trustme_short_url` после Phase 3.
+	ContractUrl *string `json:"contract_url,omitempty"`
+
+	// Status TrustMe document status code per blueprint § «Получить статус
+	// документа». 3 = подписан, 9 = отказ креатора, остальные —
+	// intermediate / unexpected.
+	Status int `json:"status"`
+}
+
 // UploadCampaignContractTemplateData Result of a successful PUT /campaigns/{id}/contract-template upload.
 // Echoes the placeholders extracted from the freshly stored PDF so the
 // admin UI can render a confirmation block ("found CreatorFIO,
@@ -1534,6 +1558,9 @@ type VerifyCreatorApplicationSocialJSONRequestBody = VerifyCreatorApplicationSoc
 // ListCreatorsJSONRequestBody defines body for ListCreators for application/json ContentType.
 type ListCreatorsJSONRequestBody = CreatorsListRequest
 
+// TrustMeWebhookJSONRequestBody defines body for TrustMeWebhook for application/json ContentType.
+type TrustMeWebhookJSONRequestBody = TrustMeWebhookRequest
+
 // SendPulseInstagramWebhookJSONRequestBody defines body for SendPulseInstagramWebhook for application/json ContentType.
 type SendPulseInstagramWebhookJSONRequestBody = SendPulseInstagramWebhookRequest
 
@@ -1653,6 +1680,9 @@ type ServerInterface interface {
 	// Creator declines to participate in a campaign (TMA-only)
 	// (POST /tma/campaigns/{secretToken}/decline)
 	TmaDecline(w http.ResponseWriter, r *http.Request, secretToken TmaSecretTokenPathParam)
+	// TrustMe document status webhook
+	// (POST /trustme/webhook)
+	TrustMeWebhook(w http.ResponseWriter, r *http.Request)
 	// SendPulse webhook for Instagram DM verification
 	// (POST /webhooks/sendpulse/instagram)
 	SendPulseInstagramWebhook(w http.ResponseWriter, r *http.Request)
@@ -1887,6 +1917,12 @@ func (_ Unimplemented) TmaAgree(w http.ResponseWriter, r *http.Request, secretTo
 // Creator declines to participate in a campaign (TMA-only)
 // (POST /tma/campaigns/{secretToken}/decline)
 func (_ Unimplemented) TmaDecline(w http.ResponseWriter, r *http.Request, secretToken TmaSecretTokenPathParam) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// TrustMe document status webhook
+// (POST /trustme/webhook)
+func (_ Unimplemented) TrustMeWebhook(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -3036,6 +3072,20 @@ func (siw *ServerInterfaceWrapper) TmaDecline(w http.ResponseWriter, r *http.Req
 	handler.ServeHTTP(w, r)
 }
 
+// TrustMeWebhook operation middleware
+func (siw *ServerInterfaceWrapper) TrustMeWebhook(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.TrustMeWebhook(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // SendPulseInstagramWebhook operation middleware
 func (siw *ServerInterfaceWrapper) SendPulseInstagramWebhook(w http.ResponseWriter, r *http.Request) {
 
@@ -3276,6 +3326,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/tma/campaigns/{secretToken}/decline", wrapper.TmaDecline)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/trustme/webhook", wrapper.TrustMeWebhook)
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/webhooks/sendpulse/instagram", wrapper.SendPulseInstagramWebhook)
@@ -5296,6 +5349,62 @@ func (response TmaDeclinedefaultJSONResponse) VisitTmaDeclineResponse(w http.Res
 	return json.NewEncoder(w).Encode(response.Body)
 }
 
+type TrustMeWebhookRequestObject struct {
+	Body *TrustMeWebhookJSONRequestBody
+}
+
+type TrustMeWebhookResponseObject interface {
+	VisitTrustMeWebhookResponse(w http.ResponseWriter) error
+}
+
+type TrustMeWebhook200JSONResponse EmptyResult
+
+func (response TrustMeWebhook200JSONResponse) VisitTrustMeWebhookResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type TrustMeWebhook401JSONResponse EmptyResult
+
+func (response TrustMeWebhook401JSONResponse) VisitTrustMeWebhookResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type TrustMeWebhook404JSONResponse ErrorResponse
+
+func (response TrustMeWebhook404JSONResponse) VisitTrustMeWebhookResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type TrustMeWebhook422JSONResponse ErrorResponse
+
+func (response TrustMeWebhook422JSONResponse) VisitTrustMeWebhookResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(422)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type TrustMeWebhookdefaultJSONResponse struct {
+	Body       ErrorResponse
+	StatusCode int
+}
+
+func (response TrustMeWebhookdefaultJSONResponse) VisitTrustMeWebhookResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+
+	return json.NewEncoder(w).Encode(response.Body)
+}
+
 type SendPulseInstagramWebhookRequestObject struct {
 	Body *SendPulseInstagramWebhookJSONRequestBody
 }
@@ -5450,6 +5559,9 @@ type StrictServerInterface interface {
 	// Creator declines to participate in a campaign (TMA-only)
 	// (POST /tma/campaigns/{secretToken}/decline)
 	TmaDecline(ctx context.Context, request TmaDeclineRequestObject) (TmaDeclineResponseObject, error)
+	// TrustMe document status webhook
+	// (POST /trustme/webhook)
+	TrustMeWebhook(ctx context.Context, request TrustMeWebhookRequestObject) (TrustMeWebhookResponseObject, error)
 	// SendPulse webhook for Instagram DM verification
 	// (POST /webhooks/sendpulse/instagram)
 	SendPulseInstagramWebhook(ctx context.Context, request SendPulseInstagramWebhookRequestObject) (SendPulseInstagramWebhookResponseObject, error)
@@ -6560,6 +6672,37 @@ func (sh *strictHandler) TmaDecline(w http.ResponseWriter, r *http.Request, secr
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(TmaDeclineResponseObject); ok {
 		if err := validResponse.VisitTmaDeclineResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// TrustMeWebhook operation middleware
+func (sh *strictHandler) TrustMeWebhook(w http.ResponseWriter, r *http.Request) {
+	var request TrustMeWebhookRequestObject
+
+	var body TrustMeWebhookJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.TrustMeWebhook(ctx, request.(TrustMeWebhookRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "TrustMeWebhook")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(TrustMeWebhookResponseObject); ok {
+		if err := validResponse.VisitTrustMeWebhookResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

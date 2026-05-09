@@ -65,6 +65,13 @@ type Config struct {
 	// ходит в сеть); для прода RealClient их валидирует при старте.
 	TrustMeBaseURL string `env:"TRUSTME_BASE_URL" envDefault:"https://test.trustme.kz/trust_contract_public_apis"`
 	TrustMeToken   string `env:"TRUSTME_TOKEN" envDefault:""`
+	// TrustMeWebhookToken — статичный токен, который TrustMe шлёт в
+	// заголовке `Authorization: <token>` (raw, без Bearer-префикса) при
+	// доставке webhook'а — формат жёстко прописан в blueprint § «Установка
+	// хуков». Constant-time compare в middleware.TrustMeWebhookAuth. Для
+	// staging/prod обязателен (Load() валидирует не-локальные окружения),
+	// локально — допустим пустой (e2e через test-окружение задаёт явно).
+	TrustMeWebhookToken string `env:"TRUSTME_WEBHOOK_TOKEN" envDefault:""`
 	// TrustMeRetryBackoffSeconds — пауза перед повторной попыткой Phase 0
 	// recovery, если предыдущий SendToSign упал. Константный, не
 	// экспоненциальный. Default 300 (5 минут): достаточно длинно, чтобы
@@ -144,6 +151,13 @@ func Load() (*Config, error) {
 	}
 	if !cfg.TelegramMock && cfg.TelegramBotToken == "" {
 		return nil, fmt.Errorf("TELEGRAM_BOT_TOKEN must be a non-empty value when TELEGRAM_MOCK=false")
+	}
+	// TrustMe webhook token guard — required outside local окружения. На
+	// staging/prod TrustMe доставляет webhook'и с этим токеном; пустой
+	// токен дал бы открытый endpoint без auth. Локально пустой допустим
+	// (e2e тесты задают явно через docker env).
+	if cfg.Environment != EnvLocal && cfg.TrustMeWebhookToken == "" {
+		return nil, fmt.Errorf("TRUSTME_WEBHOOK_TOKEN must be a non-empty value outside local environment")
 	}
 
 	// Derive values from Environment

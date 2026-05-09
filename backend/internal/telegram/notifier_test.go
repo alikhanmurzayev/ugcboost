@@ -116,6 +116,9 @@ const (
 		"Добро пожаловать на платформу UGC boost 💫\n\n" +
 		"После Недели моды мы планируем запустить приложение в App Store и добавить новые возможности для UGC-сотрудничества с брендами и партнерами EURASIAN FASHION WEEK.\n\n" +
 		"Оставайтесь с нами — впереди много масштабных проектов!"
+
+	expectedCampaignContractSigned   = "Ура, мы подписали с вами соглашение ✅ Скоро отправим вам онлайн пригласительный на показы 😍"
+	expectedCampaignContractDeclined = "Поняли, в этот раз не подписываем. Если появятся другие подходящие предложения — обязательно вам напишем 💫"
 )
 
 func TestNotifier_NotifyApplicationLinked(t *testing.T) {
@@ -323,6 +326,102 @@ func TestNotifier_NotifyApplicationApproved(t *testing.T) {
 		n := newSingleShotNotifier(sender, log)
 		require.NotPanics(t, func() {
 			n.NotifyApplicationApproved(context.Background(), 88)
+		})
+		waitFor(t, t.Name(), sendDone)
+		n.Wait()
+	})
+}
+
+func TestNotifier_NotifyCampaignContractSigned(t *testing.T) {
+	t.Parallel()
+
+	t.Run("posts exact signed copy as plain text", func(t *testing.T) {
+		t.Parallel()
+		sender := tgmocks.NewMockSender(t)
+		log := logmocks.NewMockLogger(t)
+		captured, sendDone := captureSend(t, sender, nil)
+
+		n := telegram.NewNotifier(sender, log)
+		n.NotifyCampaignContractSigned(context.Background(), 555)
+		waitFor(t, t.Name(), sendDone)
+		n.Wait()
+
+		require.NotNil(t, *captured)
+		chatID, ok := (*captured).ChatID.(int64)
+		require.True(t, ok)
+		require.Equal(t, int64(555), chatID)
+		require.Equal(t, expectedCampaignContractSigned, (*captured).Text)
+		require.Empty(t, (*captured).ParseMode)
+		require.Nil(t, (*captured).ReplyMarkup)
+	})
+
+	t.Run("sender error logged with op campaign_contract_signed", func(t *testing.T) {
+		t.Parallel()
+		sender := tgmocks.NewMockSender(t)
+		log := logmocks.NewMockLogger(t)
+		_, sendDone := captureSend(t, sender, errors.New("network down"))
+		log.EXPECT().Error(mock.Anything, "telegram notify failed",
+			mock.MatchedBy(func(args []any) bool {
+				m := map[string]any{}
+				for i := 0; i+1 < len(args); i += 2 {
+					if k, ok := args[i].(string); ok {
+						m[k] = args[i+1]
+					}
+				}
+				return m["op"] == "campaign_contract_signed" && m["chat_id"] == int64(606)
+			})).Once()
+
+		n := newSingleShotNotifier(sender, log)
+		require.NotPanics(t, func() {
+			n.NotifyCampaignContractSigned(context.Background(), 606)
+		})
+		waitFor(t, t.Name(), sendDone)
+		n.Wait()
+	})
+}
+
+func TestNotifier_NotifyCampaignContractDeclined(t *testing.T) {
+	t.Parallel()
+
+	t.Run("posts exact declined copy as plain text", func(t *testing.T) {
+		t.Parallel()
+		sender := tgmocks.NewMockSender(t)
+		log := logmocks.NewMockLogger(t)
+		captured, sendDone := captureSend(t, sender, nil)
+
+		n := telegram.NewNotifier(sender, log)
+		n.NotifyCampaignContractDeclined(context.Background(), 707)
+		waitFor(t, t.Name(), sendDone)
+		n.Wait()
+
+		require.NotNil(t, *captured)
+		chatID, ok := (*captured).ChatID.(int64)
+		require.True(t, ok)
+		require.Equal(t, int64(707), chatID)
+		require.Equal(t, expectedCampaignContractDeclined, (*captured).Text)
+		require.Empty(t, (*captured).ParseMode)
+		require.Nil(t, (*captured).ReplyMarkup)
+	})
+
+	t.Run("sender error logged with op campaign_contract_declined", func(t *testing.T) {
+		t.Parallel()
+		sender := tgmocks.NewMockSender(t)
+		log := logmocks.NewMockLogger(t)
+		_, sendDone := captureSend(t, sender, errors.New("network down"))
+		log.EXPECT().Error(mock.Anything, "telegram notify failed",
+			mock.MatchedBy(func(args []any) bool {
+				m := map[string]any{}
+				for i := 0; i+1 < len(args); i += 2 {
+					if k, ok := args[i].(string); ok {
+						m[k] = args[i+1]
+					}
+				}
+				return m["op"] == "campaign_contract_declined" && m["chat_id"] == int64(808)
+			})).Once()
+
+		n := newSingleShotNotifier(sender, log)
+		require.NotPanics(t, func() {
+			n.NotifyCampaignContractDeclined(context.Background(), 808)
 		})
 		waitFor(t, t.Name(), sendDone)
 		n.Wait()

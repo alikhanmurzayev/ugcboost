@@ -175,6 +175,74 @@ func (_c *MockContractRepo_Insert_Call) RunAndReturn(run func(ctx context.Contex
 	return _c
 }
 
+// LockByTrustMeDocumentID provides a mock function for the type MockContractRepo
+func (_mock *MockContractRepo) LockByTrustMeDocumentID(ctx context.Context, documentID string) (*repository.ContractRow, error) {
+	ret := _mock.Called(ctx, documentID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for LockByTrustMeDocumentID")
+	}
+
+	var r0 *repository.ContractRow
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) (*repository.ContractRow, error)); ok {
+		return returnFunc(ctx, documentID)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) *repository.ContractRow); ok {
+		r0 = returnFunc(ctx, documentID)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*repository.ContractRow)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string) error); ok {
+		r1 = returnFunc(ctx, documentID)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockContractRepo_LockByTrustMeDocumentID_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'LockByTrustMeDocumentID'
+type MockContractRepo_LockByTrustMeDocumentID_Call struct {
+	*mock.Call
+}
+
+// LockByTrustMeDocumentID is a helper method to define mock.On call
+//   - ctx context.Context
+//   - documentID string
+func (_e *MockContractRepo_Expecter) LockByTrustMeDocumentID(ctx interface{}, documentID interface{}) *MockContractRepo_LockByTrustMeDocumentID_Call {
+	return &MockContractRepo_LockByTrustMeDocumentID_Call{Call: _e.mock.On("LockByTrustMeDocumentID", ctx, documentID)}
+}
+
+func (_c *MockContractRepo_LockByTrustMeDocumentID_Call) Run(run func(ctx context.Context, documentID string)) *MockContractRepo_LockByTrustMeDocumentID_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockContractRepo_LockByTrustMeDocumentID_Call) Return(contractRow *repository.ContractRow, err error) *MockContractRepo_LockByTrustMeDocumentID_Call {
+	_c.Call.Return(contractRow, err)
+	return _c
+}
+
+func (_c *MockContractRepo_LockByTrustMeDocumentID_Call) RunAndReturn(run func(ctx context.Context, documentID string) (*repository.ContractRow, error)) *MockContractRepo_LockByTrustMeDocumentID_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // RecordFailedAttempt provides a mock function for the type MockContractRepo
 func (_mock *MockContractRepo) RecordFailedAttempt(ctx context.Context, contractID string, code string, message string, nextRetryAt time.Time) error {
 	ret := _mock.Called(ctx, contractID, code, message, nextRetryAt)
@@ -457,6 +525,78 @@ func (_c *MockContractRepo_UpdateAfterSend_Call) Return(err error) *MockContract
 }
 
 func (_c *MockContractRepo_UpdateAfterSend_Call) RunAndReturn(run func(ctx context.Context, id string, trustMeDocumentID string, trustMeShortURL string, trustMeStatusCode int) error) *MockContractRepo_UpdateAfterSend_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// UpdateAfterWebhook provides a mock function for the type MockContractRepo
+func (_mock *MockContractRepo) UpdateAfterWebhook(ctx context.Context, contractID string, newStatus int) (int, error) {
+	ret := _mock.Called(ctx, contractID, newStatus)
+
+	if len(ret) == 0 {
+		panic("no return value specified for UpdateAfterWebhook")
+	}
+
+	var r0 int
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, int) (int, error)); ok {
+		return returnFunc(ctx, contractID, newStatus)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, int) int); ok {
+		r0 = returnFunc(ctx, contractID, newStatus)
+	} else {
+		r0 = ret.Get(0).(int)
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, int) error); ok {
+		r1 = returnFunc(ctx, contractID, newStatus)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockContractRepo_UpdateAfterWebhook_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'UpdateAfterWebhook'
+type MockContractRepo_UpdateAfterWebhook_Call struct {
+	*mock.Call
+}
+
+// UpdateAfterWebhook is a helper method to define mock.On call
+//   - ctx context.Context
+//   - contractID string
+//   - newStatus int
+func (_e *MockContractRepo_Expecter) UpdateAfterWebhook(ctx interface{}, contractID interface{}, newStatus interface{}) *MockContractRepo_UpdateAfterWebhook_Call {
+	return &MockContractRepo_UpdateAfterWebhook_Call{Call: _e.mock.On("UpdateAfterWebhook", ctx, contractID, newStatus)}
+}
+
+func (_c *MockContractRepo_UpdateAfterWebhook_Call) Run(run func(ctx context.Context, contractID string, newStatus int)) *MockContractRepo_UpdateAfterWebhook_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 int
+		if args[2] != nil {
+			arg2 = args[2].(int)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockContractRepo_UpdateAfterWebhook_Call) Return(n int, err error) *MockContractRepo_UpdateAfterWebhook_Call {
+	_c.Call.Return(n, err)
+	return _c
+}
+
+func (_c *MockContractRepo_UpdateAfterWebhook_Call) RunAndReturn(run func(ctx context.Context, contractID string, newStatus int) (int, error)) *MockContractRepo_UpdateAfterWebhook_Call {
 	_c.Call.Return(run)
 	return _c
 }

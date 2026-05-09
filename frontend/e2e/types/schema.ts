@@ -893,6 +893,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/trustme/webhook": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * TrustMe document status webhook
+         * @description Receives TrustMe document state-change notifications. Auth via static
+         *     token in `Authorization: <token>` header (raw, без `Bearer`-префикса —
+         *     per blueprint § «Установка хуков»). Middleware compares constant-time
+         *     и пишет 401 `{}` напрямую без фингерпринта между missing/wrong.
+         *     Idempotent повтор того же события возвращает 200 без побочных
+         *     эффектов; terminal-guard (`signed`/`signing_declined`) защищает
+         *     от reorder'а.
+         */
+        post: operations["trustMeWebhook"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1420,6 +1446,36 @@ export interface components {
          *     same `{}` body.
          */
         SendPulseInstagramWebhookResult: Record<string, never>;
+        /**
+         * @description TrustMe document state-change payload. Wire-format поля повторяют
+         *     формат из blueprint § «Содержимое хука» (`contract_id`, `status`,
+         *     `client`, `contract_url`); реальный смысл указан в `description`
+         *     каждого поля.
+         */
+        TrustMeWebhookRequest: {
+            /**
+             * @description TrustMe-side document identifier. У TrustMe непоследовательный
+             *     нейминг — `document_id` в response отправки, `id` в /search,
+             *     `contract_id` здесь. У нас в БД это `contracts.trustme_document_id`.
+             */
+            contract_id: string;
+            /**
+             * @description TrustMe document status code per blueprint § «Получить статус
+             *     документа». 3 = подписан, 9 = отказ креатора, остальные —
+             *     intermediate / unexpected.
+             */
+            status: number;
+            /**
+             * @description Phone of the actor that triggered the change. Игнорируем —
+             *     PII, в БД и логи не пишем (security.md).
+             */
+            client?: string;
+            /**
+             * @description Full URL to the document. Игнорируем — детерминирован от
+             *     `contract_id`, уже записан в `trustme_short_url` после Phase 3.
+             */
+            contract_url?: string;
+        };
         /**
          * @description Generic empty success envelope for endpoints that do not carry a
          *     payload back. Clients should refetch the relevant resource to
@@ -3623,6 +3679,58 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SendPulseInstagramWebhookResult"];
+                };
+            };
+            default: components["responses"]["UnexpectedError"];
+        };
+    };
+    trustMeWebhook: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TrustMeWebhookRequest"];
+            };
+        };
+        responses: {
+            /** @description Webhook processed (включая idempotent / terminal-guard no-op). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmptyResult"];
+                };
+            };
+            /** @description Missing or wrong Authorization token (anti-fingerprint, body пустой). */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["EmptyResult"];
+                };
+            };
+            /** @description Unknown contract_id in payload — нет ряда с таким trustme_document_id. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Status вне 0..9 либо subject_kind не поддержан dispatcher'ом. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
             default: components["responses"]["UnexpectedError"];

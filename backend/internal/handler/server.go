@@ -134,6 +134,14 @@ type TmaCampaignCreatorService interface {
 	ApplyDecision(ctx context.Context, auth service.TmaDecisionAuth, decision domain.CampaignCreatorDecision) (domain.CampaignCreatorDecisionResult, error)
 }
 
+// TrustMeWebhookService is the interface Server needs from the TrustMe
+// webhook receiver — public POST /trustme/webhook hands a typed event to
+// HandleEvent which mutates contracts + cc.status + audit inside one tx
+// and fires fire-and-forget bot notify after COMMIT.
+type TrustMeWebhookService interface {
+	HandleEvent(ctx context.Context, ev domain.TrustMeWebhookEvent) error
+}
+
 // ServerConfig bundles configuration values the handler layer needs. Keeping
 // them in a struct lets NewServer grow without a long positional signature.
 type ServerConfig struct {
@@ -156,6 +164,7 @@ type Server struct {
 	campaignCreatorService    CampaignCreatorService
 	tmaCampaignCreatorService TmaCampaignCreatorService
 	dictionaryService         DictionaryService
+	trustMeWebhookService     TrustMeWebhookService
 	version                   string
 	cookieSecure              bool
 	telegramBotUsername       string
@@ -178,6 +187,7 @@ func NewServer(
 	campaignCreators CampaignCreatorService,
 	tmaCampaignCreators TmaCampaignCreatorService,
 	dict DictionaryService,
+	trustMeWebhook TrustMeWebhookService,
 	cfg ServerConfig,
 	log logger.Logger,
 ) *Server {
@@ -192,6 +202,7 @@ func NewServer(
 		campaignCreatorService:    campaignCreators,
 		tmaCampaignCreatorService: tmaCampaignCreators,
 		dictionaryService:         dict,
+		trustMeWebhookService:     trustMeWebhook,
 		version:                   cfg.Version,
 		cookieSecure:              cfg.CookieSecure,
 		telegramBotUsername:       cfg.TelegramBotUsername,

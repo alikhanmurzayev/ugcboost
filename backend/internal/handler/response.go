@@ -94,6 +94,15 @@ func respondError(w http.ResponseWriter, r *http.Request, err error, log logger.
 	case errors.Is(err, domain.ErrCampaignCreatorNotFound):
 		writeError(w, r, http.StatusNotFound, domain.CodeCampaignCreatorNotFound,
 			"Креатор не найден в этой кампании.", log)
+	case errors.Is(err, domain.ErrContractWebhookUnknownDocument):
+		writeError(w, r, http.StatusNotFound, domain.CodeContractWebhookUnknownDocument,
+			"Webhook target not found", log)
+	case errors.Is(err, domain.ErrContractWebhookUnknownSubject):
+		writeError(w, r, http.StatusUnprocessableEntity, domain.CodeContractWebhookUnknownSubject,
+			"Unsupported webhook subject", log)
+	case errors.Is(err, domain.ErrContractWebhookInvalidStatus):
+		writeError(w, r, http.StatusUnprocessableEntity, domain.CodeContractWebhookInvalidStatus,
+			"Invalid status code", log)
 	case errors.Is(err, domain.ErrTMAForbidden):
 		writeError(w, r, http.StatusForbidden, domain.CodeTMAForbidden,
 			"У вас нет приглашения на эту кампанию.", log)

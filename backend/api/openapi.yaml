@@ -1762,6 +1762,54 @@ paths:
         default:
           $ref: "#/components/responses/UnexpectedError"
 
+  /trustme/webhook:
+    post:
+      operationId: trustMeWebhook
+      summary: TrustMe document status webhook
+      description: |
+        Receives TrustMe document state-change notifications. Auth via static
+        token in `Authorization: <token>` header (raw, без `Bearer`-префикса —
+        per blueprint § «Установка хуков»). Middleware compares constant-time
+        и пишет 401 `{}` напрямую без фингерпринта между missing/wrong.
+        Idempotent повтор того же события возвращает 200 без побочных
+        эффектов; terminal-guard (`signed`/`signing_declined`) защищает
+        от reorder'а.
+      tags: [webhooks]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TrustMeWebhookRequest"
+      responses:
+        "200":
+          description: Webhook processed (включая idempotent / terminal-guard no-op).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmptyResult"
+        "401":
+          description: Missing or wrong Authorization token (anti-fingerprint, body пустой).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EmptyResult"
+        "404":
+          description: Unknown contract_id in payload — нет ряда с таким trustme_document_id.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Status вне 0..9 либо subject_kind не поддержан dispatcher'ом.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: "#/components/responses/UnexpectedError"
+
 components:
   parameters:
     PageQueryParam:
@@ -2722,6 +2770,44 @@ components:
         Empty object — the SendPulse webhook never carries data back. Both
         success (200) and the constant-time auth failure (401) emit the
         same `{}` body.
+
+    TrustMeWebhookRequest:
+      type: object
+      description: |
+        TrustMe document state-change payload. Wire-format поля повторяют
+        формат из blueprint § «Содержимое хука» (`contract_id`, `status`,
+        `client`, `contract_url`); реальный смысл указан в `description`
+        каждого поля.
+      required: [contract_id, status]
+      properties:
+        contract_id:
+          type: string
+          minLength: 1
+          maxLength: 256
+          description: |
+            TrustMe-side document identifier. У TrustMe непоследовательный
+            нейминг — `document_id` в response отправки, `id` в /search,
+            `contract_id` здесь. У нас в БД это `contracts.trustme_document_id`.
+        status:
+          type: integer
+          minimum: 0
+          maximum: 9
+          description: |
+            TrustMe document status code per blueprint § «Получить статус
+            документа». 3 = подписан, 9 = отказ креатора, остальные —
+            intermediate / unexpected.
+        client:
+          type: string
+          maxLength: 256
+          description: |
+            Phone of the actor that triggered the change. Игнорируем —
+            PII, в БД и логи не пишем (security.md).
+        contract_url:
+          type: string
+          maxLength: 1024
+          description: |
+            Full URL to the document. Игнорируем — детерминирован от
+            `contract_id`, уже записан в `trustme_short_url` после Phase 3.
 
     EmptyResult:
       type: object
