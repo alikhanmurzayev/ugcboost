@@ -2,11 +2,14 @@ package service
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"strings"
 
+	"github.com/alikhanmurzayev/ugcboost/backend/internal/contract"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/dbutil"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/domain"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/logger"
@@ -22,16 +25,34 @@ type CampaignRepoFactory interface {
 	NewAuditRepo(db dbutil.DB) repository.AuditRepo
 }
 
+// ContractExtractor parses placeholder occurrences out of a PDF byte stream.
+// Declared in this package (Go convention: accept interfaces, return structs)
+// so service tests can swap the real extractor for a mock without taking on
+// the ledongthuc/pdf import in the test file.
+type ContractExtractor interface {
+	ExtractPlaceholders(pdfBytes []byte) ([]contract.Placeholder, error)
+}
+
 // CampaignService owns the marketing-campaign lifecycle.
 type CampaignService struct {
 	pool        dbutil.Pool
 	repoFactory CampaignRepoFactory
+	extractor   ContractExtractor
 	logger      logger.Logger
 }
 
 // NewCampaignService creates a new CampaignService.
-func NewCampaignService(pool dbutil.Pool, repoFactory CampaignRepoFactory, log logger.Logger) *CampaignService {
-	return &CampaignService{pool: pool, repoFactory: repoFactory, logger: log}
+func NewCampaignService(pool dbutil.Pool, repoFactory CampaignRepoFactory, extractor ContractExtractor, log logger.Logger) *CampaignService {
+	return &CampaignService{pool: pool, repoFactory: repoFactory, extractor: extractor, logger: log}
+}
+
+// UploadContractTemplateResult is returned to the admin UI after a successful
+// PUT /campaigns/{id}/contract-template — it carries the sha256 fingerprint
+// and the canonical placeholder set so the UI can render confirmation
+// without a follow-up GET.
+type UploadContractTemplateResult struct {
+	Hash         string
+	Placeholders []string
 }
 
 // CreateCampaign inserts a new campaign and writes the matching audit row in
@@ -217,6 +238,91 @@ func (s *CampaignService) List(ctx context.Context, in domain.CampaignListInput)
 	}, nil
 }
 
+// UploadContractTemplate validates a PDF upload, persists it on the campaign
+// row, and writes the audit-log entry — all inside one transaction so a
+// rollback wipes both. Validation order mirrors the spec: empty body →
+// CONTRACT_REQUIRED, unparseable bytes → CONTRACT_INVALID_PDF, then the
+// pure-domain ValidateContractTemplatePDF chain (missing/unknown). The
+// audit row carries the sha256 hash + placeholder list + size — never the
+// PDF bytes themselves (security.md § PII в логах extends to bulk binary
+// payloads).
+func (s *CampaignService) UploadContractTemplate(ctx context.Context, id string, pdf []byte) (*UploadContractTemplateResult, error) {
+	if len(pdf) == 0 {
+		return nil, domain.NewContractRequiredError()
+	}
+
+	placeholders, err := s.extractor.ExtractPlaceholders(pdf)
+	if err != nil {
+		return nil, domain.NewContractInvalidPDFError()
+	}
+
+	names := make([]string, len(placeholders))
+	for i, p := range placeholders {
+		names[i] = p.Name
+	}
+	if err := domain.ValidateContractTemplatePDF(len(pdf), names); err != nil {
+		return nil, err
+	}
+
+	sum := sha256.Sum256(pdf)
+	hash := hex.EncodeToString(sum[:])
+
+	auditMeta := struct {
+		Hash         string   `json:"hash"`
+		Placeholders []string `json:"placeholders"`
+		SizeBytes    int      `json:"size_bytes"`
+	}{
+		Hash:         hash,
+		Placeholders: domain.KnownContractPlaceholders,
+		SizeBytes:    len(pdf),
+	}
+
+	err = dbutil.WithTx(ctx, s.pool, func(tx dbutil.DB) error {
+		campaignRepo := s.repoFactory.NewCampaignRepo(tx)
+		auditRepo := s.repoFactory.NewAuditRepo(tx)
+
+		if err := campaignRepo.UpdateContractTemplate(ctx, id, pdf); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return domain.ErrCampaignNotFound
+			}
+			return fmt.Errorf("update contract template: %w", err)
+		}
+		return writeAudit(ctx, auditRepo,
+			AuditActionCampaignContractTemplateUploaded, AuditEntityTypeCampaign, id,
+			nil, auditMeta)
+	})
+	if err != nil {
+		return nil, err
+	}
+	s.logger.Info(ctx, "contract template uploaded",
+		"campaign_id", id,
+		"size_bytes", len(pdf),
+		"sha256", hash[:12], // short fingerprint, full hash lives in audit_logs
+	)
+	return &UploadContractTemplateResult{
+		Hash:         hash,
+		Placeholders: append([]string(nil), domain.KnownContractPlaceholders...),
+	}, nil
+}
+
+// GetContractTemplate streams the stored PDF back for download. Soft-deleted
+// campaigns surface as ErrCampaignNotFound; live campaigns whose
+// contract_template_pdf column is empty (admin never uploaded) surface as
+// ErrContractTemplateNotFound — handlers map both to 404 with distinct codes.
+func (s *CampaignService) GetContractTemplate(ctx context.Context, id string) ([]byte, error) {
+	pdf, err := s.repoFactory.NewCampaignRepo(s.pool).GetContractTemplate(ctx, id)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, domain.ErrCampaignNotFound
+		}
+		return nil, fmt.Errorf("get contract template: %w", err)
+	}
+	if len(pdf) == 0 {
+		return nil, domain.ErrContractTemplateNotFound
+	}
+	return pdf, nil
+}
+
 func campaignListInputToRepo(in domain.CampaignListInput) repository.CampaignListParams {
 	return repository.CampaignListParams{
 		Search:    strings.ToLower(strings.TrimSpace(in.Search)),
@@ -230,11 +336,12 @@ func campaignListInputToRepo(in domain.CampaignListInput) repository.CampaignLis
 
 func campaignRowToDomain(row *repository.CampaignRow) *domain.Campaign {
 	return &domain.Campaign{
-		ID:        row.ID,
-		Name:      row.Name,
-		TmaURL:    row.TmaURL,
-		IsDeleted: row.IsDeleted,
-		CreatedAt: row.CreatedAt,
-		UpdatedAt: row.UpdatedAt,
+		ID:                  row.ID,
+		Name:                row.Name,
+		TmaURL:              row.TmaURL,
+		IsDeleted:           row.IsDeleted,
+		HasContractTemplate: row.HasContractTemplate,
+		CreatedAt:           row.CreatedAt,
+		UpdatedAt:           row.UpdatedAt,
 	}
 }

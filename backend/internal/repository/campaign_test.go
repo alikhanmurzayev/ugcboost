@@ -18,7 +18,7 @@ import (
 func TestCampaignRepository_Create(t *testing.T) {
 	t.Parallel()
 
-	const sqlStmt = "INSERT INTO campaigns (name,secret_token,tma_url) VALUES ($1,$2,$3) RETURNING created_at, id, is_deleted, name, secret_token, tma_url, updated_at"
+	const sqlStmt = "INSERT INTO campaigns (name,secret_token,tma_url) VALUES ($1,$2,$3) RETURNING created_at, (octet_length(contract_template_pdf) > 0) AS has_contract_template_pdf, id, is_deleted, name, secret_token, tma_url, updated_at"
 
 	t.Run("success maps row to struct", func(t *testing.T) {
 		t.Parallel()
@@ -28,8 +28,8 @@ func TestCampaignRepository_Create(t *testing.T) {
 
 		mock.ExpectQuery(sqlStmt).
 			WithArgs("Promo X", "abc_padding_secrettokenxx", "https://tma.ugcboost.kz/tz/abc_padding_secrettokenxx").
-			WillReturnRows(pgxmock.NewRows([]string{"created_at", "id", "is_deleted", "name", "secret_token", "tma_url", "updated_at"}).
-				AddRow(createdAt, "c-1", false, "Promo X", pointer.ToString("abc_padding_secrettokenxx"), "https://tma.ugcboost.kz/tz/abc_padding_secrettokenxx", createdAt))
+			WillReturnRows(pgxmock.NewRows([]string{"created_at", "has_contract_template_pdf", "id", "is_deleted", "name", "secret_token", "tma_url", "updated_at"}).
+				AddRow(createdAt, false, "c-1", false, "Promo X", pointer.ToString("abc_padding_secrettokenxx"), "https://tma.ugcboost.kz/tz/abc_padding_secrettokenxx", createdAt))
 
 		got, err := repo.Create(context.Background(), "Promo X", "https://tma.ugcboost.kz/tz/abc_padding_secrettokenxx", "abc_padding_secrettokenxx")
 		require.NoError(t, err)
@@ -78,8 +78,8 @@ func TestCampaignRepository_Create(t *testing.T) {
 
 		mock.ExpectQuery(sqlStmt).
 			WithArgs("Promo Draft", nil, "").
-			WillReturnRows(pgxmock.NewRows([]string{"created_at", "id", "is_deleted", "name", "secret_token", "tma_url", "updated_at"}).
-				AddRow(createdAt, "c-draft", false, "Promo Draft", (*string)(nil), "", createdAt))
+			WillReturnRows(pgxmock.NewRows([]string{"created_at", "has_contract_template_pdf", "id", "is_deleted", "name", "secret_token", "tma_url", "updated_at"}).
+				AddRow(createdAt, false, "c-draft", false, "Promo Draft", (*string)(nil), "", createdAt))
 
 		got, err := repo.Create(context.Background(), "Promo Draft", "", "")
 		require.NoError(t, err)
@@ -118,7 +118,7 @@ func TestCampaignRepository_Create(t *testing.T) {
 func TestCampaignRepository_GetByID(t *testing.T) {
 	t.Parallel()
 
-	const sqlStmt = "SELECT created_at, id, is_deleted, name, secret_token, tma_url, updated_at FROM campaigns WHERE id = $1"
+	const sqlStmt = "SELECT created_at, (octet_length(contract_template_pdf) > 0) AS has_contract_template_pdf, id, is_deleted, name, secret_token, tma_url, updated_at FROM campaigns WHERE id = $1"
 
 	t.Run("success maps row to struct", func(t *testing.T) {
 		t.Parallel()
@@ -128,8 +128,8 @@ func TestCampaignRepository_GetByID(t *testing.T) {
 
 		mock.ExpectQuery(sqlStmt).
 			WithArgs("c-1").
-			WillReturnRows(pgxmock.NewRows([]string{"created_at", "id", "is_deleted", "name", "secret_token", "tma_url", "updated_at"}).
-				AddRow(createdAt, "c-1", false, "Promo X", pointer.ToString("abc_padding_secrettokenxx"), "https://tma.ugcboost.kz/tz/abc_padding_secrettokenxx", createdAt))
+			WillReturnRows(pgxmock.NewRows([]string{"created_at", "has_contract_template_pdf", "id", "is_deleted", "name", "secret_token", "tma_url", "updated_at"}).
+				AddRow(createdAt, false, "c-1", false, "Promo X", pointer.ToString("abc_padding_secrettokenxx"), "https://tma.ugcboost.kz/tz/abc_padding_secrettokenxx", createdAt))
 
 		got, err := repo.GetByID(context.Background(), "c-1")
 		require.NoError(t, err)
@@ -152,8 +152,8 @@ func TestCampaignRepository_GetByID(t *testing.T) {
 
 		mock.ExpectQuery(sqlStmt).
 			WithArgs("c-2").
-			WillReturnRows(pgxmock.NewRows([]string{"created_at", "id", "is_deleted", "name", "secret_token", "tma_url", "updated_at"}).
-				AddRow(createdAt, "c-2", true, "Promo Y", pointer.ToString("y_padding_secrettokenxxxx"), "https://tma.ugcboost.kz/tz/y_padding_secrettokenxxxx", createdAt))
+			WillReturnRows(pgxmock.NewRows([]string{"created_at", "has_contract_template_pdf", "id", "is_deleted", "name", "secret_token", "tma_url", "updated_at"}).
+				AddRow(createdAt, false, "c-2", true, "Promo Y", pointer.ToString("y_padding_secrettokenxxxx"), "https://tma.ugcboost.kz/tz/y_padding_secrettokenxxxx", createdAt))
 
 		got, err := repo.GetByID(context.Background(), "c-2")
 		require.NoError(t, err)
@@ -198,7 +198,7 @@ func TestCampaignRepository_GetByID(t *testing.T) {
 func TestCampaignRepository_GetBySecretToken(t *testing.T) {
 	t.Parallel()
 
-	const sqlStmt = "SELECT created_at, id, is_deleted, name, secret_token, tma_url, updated_at FROM campaigns WHERE secret_token = $1 AND is_deleted = $2"
+	const sqlStmt = "SELECT created_at, (octet_length(contract_template_pdf) > 0) AS has_contract_template_pdf, id, is_deleted, name, secret_token, tma_url, updated_at FROM campaigns WHERE secret_token = $1 AND is_deleted = $2"
 	createdAt := time.Date(2026, 5, 6, 12, 0, 0, 0, time.UTC)
 
 	t.Run("success returns matching live row", func(t *testing.T) {
@@ -208,8 +208,8 @@ func TestCampaignRepository_GetBySecretToken(t *testing.T) {
 
 		mock.ExpectQuery(sqlStmt).
 			WithArgs("abc_padding_secrettokenxx", false).
-			WillReturnRows(pgxmock.NewRows([]string{"created_at", "id", "is_deleted", "name", "secret_token", "tma_url", "updated_at"}).
-				AddRow(createdAt, "c-1", false, "Promo X", pointer.ToString("abc_padding_secrettokenxx"), "https://tma.ugcboost.kz/tz/abc_padding_secrettokenxx", createdAt))
+			WillReturnRows(pgxmock.NewRows([]string{"created_at", "has_contract_template_pdf", "id", "is_deleted", "name", "secret_token", "tma_url", "updated_at"}).
+				AddRow(createdAt, false, "c-1", false, "Promo X", pointer.ToString("abc_padding_secrettokenxx"), "https://tma.ugcboost.kz/tz/abc_padding_secrettokenxx", createdAt))
 
 		got, err := repo.GetBySecretToken(context.Background(), "abc_padding_secrettokenxx")
 		require.NoError(t, err)
@@ -266,15 +266,15 @@ func TestCampaignRepository_ListByIDs(t *testing.T) {
 
 	t.Run("success maps single row", func(t *testing.T) {
 		t.Parallel()
-		const sqlStmt = "SELECT created_at, id, is_deleted, name, secret_token, tma_url, updated_at FROM campaigns WHERE id IN ($1)"
+		const sqlStmt = "SELECT created_at, (octet_length(contract_template_pdf) > 0) AS has_contract_template_pdf, id, is_deleted, name, secret_token, tma_url, updated_at FROM campaigns WHERE id IN ($1)"
 		mock := newPgxmock(t)
 		repo := &campaignRepository{db: mock}
 		createdAt := time.Date(2026, 5, 6, 12, 0, 0, 0, time.UTC)
 
 		mock.ExpectQuery(sqlStmt).
 			WithArgs("c-1").
-			WillReturnRows(pgxmock.NewRows([]string{"created_at", "id", "is_deleted", "name", "secret_token", "tma_url", "updated_at"}).
-				AddRow(createdAt, "c-1", false, "Promo X", pointer.ToString("abc_padding_secrettokenxx"), "https://tma.ugcboost.kz/tz/abc_padding_secrettokenxx", createdAt))
+			WillReturnRows(pgxmock.NewRows([]string{"created_at", "has_contract_template_pdf", "id", "is_deleted", "name", "secret_token", "tma_url", "updated_at"}).
+				AddRow(createdAt, false, "c-1", false, "Promo X", pointer.ToString("abc_padding_secrettokenxx"), "https://tma.ugcboost.kz/tz/abc_padding_secrettokenxx", createdAt))
 
 		got, err := repo.ListByIDs(context.Background(), []string{"c-1"})
 		require.NoError(t, err)
@@ -291,17 +291,17 @@ func TestCampaignRepository_ListByIDs(t *testing.T) {
 
 	t.Run("success maps N rows", func(t *testing.T) {
 		t.Parallel()
-		const sqlStmt = "SELECT created_at, id, is_deleted, name, secret_token, tma_url, updated_at FROM campaigns WHERE id IN ($1,$2,$3)"
+		const sqlStmt = "SELECT created_at, (octet_length(contract_template_pdf) > 0) AS has_contract_template_pdf, id, is_deleted, name, secret_token, tma_url, updated_at FROM campaigns WHERE id IN ($1,$2,$3)"
 		mock := newPgxmock(t)
 		repo := &campaignRepository{db: mock}
 		createdAt := time.Date(2026, 5, 6, 12, 0, 0, 0, time.UTC)
 
 		mock.ExpectQuery(sqlStmt).
 			WithArgs("c-1", "c-2", "c-3").
-			WillReturnRows(pgxmock.NewRows([]string{"created_at", "id", "is_deleted", "name", "secret_token", "tma_url", "updated_at"}).
-				AddRow(createdAt, "c-1", false, "Promo A", pointer.ToString("a_padding_secrettokenxxxx"), "https://tma.ugcboost.kz/tz/a_padding_secrettokenxxxx", createdAt).
-				AddRow(createdAt, "c-2", true, "Promo B", pointer.ToString("b_padding_secrettokenxxxx"), "https://tma.ugcboost.kz/tz/b_padding_secrettokenxxxx", createdAt).
-				AddRow(createdAt, "c-3", false, "Promo C", pointer.ToString("c_padding_secrettokenxxxx"), "https://tma.ugcboost.kz/tz/c_padding_secrettokenxxxx", createdAt))
+			WillReturnRows(pgxmock.NewRows([]string{"created_at", "has_contract_template_pdf", "id", "is_deleted", "name", "secret_token", "tma_url", "updated_at"}).
+				AddRow(createdAt, false, "c-1", false, "Promo A", pointer.ToString("a_padding_secrettokenxxxx"), "https://tma.ugcboost.kz/tz/a_padding_secrettokenxxxx", createdAt).
+				AddRow(createdAt, false, "c-2", true, "Promo B", pointer.ToString("b_padding_secrettokenxxxx"), "https://tma.ugcboost.kz/tz/b_padding_secrettokenxxxx", createdAt).
+				AddRow(createdAt, false, "c-3", false, "Promo C", pointer.ToString("c_padding_secrettokenxxxx"), "https://tma.ugcboost.kz/tz/c_padding_secrettokenxxxx", createdAt))
 
 		got, err := repo.ListByIDs(context.Background(), []string{"c-1", "c-2", "c-3"})
 		require.NoError(t, err)
@@ -317,7 +317,7 @@ func TestCampaignRepository_ListByIDs(t *testing.T) {
 
 	t.Run("propagates query error wrapped with method context", func(t *testing.T) {
 		t.Parallel()
-		const sqlStmt = "SELECT created_at, id, is_deleted, name, secret_token, tma_url, updated_at FROM campaigns WHERE id IN ($1,$2)"
+		const sqlStmt = "SELECT created_at, (octet_length(contract_template_pdf) > 0) AS has_contract_template_pdf, id, is_deleted, name, secret_token, tma_url, updated_at FROM campaigns WHERE id IN ($1,$2)"
 		mock := newPgxmock(t)
 		repo := &campaignRepository{db: mock}
 
@@ -334,7 +334,7 @@ func TestCampaignRepository_ListByIDs(t *testing.T) {
 func TestCampaignRepository_Update(t *testing.T) {
 	t.Parallel()
 
-	const sqlStmt = "UPDATE campaigns SET name = $1, tma_url = $2, updated_at = now(), secret_token = $3 WHERE id = $4 RETURNING created_at, id, is_deleted, name, secret_token, tma_url, updated_at"
+	const sqlStmt = "UPDATE campaigns SET name = $1, tma_url = $2, updated_at = now(), secret_token = $3 WHERE id = $4 RETURNING created_at, (octet_length(contract_template_pdf) > 0) AS has_contract_template_pdf, id, is_deleted, name, secret_token, tma_url, updated_at"
 
 	t.Run("success maps row to struct", func(t *testing.T) {
 		t.Parallel()
@@ -345,8 +345,8 @@ func TestCampaignRepository_Update(t *testing.T) {
 
 		mock.ExpectQuery(sqlStmt).
 			WithArgs("Promo Y", "https://tma.ugcboost.kz/tz/new_padding_secrettokenxx", "new_padding_secrettokenxx", "c-1").
-			WillReturnRows(pgxmock.NewRows([]string{"created_at", "id", "is_deleted", "name", "secret_token", "tma_url", "updated_at"}).
-				AddRow(createdAt, "c-1", false, "Promo Y", pointer.ToString("new_padding_secrettokenxx"), "https://tma.ugcboost.kz/tz/new_padding_secrettokenxx", updatedAt))
+			WillReturnRows(pgxmock.NewRows([]string{"created_at", "has_contract_template_pdf", "id", "is_deleted", "name", "secret_token", "tma_url", "updated_at"}).
+				AddRow(createdAt, false, "c-1", false, "Promo Y", pointer.ToString("new_padding_secrettokenxx"), "https://tma.ugcboost.kz/tz/new_padding_secrettokenxx", updatedAt))
 
 		got, err := repo.Update(context.Background(), "c-1", "Promo Y", "https://tma.ugcboost.kz/tz/new_padding_secrettokenxx", "new_padding_secrettokenxx")
 		require.NoError(t, err)
@@ -371,8 +371,8 @@ func TestCampaignRepository_Update(t *testing.T) {
 		// Soft-deleted gate is in the service (UpdateCampaign), not here.
 		mock.ExpectQuery(sqlStmt).
 			WithArgs("Promo Y", "https://tma.ugcboost.kz/tz/new_padding_secrettokenxx", "new_padding_secrettokenxx", "c-2").
-			WillReturnRows(pgxmock.NewRows([]string{"created_at", "id", "is_deleted", "name", "secret_token", "tma_url", "updated_at"}).
-				AddRow(createdAt, "c-2", true, "Promo Y", pointer.ToString("new_padding_secrettokenxx"), "https://tma.ugcboost.kz/tz/new_padding_secrettokenxx", updatedAt))
+			WillReturnRows(pgxmock.NewRows([]string{"created_at", "has_contract_template_pdf", "id", "is_deleted", "name", "secret_token", "tma_url", "updated_at"}).
+				AddRow(createdAt, false, "c-2", true, "Promo Y", pointer.ToString("new_padding_secrettokenxx"), "https://tma.ugcboost.kz/tz/new_padding_secrettokenxx", updatedAt))
 
 		got, err := repo.Update(context.Background(), "c-2", "Promo Y", "https://tma.ugcboost.kz/tz/new_padding_secrettokenxx", "new_padding_secrettokenxx")
 		require.NoError(t, err)
@@ -407,15 +407,15 @@ func TestCampaignRepository_Update(t *testing.T) {
 
 	t.Run("empty secret_token clears column to NULL", func(t *testing.T) {
 		t.Parallel()
-		const clearStmt = "UPDATE campaigns SET name = $1, tma_url = $2, updated_at = now(), secret_token = $3 WHERE id = $4 RETURNING created_at, id, is_deleted, name, secret_token, tma_url, updated_at"
+		const clearStmt = "UPDATE campaigns SET name = $1, tma_url = $2, updated_at = now(), secret_token = $3 WHERE id = $4 RETURNING created_at, (octet_length(contract_template_pdf) > 0) AS has_contract_template_pdf, id, is_deleted, name, secret_token, tma_url, updated_at"
 		mock := newPgxmock(t)
 		repo := &campaignRepository{db: mock}
 		createdAt := time.Date(2026, 5, 6, 12, 0, 0, 0, time.UTC)
 
 		mock.ExpectQuery(clearStmt).
 			WithArgs("Promo Z", "", nil, "c-3").
-			WillReturnRows(pgxmock.NewRows([]string{"created_at", "id", "is_deleted", "name", "secret_token", "tma_url", "updated_at"}).
-				AddRow(createdAt, "c-3", false, "Promo Z", (*string)(nil), "", createdAt))
+			WillReturnRows(pgxmock.NewRows([]string{"created_at", "has_contract_template_pdf", "id", "is_deleted", "name", "secret_token", "tma_url", "updated_at"}).
+				AddRow(createdAt, false, "c-3", false, "Promo Z", (*string)(nil), "", createdAt))
 
 		got, err := repo.Update(context.Background(), "c-3", "Promo Z", "", "")
 		require.NoError(t, err)
@@ -468,7 +468,7 @@ func TestCampaignRepository_List(t *testing.T) {
 	t.Parallel()
 
 	const countSQLNoFilters = "SELECT COUNT(*) FROM campaigns"
-	const pageSelectCols = "SELECT created_at, id, is_deleted, name, secret_token, tma_url, updated_at"
+	const pageSelectCols = "SELECT created_at, (octet_length(contract_template_pdf) > 0) AS has_contract_template_pdf, id, is_deleted, name, secret_token, tma_url, updated_at"
 	const pageFrom = " FROM campaigns"
 
 	t.Run("empty result returns nil 0 nil without page query", func(t *testing.T) {
@@ -582,8 +582,8 @@ func TestCampaignRepository_List(t *testing.T) {
 		mock.ExpectQuery(countSQLNoFilters).
 			WillReturnRows(pgxmock.NewRows([]string{"count"}).AddRow(int64(25)))
 		mock.ExpectQuery(pageSelectCols + pageFrom + " ORDER BY created_at DESC, id ASC LIMIT 10 OFFSET 10").
-			WillReturnRows(pgxmock.NewRows([]string{"created_at", "id", "is_deleted", "name", "secret_token", "tma_url", "updated_at"}).
-				AddRow(created, "c-1", false, "Promo X", pointer.ToString("x_padding_secrettokenxxxx"), "https://tma.ugcboost.kz/tz/x_padding_secrettokenxxxx", updated))
+			WillReturnRows(pgxmock.NewRows([]string{"created_at", "has_contract_template_pdf", "id", "is_deleted", "name", "secret_token", "tma_url", "updated_at"}).
+				AddRow(created, false, "c-1", false, "Promo X", pointer.ToString("x_padding_secrettokenxxxx"), "https://tma.ugcboost.kz/tz/x_padding_secrettokenxxxx", updated))
 
 		rows, total, err := repo.List(context.Background(), CampaignListParams{
 			Sort:    domain.CampaignSortCreatedAt,
@@ -694,7 +694,7 @@ func TestCampaignRepository_List(t *testing.T) {
 		mock.ExpectQuery(countSQLNoFilters).
 			WillReturnRows(pgxmock.NewRows([]string{"count"}).AddRow(int64(1)))
 		mock.ExpectQuery(pageSelectCols + pageFrom + " ORDER BY updated_at ASC, id ASC LIMIT 10 OFFSET 0").
-			WillReturnRows(pgxmock.NewRows([]string{"created_at", "id", "is_deleted", "name", "secret_token", "tma_url", "updated_at"}))
+			WillReturnRows(pgxmock.NewRows([]string{"created_at", "has_contract_template_pdf", "id", "is_deleted", "name", "secret_token", "tma_url", "updated_at"}))
 
 		_, _, err := repo.List(context.Background(), CampaignListParams{
 			Sort:    domain.CampaignSortUpdatedAt,
@@ -713,7 +713,7 @@ func TestCampaignRepository_List(t *testing.T) {
 		mock.ExpectQuery(countSQLNoFilters).
 			WillReturnRows(pgxmock.NewRows([]string{"count"}).AddRow(int64(1)))
 		mock.ExpectQuery(pageSelectCols + pageFrom + " ORDER BY name DESC, id ASC LIMIT 10 OFFSET 0").
-			WillReturnRows(pgxmock.NewRows([]string{"created_at", "id", "is_deleted", "name", "secret_token", "tma_url", "updated_at"}))
+			WillReturnRows(pgxmock.NewRows([]string{"created_at", "has_contract_template_pdf", "id", "is_deleted", "name", "secret_token", "tma_url", "updated_at"}))
 
 		_, _, err := repo.List(context.Background(), CampaignListParams{
 			Sort:    domain.CampaignSortName,
@@ -767,5 +767,113 @@ func TestCampaignRepository_DeleteForTests(t *testing.T) {
 
 		err := repo.DeleteForTests(context.Background(), "c-1")
 		require.ErrorContains(t, err, "db error")
+	})
+}
+
+func TestCampaignRepository_UpdateContractTemplate(t *testing.T) {
+	t.Parallel()
+
+	const sqlStmt = "UPDATE campaigns SET contract_template_pdf = $1, updated_at = now() WHERE id = $2 AND is_deleted = $3"
+
+	t.Run("success", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &campaignRepository{db: mock}
+		pdf := []byte("%PDF-1.4 fake")
+
+		mock.ExpectExec(sqlStmt).
+			WithArgs(pdf, "c-1", false).
+			WillReturnResult(pgconn.NewCommandTag("UPDATE 1"))
+
+		require.NoError(t, repo.UpdateContractTemplate(context.Background(), "c-1", pdf))
+	})
+
+	t.Run("missing or soft-deleted returns sql.ErrNoRows", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &campaignRepository{db: mock}
+		pdf := []byte("%PDF")
+
+		mock.ExpectExec(sqlStmt).
+			WithArgs(pdf, "missing", false).
+			WillReturnResult(pgconn.NewCommandTag("UPDATE 0"))
+
+		err := repo.UpdateContractTemplate(context.Background(), "missing", pdf)
+		require.ErrorIs(t, err, sql.ErrNoRows)
+	})
+
+	t.Run("propagates db error", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &campaignRepository{db: mock}
+		pdf := []byte("%PDF")
+
+		mock.ExpectExec(sqlStmt).
+			WithArgs(pdf, "c-1", false).
+			WillReturnError(errors.New("db unavailable"))
+
+		err := repo.UpdateContractTemplate(context.Background(), "c-1", pdf)
+		require.ErrorContains(t, err, "db unavailable")
+	})
+}
+
+func TestCampaignRepository_GetContractTemplate(t *testing.T) {
+	t.Parallel()
+
+	const sqlStmt = "SELECT contract_template_pdf FROM campaigns WHERE id = $1 AND is_deleted = $2"
+
+	t.Run("success returns bytes", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &campaignRepository{db: mock}
+		pdf := []byte("%PDF-1.4 fake bytes")
+
+		mock.ExpectQuery(sqlStmt).
+			WithArgs("c-1", false).
+			WillReturnRows(pgxmock.NewRows([]string{"contract_template_pdf"}).AddRow(pdf))
+
+		got, err := repo.GetContractTemplate(context.Background(), "c-1")
+		require.NoError(t, err)
+		require.Equal(t, pdf, got)
+	})
+
+	t.Run("empty bytea returned as zero-length slice", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &campaignRepository{db: mock}
+
+		mock.ExpectQuery(sqlStmt).
+			WithArgs("c-1", false).
+			WillReturnRows(pgxmock.NewRows([]string{"contract_template_pdf"}).AddRow([]byte{}))
+
+		got, err := repo.GetContractTemplate(context.Background(), "c-1")
+		require.NoError(t, err)
+		require.Empty(t, got)
+	})
+
+	t.Run("missing or soft-deleted returns sql.ErrNoRows", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &campaignRepository{db: mock}
+
+		mock.ExpectQuery(sqlStmt).
+			WithArgs("missing", false).
+			WillReturnError(sql.ErrNoRows)
+
+		_, err := repo.GetContractTemplate(context.Background(), "missing")
+		require.ErrorIs(t, err, sql.ErrNoRows)
+	})
+
+	t.Run("propagates db error", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &campaignRepository{db: mock}
+
+		mock.ExpectQuery(sqlStmt).
+			WithArgs("c-1", false).
+			WillReturnError(errors.New("db unavailable"))
+
+		_, err := repo.GetContractTemplate(context.Background(), "c-1")
+		require.ErrorContains(t, err, "db unavailable")
 	})
 }

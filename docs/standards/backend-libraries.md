@@ -23,11 +23,13 @@
 | Telegram Bot API клиент | `github.com/go-telegram/bot` |
 | Случайные значения (id, токены, фикстуры) | `crypto/rand` (stdlib) |
 | Retry с backoff'ом (transient errors) | `github.com/cenkalti/backoff/v5` |
+| PDF text + bbox extraction | `github.com/ledongthuc/pdf` |
 
 ### Правила
 
 - **Поинтеры — `AlekSi/pointer`.** `pointer.ToString`, `pointer.GetString` для безопасного дереференса. Кастомные `ptrTo[T]`, `strptr`, инлайн `&local` — не писать.
 - **Случайность — `crypto/rand`.** `math/rand` и `math/rand/v2` забанены в `golangci.yml` (depguard). Детерминированный seeded PRNG (fuzz, property-based) — `//nolint:depguard` с комментарием почему.
+- **PDF extraction — `ledongthuc/pdf`.** Используется только в `internal/contract/Extractor` для валидации шаблонов договора и chunk-16 outbox-render'а. Достаёт глифы с координатами per word (X/Y/FontSize), что критично для overlay-рендера. Mainstream pure-Go альтернатив без CGo нет: `pdfcpu` не отдаёт bbox per глиф, MuPDF доступен только через CGo. Production-код — только в этом пакете; тестовые фикстуры PDF генерируются `github.com/jung-kurt/gofpdf` в test files (не production dep).
 - Новая библиотека — через PR. Если в реестре уже есть библиотека для смежной задачи — расширяем, не добавляем вторую.
 - Удаляя зависимость — обновить реестр тем же PR'ом.
 

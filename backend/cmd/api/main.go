@@ -18,6 +18,7 @@ import (
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/authz"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/closer"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/config"
+	"github.com/alikhanmurzayev/ugcboost/backend/internal/contract"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/handler"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/logger"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/middleware"
@@ -96,7 +97,7 @@ func run() error {
 	}
 	registerNotifyWaiter(tgRig.Notifier, cl)
 
-	campaignSvc := service.NewCampaignService(pool, repoFactory, appLogger)
+	campaignSvc := service.NewCampaignService(pool, repoFactory, contract.NewRealExtractor(), appLogger)
 	campaignCreatorSvc := service.NewCampaignCreatorService(pool, repoFactory, tgRig.Notifier, appLogger)
 	tmaCampaignCreatorSvc := service.NewTmaCampaignCreatorService(pool, repoFactory, appLogger)
 	creatorApplicationSvc := service.NewCreatorApplicationService(pool, repoFactory, tgRig.Notifier, campaignCreatorSvc, appLogger)

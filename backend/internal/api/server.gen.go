@@ -414,6 +414,12 @@ type BrandResult struct {
 type Campaign struct {
 	CreatedAt time.Time `json:"createdAt"`
 
+	// HasContractTemplate Whether a contract-template PDF has been uploaded for this campaign.
+	// Computed on the fly from `octet_length(contract_template_pdf) > 0`
+	// so list endpoints stay light — the PDF body itself is only
+	// available via GET /campaigns/{id}/contract-template.
+	HasContractTemplate bool `json:"hasContractTemplate"`
+
 	// Id Server-stamped UUID of the campaign.
 	Id openapi_types.UUID `json:"id"`
 
@@ -599,6 +605,38 @@ type CampaignsListResult struct {
 
 // ConsentType Canonical consent type captured at creator application submission.
 type ConsentType string
+
+// ContractValidationDetails Optional structured details for contract-template upload validation
+// errors. `missing` lists known placeholders absent from the uploaded
+// PDF. `unknown` lists placeholders found in the PDF that are not part
+// of `domain.KnownContractPlaceholders`. Empty for the empty-body /
+// invalid-PDF cases — the code alone identifies them.
+type ContractValidationDetails struct {
+	Missing *[]string `json:"missing,omitempty"`
+	Unknown *[]string `json:"unknown,omitempty"`
+}
+
+// ContractValidationErrorBody defines model for ContractValidationErrorBody.
+type ContractValidationErrorBody struct {
+	// Code One of CONTRACT_REQUIRED / CONTRACT_INVALID_PDF /
+	// CONTRACT_MISSING_PLACEHOLDER / CONTRACT_UNKNOWN_PLACEHOLDER.
+	Code string `json:"code"`
+
+	// Details Optional structured details for contract-template upload validation
+	// errors. `missing` lists known placeholders absent from the uploaded
+	// PDF. `unknown` lists placeholders found in the PDF that are not part
+	// of `domain.KnownContractPlaceholders`. Empty for the empty-body /
+	// invalid-PDF cases — the code alone identifies them.
+	Details *ContractValidationDetails `json:"details,omitempty"`
+
+	// Message Human-readable fallback message for the admin UI.
+	Message string `json:"message"`
+}
+
+// ContractValidationErrorResponse defines model for ContractValidationErrorResponse.
+type ContractValidationErrorResponse struct {
+	Error ContractValidationErrorBody `json:"error"`
+}
 
 // CreatorAggregate Full creator profile assembled from `creators` plus the snapshot tables
 // `creator_socials` and `creator_categories`. The Telegram block is
@@ -1345,6 +1383,30 @@ type TmaDecisionResult struct {
 	Status CampaignCreatorStatus `json:"status"`
 }
 
+// UploadCampaignContractTemplateData Result of a successful PUT /campaigns/{id}/contract-template upload.
+// Echoes the placeholders extracted from the freshly stored PDF so the
+// admin UI can render a confirmation block ("found CreatorFIO,
+// CreatorIIN, IssuedDate") without a follow-up download.
+type UploadCampaignContractTemplateData struct {
+	// Hash SHA-256 hash of the raw uploaded PDF bytes (lowercase hex).
+	Hash string `json:"hash"`
+
+	// Placeholders Distinct placeholder names found in the template. After successful
+	// validation this set always equals the known set
+	// (`CreatorFIO`, `CreatorIIN`, `IssuedDate`) — order matches
+	// `domain.KnownContractPlaceholders`.
+	Placeholders []string `json:"placeholders"`
+}
+
+// UploadCampaignContractTemplateResult defines model for UploadCampaignContractTemplateResult.
+type UploadCampaignContractTemplateResult struct {
+	// Data Result of a successful PUT /campaigns/{id}/contract-template upload.
+	// Echoes the placeholders extracted from the freshly stored PDF so the
+	// admin UI can render a confirmation block ("found CreatorFIO,
+	// CreatorIIN, IssuedDate") without a follow-up download.
+	Data UploadCampaignContractTemplateData `json:"data"`
+}
+
 // User defines model for User.
 type User struct {
 	Email openapi_types.Email `json:"email"`
@@ -1531,6 +1593,12 @@ type ServerInterface interface {
 	// Update a marketing campaign by id (admin-only)
 	// (PATCH /campaigns/{id})
 	UpdateCampaign(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+	// Download the contract-template PDF for a campaign (admin-only)
+	// (GET /campaigns/{id}/contract-template)
+	GetCampaignContractTemplate(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+	// Upload the contract-template PDF for a campaign (admin-only)
+	// (PUT /campaigns/{id}/contract-template)
+	UploadCampaignContractTemplate(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
 	// List creators attached to a campaign (admin-only)
 	// (GET /campaigns/{id}/creators)
 	ListCampaignCreators(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
@@ -1699,6 +1767,18 @@ func (_ Unimplemented) GetCampaign(w http.ResponseWriter, r *http.Request, id op
 // Update a marketing campaign by id (admin-only)
 // (PATCH /campaigns/{id})
 func (_ Unimplemented) UpdateCampaign(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Download the contract-template PDF for a campaign (admin-only)
+// (GET /campaigns/{id}/contract-template)
+func (_ Unimplemented) GetCampaignContractTemplate(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Upload the contract-template PDF for a campaign (admin-only)
+// (PUT /campaigns/{id}/contract-template)
+func (_ Unimplemented) UploadCampaignContractTemplate(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -2391,6 +2471,68 @@ func (siw *ServerInterfaceWrapper) UpdateCampaign(w http.ResponseWriter, r *http
 	handler.ServeHTTP(w, r)
 }
 
+// GetCampaignContractTemplate operation middleware
+func (siw *ServerInterfaceWrapper) GetCampaignContractTemplate(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetCampaignContractTemplate(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UploadCampaignContractTemplate operation middleware
+func (siw *ServerInterfaceWrapper) UploadCampaignContractTemplate(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UploadCampaignContractTemplate(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListCampaignCreators operation middleware
 func (siw *ServerInterfaceWrapper) ListCampaignCreators(w http.ResponseWriter, r *http.Request) {
 
@@ -3074,6 +3216,12 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Patch(options.BaseURL+"/campaigns/{id}", wrapper.UpdateCampaign)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/campaigns/{id}/contract-template", wrapper.GetCampaignContractTemplate)
+	})
+	r.Group(func(r chi.Router) {
+		r.Put(options.BaseURL+"/campaigns/{id}/contract-template", wrapper.UploadCampaignContractTemplate)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/campaigns/{id}/creators", wrapper.ListCampaignCreators)
@@ -3967,6 +4115,138 @@ type UpdateCampaigndefaultJSONResponse struct {
 }
 
 func (response UpdateCampaigndefaultJSONResponse) VisitUpdateCampaignResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+
+	return json.NewEncoder(w).Encode(response.Body)
+}
+
+type GetCampaignContractTemplateRequestObject struct {
+	Id openapi_types.UUID `json:"id"`
+}
+
+type GetCampaignContractTemplateResponseObject interface {
+	VisitGetCampaignContractTemplateResponse(w http.ResponseWriter) error
+}
+
+type GetCampaignContractTemplate200ApplicationpdfResponse struct {
+	Body          io.Reader
+	ContentLength int64
+}
+
+func (response GetCampaignContractTemplate200ApplicationpdfResponse) VisitGetCampaignContractTemplateResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/pdf")
+	if response.ContentLength != 0 {
+		w.Header().Set("Content-Length", fmt.Sprint(response.ContentLength))
+	}
+	w.WriteHeader(200)
+
+	if closer, ok := response.Body.(io.ReadCloser); ok {
+		defer closer.Close()
+	}
+	_, err := io.Copy(w, response.Body)
+	return err
+}
+
+type GetCampaignContractTemplate401JSONResponse ErrorResponse
+
+func (response GetCampaignContractTemplate401JSONResponse) VisitGetCampaignContractTemplateResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetCampaignContractTemplate403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response GetCampaignContractTemplate403JSONResponse) VisitGetCampaignContractTemplateResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetCampaignContractTemplate404JSONResponse ErrorResponse
+
+func (response GetCampaignContractTemplate404JSONResponse) VisitGetCampaignContractTemplateResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type GetCampaignContractTemplatedefaultJSONResponse struct {
+	Body       ErrorResponse
+	StatusCode int
+}
+
+func (response GetCampaignContractTemplatedefaultJSONResponse) VisitGetCampaignContractTemplateResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+
+	return json.NewEncoder(w).Encode(response.Body)
+}
+
+type UploadCampaignContractTemplateRequestObject struct {
+	Id   openapi_types.UUID `json:"id"`
+	Body io.Reader
+}
+
+type UploadCampaignContractTemplateResponseObject interface {
+	VisitUploadCampaignContractTemplateResponse(w http.ResponseWriter) error
+}
+
+type UploadCampaignContractTemplate200JSONResponse UploadCampaignContractTemplateResult
+
+func (response UploadCampaignContractTemplate200JSONResponse) VisitUploadCampaignContractTemplateResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type UploadCampaignContractTemplate401JSONResponse ErrorResponse
+
+func (response UploadCampaignContractTemplate401JSONResponse) VisitUploadCampaignContractTemplateResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type UploadCampaignContractTemplate403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response UploadCampaignContractTemplate403JSONResponse) VisitUploadCampaignContractTemplateResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type UploadCampaignContractTemplate404JSONResponse ErrorResponse
+
+func (response UploadCampaignContractTemplate404JSONResponse) VisitUploadCampaignContractTemplateResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type UploadCampaignContractTemplate422JSONResponse ContractValidationErrorResponse
+
+func (response UploadCampaignContractTemplate422JSONResponse) VisitUploadCampaignContractTemplateResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(422)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type UploadCampaignContractTemplatedefaultJSONResponse struct {
+	Body       ErrorResponse
+	StatusCode int
+}
+
+func (response UploadCampaignContractTemplatedefaultJSONResponse) VisitUploadCampaignContractTemplateResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(response.StatusCode)
 
@@ -5110,6 +5390,12 @@ type StrictServerInterface interface {
 	// Update a marketing campaign by id (admin-only)
 	// (PATCH /campaigns/{id})
 	UpdateCampaign(ctx context.Context, request UpdateCampaignRequestObject) (UpdateCampaignResponseObject, error)
+	// Download the contract-template PDF for a campaign (admin-only)
+	// (GET /campaigns/{id}/contract-template)
+	GetCampaignContractTemplate(ctx context.Context, request GetCampaignContractTemplateRequestObject) (GetCampaignContractTemplateResponseObject, error)
+	// Upload the contract-template PDF for a campaign (admin-only)
+	// (PUT /campaigns/{id}/contract-template)
+	UploadCampaignContractTemplate(ctx context.Context, request UploadCampaignContractTemplateRequestObject) (UploadCampaignContractTemplateResponseObject, error)
 	// List creators attached to a campaign (admin-only)
 	// (GET /campaigns/{id}/creators)
 	ListCampaignCreators(ctx context.Context, request ListCampaignCreatorsRequestObject) (ListCampaignCreatorsResponseObject, error)
@@ -5698,6 +5984,60 @@ func (sh *strictHandler) UpdateCampaign(w http.ResponseWriter, r *http.Request, 
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(UpdateCampaignResponseObject); ok {
 		if err := validResponse.VisitUpdateCampaignResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// GetCampaignContractTemplate operation middleware
+func (sh *strictHandler) GetCampaignContractTemplate(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request GetCampaignContractTemplateRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.GetCampaignContractTemplate(ctx, request.(GetCampaignContractTemplateRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "GetCampaignContractTemplate")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(GetCampaignContractTemplateResponseObject); ok {
+		if err := validResponse.VisitGetCampaignContractTemplateResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// UploadCampaignContractTemplate operation middleware
+func (sh *strictHandler) UploadCampaignContractTemplate(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request UploadCampaignContractTemplateRequestObject
+
+	request.Id = id
+
+	request.Body = r.Body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.UploadCampaignContractTemplate(ctx, request.(UploadCampaignContractTemplateRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "UploadCampaignContractTemplate")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(UploadCampaignContractTemplateResponseObject); ok {
+		if err := validResponse.VisitUploadCampaignContractTemplateResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

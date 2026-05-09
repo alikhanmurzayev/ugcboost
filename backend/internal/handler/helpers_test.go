@@ -88,3 +88,31 @@ func withRefreshCookie(value string) func(*http.Request) {
 		r.AddCookie(&http.Cookie{Name: middleware.CookieRefreshToken, Value: value})
 	}
 }
+
+// doPDF sends a request with raw bytes as `application/pdf`. Used for the
+// PUT /campaigns/{id}/contract-template tests where the body is a PDF
+// rather than JSON. Decodes the JSON response body into Resp on the way out.
+func doPDF[Resp any](t *testing.T, router http.Handler, method, path string, body []byte, mutate ...func(*http.Request)) (*httptest.ResponseRecorder, Resp) {
+	t.Helper()
+	var reader io.Reader
+	if body != nil {
+		reader = bytes.NewReader(body)
+	}
+	r := httptest.NewRequest(method, path, reader)
+	r.Header.Set("Content-Type", "application/pdf")
+	if body != nil {
+		r.ContentLength = int64(len(body))
+	}
+	for _, m := range mutate {
+		m(r)
+	}
+
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, r)
+
+	var resp Resp
+	if w.Body.Len() > 0 {
+		_ = json.Unmarshal(w.Body.Bytes(), &resp)
+	}
+	return w, resp
+}

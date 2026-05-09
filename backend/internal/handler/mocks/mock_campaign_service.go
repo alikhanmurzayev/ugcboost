@@ -8,6 +8,7 @@ import (
 	"context"
 
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/domain"
+	"github.com/alikhanmurzayev/ugcboost/backend/internal/service"
 	mock "github.com/stretchr/testify/mock"
 )
 
@@ -231,6 +232,74 @@ func (_c *MockCampaignService_GetByID_Call) RunAndReturn(run func(ctx context.Co
 	return _c
 }
 
+// GetContractTemplate provides a mock function for the type MockCampaignService
+func (_mock *MockCampaignService) GetContractTemplate(ctx context.Context, id string) ([]byte, error) {
+	ret := _mock.Called(ctx, id)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetContractTemplate")
+	}
+
+	var r0 []byte
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) ([]byte, error)); ok {
+		return returnFunc(ctx, id)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) []byte); ok {
+		r0 = returnFunc(ctx, id)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]byte)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string) error); ok {
+		r1 = returnFunc(ctx, id)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockCampaignService_GetContractTemplate_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetContractTemplate'
+type MockCampaignService_GetContractTemplate_Call struct {
+	*mock.Call
+}
+
+// GetContractTemplate is a helper method to define mock.On call
+//   - ctx context.Context
+//   - id string
+func (_e *MockCampaignService_Expecter) GetContractTemplate(ctx interface{}, id interface{}) *MockCampaignService_GetContractTemplate_Call {
+	return &MockCampaignService_GetContractTemplate_Call{Call: _e.mock.On("GetContractTemplate", ctx, id)}
+}
+
+func (_c *MockCampaignService_GetContractTemplate_Call) Run(run func(ctx context.Context, id string)) *MockCampaignService_GetContractTemplate_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockCampaignService_GetContractTemplate_Call) Return(bytes []byte, err error) *MockCampaignService_GetContractTemplate_Call {
+	_c.Call.Return(bytes, err)
+	return _c
+}
+
+func (_c *MockCampaignService_GetContractTemplate_Call) RunAndReturn(run func(ctx context.Context, id string) ([]byte, error)) *MockCampaignService_GetContractTemplate_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // List provides a mock function for the type MockCampaignService
 func (_mock *MockCampaignService) List(ctx context.Context, in domain.CampaignListInput) (*domain.CampaignListPage, error) {
 	ret := _mock.Called(ctx, in)
@@ -358,6 +427,80 @@ func (_c *MockCampaignService_UpdateCampaign_Call) Return(err error) *MockCampai
 }
 
 func (_c *MockCampaignService_UpdateCampaign_Call) RunAndReturn(run func(ctx context.Context, id string, in domain.CampaignInput) error) *MockCampaignService_UpdateCampaign_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// UploadContractTemplate provides a mock function for the type MockCampaignService
+func (_mock *MockCampaignService) UploadContractTemplate(ctx context.Context, id string, pdf []byte) (*service.UploadContractTemplateResult, error) {
+	ret := _mock.Called(ctx, id, pdf)
+
+	if len(ret) == 0 {
+		panic("no return value specified for UploadContractTemplate")
+	}
+
+	var r0 *service.UploadContractTemplateResult
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, []byte) (*service.UploadContractTemplateResult, error)); ok {
+		return returnFunc(ctx, id, pdf)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, []byte) *service.UploadContractTemplateResult); ok {
+		r0 = returnFunc(ctx, id, pdf)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*service.UploadContractTemplateResult)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, []byte) error); ok {
+		r1 = returnFunc(ctx, id, pdf)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockCampaignService_UploadContractTemplate_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'UploadContractTemplate'
+type MockCampaignService_UploadContractTemplate_Call struct {
+	*mock.Call
+}
+
+// UploadContractTemplate is a helper method to define mock.On call
+//   - ctx context.Context
+//   - id string
+//   - pdf []byte
+func (_e *MockCampaignService_Expecter) UploadContractTemplate(ctx interface{}, id interface{}, pdf interface{}) *MockCampaignService_UploadContractTemplate_Call {
+	return &MockCampaignService_UploadContractTemplate_Call{Call: _e.mock.On("UploadContractTemplate", ctx, id, pdf)}
+}
+
+func (_c *MockCampaignService_UploadContractTemplate_Call) Run(run func(ctx context.Context, id string, pdf []byte)) *MockCampaignService_UploadContractTemplate_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 []byte
+		if args[2] != nil {
+			arg2 = args[2].([]byte)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockCampaignService_UploadContractTemplate_Call) Return(uploadContractTemplateResult *service.UploadContractTemplateResult, err error) *MockCampaignService_UploadContractTemplate_Call {
+	_c.Call.Return(uploadContractTemplateResult, err)
+	return _c
+}
+
+func (_c *MockCampaignService_UploadContractTemplate_Call) RunAndReturn(run func(ctx context.Context, id string, pdf []byte) (*service.UploadContractTemplateResult, error)) *MockCampaignService_UploadContractTemplate_Call {
 	_c.Call.Return(run)
 	return _c
 }

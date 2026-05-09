@@ -12,6 +12,7 @@ import ErrorState from "@/shared/components/ErrorState";
 import CreatorDrawer from "@/features/creators/CreatorDrawer";
 import CampaignEditSection from "./CampaignEditSection";
 import CampaignCreatorsSection from "./creators/CampaignCreatorsSection";
+import ContractTemplateField from "./contract-template/ContractTemplateField";
 import { useCampaignCreators } from "./creators/hooks/useCampaignCreators";
 
 const SAFE_LINK_SCHEMES = new Set(["http:", "https:", "tg:"]);
@@ -174,6 +175,13 @@ function CampaignDetailContent({ campaign }: { campaign: Campaign }) {
           <ViewSection campaign={campaign} />
         )}
       </section>
+
+      <ContractTemplateField
+        campaignId={campaign.id}
+        campaignName={campaign.name}
+        hasTemplate={campaign.hasContractTemplate}
+        disabled={campaign.isDeleted}
+      />
 
       <CampaignCreatorsSection campaign={campaign} />
 

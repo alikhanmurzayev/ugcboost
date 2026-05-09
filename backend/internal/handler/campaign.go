@@ -1,8 +1,10 @@
 package handler
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"strings"
 
 	"github.com/google/uuid"
@@ -171,6 +173,65 @@ func (s *Server) ListCampaigns(ctx context.Context, request api.ListCampaignsReq
 	}, nil
 }
 
+// UploadCampaignContractTemplate handles PUT /campaigns/{id}/contract-template (admin-only).
+//
+// Authorisation runs first so non-admins receive 403 before any DB or
+// extractor work. The body is `application/pdf` raw bytes — the strict-
+// server adapter hands us an io.Reader; we materialise it once and pass
+// the byte slice through to the service. The service drives validation
+// (empty body → CONTRACT_REQUIRED, parse failure → CONTRACT_INVALID_PDF,
+// missing/unknown placeholder codes from domain.ValidateContractTemplatePDF)
+// and writes audit/PDF in one transaction. The 200 reply mirrors
+// UploadCampaignContractTemplateResult{hash, placeholders} from OpenAPI.
+func (s *Server) UploadCampaignContractTemplate(ctx context.Context, request api.UploadCampaignContractTemplateRequestObject) (api.UploadCampaignContractTemplateResponseObject, error) {
+	if err := s.authzService.CanUploadCampaignContractTemplate(ctx); err != nil {
+		return nil, err
+	}
+
+	pdf, err := io.ReadAll(request.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read pdf body: %w", err)
+	}
+
+	result, err := s.campaignService.UploadContractTemplate(ctx, request.Id.String(), pdf)
+	if err != nil {
+		return nil, err
+	}
+
+	placeholders := append([]string(nil), result.Placeholders...)
+	return api.UploadCampaignContractTemplate200JSONResponse{
+		Data: api.UploadCampaignContractTemplateData{
+			Hash:         result.Hash,
+			Placeholders: placeholders,
+		},
+	}, nil
+}
+
+// GetCampaignContractTemplate handles GET /campaigns/{id}/contract-template (admin-only).
+//
+// Authorisation gates the read before the service touches the DB. The
+// service distinguishes "campaign gone" (ErrCampaignNotFound → 404
+// CAMPAIGN_NOT_FOUND) from "campaign exists but no template uploaded"
+// (ErrContractTemplateNotFound → 404 CONTRACT_TEMPLATE_NOT_FOUND); both
+// map through respondError. On success we stream the bytes back as
+// `application/pdf` with Content-Length so the browser renders the
+// progress bar correctly.
+func (s *Server) GetCampaignContractTemplate(ctx context.Context, request api.GetCampaignContractTemplateRequestObject) (api.GetCampaignContractTemplateResponseObject, error) {
+	if err := s.authzService.CanGetCampaignContractTemplate(ctx); err != nil {
+		return nil, err
+	}
+
+	pdf, err := s.campaignService.GetContractTemplate(ctx, request.Id.String())
+	if err != nil {
+		return nil, err
+	}
+
+	return api.GetCampaignContractTemplate200ApplicationpdfResponse{
+		Body:          bytes.NewReader(pdf),
+		ContentLength: int64(len(pdf)),
+	}, nil
+}
+
 // domainCampaignToAPI maps the domain campaign onto its strict-server
 // counterpart. UUID parse failure on the stored id surfaces as a wrapped
 // error so the strict-server adapter renders 500 — the row is populated by
@@ -181,11 +242,12 @@ func domainCampaignToAPI(c *domain.Campaign) (api.Campaign, error) {
 		return api.Campaign{}, fmt.Errorf("parse campaign id %q: %w", c.ID, err)
 	}
 	return api.Campaign{
-		Id:        openapi_types.UUID(id),
-		Name:      c.Name,
-		TmaUrl:    c.TmaURL,
-		IsDeleted: c.IsDeleted,
-		CreatedAt: c.CreatedAt,
-		UpdatedAt: c.UpdatedAt,
+		Id:                  openapi_types.UUID(id),
+		Name:                c.Name,
+		TmaUrl:              c.TmaURL,
+		IsDeleted:           c.IsDeleted,
+		HasContractTemplate: c.HasContractTemplate,
+		CreatedAt:           c.CreatedAt,
+		UpdatedAt:           c.UpdatedAt,
 	}, nil
 }

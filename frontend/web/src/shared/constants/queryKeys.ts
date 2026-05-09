@@ -26,6 +26,8 @@ export const campaignKeys = {
   list: (params: Record<string, unknown>) =>
     ["campaigns", "list", params] as const,
   detail: (id: string) => ["campaigns", "detail", id] as const,
+  contractTemplate: (id: string) =>
+    ["campaigns", id, "contractTemplate"] as const,
 };
 
 export const campaignCreatorKeys = {

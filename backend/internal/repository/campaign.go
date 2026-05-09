@@ -25,34 +25,68 @@ const (
 
 // Campaigns table and column names.
 const (
-	TableCampaigns            = "campaigns"
-	CampaignColumnID          = "id"
-	CampaignColumnName        = "name"
-	CampaignColumnTmaURL      = "tma_url"
-	CampaignColumnSecretToken = "secret_token"
-	CampaignColumnIsDeleted   = "is_deleted"
-	CampaignColumnCreatedAt   = "created_at"
-	CampaignColumnUpdatedAt   = "updated_at"
+	TableCampaigns                    = "campaigns"
+	CampaignColumnID                  = "id"
+	CampaignColumnName                = "name"
+	CampaignColumnTmaURL              = "tma_url"
+	CampaignColumnSecretToken         = "secret_token"
+	CampaignColumnIsDeleted           = "is_deleted"
+	CampaignColumnCreatedAt           = "created_at"
+	CampaignColumnUpdatedAt           = "updated_at"
+	CampaignColumnContractTemplatePDF = "contract_template_pdf"
+	// CampaignColumnHasContractTemplate is the projection alias for the
+	// `(octet_length(contract_template_pdf) > 0)` flag injected into every
+	// SELECT / RETURNING. Not a real DB column — never used as a target for
+	// INSERT/UPDATE.
+	CampaignColumnHasContractTemplate = "has_contract_template_pdf"
 )
+
+// campaignHasContractTemplateExpr is the SQL expression projected as the
+// CampaignColumnHasContractTemplate alias. Building it once at package level
+// keeps the SQL identical between read paths.
+var campaignHasContractTemplateExpr = "(octet_length(" + CampaignColumnContractTemplatePDF + ") > 0) AS " + CampaignColumnHasContractTemplate
 
 // CampaignRow maps to the campaigns table. Insert tags cover only the
 // fields the service supplies — id / is_deleted / *_at are DB-defaulted.
 // SecretToken is the raw last-path-segment of TmaURL extracted by the
 // service via domain.ExtractSecretToken. NULL for legacy / draft campaigns
 // (tma_url empty) — those rows are reachable in admin but not via TMA.
+//
+// HasContractTemplate is a computed projection (not a real column) — every
+// SELECT / RETURNING in this repo replaces the bare alias with
+// `(octet_length(contract_template_pdf) > 0) AS has_contract_template_pdf`
+// so the field gets populated alongside the rest of the row. The PDF body
+// itself is NEVER tied to the default SELECT — chunk-9a's GET /contract-
+// template endpoint is the only path that fetches it.
 type CampaignRow struct {
-	ID          string    `db:"id"`
-	Name        string    `db:"name"          insert:"name"`
-	TmaURL      string    `db:"tma_url"       insert:"tma_url"`
-	SecretToken *string   `db:"secret_token"  insert:"secret_token"`
-	IsDeleted   bool      `db:"is_deleted"`
-	CreatedAt   time.Time `db:"created_at"`
-	UpdatedAt   time.Time `db:"updated_at"`
+	ID                  string    `db:"id"`
+	Name                string    `db:"name"          insert:"name"`
+	TmaURL              string    `db:"tma_url"       insert:"tma_url"`
+	SecretToken         *string   `db:"secret_token"  insert:"secret_token"`
+	IsDeleted           bool      `db:"is_deleted"`
+	CreatedAt           time.Time `db:"created_at"`
+	UpdatedAt           time.Time `db:"updated_at"`
+	HasContractTemplate bool      `db:"has_contract_template_pdf"`
 }
 
+// campaignSelectColumns lists every projection in the default SELECT /
+// RETURNING. The bare `has_contract_template_pdf` alias is replaced by the
+// computed expression so callers never see the raw column. The PDF body
+// itself is intentionally absent — it lives behind a dedicated repo method.
 var (
-	campaignSelectColumns = sortColumns(stom.MustNewStom(CampaignRow{}).SetTag(string(tagSelect)).TagValues())
-	campaignInsertMapper  = stom.MustNewStom(CampaignRow{}).SetTag(string(tagInsert))
+	campaignSelectColumns = func() []string {
+		raw := sortColumns(stom.MustNewStom(CampaignRow{}).SetTag(string(tagSelect)).TagValues())
+		out := make([]string, len(raw))
+		for i, c := range raw {
+			if c == CampaignColumnHasContractTemplate {
+				out[i] = campaignHasContractTemplateExpr
+				continue
+			}
+			out[i] = c
+		}
+		return out
+	}()
+	campaignInsertMapper = stom.MustNewStom(CampaignRow{}).SetTag(string(tagInsert))
 )
 
 // CampaignRepo lists every public method of the campaign repository.
@@ -63,6 +97,8 @@ type CampaignRepo interface {
 	ListByIDs(ctx context.Context, ids []string) ([]*CampaignRow, error)
 	Update(ctx context.Context, id, name, tmaURL, secretToken string) (*CampaignRow, error)
 	List(ctx context.Context, params CampaignListParams) ([]*CampaignRow, int64, error)
+	UpdateContractTemplate(ctx context.Context, id string, pdf []byte) error
+	GetContractTemplate(ctx context.Context, id string) ([]byte, error)
 	DeleteForTests(ctx context.Context, id string) error
 }
 
@@ -268,6 +304,40 @@ func applyCampaignListOrder(q sq.SelectBuilder, sort, order string) (sq.SelectBu
 	default:
 		return q, fmt.Errorf("campaign_repository.applyCampaignListOrder: unsupported sort %q", sort)
 	}
+}
+
+// UpdateContractTemplate writes raw pdf bytes into contract_template_pdf and
+// stamps updated_at. Live rows only — soft-deleted ids return sql.ErrNoRows
+// just like a missing id (campaign-domain admin contract). Empty pdf would
+// reset the column to '\x', so the service layer guards against zero-length
+// uploads via domain.ValidateContractTemplatePDF before the call lands here.
+func (r *campaignRepository) UpdateContractTemplate(ctx context.Context, id string, pdf []byte) error {
+	q := sq.Update(TableCampaigns).
+		Set(CampaignColumnContractTemplatePDF, pdf).
+		Set(CampaignColumnUpdatedAt, sq.Expr("now()")).
+		Where(sq.Eq{CampaignColumnID: id}).
+		Where(sq.Eq{CampaignColumnIsDeleted: false})
+	n, err := dbutil.Exec(ctx, r.db, q)
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
+// GetContractTemplate reads contract_template_pdf for a live campaign. The
+// soft-deleted filter is enforced in SQL so the service can map sql.ErrNoRows
+// straight onto ErrCampaignNotFound. Empty bytea (`'\x'`, the default for
+// rows whose admin never uploaded a template) is returned as a zero-length
+// slice — the service distinguishes that case from "campaign gone".
+func (r *campaignRepository) GetContractTemplate(ctx context.Context, id string) ([]byte, error) {
+	q := sq.Select(CampaignColumnContractTemplatePDF).
+		From(TableCampaigns).
+		Where(sq.Eq{CampaignColumnID: id}).
+		Where(sq.Eq{CampaignColumnIsDeleted: false})
+	return dbutil.Val[[]byte](ctx, r.db, q)
 }
 
 // DeleteForTests hard-deletes a campaign by id. Returns sql.ErrNoRows when

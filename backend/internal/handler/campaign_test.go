@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -17,6 +18,7 @@ import (
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/domain"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/handler/mocks"
 	logmocks "github.com/alikhanmurzayev/ugcboost/backend/internal/logger/mocks"
+	"github.com/alikhanmurzayev/ugcboost/backend/internal/service"
 )
 
 func TestServer_CreateCampaign(t *testing.T) {
@@ -722,5 +724,189 @@ func TestServer_ListCampaigns(t *testing.T) {
 		require.Equal(t, http.StatusInternalServerError, w.Code)
 		require.Equal(t, domain.CodeInternal, resp.Error.Code,
 			"corrupted UUID surfaces through respondError default branch as 500/INTERNAL")
+	})
+}
+
+func TestServer_UploadCampaignContractTemplate(t *testing.T) {
+	t.Parallel()
+
+	const campaignID = "11111111-2222-3333-4444-555555555555"
+	uploadPath := "/campaigns/" + campaignID + "/contract-template"
+
+	t.Run("forbidden for non-admin", func(t *testing.T) {
+		t.Parallel()
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanUploadCampaignContractTemplate(mock.Anything).Return(domain.ErrForbidden)
+
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		w, resp := doPDF[api.ErrorResponse](t, router, http.MethodPut, uploadPath, []byte("%PDF-1.4 fake"))
+		require.Equal(t, http.StatusForbidden, w.Code)
+		require.Equal(t, domain.CodeForbidden, resp.Error.Code)
+	})
+
+	t.Run("empty body → 422 CONTRACT_REQUIRED", func(t *testing.T) {
+		t.Parallel()
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanUploadCampaignContractTemplate(mock.Anything).Return(nil)
+		campaigns := mocks.NewMockCampaignService(t)
+		campaigns.EXPECT().UploadContractTemplate(mock.Anything, campaignID, []byte{}).
+			Return(nil, domain.NewContractRequiredError())
+
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, campaigns, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		w, resp := doPDF[api.ContractValidationErrorResponse](t, router, http.MethodPut, uploadPath, nil)
+		require.Equal(t, http.StatusUnprocessableEntity, w.Code)
+		require.Equal(t, domain.CodeContractRequired, resp.Error.Code)
+		require.Nil(t, resp.Error.Details)
+	})
+
+	t.Run("invalid pdf → 422 CONTRACT_INVALID_PDF", func(t *testing.T) {
+		t.Parallel()
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanUploadCampaignContractTemplate(mock.Anything).Return(nil)
+		campaigns := mocks.NewMockCampaignService(t)
+		body := []byte("not a pdf")
+		campaigns.EXPECT().UploadContractTemplate(mock.Anything, campaignID, body).
+			Return(nil, domain.NewContractInvalidPDFError())
+
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, campaigns, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		w, resp := doPDF[api.ContractValidationErrorResponse](t, router, http.MethodPut, uploadPath, body)
+		require.Equal(t, http.StatusUnprocessableEntity, w.Code)
+		require.Equal(t, domain.CodeContractInvalidPDF, resp.Error.Code)
+		require.Nil(t, resp.Error.Details)
+	})
+
+	t.Run("missing placeholder → 422 with details.missing", func(t *testing.T) {
+		t.Parallel()
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanUploadCampaignContractTemplate(mock.Anything).Return(nil)
+		campaigns := mocks.NewMockCampaignService(t)
+		body := []byte("%PDF-1.4 fake")
+		campaigns.EXPECT().UploadContractTemplate(mock.Anything, campaignID, body).
+			Return(nil, domain.NewContractMissingPlaceholderError([]string{"CreatorIIN"}))
+
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, campaigns, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		w, resp := doPDF[api.ContractValidationErrorResponse](t, router, http.MethodPut, uploadPath, body)
+		require.Equal(t, http.StatusUnprocessableEntity, w.Code)
+		require.Equal(t, domain.CodeContractMissingPlaceholder, resp.Error.Code)
+		require.NotNil(t, resp.Error.Details)
+		require.NotNil(t, resp.Error.Details.Missing)
+		require.Equal(t, []string{"CreatorIIN"}, *resp.Error.Details.Missing)
+		require.Nil(t, resp.Error.Details.Unknown)
+	})
+
+	t.Run("unknown placeholder → 422 with details.unknown", func(t *testing.T) {
+		t.Parallel()
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanUploadCampaignContractTemplate(mock.Anything).Return(nil)
+		campaigns := mocks.NewMockCampaignService(t)
+		body := []byte("%PDF-1.4 fake")
+		campaigns.EXPECT().UploadContractTemplate(mock.Anything, campaignID, body).
+			Return(nil, domain.NewContractUnknownPlaceholderError([]string{"BrandName"}))
+
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, campaigns, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		w, resp := doPDF[api.ContractValidationErrorResponse](t, router, http.MethodPut, uploadPath, body)
+		require.Equal(t, http.StatusUnprocessableEntity, w.Code)
+		require.Equal(t, domain.CodeContractUnknownPlaceholder, resp.Error.Code)
+		require.NotNil(t, resp.Error.Details)
+		require.NotNil(t, resp.Error.Details.Unknown)
+		require.Equal(t, []string{"BrandName"}, *resp.Error.Details.Unknown)
+		require.Nil(t, resp.Error.Details.Missing)
+	})
+
+	t.Run("campaign not found → 404 CAMPAIGN_NOT_FOUND", func(t *testing.T) {
+		t.Parallel()
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanUploadCampaignContractTemplate(mock.Anything).Return(nil)
+		campaigns := mocks.NewMockCampaignService(t)
+		body := []byte("%PDF-1.4 fake")
+		campaigns.EXPECT().UploadContractTemplate(mock.Anything, campaignID, body).
+			Return(nil, domain.ErrCampaignNotFound)
+
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, campaigns, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		w, resp := doPDF[api.ErrorResponse](t, router, http.MethodPut, uploadPath, body)
+		require.Equal(t, http.StatusNotFound, w.Code)
+		require.Equal(t, domain.CodeCampaignNotFound, resp.Error.Code)
+	})
+
+	t.Run("happy path returns hash + placeholders", func(t *testing.T) {
+		t.Parallel()
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanUploadCampaignContractTemplate(mock.Anything).Return(nil)
+		campaigns := mocks.NewMockCampaignService(t)
+		body := []byte("%PDF-1.4 fake")
+		campaigns.EXPECT().UploadContractTemplate(mock.Anything, campaignID, body).
+			Return(&service.UploadContractTemplateResult{
+				Hash:         "deadbeef",
+				Placeholders: domain.KnownContractPlaceholders,
+			}, nil)
+
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, campaigns, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		w, resp := doPDF[api.UploadCampaignContractTemplateResult](t, router, http.MethodPut, uploadPath, body)
+		require.Equal(t, http.StatusOK, w.Code)
+		require.Equal(t, "deadbeef", resp.Data.Hash)
+		require.Equal(t, domain.KnownContractPlaceholders, resp.Data.Placeholders)
+	})
+}
+
+func TestServer_GetCampaignContractTemplate(t *testing.T) {
+	t.Parallel()
+
+	const campaignID = "11111111-2222-3333-4444-555555555555"
+	getPath := "/campaigns/" + campaignID + "/contract-template"
+
+	t.Run("forbidden for non-admin", func(t *testing.T) {
+		t.Parallel()
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanGetCampaignContractTemplate(mock.Anything).Return(domain.ErrForbidden)
+
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodGet, getPath, nil)
+		require.Equal(t, http.StatusForbidden, w.Code)
+		require.Equal(t, domain.CodeForbidden, resp.Error.Code)
+	})
+
+	t.Run("campaign not found → 404 CAMPAIGN_NOT_FOUND", func(t *testing.T) {
+		t.Parallel()
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanGetCampaignContractTemplate(mock.Anything).Return(nil)
+		campaigns := mocks.NewMockCampaignService(t)
+		campaigns.EXPECT().GetContractTemplate(mock.Anything, campaignID).
+			Return(nil, domain.ErrCampaignNotFound)
+
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, campaigns, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodGet, getPath, nil)
+		require.Equal(t, http.StatusNotFound, w.Code)
+		require.Equal(t, domain.CodeCampaignNotFound, resp.Error.Code)
+	})
+
+	t.Run("template not uploaded → 404 CONTRACT_TEMPLATE_NOT_FOUND", func(t *testing.T) {
+		t.Parallel()
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanGetCampaignContractTemplate(mock.Anything).Return(nil)
+		campaigns := mocks.NewMockCampaignService(t)
+		campaigns.EXPECT().GetContractTemplate(mock.Anything, campaignID).
+			Return(nil, domain.ErrContractTemplateNotFound)
+
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, campaigns, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodGet, getPath, nil)
+		require.Equal(t, http.StatusNotFound, w.Code)
+		require.Equal(t, domain.CodeContractTemplateNotFound, resp.Error.Code)
+	})
+
+	t.Run("happy path streams pdf", func(t *testing.T) {
+		t.Parallel()
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanGetCampaignContractTemplate(mock.Anything).Return(nil)
+		campaigns := mocks.NewMockCampaignService(t)
+		pdf := []byte("%PDF-1.4 stored bytes")
+		campaigns.EXPECT().GetContractTemplate(mock.Anything, campaignID).Return(pdf, nil)
+
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, campaigns, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		req := httptest.NewRequest(http.MethodGet, getPath, nil)
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		require.Equal(t, http.StatusOK, w.Code)
+		require.Equal(t, "application/pdf", w.Header().Get("Content-Type"))
+		require.Equal(t, pdf, w.Body.Bytes())
 	})
 }

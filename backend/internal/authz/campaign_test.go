@@ -98,3 +98,47 @@ func TestAuthzService_CanListCampaigns(t *testing.T) {
 		require.NoError(t, svc.CanListCampaigns(ctxWithRole(api.Admin)))
 	})
 }
+
+func TestAuthzService_CanUploadCampaignContractTemplate(t *testing.T) {
+	t.Parallel()
+
+	t.Run("manager forbidden", func(t *testing.T) {
+		t.Parallel()
+		svc := NewAuthzService(mocks.NewMockBrandService(t), nil, nil)
+		require.ErrorIs(t, svc.CanUploadCampaignContractTemplate(ctxWithRole(api.BrandManager)), domain.ErrForbidden)
+	})
+
+	t.Run("missing role forbidden", func(t *testing.T) {
+		t.Parallel()
+		svc := NewAuthzService(mocks.NewMockBrandService(t), nil, nil)
+		require.ErrorIs(t, svc.CanUploadCampaignContractTemplate(context.Background()), domain.ErrForbidden)
+	})
+
+	t.Run("admin allowed", func(t *testing.T) {
+		t.Parallel()
+		svc := NewAuthzService(mocks.NewMockBrandService(t), nil, nil)
+		require.NoError(t, svc.CanUploadCampaignContractTemplate(ctxWithRole(api.Admin)))
+	})
+}
+
+func TestAuthzService_CanGetCampaignContractTemplate(t *testing.T) {
+	t.Parallel()
+
+	t.Run("manager forbidden", func(t *testing.T) {
+		t.Parallel()
+		svc := NewAuthzService(mocks.NewMockBrandService(t), nil, nil)
+		require.ErrorIs(t, svc.CanGetCampaignContractTemplate(ctxWithRole(api.BrandManager)), domain.ErrForbidden)
+	})
+
+	t.Run("missing role forbidden", func(t *testing.T) {
+		t.Parallel()
+		svc := NewAuthzService(mocks.NewMockBrandService(t), nil, nil)
+		require.ErrorIs(t, svc.CanGetCampaignContractTemplate(context.Background()), domain.ErrForbidden)
+	})
+
+	t.Run("admin allowed", func(t *testing.T) {
+		t.Parallel()
+		svc := NewAuthzService(mocks.NewMockBrandService(t), nil, nil)
+		require.NoError(t, svc.CanGetCampaignContractTemplate(ctxWithRole(api.Admin)))
+	})
+}

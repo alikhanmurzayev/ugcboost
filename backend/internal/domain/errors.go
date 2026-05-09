@@ -84,6 +84,25 @@ const (
 	CodeCampaignTmaURLLocked = "CAMPAIGN_TMA_URL_LOCKED"
 )
 
+// Campaign contract-template upload codes — PUT/GET /campaigns/{id}/contract-template.
+const (
+	// 422 — PUT body is empty (Content-Length: 0 or body of length 0).
+	CodeContractRequired = "CONTRACT_REQUIRED"
+	// 422 — body cannot be parsed as a PDF (encrypted, JPEG, plain text…).
+	CodeContractInvalidPDF = "CONTRACT_INVALID_PDF"
+	// 422 — at least one of the known placeholders (CreatorFIO, CreatorIIN,
+	// IssuedDate) is missing from the uploaded PDF. Carries `details.missing`.
+	CodeContractMissingPlaceholder = "CONTRACT_MISSING_PLACEHOLDER"
+	// 422 — the PDF contains a `{{Name}}` token that is not part of
+	// KnownContractPlaceholders. Carries `details.unknown`.
+	CodeContractUnknownPlaceholder = "CONTRACT_UNKNOWN_PLACEHOLDER"
+	// 404 — GET /campaigns/{id}/contract-template on a live campaign whose
+	// `contract_template_pdf` column is empty (no template uploaded yet).
+	// Distinct from CAMPAIGN_NOT_FOUND so the admin UI can surface
+	// "campaign exists but template missing" separately from "campaign gone".
+	CodeContractTemplateNotFound = "CONTRACT_TEMPLATE_NOT_FOUND"
+)
+
 // TMA decision + secret_token codes — surfaced by /tma/* endpoints and by
 // POST/PATCH /campaigns when the admin-provided tma_url fails the
 // secret-token-format check or collides with another live campaign.
