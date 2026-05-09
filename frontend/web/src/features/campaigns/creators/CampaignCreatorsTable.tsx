@@ -11,12 +11,16 @@ import Table, { type Column } from "@/shared/components/Table";
 import { CategoryChips } from "@/shared/components/CategoryChip";
 import SocialLink from "@/shared/components/SocialLink";
 import { calcAge } from "@/shared/utils/age";
+import { formatDateTimeShort } from "@/shared/utils/formatDateTime";
+import type { CampaignCreatorStatus } from "@/api/campaignCreators";
+import { CAMPAIGN_CREATOR_STATUS } from "@/shared/constants/campaignCreatorStatus";
 import type { CampaignCreatorRow } from "./hooks/useCampaignCreators";
 
 export type SelectAllState = "unchecked" | "indeterminate" | "checked";
 
 interface CampaignCreatorsTableProps {
   rows: CampaignCreatorRow[];
+  status: CampaignCreatorStatus;
   selectedKey?: string;
   onRowClick: (row: CampaignCreatorRow) => void;
   onRemove?: (row: CampaignCreatorRow) => void;
@@ -31,6 +35,7 @@ interface CampaignCreatorsTableProps {
 
 export default function CampaignCreatorsTable({
   rows,
+  status,
   selectedKey,
   onRowClick,
   onRemove,
@@ -48,6 +53,7 @@ export default function CampaignCreatorsTable({
   const columns = useMemo<Column<CampaignCreatorRow>[]>(
     () =>
       buildColumns(t, tCampaigns, {
+        status,
         onRemove,
         checkedCreatorIds,
         onToggleOne,
@@ -59,6 +65,7 @@ export default function CampaignCreatorsTable({
     [
       t,
       tCampaigns,
+      status,
       onRemove,
       checkedCreatorIds,
       onToggleOne,
@@ -83,6 +90,7 @@ export default function CampaignCreatorsTable({
 }
 
 interface BuildColumnsOpts {
+  status: CampaignCreatorStatus;
   onRemove?: (row: CampaignCreatorRow) => void;
   checkedCreatorIds?: Set<string>;
   onToggleOne?: (creatorId: string) => void;
@@ -244,6 +252,11 @@ function buildColumns(
       },
       width: "w-32",
     },
+  ];
+
+  const extra = buildStatusColumns(opts.status, tCampaigns);
+
+  const tail: Column<CampaignCreatorRow>[] = [
     {
       key: "createdAt",
       header: t("columns.createdAt"),
@@ -286,7 +299,97 @@ function buildColumns(
       ]
     : [];
 
-  return [...checkbox, ...base, ...actions];
+  return [...checkbox, ...base, ...extra, ...tail, ...actions];
+}
+
+function buildStatusColumns(
+  status: CampaignCreatorStatus,
+  tCampaigns: (key: string) => string,
+): Column<CampaignCreatorRow>[] {
+  switch (status) {
+    case CAMPAIGN_CREATOR_STATUS.PLANNED:
+      return [];
+    case CAMPAIGN_CREATOR_STATUS.INVITED:
+      return [
+        pairColumn(
+          "invited",
+          tCampaigns("campaignCreators.columns.invited"),
+          (row) => row.campaignCreator.invitedCount,
+          (row) => row.campaignCreator.invitedAt ?? null,
+        ),
+        pairColumn(
+          "reminded",
+          tCampaigns("campaignCreators.columns.reminded"),
+          (row) => row.campaignCreator.remindedCount,
+          (row) => row.campaignCreator.remindedAt ?? null,
+        ),
+      ];
+    case CAMPAIGN_CREATOR_STATUS.DECLINED:
+    case CAMPAIGN_CREATOR_STATUS.AGREED:
+      return [
+        pairColumn(
+          "invited",
+          tCampaigns("campaignCreators.columns.invited"),
+          (row) => row.campaignCreator.invitedCount,
+          (row) => row.campaignCreator.invitedAt ?? null,
+        ),
+        decidedColumn(
+          tCampaigns("campaignCreators.columns.decided"),
+          (row) => row.campaignCreator.decidedAt ?? null,
+        ),
+      ];
+    default: {
+      const _exhaustive: never = status;
+      return _exhaustive;
+    }
+  }
+}
+
+function pairColumn(
+  kind: "invited" | "reminded",
+  header: string,
+  getCount: (row: CampaignCreatorRow) => number,
+  getIso: (row: CampaignCreatorRow) => string | null,
+): Column<CampaignCreatorRow> {
+  return {
+    key: `${kind}-pair`,
+    header,
+    width: "w-40",
+    render: (row) => (
+      <span className="whitespace-nowrap text-gray-700">
+        <span
+          data-testid={`campaign-creator-${kind}-count-${row.campaignCreator.creatorId}`}
+        >
+          {getCount(row)}
+        </span>
+        <span className="mx-1 text-gray-400">·</span>
+        <span
+          data-testid={`campaign-creator-${kind}-at-${row.campaignCreator.creatorId}`}
+        >
+          {formatDateTimeShort(getIso(row))}
+        </span>
+      </span>
+    ),
+  };
+}
+
+function decidedColumn(
+  header: string,
+  getIso: (row: CampaignCreatorRow) => string | null,
+): Column<CampaignCreatorRow> {
+  return {
+    key: "decided-at",
+    header,
+    width: "w-32",
+    render: (row) => (
+      <span
+        className="text-gray-700"
+        data-testid={`campaign-creator-decided-at-${row.campaignCreator.creatorId}`}
+      >
+        {formatDateTimeShort(getIso(row))}
+      </span>
+    ),
+  };
 }
 
 interface SelectAllCheckboxProps {

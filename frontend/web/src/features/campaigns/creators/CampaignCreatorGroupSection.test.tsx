@@ -19,6 +19,7 @@ const CREATOR_C = "cccccccc-cccc-cccc-cccc-cccccccccccc";
 function makeCC(
   creatorId: string,
   status: CampaignCreatorStatus = "planned",
+  overrides: Partial<CampaignCreator> = {},
 ): CampaignCreator {
   return {
     id: `cc-${creatorId}`,
@@ -32,6 +33,7 @@ function makeCC(
     decidedAt: null,
     createdAt: "2026-05-07T12:00:00Z",
     updatedAt: "2026-05-07T12:00:00Z",
+    ...overrides,
   };
 }
 
@@ -685,5 +687,36 @@ describe("CampaignCreatorGroupSection — result rendering", () => {
     // Heading still visible — count is now 0.
     const header = screen.getByTestId("campaign-creators-group-planned");
     expect(within(header).getByRole("heading")).toHaveTextContent(/group planned/);
+  });
+});
+
+describe("CampaignCreatorGroupSection — counter columns wiring", () => {
+  it("forwards status='invited' so the table renders counter+timestamp cells", () => {
+    const rows: CampaignCreatorRow[] = [
+      {
+        campaignCreator: makeCC(CREATOR_A, "invited", {
+          invitedCount: 1,
+          invitedAt: "2026-05-06T14:30:00Z",
+          remindedCount: 0,
+          remindedAt: null,
+        }),
+        creator: makeCreator(CREATOR_A, "Иванова"),
+      },
+    ];
+
+    renderGroup({ status: "invited", rows });
+
+    expect(
+      screen.getByTestId(`campaign-creator-invited-count-${CREATOR_A}`),
+    ).toHaveTextContent("1");
+    expect(
+      screen.getByTestId(`campaign-creator-invited-at-${CREATOR_A}`),
+    ).toHaveTextContent(/6 мая/);
+    expect(
+      screen.getByTestId(`campaign-creator-reminded-count-${CREATOR_A}`),
+    ).toHaveTextContent("0");
+    expect(
+      screen.getByTestId(`campaign-creator-reminded-at-${CREATOR_A}`),
+    ).toHaveTextContent("—");
   });
 });

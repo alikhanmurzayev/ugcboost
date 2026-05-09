@@ -85,6 +85,11 @@
       "declined": "Отказались",
       "agreed": "Согласились"
     },
+    "columns": {
+      "invited": "Приглашение",
+      "reminded": "Ремайндер",
+      "decided": "Решение"
+    },
     "currentStatus": {
       "planned": "Запланирован(а)",
       "invited": "Приглашён(а)",
