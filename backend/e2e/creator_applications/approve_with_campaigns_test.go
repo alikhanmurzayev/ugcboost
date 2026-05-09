@@ -50,7 +50,6 @@ import (
 const (
 	auditActionCampaignCreatorAdd  = "campaign_creator_add"
 	auditEntityTypeCampaignCreator = "campaign_creator"
-	approveCampaignsTmaURL         = "https://tma.ugcboost.kz/tz/approve-with-campaigns"
 )
 
 // Error codes mirror domain.Code* — backend/e2e is a separate Go module that
@@ -71,7 +70,7 @@ func setupApproveCampaign(t *testing.T, c *apiclient.ClientWithResponses, adminT
 	t.Helper()
 	resp, err := c.CreateCampaignWithResponse(context.Background(), apiclient.CreateCampaignJSONRequestBody{
 		Name:   name,
-		TmaUrl: approveCampaignsTmaURL,
+		TmaUrl: testutil.FreshValidTmaURL(),
 	}, testutil.WithAuth(adminToken))
 	require.NoError(t, err)
 	require.Equalf(t, http.StatusCreated, resp.StatusCode(),

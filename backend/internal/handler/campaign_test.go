@@ -27,9 +27,9 @@ func TestServer_CreateCampaign(t *testing.T) {
 		authz := mocks.NewMockAuthzService(t)
 		authz.EXPECT().CanCreateCampaign(mock.Anything).Return(domain.ErrForbidden)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/campaigns",
-			api.CampaignInput{Name: "Promo X", TmaUrl: "https://tma.ugcboost.kz/tz/abc"})
+			api.CampaignInput{Name: "Promo X", TmaUrl: "https://tma.ugcboost.kz/tz/abc_padding_secrettokenxx"})
 		require.Equal(t, http.StatusForbidden, w.Code)
 		require.Equal(t, domain.CodeForbidden, resp.Error.Code)
 	})
@@ -41,7 +41,7 @@ func TestServer_CreateCampaign(t *testing.T) {
 		// adapter layer with 422+CodeValidation via RequestErrorHandlerFunc.
 		authz := mocks.NewMockAuthzService(t)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/campaigns",
 			map[string]any{"name": 123, "tmaUrl": "https://x"})
 		require.Equal(t, http.StatusUnprocessableEntity, w.Code)
@@ -53,9 +53,9 @@ func TestServer_CreateCampaign(t *testing.T) {
 		authz := mocks.NewMockAuthzService(t)
 		authz.EXPECT().CanCreateCampaign(mock.Anything).Return(nil)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/campaigns",
-			api.CampaignInput{Name: "   ", TmaUrl: "https://tma.ugcboost.kz/tz/abc"})
+			api.CampaignInput{Name: "   ", TmaUrl: "https://tma.ugcboost.kz/tz/abc_padding_secrettokenxx"})
 		require.Equal(t, http.StatusUnprocessableEntity, w.Code)
 		require.Equal(t, domain.CodeCampaignNameRequired, resp.Error.Code)
 	})
@@ -65,23 +65,51 @@ func TestServer_CreateCampaign(t *testing.T) {
 		authz := mocks.NewMockAuthzService(t)
 		authz.EXPECT().CanCreateCampaign(mock.Anything).Return(nil)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/campaigns",
-			api.CampaignInput{Name: strings.Repeat("a", 256), TmaUrl: "https://tma.ugcboost.kz/tz/abc"})
+			api.CampaignInput{Name: strings.Repeat("a", 256), TmaUrl: "https://tma.ugcboost.kz/tz/abc_padding_secrettokenxx"})
 		require.Equal(t, http.StatusUnprocessableEntity, w.Code)
 		require.Equal(t, domain.CodeCampaignNameTooLong, resp.Error.Code)
 	})
 
-	t.Run("empty tmaUrl after trim → 422 CAMPAIGN_TMA_URL_REQUIRED", func(t *testing.T) {
+	t.Run("empty tmaUrl after trim ok (legacy/draft → secret_token NULL)", func(t *testing.T) {
+		t.Parallel()
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanCreateCampaign(mock.Anything).Return(nil)
+		campaigns := mocks.NewMockCampaignService(t)
+		// Trimmed value reaches the service as the empty string — repo records
+		// NULL secret_token, the row is reachable in admin but not via TMA.
+		campaigns.EXPECT().CreateCampaign(mock.Anything, domain.CampaignInput{Name: "Promo X", TmaURL: ""}).
+			Return(&domain.Campaign{ID: "11111111-1111-1111-1111-111111111111", Name: "Promo X"}, nil)
+
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, campaigns, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		w, _ := doJSON[api.CampaignCreatedResult](t, router, http.MethodPost, "/campaigns",
+			api.CampaignInput{Name: "Promo X", TmaUrl: "   "})
+		require.Equal(t, http.StatusCreated, w.Code)
+	})
+
+	t.Run("invalid tmaUrl (last segment <16) → 422 INVALID_TMA_URL", func(t *testing.T) {
 		t.Parallel()
 		authz := mocks.NewMockAuthzService(t)
 		authz.EXPECT().CanCreateCampaign(mock.Anything).Return(nil)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/campaigns",
-			api.CampaignInput{Name: "Promo X", TmaUrl: "   "})
+			api.CampaignInput{Name: "Promo X", TmaUrl: "https://tma.ugcboost.kz/tz/short"})
 		require.Equal(t, http.StatusUnprocessableEntity, w.Code)
-		require.Equal(t, domain.CodeCampaignTmaURLRequired, resp.Error.Code)
+		require.Equal(t, domain.CodeInvalidTmaURL, resp.Error.Code)
+	})
+
+	t.Run("invalid tmaUrl (no scheme/host) → 422 INVALID_TMA_URL", func(t *testing.T) {
+		t.Parallel()
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanCreateCampaign(mock.Anything).Return(nil)
+
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/campaigns",
+			api.CampaignInput{Name: "Promo X", TmaUrl: "/tz/abc_padding_secrettokenxx"})
+		require.Equal(t, http.StatusUnprocessableEntity, w.Code)
+		require.Equal(t, domain.CodeInvalidTmaURL, resp.Error.Code)
 	})
 
 	t.Run("tmaUrl >2048 → 422 CAMPAIGN_TMA_URL_TOO_LONG", func(t *testing.T) {
@@ -89,7 +117,7 @@ func TestServer_CreateCampaign(t *testing.T) {
 		authz := mocks.NewMockAuthzService(t)
 		authz.EXPECT().CanCreateCampaign(mock.Anything).Return(nil)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/campaigns",
 			api.CampaignInput{Name: "Promo X", TmaUrl: strings.Repeat("a", 2049)})
 		require.Equal(t, http.StatusUnprocessableEntity, w.Code)
@@ -101,12 +129,12 @@ func TestServer_CreateCampaign(t *testing.T) {
 		authz := mocks.NewMockAuthzService(t)
 		authz.EXPECT().CanCreateCampaign(mock.Anything).Return(nil)
 		campaigns := mocks.NewMockCampaignService(t)
-		campaigns.EXPECT().CreateCampaign(mock.Anything, domain.CampaignInput{Name: "Promo X", TmaURL: "https://tma.ugcboost.kz/tz/abc"}).
+		campaigns.EXPECT().CreateCampaign(mock.Anything, domain.CampaignInput{Name: "Promo X", TmaURL: "https://tma.ugcboost.kz/tz/abc_padding_secrettokenxx"}).
 			Return((*domain.Campaign)(nil), domain.ErrCampaignNameTaken)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, campaigns, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, campaigns, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/campaigns",
-			api.CampaignInput{Name: "Promo X", TmaUrl: "https://tma.ugcboost.kz/tz/abc"})
+			api.CampaignInput{Name: "Promo X", TmaUrl: "https://tma.ugcboost.kz/tz/abc_padding_secrettokenxx"})
 		require.Equal(t, http.StatusConflict, w.Code)
 		require.Equal(t, domain.CodeCampaignNameTaken, resp.Error.Code)
 		require.Contains(t, resp.Error.Message, "Кампания с таким названием")
@@ -117,14 +145,14 @@ func TestServer_CreateCampaign(t *testing.T) {
 		authz := mocks.NewMockAuthzService(t)
 		authz.EXPECT().CanCreateCampaign(mock.Anything).Return(nil)
 		campaigns := mocks.NewMockCampaignService(t)
-		campaigns.EXPECT().CreateCampaign(mock.Anything, domain.CampaignInput{Name: "Promo X", TmaURL: "https://tma.ugcboost.kz/tz/abc"}).
+		campaigns.EXPECT().CreateCampaign(mock.Anything, domain.CampaignInput{Name: "Promo X", TmaURL: "https://tma.ugcboost.kz/tz/abc_padding_secrettokenxx"}).
 			Return((*domain.Campaign)(nil), errors.New("db unavailable"))
 		log := logmocks.NewMockLogger(t)
 		expectHandlerUnexpectedErrorLog(log, "/campaigns")
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, campaigns, nil, nil, ServerConfig{Version: "test-version"}, log))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, campaigns, nil, nil, nil, ServerConfig{Version: "test-version"}, log))
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/campaigns",
-			api.CampaignInput{Name: "Promo X", TmaUrl: "https://tma.ugcboost.kz/tz/abc"})
+			api.CampaignInput{Name: "Promo X", TmaUrl: "https://tma.ugcboost.kz/tz/abc_padding_secrettokenxx"})
 		require.Equal(t, http.StatusInternalServerError, w.Code)
 		require.Equal(t, domain.CodeInternal, resp.Error.Code)
 	})
@@ -134,16 +162,16 @@ func TestServer_CreateCampaign(t *testing.T) {
 		authz := mocks.NewMockAuthzService(t)
 		authz.EXPECT().CanCreateCampaign(mock.Anything).Return(nil)
 		campaigns := mocks.NewMockCampaignService(t)
-		campaigns.EXPECT().CreateCampaign(mock.Anything, domain.CampaignInput{Name: "Promo X", TmaURL: "https://tma.ugcboost.kz/tz/abc"}).
+		campaigns.EXPECT().CreateCampaign(mock.Anything, domain.CampaignInput{Name: "Promo X", TmaURL: "https://tma.ugcboost.kz/tz/abc_padding_secrettokenxx"}).
 			Return(&domain.Campaign{
 				ID:     "11111111-2222-3333-4444-555555555555",
 				Name:   "Promo X",
-				TmaURL: "https://tma.ugcboost.kz/tz/abc",
+				TmaURL: "https://tma.ugcboost.kz/tz/abc_padding_secrettokenxx",
 			}, nil)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, campaigns, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, campaigns, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.CampaignCreatedResult](t, router, http.MethodPost, "/campaigns",
-			api.CampaignInput{Name: "  Promo X  ", TmaUrl: "  https://tma.ugcboost.kz/tz/abc  "})
+			api.CampaignInput{Name: "  Promo X  ", TmaUrl: "  https://tma.ugcboost.kz/tz/abc_padding_secrettokenxx  "})
 		require.Equal(t, http.StatusCreated, w.Code)
 		require.Equal(t, api.CampaignCreatedResult{
 			Data: api.CampaignCreatedData{
@@ -157,18 +185,18 @@ func TestServer_CreateCampaign(t *testing.T) {
 		authz := mocks.NewMockAuthzService(t)
 		authz.EXPECT().CanCreateCampaign(mock.Anything).Return(nil)
 		campaigns := mocks.NewMockCampaignService(t)
-		campaigns.EXPECT().CreateCampaign(mock.Anything, domain.CampaignInput{Name: "Promo X", TmaURL: "https://tma.ugcboost.kz/tz/abc"}).
+		campaigns.EXPECT().CreateCampaign(mock.Anything, domain.CampaignInput{Name: "Promo X", TmaURL: "https://tma.ugcboost.kz/tz/abc_padding_secrettokenxx"}).
 			Return(&domain.Campaign{
 				ID:     "not-a-uuid",
 				Name:   "Promo X",
-				TmaURL: "https://tma.ugcboost.kz/tz/abc",
+				TmaURL: "https://tma.ugcboost.kz/tz/abc_padding_secrettokenxx",
 			}, nil)
 		log := logmocks.NewMockLogger(t)
 		expectHandlerUnexpectedErrorLog(log, "/campaigns")
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, campaigns, nil, nil, ServerConfig{Version: "test-version"}, log))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, campaigns, nil, nil, nil, ServerConfig{Version: "test-version"}, log))
 		w, _ := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/campaigns",
-			api.CampaignInput{Name: "Promo X", TmaUrl: "https://tma.ugcboost.kz/tz/abc"})
+			api.CampaignInput{Name: "Promo X", TmaUrl: "https://tma.ugcboost.kz/tz/abc_padding_secrettokenxx"})
 		require.Equal(t, http.StatusInternalServerError, w.Code)
 	})
 }
@@ -184,7 +212,7 @@ func TestServer_GetCampaign(t *testing.T) {
 		authz := mocks.NewMockAuthzService(t)
 		authz.EXPECT().CanGetCampaign(mock.Anything).Return(domain.ErrForbidden)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodGet, campaignPath, nil)
 		require.Equal(t, http.StatusForbidden, w.Code)
 		require.Equal(t, domain.CodeForbidden, resp.Error.Code)
@@ -198,7 +226,7 @@ func TestServer_GetCampaign(t *testing.T) {
 		campaigns.EXPECT().GetByID(mock.Anything, campaignID.String()).
 			Return((*domain.Campaign)(nil), domain.ErrCampaignNotFound)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, campaigns, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, campaigns, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodGet, campaignPath, nil)
 		require.Equal(t, http.StatusNotFound, w.Code)
 		require.Equal(t, domain.CodeCampaignNotFound, resp.Error.Code)
@@ -215,7 +243,7 @@ func TestServer_GetCampaign(t *testing.T) {
 		log := logmocks.NewMockLogger(t)
 		expectHandlerUnexpectedErrorLog(log, campaignPath)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, campaigns, nil, nil, ServerConfig{Version: "test-version"}, log))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, campaigns, nil, nil, nil, ServerConfig{Version: "test-version"}, log))
 		w, _ := doJSON[api.ErrorResponse](t, router, http.MethodGet, campaignPath, nil)
 		require.Equal(t, http.StatusInternalServerError, w.Code)
 	})
@@ -229,12 +257,12 @@ func TestServer_GetCampaign(t *testing.T) {
 			Return(&domain.Campaign{
 				ID:     "not-a-uuid",
 				Name:   "Promo X",
-				TmaURL: "https://tma.ugcboost.kz/tz/abc",
+				TmaURL: "https://tma.ugcboost.kz/tz/abc_padding_secrettokenxx",
 			}, nil)
 		log := logmocks.NewMockLogger(t)
 		expectHandlerUnexpectedErrorLog(log, campaignPath)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, campaigns, nil, nil, ServerConfig{Version: "test-version"}, log))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, campaigns, nil, nil, nil, ServerConfig{Version: "test-version"}, log))
 		w, _ := doJSON[api.ErrorResponse](t, router, http.MethodGet, campaignPath, nil)
 		require.Equal(t, http.StatusInternalServerError, w.Code)
 	})
@@ -250,20 +278,20 @@ func TestServer_GetCampaign(t *testing.T) {
 			Return(&domain.Campaign{
 				ID:        campaignID.String(),
 				Name:      "Promo X",
-				TmaURL:    "https://tma.ugcboost.kz/tz/abc",
+				TmaURL:    "https://tma.ugcboost.kz/tz/abc_padding_secrettokenxx",
 				IsDeleted: true,
 				CreatedAt: created,
 				UpdatedAt: updated,
 			}, nil)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, campaigns, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, campaigns, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.GetCampaignResult](t, router, http.MethodGet, campaignPath, nil)
 		require.Equal(t, http.StatusOK, w.Code)
 		require.Equal(t, api.GetCampaignResult{
 			Data: api.Campaign{
 				Id:        campaignID,
 				Name:      "Promo X",
-				TmaUrl:    "https://tma.ugcboost.kz/tz/abc",
+				TmaUrl:    "https://tma.ugcboost.kz/tz/abc_padding_secrettokenxx",
 				IsDeleted: true,
 				CreatedAt: created,
 				UpdatedAt: updated,
@@ -283,9 +311,9 @@ func TestServer_UpdateCampaign(t *testing.T) {
 		authz := mocks.NewMockAuthzService(t)
 		authz.EXPECT().CanUpdateCampaign(mock.Anything).Return(domain.ErrForbidden)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPatch, campaignPath,
-			api.CampaignInput{Name: "Promo Y", TmaUrl: "https://tma.ugcboost.kz/tz/new"})
+			api.CampaignInput{Name: "Promo Y", TmaUrl: "https://tma.ugcboost.kz/tz/new_padding_secrettokenxx"})
 		require.Equal(t, http.StatusForbidden, w.Code)
 		require.Equal(t, domain.CodeForbidden, resp.Error.Code)
 	})
@@ -295,9 +323,9 @@ func TestServer_UpdateCampaign(t *testing.T) {
 		authz := mocks.NewMockAuthzService(t)
 		authz.EXPECT().CanUpdateCampaign(mock.Anything).Return(nil)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPatch, campaignPath,
-			api.CampaignInput{Name: "   ", TmaUrl: "https://tma.ugcboost.kz/tz/new"})
+			api.CampaignInput{Name: "   ", TmaUrl: "https://tma.ugcboost.kz/tz/new_padding_secrettokenxx"})
 		require.Equal(t, http.StatusUnprocessableEntity, w.Code)
 		require.Equal(t, domain.CodeCampaignNameRequired, resp.Error.Code)
 	})
@@ -307,23 +335,38 @@ func TestServer_UpdateCampaign(t *testing.T) {
 		authz := mocks.NewMockAuthzService(t)
 		authz.EXPECT().CanUpdateCampaign(mock.Anything).Return(nil)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPatch, campaignPath,
-			api.CampaignInput{Name: strings.Repeat("a", 256), TmaUrl: "https://tma.ugcboost.kz/tz/new"})
+			api.CampaignInput{Name: strings.Repeat("a", 256), TmaUrl: "https://tma.ugcboost.kz/tz/new_padding_secrettokenxx"})
 		require.Equal(t, http.StatusUnprocessableEntity, w.Code)
 		require.Equal(t, domain.CodeCampaignNameTooLong, resp.Error.Code)
 	})
 
-	t.Run("empty tmaUrl after trim → 422 CAMPAIGN_TMA_URL_REQUIRED", func(t *testing.T) {
+	t.Run("empty tmaUrl after trim ok (clears secret_token to NULL)", func(t *testing.T) {
+		t.Parallel()
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanUpdateCampaign(mock.Anything).Return(nil)
+		campaigns := mocks.NewMockCampaignService(t)
+		campaigns.EXPECT().UpdateCampaign(mock.Anything, campaignIDStr,
+			domain.CampaignInput{Name: "Promo Y", TmaURL: ""}).
+			Return(nil)
+
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, campaigns, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		w, _ := doJSON[any](t, router, http.MethodPatch, campaignPath,
+			api.CampaignInput{Name: "Promo Y", TmaUrl: "   "})
+		require.Equal(t, http.StatusNoContent, w.Code)
+	})
+
+	t.Run("invalid tmaUrl (last segment <16) → 422 INVALID_TMA_URL", func(t *testing.T) {
 		t.Parallel()
 		authz := mocks.NewMockAuthzService(t)
 		authz.EXPECT().CanUpdateCampaign(mock.Anything).Return(nil)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPatch, campaignPath,
-			api.CampaignInput{Name: "Promo Y", TmaUrl: "   "})
+			api.CampaignInput{Name: "Promo Y", TmaUrl: "https://tma.ugcboost.kz/tz/short"})
 		require.Equal(t, http.StatusUnprocessableEntity, w.Code)
-		require.Equal(t, domain.CodeCampaignTmaURLRequired, resp.Error.Code)
+		require.Equal(t, domain.CodeInvalidTmaURL, resp.Error.Code)
 	})
 
 	t.Run("tmaUrl >2048 → 422 CAMPAIGN_TMA_URL_TOO_LONG", func(t *testing.T) {
@@ -331,7 +374,7 @@ func TestServer_UpdateCampaign(t *testing.T) {
 		authz := mocks.NewMockAuthzService(t)
 		authz.EXPECT().CanUpdateCampaign(mock.Anything).Return(nil)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPatch, campaignPath,
 			api.CampaignInput{Name: "Promo Y", TmaUrl: strings.Repeat("a", 2049)})
 		require.Equal(t, http.StatusUnprocessableEntity, w.Code)
@@ -344,12 +387,12 @@ func TestServer_UpdateCampaign(t *testing.T) {
 		authz.EXPECT().CanUpdateCampaign(mock.Anything).Return(nil)
 		campaigns := mocks.NewMockCampaignService(t)
 		campaigns.EXPECT().UpdateCampaign(mock.Anything, campaignIDStr,
-			domain.CampaignInput{Name: "Promo Y", TmaURL: "https://tma.ugcboost.kz/tz/new"}).
+			domain.CampaignInput{Name: "Promo Y", TmaURL: "https://tma.ugcboost.kz/tz/new_padding_secrettokenxx"}).
 			Return(domain.ErrCampaignNotFound)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, campaigns, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, campaigns, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPatch, campaignPath,
-			api.CampaignInput{Name: "Promo Y", TmaUrl: "https://tma.ugcboost.kz/tz/new"})
+			api.CampaignInput{Name: "Promo Y", TmaUrl: "https://tma.ugcboost.kz/tz/new_padding_secrettokenxx"})
 		require.Equal(t, http.StatusNotFound, w.Code)
 		require.Equal(t, domain.CodeCampaignNotFound, resp.Error.Code)
 		require.Equal(t, "Кампания не найдена.", resp.Error.Message)
@@ -361,12 +404,12 @@ func TestServer_UpdateCampaign(t *testing.T) {
 		authz.EXPECT().CanUpdateCampaign(mock.Anything).Return(nil)
 		campaigns := mocks.NewMockCampaignService(t)
 		campaigns.EXPECT().UpdateCampaign(mock.Anything, campaignIDStr,
-			domain.CampaignInput{Name: "Promo Y", TmaURL: "https://tma.ugcboost.kz/tz/new"}).
+			domain.CampaignInput{Name: "Promo Y", TmaURL: "https://tma.ugcboost.kz/tz/new_padding_secrettokenxx"}).
 			Return(domain.ErrCampaignNameTaken)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, campaigns, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, campaigns, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPatch, campaignPath,
-			api.CampaignInput{Name: "Promo Y", TmaUrl: "https://tma.ugcboost.kz/tz/new"})
+			api.CampaignInput{Name: "Promo Y", TmaUrl: "https://tma.ugcboost.kz/tz/new_padding_secrettokenxx"})
 		require.Equal(t, http.StatusConflict, w.Code)
 		require.Equal(t, domain.CodeCampaignNameTaken, resp.Error.Code)
 		require.Contains(t, resp.Error.Message, "Кампания с таким названием")
@@ -378,14 +421,14 @@ func TestServer_UpdateCampaign(t *testing.T) {
 		authz.EXPECT().CanUpdateCampaign(mock.Anything).Return(nil)
 		campaigns := mocks.NewMockCampaignService(t)
 		campaigns.EXPECT().UpdateCampaign(mock.Anything, campaignIDStr,
-			domain.CampaignInput{Name: "Promo Y", TmaURL: "https://tma.ugcboost.kz/tz/new"}).
+			domain.CampaignInput{Name: "Promo Y", TmaURL: "https://tma.ugcboost.kz/tz/new_padding_secrettokenxx"}).
 			Return(errors.New("db unavailable"))
 		log := logmocks.NewMockLogger(t)
 		expectHandlerUnexpectedErrorLog(log, campaignPath)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, campaigns, nil, nil, ServerConfig{Version: "test-version"}, log))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, campaigns, nil, nil, nil, ServerConfig{Version: "test-version"}, log))
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPatch, campaignPath,
-			api.CampaignInput{Name: "Promo Y", TmaUrl: "https://tma.ugcboost.kz/tz/new"})
+			api.CampaignInput{Name: "Promo Y", TmaUrl: "https://tma.ugcboost.kz/tz/new_padding_secrettokenxx"})
 		require.Equal(t, http.StatusInternalServerError, w.Code)
 		require.Equal(t, domain.CodeInternal, resp.Error.Code)
 	})
@@ -396,12 +439,12 @@ func TestServer_UpdateCampaign(t *testing.T) {
 		authz.EXPECT().CanUpdateCampaign(mock.Anything).Return(nil)
 		campaigns := mocks.NewMockCampaignService(t)
 		campaigns.EXPECT().UpdateCampaign(mock.Anything, campaignIDStr,
-			domain.CampaignInput{Name: "Promo Y", TmaURL: "https://tma.ugcboost.kz/tz/new"}).
+			domain.CampaignInput{Name: "Promo Y", TmaURL: "https://tma.ugcboost.kz/tz/new_padding_secrettokenxx"}).
 			Return(nil)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, campaigns, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, campaigns, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, _ := doJSON[struct{}](t, router, http.MethodPatch, campaignPath,
-			api.CampaignInput{Name: "  Promo Y  ", TmaUrl: "  https://tma.ugcboost.kz/tz/new  "})
+			api.CampaignInput{Name: "  Promo Y  ", TmaUrl: "  https://tma.ugcboost.kz/tz/new_padding_secrettokenxx  "})
 		require.Equal(t, http.StatusNoContent, w.Code)
 		require.Zero(t, w.Body.Len(), "204 must have empty body")
 	})
@@ -417,7 +460,7 @@ func TestServer_ListCampaigns(t *testing.T) {
 		authz := mocks.NewMockAuthzService(t)
 		authz.EXPECT().CanListCampaigns(mock.Anything).Return(domain.ErrForbidden)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodGet, validQuery, nil)
 		require.Equal(t, http.StatusForbidden, w.Code)
 		require.Equal(t, domain.CodeForbidden, resp.Error.Code)
@@ -429,7 +472,7 @@ func TestServer_ListCampaigns(t *testing.T) {
 		// CodeValidation before the handler ever runs, so no authz/service mocks
 		// participate. The 400 (not 422) matches the rest of the handler-layer
 		// contract for malformed query params — see HandleParamError.
-		router := newTestRouter(t, NewServer(nil, nil, mocks.NewMockAuthzService(t), nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, nil, mocks.NewMockAuthzService(t), nil, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodGet, "/campaigns?perPage=10&sort=created_at&order=desc", nil)
 		require.Equal(t, http.StatusBadRequest, w.Code)
 		require.Equal(t, domain.CodeValidation, resp.Error.Code)
@@ -440,7 +483,7 @@ func TestServer_ListCampaigns(t *testing.T) {
 		authz := mocks.NewMockAuthzService(t)
 		authz.EXPECT().CanListCampaigns(mock.Anything).Return(nil)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodGet, "/campaigns?page=1&perPage=10&sort=bogus&order=asc", nil)
 		require.Equal(t, http.StatusUnprocessableEntity, w.Code)
 		require.Equal(t, domain.CodeValidation, resp.Error.Code)
@@ -452,7 +495,7 @@ func TestServer_ListCampaigns(t *testing.T) {
 		authz := mocks.NewMockAuthzService(t)
 		authz.EXPECT().CanListCampaigns(mock.Anything).Return(nil)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodGet, "/campaigns?page=1&perPage=10&sort=created_at&order=sideways", nil)
 		require.Equal(t, http.StatusUnprocessableEntity, w.Code)
 		require.Equal(t, domain.CodeValidation, resp.Error.Code)
@@ -464,7 +507,7 @@ func TestServer_ListCampaigns(t *testing.T) {
 		authz := mocks.NewMockAuthzService(t)
 		authz.EXPECT().CanListCampaigns(mock.Anything).Return(nil)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodGet, "/campaigns?page=0&perPage=10&sort=created_at&order=asc", nil)
 		require.Equal(t, http.StatusUnprocessableEntity, w.Code)
 		require.Equal(t, domain.CodeValidation, resp.Error.Code)
@@ -476,7 +519,7 @@ func TestServer_ListCampaigns(t *testing.T) {
 		authz := mocks.NewMockAuthzService(t)
 		authz.EXPECT().CanListCampaigns(mock.Anything).Return(nil)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodGet, "/campaigns?page=1&perPage=201&sort=created_at&order=asc", nil)
 		require.Equal(t, http.StatusUnprocessableEntity, w.Code)
 		require.Equal(t, domain.CodeValidation, resp.Error.Code)
@@ -492,7 +535,7 @@ func TestServer_ListCampaigns(t *testing.T) {
 		authz := mocks.NewMockAuthzService(t)
 		authz.EXPECT().CanListCampaigns(mock.Anything).Return(nil)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		long := strings.Repeat("a", domain.CampaignListSearchMaxLen+1)
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodGet,
 			"/campaigns?page=1&perPage=10&sort=created_at&order=asc&search="+long, nil)
@@ -511,7 +554,7 @@ func TestServer_ListCampaigns(t *testing.T) {
 		log := logmocks.NewMockLogger(t)
 		expectHandlerUnexpectedErrorLog(log, "/campaigns")
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, campaigns, nil, nil, ServerConfig{Version: "test-version"}, log))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, campaigns, nil, nil, nil, ServerConfig{Version: "test-version"}, log))
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodGet, validQuery, nil)
 		require.Equal(t, http.StatusInternalServerError, w.Code)
 		require.Equal(t, domain.CodeInternal, resp.Error.Code)
@@ -536,7 +579,7 @@ func TestServer_ListCampaigns(t *testing.T) {
 			PerPage: 10,
 		}, nil)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, campaigns, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, campaigns, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.CampaignsListResult](t, router, http.MethodGet, "/campaigns?page=5&perPage=10&sort=created_at&order=desc", nil)
 		require.Equal(t, http.StatusOK, w.Code)
 		require.NotNil(t, resp.Data.Items, "items must be a non-nil empty array, never JSON null")
@@ -562,7 +605,7 @@ func TestServer_ListCampaigns(t *testing.T) {
 				PerPage: 10,
 			}, nil)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, campaigns, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, campaigns, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.CampaignsListResult](t, router, http.MethodGet, "/campaigns?page=99&perPage=10&sort=created_at&order=desc", nil)
 		require.Equal(t, http.StatusOK, w.Code)
 		require.Empty(t, resp.Data.Items)
@@ -584,7 +627,7 @@ func TestServer_ListCampaigns(t *testing.T) {
 			}).
 			Return(&domain.CampaignListPage{Items: nil, Total: 0, Page: 1, PerPage: 10}, nil)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, campaigns, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, campaigns, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, _ := doJSON[api.CampaignsListResult](t, router, http.MethodGet, "/campaigns?page=1&perPage=10&sort=created_at&order=asc", nil)
 		require.Equal(t, http.StatusOK, w.Code)
 	})
@@ -615,15 +658,15 @@ func TestServer_ListCampaigns(t *testing.T) {
 			}).
 			Return(&domain.CampaignListPage{
 				Items: []*domain.Campaign{
-					{ID: "11111111-2222-3333-4444-555555555555", Name: "Promo A", TmaURL: "https://tma.ugcboost.kz/tz/a", IsDeleted: false, CreatedAt: created, UpdatedAt: updated},
-					{ID: "22222222-3333-4444-5555-666666666666", Name: "Promo B", TmaURL: "https://tma.ugcboost.kz/tz/b", IsDeleted: false, CreatedAt: created, UpdatedAt: updated},
+					{ID: "11111111-2222-3333-4444-555555555555", Name: "Promo A", TmaURL: "https://tma.ugcboost.kz/tz/a_padding_secrettokenxxxx", IsDeleted: false, CreatedAt: created, UpdatedAt: updated},
+					{ID: "22222222-3333-4444-5555-666666666666", Name: "Promo B", TmaURL: "https://tma.ugcboost.kz/tz/b_padding_secrettokenxxxx", IsDeleted: false, CreatedAt: created, UpdatedAt: updated},
 				},
 				Total:   42,
 				Page:    2,
 				PerPage: 25,
 			}, nil)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, campaigns, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, campaigns, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		// Search has surrounding whitespace so we exercise the trim contract.
 		w, resp := doJSON[api.CampaignsListResult](t, router, http.MethodGet,
 			"/campaigns?page=2&perPage=25&sort=name&order=asc&search=%20promo%20&isDeleted=false", nil)
@@ -651,7 +694,7 @@ func TestServer_ListCampaigns(t *testing.T) {
 			}).
 			Return(&domain.CampaignListPage{Items: nil, Total: 0, Page: 1, PerPage: 10}, nil)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, campaigns, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, campaigns, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, _ := doJSON[api.CampaignsListResult](t, router, http.MethodGet,
 			"/campaigns?page=1&perPage=10&sort=created_at&order=asc&isDeleted=true", nil)
 		require.Equal(t, http.StatusOK, w.Code)
@@ -674,7 +717,7 @@ func TestServer_ListCampaigns(t *testing.T) {
 		log := logmocks.NewMockLogger(t)
 		expectHandlerUnexpectedErrorLog(log, "/campaigns")
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, campaigns, nil, nil, ServerConfig{Version: "test-version"}, log))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, campaigns, nil, nil, nil, ServerConfig{Version: "test-version"}, log))
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodGet, validQuery, nil)
 		require.Equal(t, http.StatusInternalServerError, w.Code)
 		require.Equal(t, domain.CodeInternal, resp.Error.Code,

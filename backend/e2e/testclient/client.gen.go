@@ -119,6 +119,11 @@ type ClientInterface interface {
 	TelegramSpyFakeChatWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	TelegramSpyFakeChat(ctx context.Context, body TelegramSpyFakeChatJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// SignTMAInitDataWithBody request with any body
+	SignTMAInitDataWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	SignTMAInitData(ctx context.Context, body SignTMAInitDataJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 }
 
 func (c *Client) CleanupEntityWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -255,6 +260,30 @@ func (c *Client) TelegramSpyFakeChatWithBody(ctx context.Context, contentType st
 
 func (c *Client) TelegramSpyFakeChat(ctx context.Context, body TelegramSpyFakeChatJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewTelegramSpyFakeChatRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) SignTMAInitDataWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewSignTMAInitDataRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) SignTMAInitData(ctx context.Context, body SignTMAInitDataJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewSignTMAInitDataRequest(c.Server, body)
 	if err != nil {
 		return nil, err
 	}
@@ -571,6 +600,46 @@ func NewTelegramSpyFakeChatRequestWithBody(server string, contentType string, bo
 	return req, nil
 }
 
+// NewSignTMAInitDataRequest calls the generic SignTMAInitData builder with application/json body
+func NewSignTMAInitDataRequest(server string, body SignTMAInitDataJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewSignTMAInitDataRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewSignTMAInitDataRequestWithBody generates requests for SignTMAInitData with any type of body
+func NewSignTMAInitDataRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/test/tma/sign-init-data")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 func (c *Client) applyEditors(ctx context.Context, req *http.Request, additionalEditors []RequestEditorFn) error {
 	for _, r := range c.RequestEditors {
 		if err := r(ctx, req); err != nil {
@@ -644,6 +713,11 @@ type ClientWithResponsesInterface interface {
 	TelegramSpyFakeChatWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*TelegramSpyFakeChatResponse, error)
 
 	TelegramSpyFakeChatWithResponse(ctx context.Context, body TelegramSpyFakeChatJSONRequestBody, reqEditors ...RequestEditorFn) (*TelegramSpyFakeChatResponse, error)
+
+	// SignTMAInitDataWithBodyWithResponse request with any body
+	SignTMAInitDataWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SignTMAInitDataResponse, error)
+
+	SignTMAInitDataWithResponse(ctx context.Context, body SignTMAInitDataJSONRequestBody, reqEditors ...RequestEditorFn) (*SignTMAInitDataResponse, error)
 }
 
 type CleanupEntityResponse struct {
@@ -804,6 +878,29 @@ func (r TelegramSpyFakeChatResponse) StatusCode() int {
 	return 0
 }
 
+type SignTMAInitDataResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *SignTMAInitDataResult
+	JSON422      *ErrorResponse
+}
+
+// Status returns HTTPResponse.Status
+func (r SignTMAInitDataResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r SignTMAInitDataResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 // CleanupEntityWithBodyWithResponse request with arbitrary body returning *CleanupEntityResponse
 func (c *ClientWithResponses) CleanupEntityWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CleanupEntityResponse, error) {
 	rsp, err := c.CleanupEntityWithBody(ctx, contentType, body, reqEditors...)
@@ -905,6 +1002,23 @@ func (c *ClientWithResponses) TelegramSpyFakeChatWithResponse(ctx context.Contex
 		return nil, err
 	}
 	return ParseTelegramSpyFakeChatResponse(rsp)
+}
+
+// SignTMAInitDataWithBodyWithResponse request with arbitrary body returning *SignTMAInitDataResponse
+func (c *ClientWithResponses) SignTMAInitDataWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SignTMAInitDataResponse, error) {
+	rsp, err := c.SignTMAInitDataWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseSignTMAInitDataResponse(rsp)
+}
+
+func (c *ClientWithResponses) SignTMAInitDataWithResponse(ctx context.Context, body SignTMAInitDataJSONRequestBody, reqEditors ...RequestEditorFn) (*SignTMAInitDataResponse, error) {
+	rsp, err := c.SignTMAInitData(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseSignTMAInitDataResponse(rsp)
 }
 
 // ParseCleanupEntityResponse parses an HTTP response from a CleanupEntityWithResponse call
@@ -1105,6 +1219,39 @@ func ParseTelegramSpyFakeChatResponse(rsp *http.Response) (*TelegramSpyFakeChatR
 	}
 
 	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON422 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseSignTMAInitDataResponse parses an HTTP response from a SignTMAInitDataWithResponse call
+func ParseSignTMAInitDataResponse(rsp *http.Response) (*SignTMAInitDataResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &SignTMAInitDataResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest SignTMAInitDataResult
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
 		var dest ErrorResponse
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {

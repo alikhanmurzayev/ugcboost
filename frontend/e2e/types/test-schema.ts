@@ -134,6 +134,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/test/tma/sign-init-data": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Mint a valid Telegram WebApp initData payload for tests
+         * @description Returns an `init_data` query string signed with the same HMAC the
+         *     production middleware verifies. e2e suites paste the value into
+         *     `Authorization: tma <init-data>` to exercise /tma/* endpoints
+         *     without driving a real Telegram WebApp client. NEVER enabled in
+         *     production.
+         */
+        post: operations["signTMAInitData"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/test/telegram/spy/fail-next": {
         parameters: {
             query?: never;
@@ -252,6 +276,30 @@ export interface components {
              *     classifies it as bot_blocked.
              */
             reason?: string;
+        };
+        SignTMAInitDataRequest: {
+            /**
+             * Format: int64
+             * @description Telegram user id to sign on behalf of.
+             */
+            telegramUserId: number;
+            /**
+             * Format: int64
+             * @description Optional Unix timestamp (seconds). Defaults to "now" — used by
+             *     tests that want to exercise expired / future-dated init_data
+             *     paths.
+             */
+            authDate?: number;
+        };
+        SignTMAInitDataData: {
+            /**
+             * @description Signed query-string ready to be passed in
+             *     `Authorization: tma <init-data>`.
+             */
+            initData: string;
+        };
+        SignTMAInitDataResult: {
+            data: components["schemas"]["SignTMAInitDataData"];
         };
         TelegramSpyFakeChatRequest: {
             /**
@@ -456,6 +504,39 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    signTMAInitData: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SignTMAInitDataRequest"];
+            };
+        };
+        responses: {
+            /** @description Signed initData payload */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SignTMAInitDataResult"];
+                };
             };
             /** @description Validation error */
             422: {

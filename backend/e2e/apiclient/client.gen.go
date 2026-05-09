@@ -224,6 +224,12 @@ type ClientInterface interface {
 	// HealthCheck request
 	HealthCheck(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// TmaAgree request
+	TmaAgree(ctx context.Context, secretToken TmaSecretTokenPathParam, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// TmaDecline request
+	TmaDecline(ctx context.Context, secretToken TmaSecretTokenPathParam, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// SendPulseInstagramWebhookWithBody request with any body
 	SendPulseInstagramWebhookWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -820,6 +826,30 @@ func (c *Client) ListDictionary(ctx context.Context, pType ListDictionaryParamsT
 
 func (c *Client) HealthCheck(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewHealthCheckRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) TmaAgree(ctx context.Context, secretToken TmaSecretTokenPathParam, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewTmaAgreeRequest(c.Server, secretToken)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) TmaDecline(ctx context.Context, secretToken TmaSecretTokenPathParam, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewTmaDeclineRequest(c.Server, secretToken)
 	if err != nil {
 		return nil, err
 	}
@@ -2347,6 +2377,74 @@ func NewHealthCheckRequest(server string) (*http.Request, error) {
 	return req, nil
 }
 
+// NewTmaAgreeRequest generates requests for TmaAgree
+func NewTmaAgreeRequest(server string, secretToken TmaSecretTokenPathParam) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "secretToken", secretToken, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/tma/campaigns/%s/agree", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewTmaDeclineRequest generates requests for TmaDecline
+func NewTmaDeclineRequest(server string, secretToken TmaSecretTokenPathParam) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "secretToken", secretToken, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: ""})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/tma/campaigns/%s/decline", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewSendPulseInstagramWebhookRequest calls the generic SendPulseInstagramWebhook builder with application/json body
 func NewSendPulseInstagramWebhookRequest(server string, body SendPulseInstagramWebhookJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
@@ -2563,6 +2661,12 @@ type ClientWithResponsesInterface interface {
 
 	// HealthCheckWithResponse request
 	HealthCheckWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*HealthCheckResponse, error)
+
+	// TmaAgreeWithResponse request
+	TmaAgreeWithResponse(ctx context.Context, secretToken TmaSecretTokenPathParam, reqEditors ...RequestEditorFn) (*TmaAgreeResponse, error)
+
+	// TmaDeclineWithResponse request
+	TmaDeclineWithResponse(ctx context.Context, secretToken TmaSecretTokenPathParam, reqEditors ...RequestEditorFn) (*TmaDeclineResponse, error)
 
 	// SendPulseInstagramWebhookWithBodyWithResponse request with any body
 	SendPulseInstagramWebhookWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SendPulseInstagramWebhookResponse, error)
@@ -3435,6 +3539,60 @@ func (r HealthCheckResponse) StatusCode() int {
 	return 0
 }
 
+type TmaAgreeResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *TmaDecisionResult
+	JSON401      *ErrorResponse
+	JSON403      *ErrorResponse
+	JSON404      *ErrorResponse
+	JSON422      *ErrorResponse
+	JSONDefault  *UnexpectedError
+}
+
+// Status returns HTTPResponse.Status
+func (r TmaAgreeResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r TmaAgreeResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type TmaDeclineResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *TmaDecisionResult
+	JSON401      *ErrorResponse
+	JSON403      *ErrorResponse
+	JSON404      *ErrorResponse
+	JSON422      *ErrorResponse
+	JSONDefault  *UnexpectedError
+}
+
+// Status returns HTTPResponse.Status
+func (r TmaDeclineResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r TmaDeclineResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type SendPulseInstagramWebhookResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -3891,6 +4049,24 @@ func (c *ClientWithResponses) HealthCheckWithResponse(ctx context.Context, reqEd
 		return nil, err
 	}
 	return ParseHealthCheckResponse(rsp)
+}
+
+// TmaAgreeWithResponse request returning *TmaAgreeResponse
+func (c *ClientWithResponses) TmaAgreeWithResponse(ctx context.Context, secretToken TmaSecretTokenPathParam, reqEditors ...RequestEditorFn) (*TmaAgreeResponse, error) {
+	rsp, err := c.TmaAgree(ctx, secretToken, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseTmaAgreeResponse(rsp)
+}
+
+// TmaDeclineWithResponse request returning *TmaDeclineResponse
+func (c *ClientWithResponses) TmaDeclineWithResponse(ctx context.Context, secretToken TmaSecretTokenPathParam, reqEditors ...RequestEditorFn) (*TmaDeclineResponse, error) {
+	rsp, err := c.TmaDecline(ctx, secretToken, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseTmaDeclineResponse(rsp)
 }
 
 // SendPulseInstagramWebhookWithBodyWithResponse request with arbitrary body returning *SendPulseInstagramWebhookResponse
@@ -5576,6 +5752,128 @@ func ParseHealthCheckResponse(rsp *http.Response) (*HealthCheckResponse, error) 
 			return nil, err
 		}
 		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest UnexpectedError
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseTmaAgreeResponse parses an HTTP response from a TmaAgreeWithResponse call
+func ParseTmaAgreeResponse(rsp *http.Response) (*TmaAgreeResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &TmaAgreeResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest TmaDecisionResult
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON422 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest UnexpectedError
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseTmaDeclineResponse parses an HTTP response from a TmaDeclineWithResponse call
+func ParseTmaDeclineResponse(rsp *http.Response) (*TmaDeclineResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &TmaDeclineResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest TmaDecisionResult
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON422 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
 		var dest UnexpectedError

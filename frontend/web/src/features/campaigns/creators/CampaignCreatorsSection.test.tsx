@@ -499,39 +499,29 @@ describe("CampaignCreatorsSection — Remove flow", () => {
     );
   });
 
-  it("422 CAMPAIGN_CREATOR_AGREED keeps dialog open with agreed-error", async () => {
+  it("trash button is not rendered for an agreed creator (UI gates removal upstream of backend)", async () => {
     vi.mocked(listCampaignCreators).mockResolvedValueOnce([
       makeCC(CREATOR_A, "agreed"),
+      makeCC(CREATOR_B, "planned"),
     ]);
     vi.mocked(listCreators).mockResolvedValueOnce({
       data: {
-        items: [makeCreator(CREATOR_A, "Иванова")],
-        total: 1,
+        items: [
+          makeCreator(CREATOR_A, "Иванова"),
+          makeCreator(CREATOR_B, "Петрова"),
+        ],
+        total: 2,
         page: 1,
         perPage: 200,
       },
     });
-    vi.mocked(removeCampaignCreator).mockRejectedValueOnce(
-      new ApiError(422, "CAMPAIGN_CREATOR_AGREED"),
-    );
 
     renderSection(FIXTURE_CAMPAIGN_LIVE);
 
-    await userEvent.click(
-      await screen.findByTestId(`campaign-creator-remove-${CREATOR_A}`),
-    );
-    await userEvent.click(
-      await screen.findByTestId("remove-creator-confirm-submit"),
-    );
-
-    await waitFor(() => {
-      expect(
-        screen.getByTestId("remove-creator-confirm-error"),
-      ).toHaveTextContent(/удалить нельзя/i);
-    });
+    await screen.findByTestId(`campaign-creator-remove-${CREATOR_B}`);
     expect(
-      screen.getByTestId("remove-creator-confirm"),
-    ).toBeInTheDocument();
+      screen.queryByTestId(`campaign-creator-remove-${CREATOR_A}`),
+    ).not.toBeInTheDocument();
   });
 
   it("404 race: dialog closes silently and list invalidates", async () => {

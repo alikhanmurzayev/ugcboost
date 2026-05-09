@@ -20,28 +20,34 @@ import (
 // instead of leaking the raw Postgres error.
 const (
 	CampaignsNameActiveUnique = "campaigns_name_active_unique"
+	CampaignsSecretTokenUniq  = "campaigns_secret_token_uniq"
 )
 
 // Campaigns table and column names.
 const (
-	TableCampaigns          = "campaigns"
-	CampaignColumnID        = "id"
-	CampaignColumnName      = "name"
-	CampaignColumnTmaURL    = "tma_url"
-	CampaignColumnIsDeleted = "is_deleted"
-	CampaignColumnCreatedAt = "created_at"
-	CampaignColumnUpdatedAt = "updated_at"
+	TableCampaigns            = "campaigns"
+	CampaignColumnID          = "id"
+	CampaignColumnName        = "name"
+	CampaignColumnTmaURL      = "tma_url"
+	CampaignColumnSecretToken = "secret_token"
+	CampaignColumnIsDeleted   = "is_deleted"
+	CampaignColumnCreatedAt   = "created_at"
+	CampaignColumnUpdatedAt   = "updated_at"
 )
 
-// CampaignRow maps to the campaigns table. Insert tags cover only the two
+// CampaignRow maps to the campaigns table. Insert tags cover only the
 // fields the service supplies — id / is_deleted / *_at are DB-defaulted.
+// SecretToken is the raw last-path-segment of TmaURL extracted by the
+// service via domain.ExtractSecretToken. NULL for legacy / draft campaigns
+// (tma_url empty) — those rows are reachable in admin but not via TMA.
 type CampaignRow struct {
-	ID        string    `db:"id"`
-	Name      string    `db:"name"       insert:"name"`
-	TmaURL    string    `db:"tma_url"    insert:"tma_url"`
-	IsDeleted bool      `db:"is_deleted"`
-	CreatedAt time.Time `db:"created_at"`
-	UpdatedAt time.Time `db:"updated_at"`
+	ID          string    `db:"id"`
+	Name        string    `db:"name"          insert:"name"`
+	TmaURL      string    `db:"tma_url"       insert:"tma_url"`
+	SecretToken *string   `db:"secret_token"  insert:"secret_token"`
+	IsDeleted   bool      `db:"is_deleted"`
+	CreatedAt   time.Time `db:"created_at"`
+	UpdatedAt   time.Time `db:"updated_at"`
 }
 
 var (
@@ -51,10 +57,11 @@ var (
 
 // CampaignRepo lists every public method of the campaign repository.
 type CampaignRepo interface {
-	Create(ctx context.Context, name, tmaURL string) (*CampaignRow, error)
+	Create(ctx context.Context, name, tmaURL, secretToken string) (*CampaignRow, error)
 	GetByID(ctx context.Context, id string) (*CampaignRow, error)
+	GetBySecretToken(ctx context.Context, secretToken string) (*CampaignRow, error)
 	ListByIDs(ctx context.Context, ids []string) ([]*CampaignRow, error)
-	Update(ctx context.Context, id, name, tmaURL string) (*CampaignRow, error)
+	Update(ctx context.Context, id, name, tmaURL, secretToken string) (*CampaignRow, error)
 	List(ctx context.Context, params CampaignListParams) ([]*CampaignRow, int64, error)
 	DeleteForTests(ctx context.Context, id string) error
 }
@@ -76,23 +83,38 @@ type campaignRepository struct {
 }
 
 // Create inserts a new campaign row and returns the persisted row with
-// DB-generated fields populated. Concurrent inserts of the same name on the
-// partial unique index `campaigns_name_active_unique` (WHERE is_deleted =
-// false) trip a 23505 — translated into domain.ErrCampaignNameTaken so the
-// service surfaces a 409 instead of leaking the raw Postgres error.
-func (r *campaignRepository) Create(ctx context.Context, name, tmaURL string) (*CampaignRow, error) {
+// DB-generated fields populated. Two unique-index races translate into
+// distinct domain sentinels:
+//
+//   - 23505 + campaigns_name_active_unique → ErrCampaignNameTaken
+//     (another live campaign already uses this name).
+//   - 23505 + campaigns_secret_token_uniq → ErrTmaURLConflict
+//     (another live campaign already uses this secret_token / tma_url).
+//
+// Empty secretToken is stored as NULL — partial UNIQUE skips NULL rows so
+// multiple legacy/draft campaigns (no TMA link) coexist without conflict.
+func (r *campaignRepository) Create(ctx context.Context, name, tmaURL, secretToken string) (*CampaignRow, error) {
+	row := CampaignRow{Name: name, TmaURL: tmaURL}
+	if secretToken != "" {
+		row.SecretToken = &secretToken
+	}
 	q := sq.Insert(TableCampaigns).
-		SetMap(toMap(CampaignRow{Name: name, TmaURL: tmaURL}, campaignInsertMapper)).
+		SetMap(toMap(row, campaignInsertMapper)).
 		Suffix(returningClause(campaignSelectColumns))
-	row, err := dbutil.One[CampaignRow](ctx, r.db, q)
+	persisted, err := dbutil.One[CampaignRow](ctx, r.db, q)
 	if err != nil {
 		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == "23505" && pgErr.ConstraintName == CampaignsNameActiveUnique {
-			return nil, domain.ErrCampaignNameTaken
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			switch pgErr.ConstraintName {
+			case CampaignsNameActiveUnique:
+				return nil, domain.ErrCampaignNameTaken
+			case CampaignsSecretTokenUniq:
+				return nil, domain.ErrTmaURLConflict
+			}
 		}
 		return nil, err
 	}
-	return row, nil
+	return persisted, nil
 }
 
 // GetByID returns the campaign row by id. The WHERE clause intentionally has
@@ -127,24 +149,52 @@ func (r *campaignRepository) ListByIDs(ctx context.Context, ids []string) ([]*Ca
 	return rows, nil
 }
 
-// Update writes name/tma_url + updated_at=now() and RETURNINGs the row.
-// is_deleted is not filtered here — the gate lives in CampaignService.
-func (r *campaignRepository) Update(ctx context.Context, id, name, tmaURL string) (*CampaignRow, error) {
+// Update writes name/tma_url/secret_token + updated_at=now() and RETURNINGs
+// the row. is_deleted is not filtered here — the gate lives in
+// CampaignService. Empty secretToken clears the column to NULL (legacy/draft
+// flip). 23505 races are translated to ErrCampaignNameTaken /
+// ErrTmaURLConflict per the same matrix as Create.
+func (r *campaignRepository) Update(ctx context.Context, id, name, tmaURL, secretToken string) (*CampaignRow, error) {
 	q := sq.Update(TableCampaigns).
 		Set(CampaignColumnName, name).
 		Set(CampaignColumnTmaURL, tmaURL).
 		Set(CampaignColumnUpdatedAt, sq.Expr("now()")).
 		Where(sq.Eq{CampaignColumnID: id}).
 		Suffix(returningClause(campaignSelectColumns))
+	if secretToken == "" {
+		q = q.Set(CampaignColumnSecretToken, nil)
+	} else {
+		q = q.Set(CampaignColumnSecretToken, secretToken)
+	}
 	row, err := dbutil.One[CampaignRow](ctx, r.db, q)
 	if err != nil {
 		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == "23505" && pgErr.ConstraintName == CampaignsNameActiveUnique {
-			return nil, domain.ErrCampaignNameTaken
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			switch pgErr.ConstraintName {
+			case CampaignsNameActiveUnique:
+				return nil, domain.ErrCampaignNameTaken
+			case CampaignsSecretTokenUniq:
+				return nil, domain.ErrTmaURLConflict
+			}
 		}
 		return nil, err
 	}
 	return row, nil
+}
+
+// GetBySecretToken returns the live campaign row whose secret_token equals
+// the supplied value. Exact `=` lookup, not LIKE — defence against a
+// suffix-attack where a one-character path-segment would match every row.
+// Soft-deleted rows are filtered out at the SQL level so AuthzService gets
+// `sql.ErrNoRows` for both unknown and deleted, mapped to 404 anti-fingerprint.
+// Repo does not assert N>1 — partial UNIQUE caps it at 1 on the DB side; an
+// inflated row count would mean the index is broken, propagated as internal.
+func (r *campaignRepository) GetBySecretToken(ctx context.Context, secretToken string) (*CampaignRow, error) {
+	q := sq.Select(campaignSelectColumns...).
+		From(TableCampaigns).
+		Where(sq.Eq{CampaignColumnSecretToken: secretToken}).
+		Where(sq.Eq{CampaignColumnIsDeleted: false})
+	return dbutil.One[CampaignRow](ctx, r.db, q)
 }
 
 // List returns one page of campaigns matching the filter set, plus the

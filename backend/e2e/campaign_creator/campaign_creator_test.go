@@ -57,8 +57,6 @@ import (
 	"github.com/alikhanmurzayev/ugcboost/backend/e2e/testutil"
 )
 
-const validTmaURL = "https://tma.ugcboost.kz/tz/abc123secret"
-
 // defaultCreatorOpts mirrors the fixture from creators/list_test.go: one
 // auto-verified Instagram social plus an unverified TikTok handle so the
 // approve flow has exactly the verification it needs.
@@ -77,7 +75,7 @@ func setupCampaign(t *testing.T, c *apiclient.ClientWithResponses, adminToken, n
 	t.Helper()
 	resp, err := c.CreateCampaignWithResponse(context.Background(), apiclient.CreateCampaignJSONRequestBody{
 		Name:   name,
-		TmaUrl: validTmaURL,
+		TmaUrl: testutil.FreshValidTmaURL(),
 	}, testutil.WithAuth(adminToken))
 	require.NoError(t, err)
 	require.Equalf(t, http.StatusCreated, resp.StatusCode(),

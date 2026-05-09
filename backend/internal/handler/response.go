@@ -85,6 +85,9 @@ func respondError(w http.ResponseWriter, r *http.Request, err error, log logger.
 	case errors.Is(err, domain.ErrCampaignCreatorNotFound):
 		writeError(w, r, http.StatusNotFound, domain.CodeCampaignCreatorNotFound,
 			"Креатор не найден в этой кампании.", log)
+	case errors.Is(err, domain.ErrTMAForbidden):
+		writeError(w, r, http.StatusForbidden, domain.CodeTMAForbidden,
+			"У вас нет приглашения на эту кампанию.", log)
 	case errors.Is(err, domain.ErrNotFound), errors.Is(err, sql.ErrNoRows):
 		writeError(w, r, http.StatusNotFound, domain.CodeNotFound, "Resource not found", log)
 	case errors.Is(err, domain.ErrForbidden):

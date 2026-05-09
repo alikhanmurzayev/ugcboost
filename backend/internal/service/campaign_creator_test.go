@@ -35,7 +35,7 @@ func liveCampaignRow(id string, created time.Time) *repository.CampaignRow {
 	return &repository.CampaignRow{
 		ID:        id,
 		Name:      "Promo X",
-		TmaURL:    "https://tma.ugcboost.kz/tz/abc",
+		TmaURL:    "https://tma.ugcboost.kz/tz/abc_padding_secrettokenxx",
 		IsDeleted: false,
 		CreatedAt: created,
 		UpdatedAt: created,
@@ -702,7 +702,7 @@ func setupNotifyKit(t *testing.T, opts notifyKitOpts) *notifyKit {
 	t.Helper()
 	tmaURL := opts.tmaURL
 	if tmaURL == "" {
-		tmaURL = "https://tma.ugcboost.kz/tz/abc"
+		tmaURL = "https://tma.ugcboost.kz/tz/abc_padding_secrettokenxx"
 	}
 	pool := dbmocks.NewMockPool(t)
 	factory := svcmocks.NewMockCampaignCreatorRepoFactory(t)

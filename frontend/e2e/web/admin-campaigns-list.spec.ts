@@ -93,9 +93,12 @@ test.describe("Admin campaigns list", () => {
     const labels = ["Aaaa", "Bbbb", "Cccc"];
     const seeded: SeededCampaign[] = [];
     for (const label of labels) {
+      // tmaUrl needs a per-iteration UUID — campaigns.secret_token has a
+      // partial UNIQUE INDEX, so reusing the outer `uuid` for all three
+      // seeds would trip TMA_URL_CONFLICT on the second insert.
       const camp = await seedCampaign(request, API_URL, adminToken, {
         name: `e2e-${uuid}-${label}`,
-        tmaUrl: `https://t.me/ugcboost_bot/app?startapp=${uuid.slice(0, 8)}-${label.toLowerCase()}`,
+        tmaUrl: `https://tma.ugcboost.kz/tz/${randomUUID().replaceAll("-", "")}`,
       });
       seeded.push(camp);
       cleanupStack.push(camp.cleanup);
@@ -143,9 +146,10 @@ test.describe("Admin campaigns list", () => {
     const uuid = randomUUID();
     const labels = ["Cccc", "Aaaa", "Bbbb"];
     for (const label of labels) {
+      // Per-iteration UUID for tmaUrl — see note in the previous test.
       const camp = await seedCampaign(request, API_URL, adminToken, {
         name: `e2e-${uuid}-${label}`,
-        tmaUrl: `https://t.me/ugcboost_bot/app?startapp=${uuid.slice(0, 8)}-${label.toLowerCase()}`,
+        tmaUrl: `https://tma.ugcboost.kz/tz/${randomUUID().replaceAll("-", "")}`,
       });
       cleanupStack.push(camp.cleanup);
     }
@@ -214,7 +218,7 @@ test.describe("Admin campaigns list", () => {
     const uuid = randomUUID();
     const camp = await seedCampaign(request, API_URL, adminToken, {
       name: `e2e-${uuid}-Single`,
-      tmaUrl: `https://t.me/ugcboost_bot/app?startapp=${uuid.slice(0, 8)}`,
+      tmaUrl: `https://tma.ugcboost.kz/tz/${uuid.replaceAll("-", "")}`,
     });
     cleanupStack.push(camp.cleanup);
 

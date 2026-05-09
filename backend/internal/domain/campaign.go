@@ -2,6 +2,8 @@ package domain
 
 import (
 	"errors"
+	"net/url"
+	"regexp"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -10,7 +12,25 @@ import (
 const (
 	campaignNameMaxLen   = 255
 	campaignTmaURLMaxLen = 2048
+
+	// secretTokenPattern enforces the format of the TMA-side secret token: 16
+	// to 256 URL-safe chars (letters/digits/underscore/hyphen). Defence in
+	// depth — both the ADMIN POST/PATCH and the TMA path-param are checked
+	// against this regex before any DB lookup, so neither a one-character
+	// nor a megabyte-sized token can reach `WHERE secret_token = $1`. 256 is
+	// far above any realistic UUID / base64 token (22-32 chars typical) but
+	// keeps a hard cap on attacker-controlled path-param length.
+	secretTokenPattern = `^[A-Za-z0-9_-]{16,256}$`
 )
+
+// secretTokenRe is the compiled regex matching the secret_token format.
+// Exported so middleware/handler/repo packages can early-reject malformed
+// tokens without re-compiling the same pattern.
+var secretTokenRe = regexp.MustCompile(secretTokenPattern)
+
+// SecretTokenRegex returns the compiled regex matching the secret_token
+// format. Used by handler-side early-reject to keep the regex in one place.
+func SecretTokenRegex() *regexp.Regexp { return secretTokenRe }
 
 // Campaign is the domain projection of a marketing campaign. JSON tags are
 // snake_case because the struct is serialized into audit_logs.new_value as-is
@@ -76,6 +96,23 @@ var ErrCampaignNotAvailableForAdd = NewValidationError(
 	"Одна или несколько выбранных кампаний недоступны. Обновите список и попробуйте снова.",
 )
 
+// ErrInvalidTmaURL is raised by ValidateCampaignTmaURL when the supplied
+// tma_url is not a valid absolute URL OR its last path segment fails the
+// secret_token format check (`^[A-Za-z0-9_-]{16,}$`). Empty input is
+// allowed (legacy / draft campaign). Mapped to 422 INVALID_TMA_URL.
+var ErrInvalidTmaURL = NewValidationError(
+	CodeInvalidTmaURL,
+	"Последний сегмент ссылки на TMA должен быть длиной от 16 символов и содержать только латинские буквы, цифры, '_' и '-'. Проверьте URL.",
+)
+
+// ErrTmaURLConflict is raised by CampaignRepo.Create / Update when a 23505
+// fires on `campaigns_secret_token_uniq` — another live campaign already
+// uses this secret_token. Mapped to 422 TMA_URL_CONFLICT.
+var ErrTmaURLConflict = NewValidationError(
+	CodeTmaURLConflict,
+	"Эта ссылка на TMA уже используется в другой кампании. Сгенерируйте новую ссылку.",
+)
+
 // NewErrCampaignAddAfterApproveFailed is constructed by ApproveApplication
 // when the post-tx1 add-loop fails on a specific campaign. The text spells
 // out that the creator is already created so the admin does not retry the
@@ -111,28 +148,61 @@ func ValidateCampaignName(name string) (string, error) {
 	return name, nil
 }
 
-// ValidateCampaignTmaURL enforces the trim + non-empty + ≤2048 contract on
-// the TMA-side ТЗ landing URL and returns the trimmed value. Format-wise we
-// only require non-empty — host differs between local / staging / production
-// and the value lives only to be embedded into outbound creator-invite
-// messages. Security note: the value is admin-controlled but downstream code
-// embedding it into outbound Telegram-messages MUST escape it for the target
-// surface (Markdown / HTML); we do not enforce a scheme whitelist here.
-func ValidateCampaignTmaURL(url string) (string, error) {
-	url = strings.TrimSpace(url)
-	if url == "" {
-		return "", NewValidationError(
-			CodeCampaignTmaURLRequired,
-			"Ссылка на TMA-страницу обязательна. Укажите URL без пробелов.",
-		)
+// ValidateCampaignTmaURL trims the supplied tma_url and enforces the
+// secret_token contract for the live-campaign TMA flow. Empty input is
+// allowed — legacy / draft campaigns stay reachable in admin without a TMA
+// link and surface as `secret_token = NULL` in the DB. Non-empty input must
+// parse as an absolute URL (scheme + host) and its last path segment must
+// match `^[A-Za-z0-9_-]{16,}$`. The secret_token integrity check lives here
+// so a one-character token can never reach the DB and a partial UNIQUE
+// index lookup never sees a malformed value.
+//
+// Security note: the value is admin-controlled but downstream code embedding
+// it into outbound Telegram messages MUST escape it for the target surface
+// (Markdown / HTML); the format check does not substitute for that escape.
+func ValidateCampaignTmaURL(raw string) (string, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "", nil
 	}
-	if utf8.RuneCountInString(url) > campaignTmaURLMaxLen {
+	if utf8.RuneCountInString(raw) > campaignTmaURLMaxLen {
 		return "", NewValidationError(
 			CodeCampaignTmaURLTooLong,
 			"Ссылка на TMA-страницу слишком длинная. Сократите URL до 2048 символов.",
 		)
 	}
-	return url, nil
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme == "" || u.Host == "" {
+		return "", ErrInvalidTmaURL
+	}
+	if !secretTokenRe.MatchString(lastSegment(u.Path)) {
+		return "", ErrInvalidTmaURL
+	}
+	return raw, nil
+}
+
+// ExtractSecretToken returns the last path segment of the supplied tma_url
+// or the empty string when the input is empty / unparseable. Callers pair
+// this with ValidateCampaignTmaURL — the validator gates format, this
+// helper extracts the raw token for the DB column.
+func ExtractSecretToken(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	u, err := url.Parse(raw)
+	if err != nil {
+		return ""
+	}
+	return lastSegment(u.Path)
+}
+
+func lastSegment(p string) string {
+	p = strings.TrimRight(p, "/")
+	if i := strings.LastIndex(p, "/"); i >= 0 {
+		return p[i+1:]
+	}
+	return p
 }
 
 const (

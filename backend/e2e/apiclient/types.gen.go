@@ -10,7 +10,8 @@ import (
 )
 
 const (
-	BearerAuthScopes = "bearerAuth.Scopes"
+	BearerAuthScopes  = "bearerAuth.Scopes"
+	TmaInitDataScopes = "tmaInitData.Scopes"
 )
 
 // Defines values for CampaignCreatorBatchInvalidReason.
@@ -260,6 +261,7 @@ func (e SortOrder) Valid() bool {
 const (
 	Admin        UserRole = "admin"
 	BrandManager UserRole = "brand_manager"
+	Creator      UserRole = "creator"
 )
 
 // Valid indicates whether the value is a known member of the UserRole enum.
@@ -268,6 +270,8 @@ func (e UserRole) Valid() bool {
 	case Admin:
 		return true
 	case BrandManager:
+		return true
+	case Creator:
 		return true
 	default:
 		return false
@@ -1315,12 +1319,31 @@ type TelegramLink struct {
 	TelegramUsername *string `json:"telegramUsername,omitempty"`
 }
 
+// TmaDecisionResult Result of a TMA agree / decline call. `status` is the
+// post-decision row state (`agreed` | `declined`). `alreadyDecided`
+// is true when the row was already in the requested terminal state —
+// the service skipped both the UPDATE and the audit row, the call is
+// an idempotent no-op.
+type TmaDecisionResult struct {
+	AlreadyDecided bool `json:"alreadyDecided"`
+
+	// Status Lifecycle state of a creator within a campaign.
+	//
+	// - `planned` — admin added the creator to the campaign (default on create).
+	// - `invited` — admin sent an invitation; awaiting creator response.
+	// - `declined` — creator declined via TMA.
+	// - `agreed` — creator accepted via TMA. Terminal for the current scope.
+	Status CampaignCreatorStatus `json:"status"`
+}
+
 // User defines model for User.
 type User struct {
 	Email openapi_types.Email `json:"email"`
 	Id    string              `json:"id"`
 
-	// Role Role of an authenticated user.
+	// Role Role of an authenticated user. `creator` is set by the TMA initData
+	// middleware after a successful HMAC + creator-by-telegram-user-id
+	// lookup; admin / brand_manager come from the JWT auth flow.
 	Role UserRole `json:"role"`
 }
 
@@ -1329,7 +1352,9 @@ type UserResponse struct {
 	Data User `json:"data"`
 }
 
-// UserRole Role of an authenticated user.
+// UserRole Role of an authenticated user. `creator` is set by the TMA initData
+// middleware after a successful HMAC + creator-by-telegram-user-id
+// lookup; admin / brand_manager come from the JWT auth flow.
 type UserRole string
 
 // PageQueryParam defines model for PageQueryParam.
@@ -1337,6 +1362,9 @@ type PageQueryParam = int
 
 // PerPageQueryParam defines model for PerPageQueryParam.
 type PerPageQueryParam = int
+
+// TmaSecretTokenPathParam defines model for TmaSecretTokenPathParam.
+type TmaSecretTokenPathParam = string
 
 // Forbidden defines model for Forbidden.
 type Forbidden = ErrorResponse

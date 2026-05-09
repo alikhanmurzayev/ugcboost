@@ -12,6 +12,9 @@ import type {
   Mentions,
   ReelsBrief,
 } from "./types";
+import { useAgreeDecision, useDeclineDecision } from "./useDecision";
+import { decisionErrorMessage } from "../../shared/i18n/errors";
+import { CAMPAIGN_CREATOR_STATUS } from "../../shared/constants/campaignCreatorStatus";
 
 type ConfirmTarget = "accept" | "decline" | null;
 
@@ -20,8 +23,8 @@ export function CampaignBriefPage() {
   const campaign = token ? getCampaignByToken(token) : undefined;
   const [ndaAccepted, setNdaAccepted] = useState(false);
   const [confirm, setConfirm] = useState<ConfirmTarget>(null);
-  const [accepted, setAccepted] = useState(false);
-  const [declined, setDeclined] = useState(false);
+  const agree = useAgreeDecision(token);
+  const decline = useDeclineDecision(token);
 
   useEffect(() => {
     const lock = !ndaAccepted || confirm !== null;
@@ -38,33 +41,34 @@ export function CampaignBriefPage() {
     return <NotFoundPage />;
   }
 
-  if (accepted) {
-    return <AcceptedView />;
+  const decisionResult = agree.data ?? decline.data;
+  if (decisionResult?.status === CAMPAIGN_CREATOR_STATUS.AGREED) {
+    return <AcceptedView alreadyDecided={decisionResult.alreadyDecided} />;
   }
-
-  if (declined) {
-    return <DeclinedView />;
+  if (decisionResult?.status === CAMPAIGN_CREATOR_STATUS.DECLINED) {
+    return <DeclinedView alreadyDecided={decisionResult.alreadyDecided} />;
   }
 
   const handleAcceptClick = () => setConfirm("accept");
   const handleDeclineClick = () => setConfirm("decline");
 
   const handleConfirmAccept = () => {
-    // backend integration will be wired by Alikhan later
     setConfirm(null);
-    setAccepted(true);
+    agree.mutate();
   };
 
   const handleConfirmDecline = () => {
-    // backend integration will be wired by Alikhan later
     setConfirm(null);
-    setDeclined(true);
+    decline.mutate();
   };
+
+  const submitting = agree.isPending || decline.isPending;
+  const submitError = agree.error ?? decline.error;
 
   const handleCancel = () => setConfirm(null);
 
   return (
-    <div className="min-h-screen bg-surface pb-12">
+    <div className="min-h-screen bg-surface pb-44">
       <div
         aria-hidden={!ndaAccepted}
         className={
@@ -130,25 +134,47 @@ export function CampaignBriefPage() {
           </Section>
         )}
 
-        <div className="flex flex-col gap-3 pt-2">
-          <button
-            type="button"
-            onClick={handleAcceptClick}
-            className="w-full rounded-button bg-primary py-3 text-base font-semibold text-white transition-colors hover:bg-primary-600 active:bg-primary-700"
-            data-testid="campaign-accept-button"
-          >
-            Согласиться
-          </button>
-          <button
-            type="button"
-            onClick={handleDeclineClick}
-            className="w-full rounded-button border border-surface-300 bg-surface-50 py-3 text-base font-semibold text-gray-700 transition-colors hover:bg-surface-200"
-            data-testid="campaign-decline-button"
-          >
-            Отказаться
-          </button>
-        </div>
       </main>
+      </div>
+      <div
+        aria-hidden={!ndaAccepted}
+        className={
+          "pointer-events-none fixed inset-x-0 bottom-0 z-40 " +
+          (ndaAccepted ? "" : "select-none blur-md")
+        }
+      >
+        <div className="h-8 bg-gradient-to-b from-transparent to-surface" />
+        <div className="bg-surface pb-[calc(env(safe-area-inset-bottom)+1rem)]">
+          <div className="pointer-events-auto mx-auto max-w-xl space-y-3 px-4">
+            {submitError && (
+              <p
+                data-testid="tma-decision-error"
+                data-error-code={submitError.code}
+                className="rounded-md bg-red-50 px-4 py-2 text-center text-sm text-red-700"
+              >
+                {decisionErrorMessage(submitError.code)}
+              </p>
+            )}
+            <button
+              type="button"
+              onClick={handleAcceptClick}
+              disabled={submitting}
+              className="w-full rounded-full bg-primary py-4 text-base font-semibold text-white shadow-xl shadow-primary/30 transition-all hover:bg-primary-600 hover:shadow-2xl active:bg-primary-700 active:shadow-md disabled:opacity-60"
+              data-testid="campaign-accept-button"
+            >
+              Согласиться
+            </button>
+            <button
+              type="button"
+              onClick={handleDeclineClick}
+              disabled={submitting}
+              className="block w-full text-center text-sm font-medium text-gray-400 underline-offset-2 transition-colors hover:text-gray-600 hover:underline disabled:opacity-60"
+              data-testid="campaign-decline-button"
+            >
+              Отказаться
+            </button>
+          </div>
+        </div>
       </div>
       {!ndaAccepted && <NdaGate onAccept={() => setNdaAccepted(true)} />}
       {ndaAccepted && confirm === "accept" && (

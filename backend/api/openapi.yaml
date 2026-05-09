@@ -1508,6 +1508,108 @@ paths:
         default:
           $ref: "#/components/responses/UnexpectedError"
 
+  /tma/campaigns/{secretToken}/agree:
+    post:
+      operationId: tmaAgree
+      summary: Creator agrees to participate in a campaign (TMA-only)
+      description: |
+        Creator-side decision endpoint. The `secretToken` path-param is the
+        last path-segment of the campaign's tma_url; the regex format
+        (`^[A-Za-z0-9_-]{16,}$`) is enforced both in handler-side
+        early-reject and in domain validation on POST/PATCH /campaigns,
+        plus a partial UNIQUE index in the DB. Authentication is via
+        `Authorization: tma <init-data>` header; the middleware verifies
+        the Telegram WebApp HMAC and resolves the creator. Body is empty.
+
+        Idempotency: a repeated agree from `agreed` (or decline from
+        `declined`) returns 200 + `alreadyDecided=true` without writing
+        UPDATE or audit. Other transitions surface granular 422s.
+      tags: [tma]
+      security:
+        - tmaInitData: []
+      parameters:
+        - $ref: "#/components/parameters/TmaSecretTokenPathParam"
+      responses:
+        "200":
+          description: Decision applied (or already in this state — see `alreadyDecided`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TmaDecisionResult"
+        "401":
+          description: TMA initData header missing / invalid / expired. Generic anti-fingerprint body.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Creator not registered or not invited to this campaign. Anti-fingerprint single body.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Campaign not found by secret_token (or soft-deleted, or token format mismatch).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Granular state-machine error (planned / declined / etc).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: "#/components/responses/UnexpectedError"
+
+  /tma/campaigns/{secretToken}/decline:
+    post:
+      operationId: tmaDecline
+      summary: Creator declines to participate in a campaign (TMA-only)
+      description: |
+        Symmetric counterpart to `tmaAgree`. Same authn / authz / state-machine
+        rules; flips the row to `declined` and records a
+        `campaign_creator_decline` audit event in the same tx.
+      tags: [tma]
+      security:
+        - tmaInitData: []
+      parameters:
+        - $ref: "#/components/parameters/TmaSecretTokenPathParam"
+      responses:
+        "200":
+          description: Decision applied (or already in this state — see `alreadyDecided`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TmaDecisionResult"
+        "401":
+          description: TMA initData header missing / invalid / expired.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Creator not registered or not invited.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Campaign not found / soft-deleted / token format mismatch.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: Granular state-machine error.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: "#/components/responses/UnexpectedError"
+
   /webhooks/sendpulse/instagram:
     post:
       operationId: sendPulseInstagramWebhook
@@ -1557,6 +1659,17 @@ components:
         type: integer
         minimum: 1
         maximum: 200
+    TmaSecretTokenPathParam:
+      name: secretToken
+      in: path
+      required: true
+      description: |
+        URL-safe secret token — last path segment of the campaign's tma_url.
+        Format `^[A-Za-z0-9_-]{16,256}$`. Strict regex match in the handler
+        rejects malformed tokens with 404 before any DB lookup.
+      schema:
+        type: string
+        pattern: '^[A-Za-z0-9_-]{16,256}$'
 
   responses:
     UnexpectedError:
@@ -1621,8 +1734,11 @@ components:
 
     UserRole:
       type: string
-      description: Role of an authenticated user.
-      enum: [admin, brand_manager]
+      description: |
+        Role of an authenticated user. `creator` is set by the TMA initData
+        middleware after a successful HMAC + creator-by-telegram-user-id
+        lookup; admin / brand_manager come from the JWT auth flow.
+      enum: [admin, brand_manager, creator]
 
     ConsentType:
       type: string
@@ -3165,8 +3281,32 @@ components:
               items:
                 $ref: "#/components/schemas/CampaignNotifyUndelivered"
 
+    TmaDecisionResult:
+      type: object
+      description: |
+        Result of a TMA agree / decline call. `status` is the
+        post-decision row state (`agreed` | `declined`). `alreadyDecided`
+        is true when the row was already in the requested terminal state —
+        the service skipped both the UPDATE and the audit row, the call is
+        an idempotent no-op.
+      required: [status, alreadyDecided]
+      properties:
+        status:
+          $ref: "#/components/schemas/CampaignCreatorStatus"
+        alreadyDecided:
+          type: boolean
+
   securitySchemes:
     bearerAuth:
       type: http
       scheme: bearer
       bearerFormat: JWT
+    tmaInitData:
+      type: apiKey
+      in: header
+      name: Authorization
+      description: |
+        Telegram WebApp initData — `Authorization: tma <init-data>`. The
+        middleware HMAC-validates the payload against the bot token and
+        resolves the creator by telegram_user_id. Failures map to a
+        generic 401 (anti-fingerprint).

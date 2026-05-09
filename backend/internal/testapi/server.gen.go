@@ -153,6 +153,29 @@ type SendTelegramMessageResult struct {
 	Replies []TelegramReply `json:"replies"`
 }
 
+// SignTMAInitDataData defines model for SignTMAInitDataData.
+type SignTMAInitDataData struct {
+	// InitData Signed query-string ready to be passed in
+	// `Authorization: tma <init-data>`.
+	InitData string `json:"initData"`
+}
+
+// SignTMAInitDataRequest defines model for SignTMAInitDataRequest.
+type SignTMAInitDataRequest struct {
+	// AuthDate Optional Unix timestamp (seconds). Defaults to "now" — used by
+	// tests that want to exercise expired / future-dated init_data
+	// paths.
+	AuthDate *int64 `json:"authDate,omitempty"`
+
+	// TelegramUserId Telegram user id to sign on behalf of.
+	TelegramUserId int64 `json:"telegramUserId"`
+}
+
+// SignTMAInitDataResult defines model for SignTMAInitDataResult.
+type SignTMAInitDataResult struct {
+	Data SignTMAInitDataData `json:"data"`
+}
+
 // TelegramReply defines model for TelegramReply.
 type TelegramReply struct {
 	ChatId int64  `json:"chatId"`
@@ -231,6 +254,9 @@ type TelegramSpyFailNextJSONRequestBody = TelegramSpyFailNextRequest
 // TelegramSpyFakeChatJSONRequestBody defines body for TelegramSpyFakeChat for application/json ContentType.
 type TelegramSpyFakeChatJSONRequestBody = TelegramSpyFakeChatRequest
 
+// SignTMAInitDataJSONRequestBody defines body for SignTMAInitData for application/json ContentType.
+type SignTMAInitDataJSONRequestBody = SignTMAInitDataRequest
+
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
 	// Hard-delete a test entity (user or brand) and its references
@@ -254,6 +280,9 @@ type ServerInterface interface {
 	// Mark chatId as test-synthetic so TeeSender skips the real bot
 	// (POST /test/telegram/spy/fake-chat)
 	TelegramSpyFakeChat(w http.ResponseWriter, r *http.Request)
+	// Mint a valid Telegram WebApp initData payload for tests
+	// (POST /test/tma/sign-init-data)
+	SignTMAInitData(w http.ResponseWriter, r *http.Request)
 }
 
 // Unimplemented server implementation that returns http.StatusNotImplemented for each endpoint.
@@ -299,6 +328,12 @@ func (_ Unimplemented) TelegramSpyFailNext(w http.ResponseWriter, r *http.Reques
 // Mark chatId as test-synthetic so TeeSender skips the real bot
 // (POST /test/telegram/spy/fake-chat)
 func (_ Unimplemented) TelegramSpyFakeChat(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Mint a valid Telegram WebApp initData payload for tests
+// (POST /test/tma/sign-init-data)
+func (_ Unimplemented) SignTMAInitData(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -457,6 +492,20 @@ func (siw *ServerInterfaceWrapper) TelegramSpyFakeChat(w http.ResponseWriter, r 
 	handler.ServeHTTP(w, r)
 }
 
+// SignTMAInitData operation middleware
+func (siw *ServerInterfaceWrapper) SignTMAInitData(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SignTMAInitData(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 type UnescapedCookieParamError struct {
 	ParamName string
 	Err       error
@@ -590,6 +639,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/test/telegram/spy/fake-chat", wrapper.TelegramSpyFakeChat)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/test/tma/sign-init-data", wrapper.SignTMAInitData)
 	})
 
 	return r
@@ -774,6 +826,32 @@ func (response TelegramSpyFakeChat422JSONResponse) VisitTelegramSpyFakeChatRespo
 	return json.NewEncoder(w).Encode(response)
 }
 
+type SignTMAInitDataRequestObject struct {
+	Body *SignTMAInitDataJSONRequestBody
+}
+
+type SignTMAInitDataResponseObject interface {
+	VisitSignTMAInitDataResponse(w http.ResponseWriter) error
+}
+
+type SignTMAInitData200JSONResponse SignTMAInitDataResult
+
+func (response SignTMAInitData200JSONResponse) VisitSignTMAInitDataResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type SignTMAInitData422JSONResponse ErrorResponse
+
+func (response SignTMAInitData422JSONResponse) VisitSignTMAInitDataResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(422)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
 	// Hard-delete a test entity (user or brand) and its references
@@ -797,6 +875,9 @@ type StrictServerInterface interface {
 	// Mark chatId as test-synthetic so TeeSender skips the real bot
 	// (POST /test/telegram/spy/fake-chat)
 	TelegramSpyFakeChat(ctx context.Context, request TelegramSpyFakeChatRequestObject) (TelegramSpyFakeChatResponseObject, error)
+	// Mint a valid Telegram WebApp initData payload for tests
+	// (POST /test/tma/sign-init-data)
+	SignTMAInitData(ctx context.Context, request SignTMAInitDataRequestObject) (SignTMAInitDataResponseObject, error)
 }
 
 type StrictHandlerFunc = strictnethttp.StrictHTTPHandlerFunc
@@ -1028,6 +1109,37 @@ func (sh *strictHandler) TelegramSpyFakeChat(w http.ResponseWriter, r *http.Requ
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(TelegramSpyFakeChatResponseObject); ok {
 		if err := validResponse.VisitTelegramSpyFakeChatResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// SignTMAInitData operation middleware
+func (sh *strictHandler) SignTMAInitData(w http.ResponseWriter, r *http.Request) {
+	var request SignTMAInitDataRequestObject
+
+	var body SignTMAInitDataJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.SignTMAInitData(ctx, request.(SignTMAInitDataRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "SignTMAInitData")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(SignTMAInitDataResponseObject); ok {
+		if err := validResponse.VisitSignTMAInitDataResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

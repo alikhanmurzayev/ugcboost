@@ -1,8 +1,23 @@
-export function AcceptedView() {
+type AcceptedViewProps = {
+  alreadyDecided?: boolean;
+};
+
+export function AcceptedView({ alreadyDecided = false }: AcceptedViewProps) {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-surface px-6 py-10">
+    <div
+      data-testid="tma-accepted-view"
+      className="flex min-h-screen items-center justify-center bg-surface px-6 py-10"
+    >
       <div className="flex max-w-sm flex-col items-center text-center">
         <SuccessCheckmark />
+        {alreadyDecided && (
+          <p
+            data-testid="tma-already-decided-banner"
+            className="mt-4 rounded-md bg-primary-50 px-4 py-2 text-sm text-primary-800"
+          >
+            Вы уже соглашались на участие в этой кампании.
+          </p>
+        )}
         <p className="mt-6 text-lg leading-relaxed text-gray-900">
           Отправили вам договор на подписание по СМС, подпишите,
           пожалуйста.

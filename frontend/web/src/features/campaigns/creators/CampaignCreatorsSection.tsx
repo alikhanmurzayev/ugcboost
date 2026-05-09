@@ -88,7 +88,7 @@ export default function CampaignCreatorsSection({
       }
       if (
         apiErr?.status === 422 &&
-        apiErr.code === "CAMPAIGN_CREATOR_AGREED"
+        apiErr.code === "CAMPAIGN_CREATOR_REMOVE_AFTER_AGREED"
       ) {
         void queryClient.invalidateQueries({
           queryKey: campaignCreatorKeys.all(),
@@ -261,7 +261,11 @@ export default function CampaignCreatorsSection({
               result={result}
               isPending={isPending}
               isSubmitting={isSubmitting}
-              onRemove={handleRemoveRequest}
+              onRemove={
+                status === CAMPAIGN_CREATOR_STATUS.AGREED
+                  ? undefined
+                  : handleRemoveRequest
+              }
               drawerSelectedCreatorId={selectedCreatorId ?? undefined}
               onRowClick={handleRowClick}
             />

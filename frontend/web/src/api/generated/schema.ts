@@ -768,6 +768,58 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/tma/campaigns/{secretToken}/agree": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Creator agrees to participate in a campaign (TMA-only)
+         * @description Creator-side decision endpoint. The `secretToken` path-param is the
+         *     last path-segment of the campaign's tma_url; the regex format
+         *     (`^[A-Za-z0-9_-]{16,}$`) is enforced both in handler-side
+         *     early-reject and in domain validation on POST/PATCH /campaigns,
+         *     plus a partial UNIQUE index in the DB. Authentication is via
+         *     `Authorization: tma <init-data>` header; the middleware verifies
+         *     the Telegram WebApp HMAC and resolves the creator. Body is empty.
+         *
+         *     Idempotency: a repeated agree from `agreed` (or decline from
+         *     `declined`) returns 200 + `alreadyDecided=true` without writing
+         *     UPDATE or audit. Other transitions surface granular 422s.
+         */
+        post: operations["tmaAgree"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/tma/campaigns/{secretToken}/decline": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Creator declines to participate in a campaign (TMA-only)
+         * @description Symmetric counterpart to `tmaAgree`. Same authn / authz / state-machine
+         *     rules; flips the row to `declined` and records a
+         *     `campaign_creator_decline` audit event in the same tx.
+         */
+        post: operations["tmaDecline"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/webhooks/sendpulse/instagram": {
         parameters: {
             query?: never;
@@ -823,10 +875,12 @@ export interface components {
             data: components["schemas"]["MessageData"];
         };
         /**
-         * @description Role of an authenticated user.
+         * @description Role of an authenticated user. `creator` is set by the TMA initData
+         *     middleware after a successful HMAC + creator-by-telegram-user-id
+         *     lookup; admin / brand_manager come from the JWT auth flow.
          * @enum {string}
          */
-        UserRole: "admin" | "brand_manager";
+        UserRole: "admin" | "brand_manager" | "creator";
         /**
          * @description Canonical consent type captured at creator application submission.
          * @enum {string}
@@ -1731,6 +1785,17 @@ export interface components {
                 undelivered: components["schemas"]["CampaignNotifyUndelivered"][];
             };
         };
+        /**
+         * @description Result of a TMA agree / decline call. `status` is the
+         *     post-decision row state (`agreed` | `declined`). `alreadyDecided`
+         *     is true when the row was already in the requested terminal state —
+         *     the service skipped both the UPDATE and the audit row, the call is
+         *     an idempotent no-op.
+         */
+        TmaDecisionResult: {
+            status: components["schemas"]["CampaignCreatorStatus"];
+            alreadyDecided: boolean;
+        };
     };
     responses: {
         /** @description Unexpected error */
@@ -1757,6 +1822,12 @@ export interface components {
         PageQueryParam: number;
         /** @description Page size, between 1 and 200 inclusive. */
         PerPageQueryParam: number;
+        /**
+         * @description URL-safe secret token — last path segment of the campaign's tma_url.
+         *     Format `^[A-Za-z0-9_-]{16,256}$`. Strict regex match in the handler
+         *     rejects malformed tokens with 404 before any DB lookup.
+         */
+        TmaSecretTokenPathParam: string;
     };
     requestBodies: never;
     headers: never;
@@ -3178,6 +3249,134 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CampaignCreatorBatchInvalidErrorResponse"] | components["schemas"]["ErrorResponse"];
+                };
+            };
+            default: components["responses"]["UnexpectedError"];
+        };
+    };
+    tmaAgree: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description URL-safe secret token — last path segment of the campaign's tma_url.
+                 *     Format `^[A-Za-z0-9_-]{16,256}$`. Strict regex match in the handler
+                 *     rejects malformed tokens with 404 before any DB lookup.
+                 */
+                secretToken: components["parameters"]["TmaSecretTokenPathParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Decision applied (or already in this state — see `alreadyDecided`). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TmaDecisionResult"];
+                };
+            };
+            /** @description TMA initData header missing / invalid / expired. Generic anti-fingerprint body. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Creator not registered or not invited to this campaign. Anti-fingerprint single body. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Campaign not found by secret_token (or soft-deleted, or token format mismatch). */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Granular state-machine error (planned / declined / etc). */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            default: components["responses"]["UnexpectedError"];
+        };
+    };
+    tmaDecline: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description URL-safe secret token — last path segment of the campaign's tma_url.
+                 *     Format `^[A-Za-z0-9_-]{16,256}$`. Strict regex match in the handler
+                 *     rejects malformed tokens with 404 before any DB lookup.
+                 */
+                secretToken: components["parameters"]["TmaSecretTokenPathParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Decision applied (or already in this state — see `alreadyDecided`). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TmaDecisionResult"];
+                };
+            };
+            /** @description TMA initData header missing / invalid / expired. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Creator not registered or not invited. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Campaign not found / soft-deleted / token format mismatch. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Granular state-machine error. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
             default: components["responses"]["UnexpectedError"];

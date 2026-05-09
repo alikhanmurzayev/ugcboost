@@ -254,9 +254,9 @@ describe("removeCampaignCreator", () => {
     });
   });
 
-  it("throws ApiError with code on 422 CREATOR_AGREED", async () => {
+  it("throws ApiError with code on 422 CREATOR_REMOVE_AFTER_AGREED", async () => {
     mockedDelete.mockResolvedValueOnce({
-      error: { error: { code: "CAMPAIGN_CREATOR_AGREED", message: "agreed" } },
+      error: { error: { code: "CAMPAIGN_CREATOR_REMOVE_AFTER_AGREED", message: "agreed" } },
       response: { status: 422 } as Response,
     });
 
@@ -264,7 +264,7 @@ describe("removeCampaignCreator", () => {
       removeCampaignCreator(CAMPAIGN_ID, CREATOR_A),
     ).rejects.toMatchObject({
       status: 422,
-      code: "CAMPAIGN_CREATOR_AGREED",
+      code: "CAMPAIGN_CREATOR_REMOVE_AFTER_AGREED",
     });
   });
 

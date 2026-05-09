@@ -66,10 +66,12 @@ var (
 type CampaignCreatorRepo interface {
 	Add(ctx context.Context, campaignID, creatorID, status string) (*CampaignCreatorRow, error)
 	GetByCampaignAndCreator(ctx context.Context, campaignID, creatorID string) (*CampaignCreatorRow, error)
+	GetByIDForUpdate(ctx context.Context, id string) (*CampaignCreatorRow, error)
 	ListByCampaign(ctx context.Context, campaignID string) ([]*CampaignCreatorRow, error)
 	ListByCampaignAndCreators(ctx context.Context, campaignID string, creatorIDs []string) ([]*CampaignCreatorRow, error)
 	ApplyInvite(ctx context.Context, id string) (*CampaignCreatorRow, error)
 	ApplyRemind(ctx context.Context, id string) (*CampaignCreatorRow, error)
+	ApplyDecision(ctx context.Context, id, status string) (*CampaignCreatorRow, error)
 	ExistsInvitedInCampaign(ctx context.Context, campaignID string) (bool, error)
 	DeleteByID(ctx context.Context, id string) error
 }
@@ -218,6 +220,38 @@ func (r *campaignCreatorRepository) ApplyRemind(ctx context.Context, id string) 
 	q := sq.Update(TableCampaignCreators).
 		Set(CampaignCreatorColumnRemindedCount, sq.Expr(CampaignCreatorColumnRemindedCount+" + 1")).
 		Set(CampaignCreatorColumnRemindedAt, sq.Expr("now()")).
+		Set(CampaignCreatorColumnUpdatedAt, sq.Expr("now()")).
+		Where(sq.Eq{CampaignCreatorColumnID: id}).
+		Suffix(returningClause(campaignCreatorSelectColumns))
+	return dbutil.One[CampaignCreatorRow](ctx, r.db, q)
+}
+
+// GetByIDForUpdate returns the campaign_creators row by primary key under
+// `SELECT ... FOR UPDATE` row-lock. ApplyDecision uses it inside a tx to
+// serialise concurrent agree/decline attempts on the same row: the second
+// caller blocks until the first commits, then reads the post-decision
+// state and either no-ops (idempotent) or surfaces a granular 422.
+//
+// Caller must run inside a transaction — outside one, FOR UPDATE is a
+// no-op (auto-commit per statement). dbutil.One propagates wrapped
+// sql.ErrNoRows; the service maps it to ErrCampaignCreatorNotFound.
+func (r *campaignCreatorRepository) GetByIDForUpdate(ctx context.Context, id string) (*CampaignCreatorRow, error) {
+	q := sq.Select(campaignCreatorSelectColumns...).
+		From(TableCampaignCreators).
+		Where(sq.Eq{CampaignCreatorColumnID: id}).
+		Suffix("FOR UPDATE")
+	return dbutil.One[CampaignCreatorRow](ctx, r.db, q)
+}
+
+// ApplyDecision flips the campaign_creators row to the supplied status
+// (agreed | declined) and stamps decided_at + updated_at = now(). Caller
+// (TmaCampaignCreatorService) verifies the source status under
+// `SELECT ... FOR UPDATE` before calling — this method does not re-check
+// the transition. Returns the freshly updated row for audit.
+func (r *campaignCreatorRepository) ApplyDecision(ctx context.Context, id, status string) (*CampaignCreatorRow, error) {
+	q := sq.Update(TableCampaignCreators).
+		Set(CampaignCreatorColumnStatus, status).
+		Set(CampaignCreatorColumnDecidedAt, sq.Expr("now()")).
 		Set(CampaignCreatorColumnUpdatedAt, sq.Expr("now()")).
 		Where(sq.Eq{CampaignCreatorColumnID: id}).
 		Suffix(returningClause(campaignCreatorSelectColumns))

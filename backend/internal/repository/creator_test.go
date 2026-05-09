@@ -614,6 +614,57 @@ func TestCreatorRepository_GetByID(t *testing.T) {
 	})
 }
 
+func TestCreatorRepository_GetByTelegramUserID(t *testing.T) {
+	t.Parallel()
+
+	const sqlStmt = "SELECT address, birth_date, category_other_text, city_code, created_at, first_name, id, iin, last_name, middle_name, phone, source_application_id, telegram_first_name, telegram_last_name, telegram_user_id, telegram_username, updated_at FROM creators WHERE telegram_user_id = $1"
+
+	birth := time.Date(1995, 5, 15, 0, 0, 0, 0, time.UTC)
+	created := time.Date(2026, 5, 5, 12, 0, 0, 0, time.UTC)
+
+	t.Run("success maps row by telegram_user_id", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &creatorRepository{db: mock}
+
+		mock.ExpectQuery(sqlStmt).
+			WithArgs(int64(9000000001)).
+			WillReturnRows(pgxmock.NewRows([]string{"address", "birth_date", "category_other_text", "city_code", "created_at", "first_name", "id", "iin", "last_name", "middle_name", "phone", "source_application_id", "telegram_first_name", "telegram_last_name", "telegram_user_id", "telegram_username", "updated_at"}).
+				AddRow(pointer.ToString("ул. Абая 1"), birth, pointer.ToString("ASMR"), "almaty", created, "Айдана", "creator-1", "950515312348", "Муратова", pointer.ToString("Ивановна"), "+77001234567", "app-1", pointer.ToString("Aidana"), pointer.ToString("M."), int64(9000000001), pointer.ToString("aidana"), created))
+
+		got, err := repo.GetByTelegramUserID(context.Background(), 9000000001)
+		require.NoError(t, err)
+		require.Equal(t, "creator-1", got.ID)
+		require.Equal(t, int64(9000000001), got.TelegramUserID)
+	})
+
+	t.Run("not found propagates sql.ErrNoRows", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &creatorRepository{db: mock}
+
+		mock.ExpectQuery(sqlStmt).
+			WithArgs(int64(0)).
+			WillReturnError(pgx.ErrNoRows)
+
+		_, err := repo.GetByTelegramUserID(context.Background(), 0)
+		require.ErrorIs(t, err, sql.ErrNoRows)
+	})
+
+	t.Run("propagates other errors", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &creatorRepository{db: mock}
+
+		mock.ExpectQuery(sqlStmt).
+			WithArgs(int64(1234)).
+			WillReturnError(errors.New("db down"))
+
+		_, err := repo.GetByTelegramUserID(context.Background(), 1234)
+		require.ErrorContains(t, err, "db down")
+	})
+}
+
 func TestCreatorRepository_DeleteForTests(t *testing.T) {
 	t.Parallel()
 

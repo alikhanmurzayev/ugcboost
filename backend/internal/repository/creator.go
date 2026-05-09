@@ -92,6 +92,7 @@ const (
 type CreatorRepo interface {
 	Create(ctx context.Context, row CreatorRow) (*CreatorRow, error)
 	GetByID(ctx context.Context, id string) (*CreatorRow, error)
+	GetByTelegramUserID(ctx context.Context, tgID int64) (*CreatorRow, error)
 	GetTelegramUserIDsByIDs(ctx context.Context, ids []string) (map[string]int64, error)
 	List(ctx context.Context, params CreatorListParams) ([]*CreatorListRow, int64, error)
 	DeleteForTests(ctx context.Context, id string) error
@@ -181,6 +182,20 @@ func (r *creatorRepository) GetByID(ctx context.Context, id string) (*CreatorRow
 	q := sq.Select(creatorSelectColumns...).
 		From(TableCreators).
 		Where(sq.Eq{CreatorColumnID: id})
+	return dbutil.One[CreatorRow](ctx, r.db, q)
+}
+
+// GetByTelegramUserID resolves a telegram_user_id to a creator row. Used by
+// the TMA initData middleware after HMAC validation to look up the creator
+// behind the WebApp identity. Wrapped sql.ErrNoRows from dbutil.One is
+// propagated as-is — middleware leaves the auth-context partial (only
+// telegram_user_id, no creator_id/role) so AuthzService surfaces 403
+// anti-fingerprint between "creator not registered" and "creator not in
+// campaign".
+func (r *creatorRepository) GetByTelegramUserID(ctx context.Context, tgID int64) (*CreatorRow, error) {
+	q := sq.Select(creatorSelectColumns...).
+		From(TableCreators).
+		Where(sq.Eq{CreatorColumnTelegramUserID: tgID})
 	return dbutil.One[CreatorRow](ctx, r.db, q)
 }
 

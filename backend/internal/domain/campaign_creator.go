@@ -103,3 +103,54 @@ type NotifyFailure struct {
 	CreatorID string
 	Reason    string
 }
+
+// CampaignCreatorDecision is the creator-side intent passed by the TMA
+// agree/decline endpoints to TmaCampaignCreatorService.ApplyDecision.
+type CampaignCreatorDecision string
+
+const (
+	CampaignCreatorDecisionAgree   CampaignCreatorDecision = "agree"
+	CampaignCreatorDecisionDecline CampaignCreatorDecision = "decline"
+)
+
+// CampaignCreatorDecisionResult carries the post-decision row state plus an
+// idempotency marker — `AlreadyDecided=true` means the row was already in
+// the requested terminal state, so the service skipped both the UPDATE and
+// the audit row. Handler renders both `Status` and `AlreadyDecided` to the
+// client; UI uses `AlreadyDecided` to decide whether to show the "вы уже
+// решили ранее" banner.
+type CampaignCreatorDecisionResult struct {
+	Status         string
+	AlreadyDecided bool
+}
+
+// ErrCampaignCreatorNotInvited is raised by ApplyDecision when the row is
+// in `planned` — invitation has not been delivered yet, the creator should
+// wait for the admin notify to land.
+var ErrCampaignCreatorNotInvited = NewValidationError(
+	CodeCampaignCreatorNotInvited,
+	"Приглашение ещё не отправлено. Дождитесь приглашения от менеджера.",
+)
+
+// ErrCampaignCreatorAlreadyAgreed is raised by ApplyDecision when an
+// already-agreed row receives a decline — agreement is final from the
+// creator side; reversal lives in admin flow.
+var ErrCampaignCreatorAlreadyAgreed = NewValidationError(
+	CodeCampaignCreatorAlreadyAgreed,
+	"Вы уже согласились участвовать. Чтобы изменить решение, обратитесь к менеджеру.",
+)
+
+// ErrCampaignCreatorDeclinedNeedReinvite is raised by ApplyDecision when an
+// already-declined row receives an agree — the admin must re-invite (status
+// flips back to `invited`) before the creator can agree.
+var ErrCampaignCreatorDeclinedNeedReinvite = NewValidationError(
+	CodeCampaignCreatorDeclinedNeedReinvite,
+	"Вы уже отказались. Чтобы согласиться, попросите менеджера прислать приглашение заново.",
+)
+
+// ErrTMAForbidden is raised by AuthzService.AuthorizeTMACampaignDecision
+// when the resolved telegram_user_id is not a known creator OR is a creator
+// but not attached to the requested campaign. Single sentinel for both
+// branches by design — anti-fingerprint between "not registered" and
+// "not in campaign". Mapped to 403 TMA_FORBIDDEN by respondError.
+var ErrTMAForbidden = errors.New("tma forbidden")

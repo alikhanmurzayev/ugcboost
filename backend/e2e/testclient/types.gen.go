@@ -146,6 +146,29 @@ type SendTelegramMessageResult struct {
 	Replies []TelegramReply `json:"replies"`
 }
 
+// SignTMAInitDataData defines model for SignTMAInitDataData.
+type SignTMAInitDataData struct {
+	// InitData Signed query-string ready to be passed in
+	// `Authorization: tma <init-data>`.
+	InitData string `json:"initData"`
+}
+
+// SignTMAInitDataRequest defines model for SignTMAInitDataRequest.
+type SignTMAInitDataRequest struct {
+	// AuthDate Optional Unix timestamp (seconds). Defaults to "now" — used by
+	// tests that want to exercise expired / future-dated init_data
+	// paths.
+	AuthDate *int64 `json:"authDate,omitempty"`
+
+	// TelegramUserId Telegram user id to sign on behalf of.
+	TelegramUserId int64 `json:"telegramUserId"`
+}
+
+// SignTMAInitDataResult defines model for SignTMAInitDataResult.
+type SignTMAInitDataResult struct {
+	Data SignTMAInitDataData `json:"data"`
+}
+
 // TelegramReply defines model for TelegramReply.
 type TelegramReply struct {
 	ChatId int64  `json:"chatId"`
@@ -223,3 +246,6 @@ type TelegramSpyFailNextJSONRequestBody = TelegramSpyFailNextRequest
 
 // TelegramSpyFakeChatJSONRequestBody defines body for TelegramSpyFakeChat for application/json ContentType.
 type TelegramSpyFakeChatJSONRequestBody = TelegramSpyFakeChatRequest
+
+// SignTMAInitDataJSONRequestBody defines body for SignTMAInitData for application/json ContentType.
+type SignTMAInitDataJSONRequestBody = SignTMAInitDataRequest

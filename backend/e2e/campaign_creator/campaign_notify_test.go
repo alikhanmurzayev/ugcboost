@@ -102,7 +102,6 @@ func waitInviteSent(t *testing.T, chatID int64, since time.Time, expectedText st
 	}
 }
 
-
 // addCreatorToCampaign drives POST /campaigns/{id}/creators for one creator
 // and registers the LIFO cleanup. Used by every chunk-12 e2e to seed the
 // `planned` baseline before exercising notify / remind.
@@ -227,7 +226,7 @@ func TestNotifyCampaignCreators(t *testing.T) {
 	t.Run("happy: invites all and writes audit + spy hits per creator", func(t *testing.T) {
 		t.Parallel()
 		adminClient, adminToken, _ := testutil.SetupAdminClient(t)
-		const tmaURL = "https://tma.ugcboost.kz/tz/notify-happy"
+		tmaURL := testutil.FreshValidTmaURL()
 		campaignID := setupCampaignWithTmaURL(t, adminClient, adminToken,
 			"ccA4-happy-"+testutil.UniqueEmail("camp"), tmaURL)
 
@@ -412,7 +411,7 @@ func TestUpdateCampaignTmaURLLock(t *testing.T) {
 	t.Run("lock fires when tma_url changes after invite", func(t *testing.T) {
 		t.Parallel()
 		adminClient, adminToken, _ := testutil.SetupAdminClient(t)
-		const tmaURL = "https://tma.ugcboost.kz/tz/lock-original"
+		tmaURL := testutil.FreshValidTmaURL()
 		campaignID := setupCampaignWithTmaURL(t, adminClient, adminToken,
 			"ccTmaLock-"+testutil.UniqueEmail("camp"), tmaURL)
 		creator := testutil.SetupApprovedCreator(t, defaultCreatorOpts(testutil.UniqueIIN()[6:]))
@@ -428,7 +427,7 @@ func TestUpdateCampaignTmaURLLock(t *testing.T) {
 		patchResp, err := adminClient.UpdateCampaignWithResponse(context.Background(), campaignID,
 			apiclient.UpdateCampaignJSONRequestBody{
 				Name:   "Renamed " + testutil.UniqueEmail("camp"),
-				TmaUrl: "https://tma.ugcboost.kz/tz/lock-new",
+				TmaUrl: testutil.FreshValidTmaURL(),
 			}, testutil.WithAuth(adminToken))
 		require.NoError(t, err)
 		require.Equal(t, http.StatusUnprocessableEntity, patchResp.StatusCode())
@@ -445,7 +444,7 @@ func TestUpdateCampaignTmaURLLock(t *testing.T) {
 	t.Run("name-only patch passes after invite", func(t *testing.T) {
 		t.Parallel()
 		adminClient, adminToken, _ := testutil.SetupAdminClient(t)
-		const tmaURL = "https://tma.ugcboost.kz/tz/lock-noop"
+		tmaURL := testutil.FreshValidTmaURL()
 		campaignID := setupCampaignWithTmaURL(t, adminClient, adminToken,
 			"ccTmaNoop-"+testutil.UniqueEmail("camp"), tmaURL)
 		creator := testutil.SetupApprovedCreator(t, defaultCreatorOpts(testutil.UniqueIIN()[6:]))
@@ -475,4 +474,3 @@ func TestUpdateCampaignTmaURLLock(t *testing.T) {
 			"campaign", campaignID.String(), "campaign_update")
 	})
 }
-

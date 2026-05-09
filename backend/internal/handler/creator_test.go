@@ -29,7 +29,7 @@ import (
 // or the dictionary service (hydration happens inside CreatorService).
 func serverWithAuthzAndCreatorRead(t *testing.T, authz AuthzService, creators CreatorService, log *logmocks.MockLogger) *Server {
 	t.Helper()
-	return NewServer(nil, nil, authz, nil, nil, creators, nil, nil, nil, ServerConfig{Version: "test-version"}, log)
+	return NewServer(nil, nil, authz, nil, nil, creators, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, log)
 }
 
 // serverWithAuthzCreatorAndDict wires the trio the POST /creators/list path
@@ -37,7 +37,7 @@ func serverWithAuthzAndCreatorRead(t *testing.T, authz AuthzService, creators Cr
 // nil — the list endpoint never touches them.
 func serverWithAuthzCreatorAndDict(t *testing.T, authz AuthzService, creators CreatorService, dict DictionaryService, log *logmocks.MockLogger) *Server {
 	t.Helper()
-	return NewServer(nil, nil, authz, nil, nil, creators, nil, nil, dict, ServerConfig{Version: "test-version"}, log)
+	return NewServer(nil, nil, authz, nil, nil, creators, nil, nil, nil, dict, ServerConfig{Version: "test-version"}, log)
 }
 
 // validCreatorListBody returns the canonical creator-list-request body shared

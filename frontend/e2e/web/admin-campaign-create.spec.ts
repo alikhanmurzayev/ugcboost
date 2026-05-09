@@ -77,7 +77,7 @@ test.describe("Admin campaign create", () => {
 
     const uuid = randomUUID();
     const name = `e2e-create-${uuid}`;
-    const tmaUrl = `https://t.me/ugcboost_bot/app?startapp=${uuid.slice(0, 8)}`;
+    const tmaUrl = `https://tma.ugcboost.kz/tz/${uuid.replaceAll("-", "")}`;
 
     await loginAs(page, admin.email, admin.password);
     await page.goto("/campaigns");
@@ -151,7 +151,7 @@ test.describe("Admin campaign create", () => {
     const uuid = randomUUID();
     const seeded = await seedCampaign(request, API_URL, adminToken, {
       name: `e2e-dup-${uuid}`,
-      tmaUrl: `https://t.me/ugcboost_bot/app?startapp=${uuid.slice(0, 8)}`,
+      tmaUrl: `https://tma.ugcboost.kz/tz/${uuid.replaceAll("-", "")}`,
     });
     cleanupStack.push(seeded.cleanup);
 
@@ -161,7 +161,7 @@ test.describe("Admin campaign create", () => {
     await page.getByTestId("campaign-name-input").fill(seeded.name);
     await page
       .getByTestId("campaign-tma-url-input")
-      .fill(`https://t.me/ugcboost_bot/app?startapp=other-${uuid.slice(0, 8)}`);
+      .fill(`https://tma.ugcboost.kz/tz/other-${uuid.replaceAll("-", "")}`);
     await page.getByTestId("create-campaign-submit").click();
 
     const err = page.getByTestId("create-campaign-error");
