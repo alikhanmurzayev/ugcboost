@@ -156,11 +156,6 @@ func writeBatchInvalid(w http.ResponseWriter, r *http.Request, bie *domain.Campa
 	}, log)
 }
 
-// writeContractValidation renders a 422 ContractValidationErrorResponse for
-// the PUT /campaigns/{id}/contract-template flow. `Missing` populates
-// `details.missing`; `Unknown` populates `details.unknown`. Both stay nil
-// for the empty-body / invalid-PDF cases — the schema's `details` field is
-// optional, so we simply omit it.
 func writeContractValidation(w http.ResponseWriter, r *http.Request, cve *domain.ContractValidationError, log logger.Logger) {
 	body := api.ContractValidationErrorBody{
 		Code:    cve.Code,

@@ -11,8 +11,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// PutContractTemplate sends a PUT with raw application/pdf body. Returns the
-// response — the caller owns Body and MUST close it.
 func PutContractTemplate(t *testing.T, path string, pdf []byte, opts ...RawOption) *http.Response {
 	t.Helper()
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodPut, BaseURL+path, bytes.NewReader(pdf))
@@ -27,8 +25,6 @@ func PutContractTemplate(t *testing.T, path string, pdf []byte, opts ...RawOptio
 	return resp
 }
 
-// GetContractTemplate sends a GET expecting an application/pdf or json body.
-// Returns the response — caller owns Body.
 func GetContractTemplate(t *testing.T, path string, opts ...RawOption) *http.Response {
 	t.Helper()
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, BaseURL+path, nil)
@@ -41,9 +37,6 @@ func GetContractTemplate(t *testing.T, path string, opts ...RawOption) *http.Res
 	return resp
 }
 
-// ReadBody pulls the response body into a byte slice and closes it. Useful
-// after PutContractTemplate/GetContractTemplate when the test asserts on
-// either bytes (PDF) or json shape.
 func ReadBody(t *testing.T, resp *http.Response) []byte {
 	t.Helper()
 	defer resp.Body.Close()
@@ -52,10 +45,6 @@ func ReadBody(t *testing.T, resp *http.Response) []byte {
 	return body
 }
 
-// BuildContractPDF generates an in-memory PDF whose lines carry the supplied
-// placeholder names verbatim. Each entry is rendered on its own line as
-// `{{Name}}` so the production extractor (gofpdf-rendered Helvetica + the
-// ledongthuc/pdf reader) recognises the token.
 func BuildContractPDF(t *testing.T, placeholders []string) []byte {
 	t.Helper()
 	pdf := gofpdf.New("P", "mm", "A4", "")
@@ -72,10 +61,7 @@ func BuildContractPDF(t *testing.T, placeholders []string) []byte {
 	return buf.Bytes()
 }
 
-// BuildValidContractPDF returns a PDF carrying all three known placeholders
-// — passes the upload validator successfully.
 func BuildValidContractPDF(t *testing.T) []byte {
 	t.Helper()
 	return BuildContractPDF(t, []string{"CreatorFIO", "CreatorIIN", "IssuedDate"})
 }
-

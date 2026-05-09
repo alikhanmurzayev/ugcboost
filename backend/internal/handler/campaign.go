@@ -174,16 +174,6 @@ func (s *Server) ListCampaigns(ctx context.Context, request api.ListCampaignsReq
 	}, nil
 }
 
-// UploadCampaignContractTemplate handles PUT /campaigns/{id}/contract-template (admin-only).
-//
-// Authorisation runs first so non-admins receive 403 before any DB or
-// extractor work. The body is `application/pdf` raw bytes — the strict-
-// server adapter hands us an io.Reader; we materialise it once and pass
-// the byte slice through to the service. The service drives validation
-// (empty body → CONTRACT_REQUIRED, parse failure → CONTRACT_INVALID_PDF,
-// missing/unknown placeholder codes from domain.ValidateContractTemplatePDF)
-// and writes audit/PDF in one transaction. The 200 reply mirrors
-// UploadCampaignContractTemplateResult{hash, placeholders} from OpenAPI.
 func (s *Server) UploadCampaignContractTemplate(ctx context.Context, request api.UploadCampaignContractTemplateRequestObject) (api.UploadCampaignContractTemplateResponseObject, error) {
 	if err := s.authzService.CanUploadCampaignContractTemplate(ctx); err != nil {
 		return nil, err
@@ -208,15 +198,6 @@ func (s *Server) UploadCampaignContractTemplate(ctx context.Context, request api
 	}, nil
 }
 
-// GetCampaignContractTemplate handles GET /campaigns/{id}/contract-template (admin-only).
-//
-// Authorisation gates the read before the service touches the DB. The
-// service distinguishes "campaign gone" (ErrCampaignNotFound → 404
-// CAMPAIGN_NOT_FOUND) from "campaign exists but no template uploaded"
-// (ErrContractTemplateNotFound → 404 CONTRACT_TEMPLATE_NOT_FOUND); both
-// map through respondError. On success we stream the bytes back as
-// `application/pdf` with Content-Length so the browser renders the
-// progress bar correctly.
 func (s *Server) GetCampaignContractTemplate(ctx context.Context, request api.GetCampaignContractTemplateRequestObject) (api.GetCampaignContractTemplateResponseObject, error) {
 	if err := s.authzService.CanGetCampaignContractTemplate(ctx); err != nil {
 		return nil, err
@@ -236,11 +217,9 @@ func (s *Server) GetCampaignContractTemplate(ctx context.Context, request api.Ge
 	}, nil
 }
 
-// contractTemplateDownloadResponse layers Cache-Control + Content-Disposition
-// over the strict-server PDF response. The underlying PDF is per-campaign
-// admin content — must not sit in shared caches/proxies (`private, no-store`)
-// and must trigger a download dialog (`attachment; filename=...`) so the
-// admin lands in the OS file picker rather than rendering inline.
+// contractTemplateDownloadResponse adds Cache-Control + Content-Disposition
+// to the strict-server PDF response — без них браузер откроет inline и шаблон
+// может осесть в shared-кэше.
 type contractTemplateDownloadResponse struct {
 	Inner    api.GetCampaignContractTemplate200ApplicationpdfResponse
 	FileName string

@@ -94,11 +94,24 @@ func TestRealExtractor_ExtractPlaceholders(t *testing.T) {
 		names := uniquePlaceholderNames(got)
 		require.ElementsMatch(t, []string{"CreatorFIO", "CreatorEmail"}, names)
 	})
+
+	t.Run("multiple placeholders on one line — both space-separated and glued", func(t *testing.T) {
+		t.Parallel()
+		pdfBytes := buildPDF(t, [][]string{
+			{"{{CreatorFIO}} {{CreatorIIN}}"},
+			{"{{IssuedDate}}{{CreatorFIO}}"},
+		})
+		extractor := NewRealExtractor()
+		got, err := extractor.ExtractPlaceholders(pdfBytes)
+		require.NoError(t, err)
+		var names []string
+		for _, p := range got {
+			names = append(names, p.Name)
+		}
+		require.ElementsMatch(t, []string{"CreatorFIO", "CreatorIIN", "IssuedDate", "CreatorFIO"}, names)
+	})
 }
 
-// buildPDF renders a single-page A4 PDF with each entry of `lines` printed
-// on its own line. Uses gofpdf's bundled Helvetica so tests don't depend on
-// external TTF files. Returns the raw PDF bytes.
 func buildPDF(t *testing.T, lines [][]string) []byte {
 	t.Helper()
 	pdf := gofpdf.New("P", "mm", "A4", "")
@@ -113,8 +126,6 @@ func buildPDF(t *testing.T, lines [][]string) []byte {
 	return buf.Bytes()
 }
 
-// buildMultiPagePDF renders one A4 page per entry in `pages`; each page
-// itself is a slice of lines (matching buildPDF's shape).
 func buildMultiPagePDF(t *testing.T, pages [][][]string) []byte {
 	t.Helper()
 	pdf := gofpdf.New("P", "mm", "A4", "")
@@ -142,8 +153,6 @@ func joinLine(parts []string) string {
 	return out
 }
 
-// uniquePlaceholderNames returns the deduplicated, sorted set of placeholder
-// names from a list of Placeholder entries.
 func uniquePlaceholderNames(ps []Placeholder) []string {
 	seen := make(map[string]struct{}, len(ps))
 	for _, p := range ps {

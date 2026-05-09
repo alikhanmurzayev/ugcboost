@@ -11,11 +11,6 @@ import (
 	"github.com/ledongthuc/pdf"
 )
 
-// Placeholder describes a single `{{Name}}` token found in a PDF, with its
-// page number and bounding box in PDF coordinates (origin bottom-left). The
-// chunk-9a upload validator only consumes Name and Page; chunk 16's overlay
-// renderer reuses the geometric fields to lay rendered text over the
-// original placeholder.
 type Placeholder struct {
 	Page      int
 	Name      string
@@ -25,41 +20,24 @@ type Placeholder struct {
 	FontSize  float64
 }
 
-// Extractor pulls placeholder occurrences out of a PDF byte stream. The
-// interface lets service-layer tests swap in a mock without touching real
-// PDF parsing, while production wiring uses RealExtractor.
 type Extractor interface {
 	ExtractPlaceholders(pdfBytes []byte) ([]Placeholder, error)
 }
 
-// RealExtractor implements Extractor on top of github.com/ledongthuc/pdf.
-// Stateless — safe to share across goroutines and reuse between requests.
 type RealExtractor struct{}
 
-// NewRealExtractor returns the default Extractor wired with ledongthuc/pdf.
 func NewRealExtractor() *RealExtractor { return &RealExtractor{} }
 
-// placeholderRE matches `{{Name}}` tokens where Name is a word character run.
 var placeholderRE = regexp.MustCompile(`\{\{(\w+)\}\}`)
 
-// lineTolerance — Y-coordinate window in PDF points used to merge characters
-// into one logical line. Aидана's reference template clusters glyphs within
-// well under 0.5pt of each other, so 0.5pt is generous yet tight enough to
-// keep adjacent baselines apart.
+// lineTolerance — Y-окно в PDF-точках для склейки глифов в одну логическую
+// линию. У шаблонов Аиданы глифы кластеризуются куда плотнее 0.5pt, при этом
+// 0.5pt не съедает соседние baseline'ы.
 const lineTolerance = 0.5
 
-// ExtractPlaceholders parses pdfBytes and returns every placeholder
-// occurrence (one entry per page-position; a placeholder repeated across
-// pages produces multiple results). Returns a wrapped error when
-// ledongthuc/pdf cannot parse the bytes — the service translates that into
-// a domain CONTRACT_INVALID_PDF response.
-//
-// The algorithm mirrors `_bmad-output/experiments/pdf-overlay/main.go`:
-// characters are grouped into lines by Y proximity, words are split on
-// whitespace within a line, and each word is matched against the
-// `{{Name}}` regex. ledongthuc/pdf does not report word widths so the
-// closing X is taken from the next whitespace character (or estimated from
-// font size as a fallback for the trailing word).
+// ExtractPlaceholders walks every page, splits glyphs into lines / words и
+// собирает все `{{Name}}` (включая `{{A}}{{B}}` без пробела — несколько
+// токенов в одном слове). Bounding box нужен chunk 16 outbox-renderer'у.
 func (e *RealExtractor) ExtractPlaceholders(pdfBytes []byte) ([]Placeholder, error) {
 	reader := bytes.NewReader(pdfBytes)
 	pdfDoc, err := pdf.NewReader(reader, int64(len(pdfBytes)))
@@ -80,7 +58,7 @@ func (e *RealExtractor) ExtractPlaceholders(pdfBytes []byte) ([]Placeholder, err
 		}
 		for _, line := range groupByLine(chars) {
 			for _, w := range splitWords(line) {
-				if m := placeholderRE.FindStringSubmatch(w.text); m != nil {
+				for _, m := range placeholderRE.FindAllStringSubmatch(w.text, -1) {
 					found = append(found, Placeholder{
 						Page:      pageNum,
 						Name:      m[1],
@@ -96,9 +74,6 @@ func (e *RealExtractor) ExtractPlaceholders(pdfBytes []byte) ([]Placeholder, err
 	return found, nil
 }
 
-// groupByLine clusters glyphs into lines by Y-coordinate proximity.
-// Within a line the slice is sorted left-to-right by X. Lines are emitted
-// top-to-bottom (descending Y) — page coordinates have origin at bottom-left.
 func groupByLine(chars []pdf.Text) [][]pdf.Text {
 	if len(chars) == 0 {
 		return nil
@@ -128,8 +103,6 @@ func groupByLine(chars []pdf.Text) [][]pdf.Text {
 	return lines
 }
 
-// wordBox carries one whitespace-delimited token within a line plus its
-// bounding box (X bounds + baseline + font size).
 type wordBox struct {
 	text      string
 	xMin      float64
@@ -138,11 +111,10 @@ type wordBox struct {
 	fontSize  float64
 }
 
-// splitWords walks one line of glyphs and emits whitespace-delimited words.
-// ledongthuc/pdf does not report word advance, so the closing X for a word
-// is the X of the next whitespace glyph; for the trailing word we estimate
-// width from font size and rune count (within 1-2pt for monospace and
-// proportional fonts alike — sufficient for placeholder-bbox usage).
+// splitWords splits a line on whitespace. ledongthuc/pdf не отдаёт word advance —
+// xMax для слов внутри строки берём из X следующего whitespace-glyph'а; для
+// trailing word оцениваем по fontSize·0.5·runes (в пределах 1–2pt — хватает
+// под bbox-overlay).
 func splitWords(line []pdf.Text) []wordBox {
 	var words []wordBox
 	var cur wordBox

@@ -84,6 +84,15 @@ func SetupCampaignWithInvitedCreator(t *testing.T) TmaCampaignFixture {
 	campaignID := createResp.JSON201.Data.Id.String()
 	RegisterCampaignCleanup(t, campaignID)
 
+	// Notify guard (chunk 9a) требует загруженный шаблон договора.
+	uploadResp := PutContractTemplate(t,
+		"/campaigns/"+campaignID+"/contract-template",
+		BuildValidContractPDF(t),
+		WithHeader("Authorization", "Bearer "+adminToken))
+	uploadResp.Body.Close()
+	require.Equalf(t, http.StatusOK, uploadResp.StatusCode,
+		"SetupCampaignWithInvitedCreator: contract-template upload %d", uploadResp.StatusCode)
+
 	suffix := UniqueIIN()[6:]
 	creator := SetupApprovedCreator(t, CreatorApplicationFixture{
 		Socials: []SocialFixture{

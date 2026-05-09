@@ -724,12 +724,29 @@ func (k *notifyKit) liveCampaign(id string) *repository.CampaignRow {
 	created := time.Date(2026, 5, 7, 12, 0, 0, 0, time.UTC)
 	return &repository.CampaignRow{
 		ID: id, Name: "Promo X", TmaURL: k.tmaURL,
-		IsDeleted: false, CreatedAt: created, UpdatedAt: created,
+		IsDeleted: false, HasContractTemplate: true,
+		CreatedAt: created, UpdatedAt: created,
 	}
 }
 
 func TestCampaignCreatorService_Notify(t *testing.T) {
 	t.Parallel()
+
+	t.Run("rejects with CONTRACT_TEMPLATE_REQUIRED when campaign has no template", func(t *testing.T) {
+		t.Parallel()
+		k := setupNotifyKit(t, notifyKitOpts{})
+
+		camp := k.liveCampaign("camp-1")
+		camp.HasContractTemplate = false
+
+		k.factory.EXPECT().NewCampaignRepo(k.pool).Return(k.campaigns)
+		k.campaigns.EXPECT().GetByID(mock.Anything, "camp-1").Return(camp, nil)
+
+		_, err := k.svc.Notify(adminCtx(), "camp-1", []string{"cr-1"})
+		var ve *domain.ValidationError
+		require.ErrorAs(t, err, &ve)
+		require.Equal(t, domain.CodeContractTemplateRequired, ve.Code)
+	})
 
 	t.Run("happy path delivers all and writes invite audit per creator", func(t *testing.T) {
 		t.Parallel()

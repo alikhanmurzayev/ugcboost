@@ -3280,10 +3280,10 @@ export interface operations {
                 };
             };
             /**
-             * @description Either a shape/format violation (empty array, > 200 ids, duplicate
-             *     ids) returned as the standard ErrorResponse, or
-             *     CAMPAIGN_CREATOR_BATCH_INVALID with `details` listing every
-             *     unattached / wrong-status creator from the batch.
+             * @description Shape/format violation (empty array, > 200 ids, duplicate ids), or
+             *     CONTRACT_TEMPLATE_REQUIRED if the campaign has no contract template
+             *     uploaded yet, or CAMPAIGN_CREATOR_BATCH_INVALID with `details`
+             *     listing every unattached / wrong-status creator from the batch.
              */
             422: {
                 headers: {

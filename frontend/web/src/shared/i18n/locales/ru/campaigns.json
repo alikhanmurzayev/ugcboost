@@ -59,7 +59,7 @@
   "contractTemplate": {
     "sectionTitle": "Шаблон договора",
     "label": "Шаблон договора (PDF)",
-    "descriptionEmpty": "Загрузите PDF-шаблон, экспортированный из Google Docs. В шаблоне должны быть три плейсхолдера: {{CreatorFIO}}, {{CreatorIIN}}, {{IssuedDate}} — каждый в формате CamelCase на отдельной строке.",
+    "descriptionEmpty": "Загрузите PDF-шаблон с тремя плейсхолдерами: {{CreatorFIO}}, {{CreatorIIN}}, {{IssuedDate}}.",
     "uploadButton": "Загрузить шаблон",
     "replaceButton": "Заменить шаблон",
     "downloadButton": "Скачать существующий шаблон",
@@ -67,6 +67,7 @@
     "placeholdersFound": "Найдены плейсхолдеры:",
     "errorRequired": "Загрузите PDF-шаблон договора. Файл не должен быть пустым.",
     "errorInvalidPDF": "Файл не распознаётся как PDF.",
+    "errorContractTemplateRequired": "Загрузите шаблон договора в кампанию, прежде чем приглашать креаторов.",
     "errorMissingPlaceholder": "В шаблоне не найдены обязательные плейсхолдеры.",
     "errorUnknownPlaceholder": "В шаблоне найдены незнакомые плейсхолдеры.",
     "networkError": "Не удалось загрузить шаблон. Попробуйте снова."

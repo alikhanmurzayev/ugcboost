@@ -25,15 +25,10 @@ type CampaignRepoFactory interface {
 	NewAuditRepo(db dbutil.DB) repository.AuditRepo
 }
 
-// ContractExtractor parses placeholder occurrences out of a PDF byte stream.
-// Declared in this package (Go convention: accept interfaces, return structs)
-// so service tests can swap the real extractor for a mock without taking on
-// the ledongthuc/pdf import in the test file.
 type ContractExtractor interface {
 	ExtractPlaceholders(pdfBytes []byte) ([]contract.Placeholder, error)
 }
 
-// CampaignService owns the marketing-campaign lifecycle.
 type CampaignService struct {
 	pool        dbutil.Pool
 	repoFactory CampaignRepoFactory
@@ -41,15 +36,10 @@ type CampaignService struct {
 	logger      logger.Logger
 }
 
-// NewCampaignService creates a new CampaignService.
 func NewCampaignService(pool dbutil.Pool, repoFactory CampaignRepoFactory, extractor ContractExtractor, log logger.Logger) *CampaignService {
 	return &CampaignService{pool: pool, repoFactory: repoFactory, extractor: extractor, logger: log}
 }
 
-// UploadContractTemplateResult is returned to the admin UI after a successful
-// PUT /campaigns/{id}/contract-template — it carries the sha256 fingerprint
-// and the canonical placeholder set so the UI can render confirmation
-// without a follow-up GET.
 type UploadContractTemplateResult struct {
 	Hash         string
 	Placeholders []string
@@ -238,14 +228,6 @@ func (s *CampaignService) List(ctx context.Context, in domain.CampaignListInput)
 	}, nil
 }
 
-// UploadContractTemplate validates a PDF upload, persists it on the campaign
-// row, and writes the audit-log entry — all inside one transaction so a
-// rollback wipes both. Validation order mirrors the spec: empty body →
-// CONTRACT_REQUIRED, unparseable bytes → CONTRACT_INVALID_PDF, then the
-// pure-domain ValidateContractTemplatePDF chain (missing/unknown). The
-// audit row carries the sha256 hash + placeholder list + size — never the
-// PDF bytes themselves (security.md § PII в логах extends to bulk binary
-// payloads).
 func (s *CampaignService) UploadContractTemplate(ctx context.Context, id string, pdf []byte) (*UploadContractTemplateResult, error) {
 	if len(pdf) == 0 {
 		return nil, domain.NewContractRequiredError()
@@ -299,7 +281,7 @@ func (s *CampaignService) UploadContractTemplate(ctx context.Context, id string,
 	s.logger.Info(ctx, "contract template uploaded",
 		"campaign_id", id,
 		"size_bytes", len(pdf),
-		"sha256", hash[:12], // short fingerprint, full hash lives in audit_logs
+		"sha256", hash[:12],
 	)
 	return &UploadContractTemplateResult{
 		Hash:         hash,
@@ -307,10 +289,6 @@ func (s *CampaignService) UploadContractTemplate(ctx context.Context, id string,
 	}, nil
 }
 
-// GetContractTemplate streams the stored PDF back for download. Soft-deleted
-// campaigns surface as ErrCampaignNotFound; live campaigns whose
-// contract_template_pdf column is empty (admin never uploaded) surface as
-// ErrContractTemplateNotFound — handlers map both to 404 with distinct codes.
 func (s *CampaignService) GetContractTemplate(ctx context.Context, id string) ([]byte, error) {
 	pdf, err := s.repoFactory.NewCampaignRepo(s.pool).GetContractTemplate(ctx, id)
 	if err != nil {

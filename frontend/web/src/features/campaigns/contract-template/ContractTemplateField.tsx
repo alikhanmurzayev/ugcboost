@@ -34,12 +34,8 @@ export default function ContractTemplateField({
 
   function handleFileChange(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
-    e.target.value = ""; // allow re-upload of the same file name
+    e.target.value = "";
     if (!file) return;
-    // Reject obvious non-PDFs before paying for an upload roundtrip — saves
-    // bandwidth on a 50 MB .docx renamed to .pdf and gives the admin
-    // immediate feedback instead of a 422 from the parser. Server-side
-    // CONTRACT_INVALID_PDF still backs this up.
     const looksLikePDF =
       file.type === "application/pdf" ||
       file.name.toLowerCase().endsWith(".pdf");

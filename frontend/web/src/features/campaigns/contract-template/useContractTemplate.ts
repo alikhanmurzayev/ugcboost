@@ -17,16 +17,11 @@ export function useUploadContractTemplate(campaignId: string) {
       void queryClient.invalidateQueries({
         queryKey: campaignKeys.contractTemplate(campaignId),
       });
-      // List view shows hasContractTemplate per row; refetch so the freshly
-      // uploaded template flips the indicator without a manual reload.
       void queryClient.invalidateQueries({ queryKey: campaignKeys.lists() });
     },
   });
 }
 
-// triggerDownloadContractTemplate fetches the stored PDF and triggers a
-// browser download via an anonymous anchor — keeps the action a one-liner
-// from the component without holding the blob URL in component state.
 export async function triggerDownloadContractTemplate(
   campaignId: string,
   fileName: string,
