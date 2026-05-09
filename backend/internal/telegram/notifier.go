@@ -114,11 +114,13 @@ const campaignContractSignedText = "Ура, мы подписали с вами 
 func CampaignContractSignedText() string { return campaignContractSignedText }
 
 // campaignContractSentText — креатору после Phase 3 outbox-worker'а: договор
-// ушёл в TrustMe на подпись. TrustMe сам пришлёт SMS со ссылкой на свой
-// сайт, где креатор подпишет — поэтому ссылку здесь не дублируем (TrustMe
-// отдаёт нам не URL, а только short-code, и собирать `tct.kz/uploader/<code>`
-// руками тут смысла нет).
-const campaignContractSentText = "Мы отправили вам соглашение на подпись 📄"
+// ушёл в TrustMe на подпись. Подпись происходит по ссылке, которую TrustMe
+// сам пришлёт креатору SMS-кой на тот же телефон, что и в реквизитах
+// (TrustMe отдаёт нам не URL, а только short-code — собирать
+// `tct.kz/uploader/<code>` руками тут смысла нет).
+const campaignContractSentText = "Мы отправили вам соглашение на подпись по СМС на номер телефона, указанный при регистрации 📄\n\n" +
+	"Перейдите по ссылке из СМС и подпишите соглашение\n\n" +
+	"Если есть вопросы, можете обратиться к @iskarova"
 
 // CampaignContractSentText экспортирует текст для тестов.
 func CampaignContractSentText() string { return campaignContractSentText }
