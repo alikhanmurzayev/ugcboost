@@ -33,11 +33,11 @@ func TestCampaignService_CreateCampaign(t *testing.T) {
 		pool.EXPECT().Begin(mock.Anything).Return(testTx{}, nil)
 		factory.EXPECT().NewCampaignRepo(mock.Anything).Return(campaigns)
 		factory.EXPECT().NewAuditRepo(mock.Anything).Return(audit)
-		campaigns.EXPECT().Create(mock.Anything, "Promo X", "https://tma.ugcboost.kz/tz/abc").
+		campaigns.EXPECT().Create(mock.Anything, "Promo X", "https://tma.ugcboost.kz/tz/abc_padding_secrettokenxx", "abc_padding_secrettokenxx").
 			Return((*repository.CampaignRow)(nil), errors.New("db error"))
 
 		svc := NewCampaignService(pool, factory, logmocks.NewMockLogger(t))
-		_, err := svc.CreateCampaign(context.Background(), domain.CampaignInput{Name: "Promo X", TmaURL: "https://tma.ugcboost.kz/tz/abc"})
+		_, err := svc.CreateCampaign(context.Background(), domain.CampaignInput{Name: "Promo X", TmaURL: "https://tma.ugcboost.kz/tz/abc_padding_secrettokenxx"})
 		require.ErrorContains(t, err, "db error")
 	})
 
@@ -51,11 +51,11 @@ func TestCampaignService_CreateCampaign(t *testing.T) {
 		pool.EXPECT().Begin(mock.Anything).Return(testTx{}, nil)
 		factory.EXPECT().NewCampaignRepo(mock.Anything).Return(campaigns)
 		factory.EXPECT().NewAuditRepo(mock.Anything).Return(audit)
-		campaigns.EXPECT().Create(mock.Anything, "Promo X", "https://tma.ugcboost.kz/tz/abc").
+		campaigns.EXPECT().Create(mock.Anything, "Promo X", "https://tma.ugcboost.kz/tz/abc_padding_secrettokenxx", "abc_padding_secrettokenxx").
 			Return((*repository.CampaignRow)(nil), domain.ErrCampaignNameTaken)
 
 		svc := NewCampaignService(pool, factory, logmocks.NewMockLogger(t))
-		_, err := svc.CreateCampaign(context.Background(), domain.CampaignInput{Name: "Promo X", TmaURL: "https://tma.ugcboost.kz/tz/abc"})
+		_, err := svc.CreateCampaign(context.Background(), domain.CampaignInput{Name: "Promo X", TmaURL: "https://tma.ugcboost.kz/tz/abc_padding_secrettokenxx"})
 		require.ErrorIs(t, err, domain.ErrCampaignNameTaken)
 	})
 
@@ -70,11 +70,11 @@ func TestCampaignService_CreateCampaign(t *testing.T) {
 		pool.EXPECT().Begin(mock.Anything).Return(testTx{}, nil)
 		factory.EXPECT().NewCampaignRepo(mock.Anything).Return(campaigns)
 		factory.EXPECT().NewAuditRepo(mock.Anything).Return(audit)
-		campaigns.EXPECT().Create(mock.Anything, "Promo X", "https://tma.ugcboost.kz/tz/abc").
+		campaigns.EXPECT().Create(mock.Anything, "Promo X", "https://tma.ugcboost.kz/tz/abc_padding_secrettokenxx", "abc_padding_secrettokenxx").
 			Return(&repository.CampaignRow{
 				ID:        "c-1",
 				Name:      "Promo X",
-				TmaURL:    "https://tma.ugcboost.kz/tz/abc",
+				TmaURL:    "https://tma.ugcboost.kz/tz/abc_padding_secrettokenxx",
 				IsDeleted: false,
 				CreatedAt: created,
 				UpdatedAt: created,
@@ -82,7 +82,7 @@ func TestCampaignService_CreateCampaign(t *testing.T) {
 		audit.EXPECT().Create(mock.Anything, mock.Anything).Return(errors.New("audit failed"))
 
 		svc := NewCampaignService(pool, factory, logmocks.NewMockLogger(t))
-		_, err := svc.CreateCampaign(context.Background(), domain.CampaignInput{Name: "Promo X", TmaURL: "https://tma.ugcboost.kz/tz/abc"})
+		_, err := svc.CreateCampaign(context.Background(), domain.CampaignInput{Name: "Promo X", TmaURL: "https://tma.ugcboost.kz/tz/abc_padding_secrettokenxx"})
 		require.ErrorContains(t, err, "audit failed")
 	})
 
@@ -98,11 +98,11 @@ func TestCampaignService_CreateCampaign(t *testing.T) {
 		pool.EXPECT().Begin(mock.Anything).Return(testTx{}, nil)
 		factory.EXPECT().NewCampaignRepo(mock.Anything).Return(campaigns)
 		factory.EXPECT().NewAuditRepo(mock.Anything).Return(audit)
-		campaigns.EXPECT().Create(mock.Anything, "Promo X", "https://tma.ugcboost.kz/tz/abc").
+		campaigns.EXPECT().Create(mock.Anything, "Promo X", "https://tma.ugcboost.kz/tz/abc_padding_secrettokenxx", "abc_padding_secrettokenxx").
 			Return(&repository.CampaignRow{
 				ID:        "c-1",
 				Name:      "Promo X",
-				TmaURL:    "https://tma.ugcboost.kz/tz/abc",
+				TmaURL:    "https://tma.ugcboost.kz/tz/abc_padding_secrettokenxx",
 				IsDeleted: false,
 				CreatedAt: created,
 				UpdatedAt: created,
@@ -110,7 +110,7 @@ func TestCampaignService_CreateCampaign(t *testing.T) {
 		expected := &domain.Campaign{
 			ID:        "c-1",
 			Name:      "Promo X",
-			TmaURL:    "https://tma.ugcboost.kz/tz/abc",
+			TmaURL:    "https://tma.ugcboost.kz/tz/abc_padding_secrettokenxx",
 			IsDeleted: false,
 			CreatedAt: created,
 			UpdatedAt: created,
@@ -132,7 +132,7 @@ func TestCampaignService_CreateCampaign(t *testing.T) {
 		log.EXPECT().Info(mock.Anything, "campaign created", []any{"campaign_id", "c-1"}).Once()
 
 		svc := NewCampaignService(pool, factory, log)
-		got, err := svc.CreateCampaign(context.Background(), domain.CampaignInput{Name: "Promo X", TmaURL: "https://tma.ugcboost.kz/tz/abc"})
+		got, err := svc.CreateCampaign(context.Background(), domain.CampaignInput{Name: "Promo X", TmaURL: "https://tma.ugcboost.kz/tz/abc_padding_secrettokenxx"})
 		require.NoError(t, err)
 		require.Equal(t, expected, got)
 	})
@@ -184,7 +184,7 @@ func TestCampaignService_GetByID(t *testing.T) {
 			Return(&repository.CampaignRow{
 				ID:        "c-1",
 				Name:      "Promo X",
-				TmaURL:    "https://tma.ugcboost.kz/tz/abc",
+				TmaURL:    "https://tma.ugcboost.kz/tz/abc_padding_secrettokenxx",
 				IsDeleted: true,
 				CreatedAt: created,
 				UpdatedAt: created,
@@ -196,7 +196,7 @@ func TestCampaignService_GetByID(t *testing.T) {
 		require.Equal(t, &domain.Campaign{
 			ID:        "c-1",
 			Name:      "Promo X",
-			TmaURL:    "https://tma.ugcboost.kz/tz/abc",
+			TmaURL:    "https://tma.ugcboost.kz/tz/abc_padding_secrettokenxx",
 			IsDeleted: true,
 			CreatedAt: created,
 			UpdatedAt: created,
@@ -222,7 +222,7 @@ func TestCampaignService_UpdateCampaign(t *testing.T) {
 
 		svc := NewCampaignService(pool, factory, logmocks.NewMockLogger(t))
 		err := svc.UpdateCampaign(context.Background(), "missing",
-			domain.CampaignInput{Name: "Promo Y", TmaURL: "https://tma.ugcboost.kz/tz/new"})
+			domain.CampaignInput{Name: "Promo Y", TmaURL: "https://tma.ugcboost.kz/tz/new_padding_secrettokenxx"})
 		require.ErrorIs(t, err, domain.ErrCampaignNotFound)
 	})
 
@@ -241,7 +241,7 @@ func TestCampaignService_UpdateCampaign(t *testing.T) {
 
 		svc := NewCampaignService(pool, factory, logmocks.NewMockLogger(t))
 		err := svc.UpdateCampaign(context.Background(), "c-1",
-			domain.CampaignInput{Name: "Promo Y", TmaURL: "https://tma.ugcboost.kz/tz/new"})
+			domain.CampaignInput{Name: "Promo Y", TmaURL: "https://tma.ugcboost.kz/tz/new_padding_secrettokenxx"})
 		require.ErrorContains(t, err, "get campaign")
 		require.ErrorContains(t, err, "db unavailable")
 	})
@@ -261,7 +261,7 @@ func TestCampaignService_UpdateCampaign(t *testing.T) {
 			Return(&repository.CampaignRow{
 				ID:        "c-1",
 				Name:      "Promo X",
-				TmaURL:    "https://tma.ugcboost.kz/tz/abc",
+				TmaURL:    "https://tma.ugcboost.kz/tz/abc_padding_secrettokenxx",
 				IsDeleted: true,
 				CreatedAt: created,
 				UpdatedAt: created,
@@ -269,7 +269,7 @@ func TestCampaignService_UpdateCampaign(t *testing.T) {
 
 		svc := NewCampaignService(pool, factory, logmocks.NewMockLogger(t))
 		err := svc.UpdateCampaign(context.Background(), "c-1",
-			domain.CampaignInput{Name: "Promo Y", TmaURL: "https://tma.ugcboost.kz/tz/new"})
+			domain.CampaignInput{Name: "Promo Y", TmaURL: "https://tma.ugcboost.kz/tz/new_padding_secrettokenxx"})
 		require.ErrorIs(t, err, domain.ErrCampaignNotFound)
 	})
 
@@ -290,18 +290,18 @@ func TestCampaignService_UpdateCampaign(t *testing.T) {
 			Return(&repository.CampaignRow{
 				ID:        "c-1",
 				Name:      "Promo X",
-				TmaURL:    "https://tma.ugcboost.kz/tz/abc",
+				TmaURL:    "https://tma.ugcboost.kz/tz/abc_padding_secrettokenxx",
 				IsDeleted: false,
 				CreatedAt: created,
 				UpdatedAt: created,
 			}, nil)
 		ccRepo.EXPECT().ExistsInvitedInCampaign(mock.Anything, "c-1").Return(false, nil)
-		campaigns.EXPECT().Update(mock.Anything, "c-1", "Promo Y", "https://tma.ugcboost.kz/tz/new").
+		campaigns.EXPECT().Update(mock.Anything, "c-1", "Promo Y", "https://tma.ugcboost.kz/tz/new_padding_secrettokenxx", "new_padding_secrettokenxx").
 			Return((*repository.CampaignRow)(nil), sql.ErrNoRows)
 
 		svc := NewCampaignService(pool, factory, logmocks.NewMockLogger(t))
 		err := svc.UpdateCampaign(context.Background(), "c-1",
-			domain.CampaignInput{Name: "Promo Y", TmaURL: "https://tma.ugcboost.kz/tz/new"})
+			domain.CampaignInput{Name: "Promo Y", TmaURL: "https://tma.ugcboost.kz/tz/new_padding_secrettokenxx"})
 		require.ErrorIs(t, err, domain.ErrCampaignNotFound)
 	})
 
@@ -322,18 +322,18 @@ func TestCampaignService_UpdateCampaign(t *testing.T) {
 			Return(&repository.CampaignRow{
 				ID:        "c-1",
 				Name:      "Promo X",
-				TmaURL:    "https://tma.ugcboost.kz/tz/abc",
+				TmaURL:    "https://tma.ugcboost.kz/tz/abc_padding_secrettokenxx",
 				IsDeleted: false,
 				CreatedAt: created,
 				UpdatedAt: created,
 			}, nil)
 		ccRepo.EXPECT().ExistsInvitedInCampaign(mock.Anything, "c-1").Return(false, nil)
-		campaigns.EXPECT().Update(mock.Anything, "c-1", "Promo Y", "https://tma.ugcboost.kz/tz/new").
+		campaigns.EXPECT().Update(mock.Anything, "c-1", "Promo Y", "https://tma.ugcboost.kz/tz/new_padding_secrettokenxx", "new_padding_secrettokenxx").
 			Return((*repository.CampaignRow)(nil), domain.ErrCampaignNameTaken)
 
 		svc := NewCampaignService(pool, factory, logmocks.NewMockLogger(t))
 		err := svc.UpdateCampaign(context.Background(), "c-1",
-			domain.CampaignInput{Name: "Promo Y", TmaURL: "https://tma.ugcboost.kz/tz/new"})
+			domain.CampaignInput{Name: "Promo Y", TmaURL: "https://tma.ugcboost.kz/tz/new_padding_secrettokenxx"})
 		require.ErrorIs(t, err, domain.ErrCampaignNameTaken)
 	})
 
@@ -354,18 +354,18 @@ func TestCampaignService_UpdateCampaign(t *testing.T) {
 			Return(&repository.CampaignRow{
 				ID:        "c-1",
 				Name:      "Promo X",
-				TmaURL:    "https://tma.ugcboost.kz/tz/abc",
+				TmaURL:    "https://tma.ugcboost.kz/tz/abc_padding_secrettokenxx",
 				IsDeleted: false,
 				CreatedAt: created,
 				UpdatedAt: created,
 			}, nil)
 		ccRepo.EXPECT().ExistsInvitedInCampaign(mock.Anything, "c-1").Return(false, nil)
-		campaigns.EXPECT().Update(mock.Anything, "c-1", "Promo Y", "https://tma.ugcboost.kz/tz/new").
+		campaigns.EXPECT().Update(mock.Anything, "c-1", "Promo Y", "https://tma.ugcboost.kz/tz/new_padding_secrettokenxx", "new_padding_secrettokenxx").
 			Return((*repository.CampaignRow)(nil), errors.New("db unavailable"))
 
 		svc := NewCampaignService(pool, factory, logmocks.NewMockLogger(t))
 		err := svc.UpdateCampaign(context.Background(), "c-1",
-			domain.CampaignInput{Name: "Promo Y", TmaURL: "https://tma.ugcboost.kz/tz/new"})
+			domain.CampaignInput{Name: "Promo Y", TmaURL: "https://tma.ugcboost.kz/tz/new_padding_secrettokenxx"})
 		require.ErrorContains(t, err, "update campaign")
 		require.ErrorContains(t, err, "db unavailable")
 	})
@@ -388,17 +388,17 @@ func TestCampaignService_UpdateCampaign(t *testing.T) {
 			Return(&repository.CampaignRow{
 				ID:        "c-1",
 				Name:      "Promo X",
-				TmaURL:    "https://tma.ugcboost.kz/tz/abc",
+				TmaURL:    "https://tma.ugcboost.kz/tz/abc_padding_secrettokenxx",
 				IsDeleted: false,
 				CreatedAt: created,
 				UpdatedAt: created,
 			}, nil)
 		ccRepo.EXPECT().ExistsInvitedInCampaign(mock.Anything, "c-1").Return(false, nil)
-		campaigns.EXPECT().Update(mock.Anything, "c-1", "Promo Y", "https://tma.ugcboost.kz/tz/new").
+		campaigns.EXPECT().Update(mock.Anything, "c-1", "Promo Y", "https://tma.ugcboost.kz/tz/new_padding_secrettokenxx", "new_padding_secrettokenxx").
 			Return(&repository.CampaignRow{
 				ID:        "c-1",
 				Name:      "Promo Y",
-				TmaURL:    "https://tma.ugcboost.kz/tz/new",
+				TmaURL:    "https://tma.ugcboost.kz/tz/new_padding_secrettokenxx",
 				IsDeleted: false,
 				CreatedAt: created,
 				UpdatedAt: updated,
@@ -407,7 +407,7 @@ func TestCampaignService_UpdateCampaign(t *testing.T) {
 
 		svc := NewCampaignService(pool, factory, logmocks.NewMockLogger(t))
 		err := svc.UpdateCampaign(context.Background(), "c-1",
-			domain.CampaignInput{Name: "Promo Y", TmaURL: "https://tma.ugcboost.kz/tz/new"})
+			domain.CampaignInput{Name: "Promo Y", TmaURL: "https://tma.ugcboost.kz/tz/new_padding_secrettokenxx"})
 		require.ErrorContains(t, err, "audit failed")
 	})
 
@@ -425,7 +425,7 @@ func TestCampaignService_UpdateCampaign(t *testing.T) {
 		oldCampaign := &domain.Campaign{
 			ID:        "c-1",
 			Name:      "Promo X",
-			TmaURL:    "https://tma.ugcboost.kz/tz/abc",
+			TmaURL:    "https://tma.ugcboost.kz/tz/abc_padding_secrettokenxx",
 			IsDeleted: false,
 			CreatedAt: created,
 			UpdatedAt: created,
@@ -433,7 +433,7 @@ func TestCampaignService_UpdateCampaign(t *testing.T) {
 		newCampaign := &domain.Campaign{
 			ID:        "c-1",
 			Name:      "Promo Y",
-			TmaURL:    "https://tma.ugcboost.kz/tz/new",
+			TmaURL:    "https://tma.ugcboost.kz/tz/new_padding_secrettokenxx",
 			IsDeleted: false,
 			CreatedAt: created,
 			UpdatedAt: updated,
@@ -457,7 +457,7 @@ func TestCampaignService_UpdateCampaign(t *testing.T) {
 				UpdatedAt: oldCampaign.UpdatedAt,
 			}, nil)
 		ccRepo.EXPECT().ExistsInvitedInCampaign(mock.Anything, "c-1").Return(false, nil)
-		campaigns.EXPECT().Update(mock.Anything, "c-1", "Promo Y", "https://tma.ugcboost.kz/tz/new").
+		campaigns.EXPECT().Update(mock.Anything, "c-1", "Promo Y", "https://tma.ugcboost.kz/tz/new_padding_secrettokenxx", "new_padding_secrettokenxx").
 			Return(&repository.CampaignRow{
 				ID:        newCampaign.ID,
 				Name:      newCampaign.Name,
@@ -483,7 +483,7 @@ func TestCampaignService_UpdateCampaign(t *testing.T) {
 
 		svc := NewCampaignService(pool, factory, log)
 		err = svc.UpdateCampaign(context.Background(), "c-1",
-			domain.CampaignInput{Name: "Promo Y", TmaURL: "https://tma.ugcboost.kz/tz/new"})
+			domain.CampaignInput{Name: "Promo Y", TmaURL: "https://tma.ugcboost.kz/tz/new_padding_secrettokenxx"})
 		require.NoError(t, err)
 	})
 
@@ -504,7 +504,7 @@ func TestCampaignService_UpdateCampaign(t *testing.T) {
 			Return(&repository.CampaignRow{
 				ID:        "c-1",
 				Name:      "Promo X",
-				TmaURL:    "https://tma.ugcboost.kz/tz/abc",
+				TmaURL:    "https://tma.ugcboost.kz/tz/abc_padding_secrettokenxx",
 				IsDeleted: false,
 				CreatedAt: created,
 				UpdatedAt: created,
@@ -513,7 +513,7 @@ func TestCampaignService_UpdateCampaign(t *testing.T) {
 
 		svc := NewCampaignService(pool, factory, logmocks.NewMockLogger(t))
 		err := svc.UpdateCampaign(context.Background(), "c-1",
-			domain.CampaignInput{Name: "Promo Y", TmaURL: "https://tma.ugcboost.kz/tz/new"})
+			domain.CampaignInput{Name: "Promo Y", TmaURL: "https://tma.ugcboost.kz/tz/new_padding_secrettokenxx"})
 		require.ErrorIs(t, err, domain.ErrCampaignTmaURLLocked)
 	})
 
@@ -530,7 +530,7 @@ func TestCampaignService_UpdateCampaign(t *testing.T) {
 		oldRow := &repository.CampaignRow{
 			ID:        "c-1",
 			Name:      "Promo X",
-			TmaURL:    "https://tma.ugcboost.kz/tz/abc",
+			TmaURL:    "https://tma.ugcboost.kz/tz/abc_padding_secrettokenxx",
 			IsDeleted: false,
 			CreatedAt: created,
 			UpdatedAt: created,
@@ -538,7 +538,7 @@ func TestCampaignService_UpdateCampaign(t *testing.T) {
 		newRow := &repository.CampaignRow{
 			ID:        "c-1",
 			Name:      "Promo Y",
-			TmaURL:    "https://tma.ugcboost.kz/tz/abc",
+			TmaURL:    "https://tma.ugcboost.kz/tz/abc_padding_secrettokenxx",
 			IsDeleted: false,
 			CreatedAt: created,
 			UpdatedAt: updated,
@@ -548,14 +548,14 @@ func TestCampaignService_UpdateCampaign(t *testing.T) {
 		factory.EXPECT().NewAuditRepo(mock.Anything).Return(audit)
 		campaigns.EXPECT().GetByID(mock.Anything, "c-1").Return(oldRow, nil)
 		// No NewCampaignCreatorRepo / ExistsInvitedInCampaign call: lock skipped.
-		campaigns.EXPECT().Update(mock.Anything, "c-1", "Promo Y", "https://tma.ugcboost.kz/tz/abc").
+		campaigns.EXPECT().Update(mock.Anything, "c-1", "Promo Y", "https://tma.ugcboost.kz/tz/abc_padding_secrettokenxx", "abc_padding_secrettokenxx").
 			Return(newRow, nil)
 		audit.EXPECT().Create(mock.Anything, mock.Anything).Return(nil).Once()
 		log.EXPECT().Info(mock.Anything, "campaign updated", mock.Anything).Once()
 
 		svc := NewCampaignService(pool, factory, log)
 		err := svc.UpdateCampaign(context.Background(), "c-1",
-			domain.CampaignInput{Name: "Promo Y", TmaURL: "https://tma.ugcboost.kz/tz/abc"})
+			domain.CampaignInput{Name: "Promo Y", TmaURL: "https://tma.ugcboost.kz/tz/abc_padding_secrettokenxx"})
 		require.NoError(t, err)
 	})
 
@@ -574,7 +574,7 @@ func TestCampaignService_UpdateCampaign(t *testing.T) {
 		factory.EXPECT().NewAuditRepo(mock.Anything).Return(audit)
 		campaigns.EXPECT().GetByID(mock.Anything, "c-1").
 			Return(&repository.CampaignRow{
-				ID: "c-1", Name: "Promo X", TmaURL: "https://tma.ugcboost.kz/tz/abc",
+				ID: "c-1", Name: "Promo X", TmaURL: "https://tma.ugcboost.kz/tz/abc_padding_secrettokenxx",
 				IsDeleted: false, CreatedAt: created, UpdatedAt: created,
 			}, nil)
 		ccRepo.EXPECT().ExistsInvitedInCampaign(mock.Anything, "c-1").
@@ -582,7 +582,7 @@ func TestCampaignService_UpdateCampaign(t *testing.T) {
 
 		svc := NewCampaignService(pool, factory, logmocks.NewMockLogger(t))
 		err := svc.UpdateCampaign(context.Background(), "c-1",
-			domain.CampaignInput{Name: "Promo Y", TmaURL: "https://tma.ugcboost.kz/tz/new"})
+			domain.CampaignInput{Name: "Promo Y", TmaURL: "https://tma.ugcboost.kz/tz/new_padding_secrettokenxx"})
 		require.ErrorContains(t, err, "check tma_url lock")
 		require.ErrorContains(t, err, "db down")
 	})
@@ -675,8 +675,8 @@ func TestCampaignService_List(t *testing.T) {
 				}, p)
 			}).
 			Return([]*repository.CampaignRow{
-				{ID: "c-1", Name: "Promo A", TmaURL: "https://tma.ugcboost.kz/tz/a", IsDeleted: false, CreatedAt: created, UpdatedAt: updated},
-				{ID: "c-2", Name: "Promo B", TmaURL: "https://tma.ugcboost.kz/tz/b", IsDeleted: true, CreatedAt: created, UpdatedAt: updated},
+				{ID: "c-1", Name: "Promo A", TmaURL: "https://tma.ugcboost.kz/tz/a_padding_secrettokenxxxx", IsDeleted: false, CreatedAt: created, UpdatedAt: updated},
+				{ID: "c-2", Name: "Promo B", TmaURL: "https://tma.ugcboost.kz/tz/b_padding_secrettokenxxxx", IsDeleted: true, CreatedAt: created, UpdatedAt: updated},
 			}, int64(7), nil)
 
 		svc := NewCampaignService(pool, factory, logmocks.NewMockLogger(t))
@@ -691,8 +691,8 @@ func TestCampaignService_List(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, &domain.CampaignListPage{
 			Items: []*domain.Campaign{
-				{ID: "c-1", Name: "Promo A", TmaURL: "https://tma.ugcboost.kz/tz/a", IsDeleted: false, CreatedAt: created, UpdatedAt: updated},
-				{ID: "c-2", Name: "Promo B", TmaURL: "https://tma.ugcboost.kz/tz/b", IsDeleted: true, CreatedAt: created, UpdatedAt: updated},
+				{ID: "c-1", Name: "Promo A", TmaURL: "https://tma.ugcboost.kz/tz/a_padding_secrettokenxxxx", IsDeleted: false, CreatedAt: created, UpdatedAt: updated},
+				{ID: "c-2", Name: "Promo B", TmaURL: "https://tma.ugcboost.kz/tz/b_padding_secrettokenxxxx", IsDeleted: true, CreatedAt: created, UpdatedAt: updated},
 			},
 			Total:   7,
 			Page:    2,

@@ -62,8 +62,19 @@ type Config struct {
 	TelegramBotUsername string `env:"TELEGRAM_BOT_USERNAME,required"`
 
 	// Required when TelegramMock is false. With TelegramMock=true the sender
-	// runs in spy-only mode and the token is irrelevant.
+	// runs in spy-only mode and the token is irrelevant. Doubles as the HMAC
+	// key for /tma/* initData verification — same secret, different scope.
 	TelegramBotToken string `env:"TELEGRAM_BOT_TOKEN" envDefault:""`
+
+	// Freshness window for Telegram WebApp initData. Older / future-dated
+	// signatures get a generic 401 (anti-fingerprint) before any DB lookup.
+	// Default 24h matches the official WebApp expiration; staging may dial
+	// it down for faster manual replay-attack drills.
+	//
+	// Use Go time.Duration syntax — `24h`, `1h30m`, `90s`. Bare integers
+	// like `86400` are NOT valid (caarlos0/env parses through
+	// time.ParseDuration which would treat them as nanoseconds).
+	TMAInitDataTTL time.Duration `env:"TMA_INITDATA_TTL" envDefault:"24h"`
 
 	// When true the outbound Telegram sender records into an in-memory spy
 	// store and never touches the network. Used by local dev and CI so tests

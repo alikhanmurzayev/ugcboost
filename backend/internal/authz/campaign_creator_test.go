@@ -16,19 +16,19 @@ func TestAuthzService_CanAddCampaignCreators(t *testing.T) {
 
 	t.Run("manager forbidden", func(t *testing.T) {
 		t.Parallel()
-		svc := NewAuthzService(mocks.NewMockBrandService(t))
+		svc := NewAuthzService(mocks.NewMockBrandService(t), nil, nil)
 		require.ErrorIs(t, svc.CanAddCampaignCreators(ctxWithRole(api.BrandManager)), domain.ErrForbidden)
 	})
 
 	t.Run("missing role forbidden", func(t *testing.T) {
 		t.Parallel()
-		svc := NewAuthzService(mocks.NewMockBrandService(t))
+		svc := NewAuthzService(mocks.NewMockBrandService(t), nil, nil)
 		require.ErrorIs(t, svc.CanAddCampaignCreators(context.Background()), domain.ErrForbidden)
 	})
 
 	t.Run("admin allowed", func(t *testing.T) {
 		t.Parallel()
-		svc := NewAuthzService(mocks.NewMockBrandService(t))
+		svc := NewAuthzService(mocks.NewMockBrandService(t), nil, nil)
 		require.NoError(t, svc.CanAddCampaignCreators(ctxWithRole(api.Admin)))
 	})
 }
@@ -38,19 +38,19 @@ func TestAuthzService_CanRemoveCampaignCreator(t *testing.T) {
 
 	t.Run("manager forbidden", func(t *testing.T) {
 		t.Parallel()
-		svc := NewAuthzService(mocks.NewMockBrandService(t))
+		svc := NewAuthzService(mocks.NewMockBrandService(t), nil, nil)
 		require.ErrorIs(t, svc.CanRemoveCampaignCreator(ctxWithRole(api.BrandManager)), domain.ErrForbidden)
 	})
 
 	t.Run("missing role forbidden", func(t *testing.T) {
 		t.Parallel()
-		svc := NewAuthzService(mocks.NewMockBrandService(t))
+		svc := NewAuthzService(mocks.NewMockBrandService(t), nil, nil)
 		require.ErrorIs(t, svc.CanRemoveCampaignCreator(context.Background()), domain.ErrForbidden)
 	})
 
 	t.Run("admin allowed", func(t *testing.T) {
 		t.Parallel()
-		svc := NewAuthzService(mocks.NewMockBrandService(t))
+		svc := NewAuthzService(mocks.NewMockBrandService(t), nil, nil)
 		require.NoError(t, svc.CanRemoveCampaignCreator(ctxWithRole(api.Admin)))
 	})
 }
@@ -60,19 +60,19 @@ func TestAuthzService_CanListCampaignCreators(t *testing.T) {
 
 	t.Run("manager forbidden", func(t *testing.T) {
 		t.Parallel()
-		svc := NewAuthzService(mocks.NewMockBrandService(t))
+		svc := NewAuthzService(mocks.NewMockBrandService(t), nil, nil)
 		require.ErrorIs(t, svc.CanListCampaignCreators(ctxWithRole(api.BrandManager)), domain.ErrForbidden)
 	})
 
 	t.Run("missing role forbidden", func(t *testing.T) {
 		t.Parallel()
-		svc := NewAuthzService(mocks.NewMockBrandService(t))
+		svc := NewAuthzService(mocks.NewMockBrandService(t), nil, nil)
 		require.ErrorIs(t, svc.CanListCampaignCreators(context.Background()), domain.ErrForbidden)
 	})
 
 	t.Run("admin allowed", func(t *testing.T) {
 		t.Parallel()
-		svc := NewAuthzService(mocks.NewMockBrandService(t))
+		svc := NewAuthzService(mocks.NewMockBrandService(t), nil, nil)
 		require.NoError(t, svc.CanListCampaignCreators(ctxWithRole(api.Admin)))
 	})
 }
@@ -82,19 +82,19 @@ func TestAuthzService_CanNotifyCampaignCreators(t *testing.T) {
 
 	t.Run("manager forbidden", func(t *testing.T) {
 		t.Parallel()
-		svc := NewAuthzService(mocks.NewMockBrandService(t))
+		svc := NewAuthzService(mocks.NewMockBrandService(t), nil, nil)
 		require.ErrorIs(t, svc.CanNotifyCampaignCreators(ctxWithRole(api.BrandManager)), domain.ErrForbidden)
 	})
 
 	t.Run("missing role forbidden", func(t *testing.T) {
 		t.Parallel()
-		svc := NewAuthzService(mocks.NewMockBrandService(t))
+		svc := NewAuthzService(mocks.NewMockBrandService(t), nil, nil)
 		require.ErrorIs(t, svc.CanNotifyCampaignCreators(context.Background()), domain.ErrForbidden)
 	})
 
 	t.Run("admin allowed", func(t *testing.T) {
 		t.Parallel()
-		svc := NewAuthzService(mocks.NewMockBrandService(t))
+		svc := NewAuthzService(mocks.NewMockBrandService(t), nil, nil)
 		require.NoError(t, svc.CanNotifyCampaignCreators(ctxWithRole(api.Admin)))
 	})
 }
@@ -104,19 +104,19 @@ func TestAuthzService_CanRemindCampaignCreators(t *testing.T) {
 
 	t.Run("manager forbidden", func(t *testing.T) {
 		t.Parallel()
-		svc := NewAuthzService(mocks.NewMockBrandService(t))
+		svc := NewAuthzService(mocks.NewMockBrandService(t), nil, nil)
 		require.ErrorIs(t, svc.CanRemindCampaignCreators(ctxWithRole(api.BrandManager)), domain.ErrForbidden)
 	})
 
 	t.Run("missing role forbidden", func(t *testing.T) {
 		t.Parallel()
-		svc := NewAuthzService(mocks.NewMockBrandService(t))
+		svc := NewAuthzService(mocks.NewMockBrandService(t), nil, nil)
 		require.ErrorIs(t, svc.CanRemindCampaignCreators(context.Background()), domain.ErrForbidden)
 	})
 
 	t.Run("admin allowed", func(t *testing.T) {
 		t.Parallel()
-		svc := NewAuthzService(mocks.NewMockBrandService(t))
+		svc := NewAuthzService(mocks.NewMockBrandService(t), nil, nil)
 		require.NoError(t, svc.CanRemindCampaignCreators(ctxWithRole(api.Admin)))
 	})
 }

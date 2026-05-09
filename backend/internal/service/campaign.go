@@ -37,14 +37,17 @@ func NewCampaignService(pool dbutil.Pool, repoFactory CampaignRepoFactory, log l
 // CreateCampaign inserts a new campaign and writes the matching audit row in
 // the same transaction. The whole *domain.Campaign is serialized into
 // audit_logs.new_value so the payload follows the struct without
-// per-callsite changes.
+// per-callsite changes. Empty TmaURL stores secret_token=NULL — the row
+// stays admin-reachable but invisible to the TMA flow until the URL is
+// filled in.
 func (s *CampaignService) CreateCampaign(ctx context.Context, in domain.CampaignInput) (*domain.Campaign, error) {
+	secretToken := domain.ExtractSecretToken(in.TmaURL)
 	var campaign *domain.Campaign
 	err := dbutil.WithTx(ctx, s.pool, func(tx dbutil.DB) error {
 		campaignRepo := s.repoFactory.NewCampaignRepo(tx)
 		auditRepo := s.repoFactory.NewAuditRepo(tx)
 
-		row, err := campaignRepo.Create(ctx, in.Name, in.TmaURL)
+		row, err := campaignRepo.Create(ctx, in.Name, in.TmaURL, secretToken)
 		if err != nil {
 			return err
 		}
@@ -104,12 +107,13 @@ func (s *CampaignService) UpdateCampaign(ctx context.Context, id string, in doma
 			}
 		}
 
-		newRow, err := campaignRepo.Update(ctx, id, in.Name, in.TmaURL)
+		newSecretToken := domain.ExtractSecretToken(in.TmaURL)
+		newRow, err := campaignRepo.Update(ctx, id, in.Name, in.TmaURL, newSecretToken)
 		if err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				return domain.ErrCampaignNotFound
 			}
-			if errors.Is(err, domain.ErrCampaignNameTaken) {
+			if errors.Is(err, domain.ErrCampaignNameTaken) || errors.Is(err, domain.ErrTmaURLConflict) {
 				return err
 			}
 			return fmt.Errorf("update campaign: %w", err)

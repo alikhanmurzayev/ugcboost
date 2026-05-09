@@ -23,6 +23,8 @@ const (
 	AuditActionCampaignCreatorRemove                = "campaign_creator_remove"
 	AuditActionCampaignCreatorInvite                = "campaign_creator_invite"
 	AuditActionCampaignCreatorRemind                = "campaign_creator_remind"
+	AuditActionCampaignCreatorAgree                 = "campaign_creator_agree"
+	AuditActionCampaignCreatorDecline               = "campaign_creator_decline"
 )
 
 // Audit entity types used alongside AuditAction* values.

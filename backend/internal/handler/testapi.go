@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"time"
 
 	tgbot "github.com/go-telegram/bot"
 	tgmodels "github.com/go-telegram/bot/models"
@@ -13,6 +14,7 @@ import (
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/dbutil"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/domain"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/logger"
+	"github.com/alikhanmurzayev/ugcboost/backend/internal/middleware"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/repository"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/telegram"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/testapi"
@@ -46,13 +48,14 @@ type TestAPICleanupRepoFactory interface {
 // because the hard-delete semantics are test-only and must not leak into
 // production call sites — see repository.UserRepo.DeleteForTests for details.
 type TestAPIHandler struct {
-	auth        TestAPIAuthService
-	pool        dbutil.Pool
-	repos       TestAPICleanupRepoFactory
-	tokenStore  TokenStore
-	tgHandler   *telegram.Handler
-	telegramSpy *telegram.SentSpyStore
-	logger      logger.Logger
+	auth             TestAPIAuthService
+	pool             dbutil.Pool
+	repos            TestAPICleanupRepoFactory
+	tokenStore       TokenStore
+	tgHandler        *telegram.Handler
+	telegramSpy      *telegram.SentSpyStore
+	telegramBotToken string
+	logger           logger.Logger
 }
 
 var _ testapi.StrictServerInterface = (*TestAPIHandler)(nil)
@@ -65,16 +68,18 @@ func NewTestAPIHandler(
 	tokenStore TokenStore,
 	tgHandler *telegram.Handler,
 	telegramSpy *telegram.SentSpyStore,
+	telegramBotToken string,
 	log logger.Logger,
 ) *TestAPIHandler {
 	return &TestAPIHandler{
-		auth:        auth,
-		pool:        pool,
-		repos:       repos,
-		tokenStore:  tokenStore,
-		tgHandler:   tgHandler,
-		telegramSpy: telegramSpy,
-		logger:      log,
+		auth:             auth,
+		pool:             pool,
+		repos:            repos,
+		tokenStore:       tokenStore,
+		tgHandler:        tgHandler,
+		telegramSpy:      telegramSpy,
+		telegramBotToken: telegramBotToken,
+		logger:           log,
 	}
 }
 
@@ -298,4 +303,23 @@ func (h *TestAPIHandler) TelegramSpyFailNext(_ context.Context, request testapi.
 func (h *TestAPIHandler) TelegramSpyFakeChat(_ context.Context, request testapi.TelegramSpyFakeChatRequestObject) (testapi.TelegramSpyFakeChatResponseObject, error) {
 	h.telegramSpy.RegisterFakeChat(request.Body.ChatId)
 	return testapi.TelegramSpyFakeChat204Response{}, nil
+}
+
+// SignTMAInitData handles POST /test/tma/sign-init-data. Mints a valid
+// init_data query string for the supplied telegram_user_id signed with the
+// production bot token, so e2e suites can drive /tma/* endpoints without
+// running a real Telegram WebApp client. Optional `authDate` lets callers
+// rehearse expired / future-dated paths; defaults to now().
+func (h *TestAPIHandler) SignTMAInitData(_ context.Context, request testapi.SignTMAInitDataRequestObject) (testapi.SignTMAInitDataResponseObject, error) {
+	if request.Body == nil || request.Body.TelegramUserId <= 0 {
+		return nil, domain.NewValidationError(domain.CodeValidation, "telegramUserId must be a positive integer")
+	}
+	authDate := time.Now()
+	if request.Body.AuthDate != nil {
+		authDate = time.Unix(*request.Body.AuthDate, 0)
+	}
+	initData := middleware.SignTMAInitDataForTests(h.telegramBotToken, request.Body.TelegramUserId, authDate)
+	return testapi.SignTMAInitData200JSONResponse{
+		Data: testapi.SignTMAInitDataData{InitData: initData},
+	}, nil
 }

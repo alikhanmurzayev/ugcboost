@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/api"
+	"github.com/alikhanmurzayev/ugcboost/backend/internal/authz"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/domain"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/logger"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/middleware"
@@ -61,6 +62,7 @@ type AuthzService interface {
 	CanListCampaignCreators(ctx context.Context) error
 	CanNotifyCampaignCreators(ctx context.Context) error
 	CanRemindCampaignCreators(ctx context.Context) error
+	AuthorizeTMACampaignDecision(ctx context.Context, secretToken string) (authz.TMACampaignDecisionAuth, error)
 }
 
 // AuditLogService is the interface Server needs from the audit service.
@@ -121,6 +123,13 @@ type CampaignCreatorService interface {
 	RemindInvitation(ctx context.Context, campaignID string, creatorIDs []string) ([]domain.NotifyFailure, error)
 }
 
+// TmaCampaignCreatorService is the interface Server needs from the
+// TMA-side decision flow service — agree / decline endpoints behind the
+// `tma_initdata` middleware.
+type TmaCampaignCreatorService interface {
+	ApplyDecision(ctx context.Context, auth service.TmaDecisionAuth, decision domain.CampaignCreatorDecision) (domain.CampaignCreatorDecisionResult, error)
+}
+
 // ServerConfig bundles configuration values the handler layer needs. Keeping
 // them in a struct lets NewServer grow without a long positional signature.
 type ServerConfig struct {
@@ -141,6 +150,7 @@ type Server struct {
 	creatorService            CreatorService
 	campaignService           CampaignService
 	campaignCreatorService    CampaignCreatorService
+	tmaCampaignCreatorService TmaCampaignCreatorService
 	dictionaryService         DictionaryService
 	version                   string
 	cookieSecure              bool
@@ -162,6 +172,7 @@ func NewServer(
 	creators CreatorService,
 	campaigns CampaignService,
 	campaignCreators CampaignCreatorService,
+	tmaCampaignCreators TmaCampaignCreatorService,
 	dict DictionaryService,
 	cfg ServerConfig,
 	log logger.Logger,
@@ -175,6 +186,7 @@ func NewServer(
 		creatorService:            creators,
 		campaignService:           campaigns,
 		campaignCreatorService:    campaignCreators,
+		tmaCampaignCreatorService: tmaCampaignCreators,
 		dictionaryService:         dict,
 		version:                   cfg.Version,
 		cookieSecure:              cfg.CookieSecure,

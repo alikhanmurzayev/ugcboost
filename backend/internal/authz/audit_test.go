@@ -15,13 +15,13 @@ func TestAuthzService_CanListAuditLogs(t *testing.T) {
 
 	t.Run("manager forbidden", func(t *testing.T) {
 		t.Parallel()
-		svc := NewAuthzService(mocks.NewMockBrandService(t))
+		svc := NewAuthzService(mocks.NewMockBrandService(t), nil, nil)
 		require.ErrorIs(t, svc.CanListAuditLogs(ctxWithRole(api.BrandManager)), domain.ErrForbidden)
 	})
 
 	t.Run("admin allowed", func(t *testing.T) {
 		t.Parallel()
-		svc := NewAuthzService(mocks.NewMockBrandService(t))
+		svc := NewAuthzService(mocks.NewMockBrandService(t), nil, nil)
 		require.NoError(t, svc.CanListAuditLogs(ctxWithRole(api.Admin)))
 	})
 }

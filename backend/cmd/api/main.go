@@ -88,7 +88,7 @@ func run() error {
 	authSvc := service.NewAuthService(pool, repoFactory, tokenSvc, resetTokenStore, cfg.BcryptCost, appLogger)
 	brandSvc := service.NewBrandService(pool, repoFactory, cfg.BcryptCost, appLogger)
 	auditSvc := service.NewAuditService(pool, repoFactory)
-	authzSvc := authz.NewAuthzService(brandSvc)
+	authzSvc := authz.NewAuthzService(brandSvc, pool, repoFactory)
 
 	tgRig, err := setupTelegram(cfg, appLogger)
 	if err != nil {
@@ -98,6 +98,7 @@ func run() error {
 
 	campaignSvc := service.NewCampaignService(pool, repoFactory, appLogger)
 	campaignCreatorSvc := service.NewCampaignCreatorService(pool, repoFactory, tgRig.Notifier, appLogger)
+	tmaCampaignCreatorSvc := service.NewTmaCampaignCreatorService(pool, repoFactory, appLogger)
 	creatorApplicationSvc := service.NewCreatorApplicationService(pool, repoFactory, tgRig.Notifier, campaignCreatorSvc, appLogger)
 	creatorApplicationTelegramSvc := service.NewCreatorApplicationTelegramService(pool, repoFactory, tgRig.Notifier, appLogger)
 	creatorSvc := service.NewCreatorService(pool, repoFactory, appLogger)
@@ -129,7 +130,7 @@ func run() error {
 	r.Use(middleware.SendPulseAuth(cfg.SendPulseWebhookSecret, appLogger))
 
 	// Create server implementing ServerInterface
-	server := handler.NewServer(authSvc, brandSvc, authzSvc, auditSvc, creatorApplicationSvc, creatorSvc, campaignSvc, campaignCreatorSvc, dictionarySvc, handler.ServerConfig{
+	server := handler.NewServer(authSvc, brandSvc, authzSvc, auditSvc, creatorApplicationSvc, creatorSvc, campaignSvc, campaignCreatorSvc, tmaCampaignCreatorSvc, dictionarySvc, handler.ServerConfig{
 		Version:               cfg.Version,
 		CookieSecure:          cfg.CookieSecure,
 		TelegramBotUsername:   cfg.TelegramBotUsername,
@@ -137,10 +138,18 @@ func run() error {
 		LegalPrivacyVersion:   cfg.LegalPrivacyVersion,
 	}, appLogger)
 
+	tmaInitDataMiddleware := middleware.TMAInitDataFromScopes(middleware.TMAInitDataConfig{
+		BotToken:    cfg.TelegramBotToken,
+		TTL:         cfg.TMAInitDataTTL,
+		CreatorRepo: repoFactory.NewCreatorRepo(pool),
+		Logger:      appLogger,
+	})
+
 	api.HandlerWithOptions(handler.NewStrictAPIHandler(server), api.ChiServerOptions{
 		BaseRouter: r,
 		Middlewares: []api.MiddlewareFunc{
 			middleware.AuthFromScopes(tokenSvc),
+			tmaInitDataMiddleware,
 		},
 		ErrorHandlerFunc: handler.HandleParamError(appLogger),
 	})
@@ -149,7 +158,7 @@ func run() error {
 	// endpoint uses the repo factory directly — the hard-delete for users
 	// is test-only and intentionally not exposed through any service.
 	if cfg.EnableTestEndpoints {
-		testHandler := handler.NewTestAPIHandler(authSvc, pool, repoFactory, resetTokenStore, tgHandler, tgRig.Spy, appLogger)
+		testHandler := handler.NewTestAPIHandler(authSvc, pool, repoFactory, resetTokenStore, tgHandler, tgRig.Spy, cfg.TelegramBotToken, appLogger)
 		testapi.HandlerWithOptions(handler.NewStrictTestAPIHandler(testHandler), testapi.ChiServerOptions{
 			BaseRouter:       r,
 			ErrorHandlerFunc: handler.HandleParamError(appLogger),

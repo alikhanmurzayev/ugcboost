@@ -509,3 +509,93 @@ func TestCampaignCreatorRepository_ExistsInvitedInCampaign(t *testing.T) {
 		require.ErrorContains(t, err, "db down")
 	})
 }
+
+func TestCampaignCreatorRepository_GetByIDForUpdate(t *testing.T) {
+	t.Parallel()
+
+	const sqlStmt = "SELECT " + campaignCreatorAllCols + " FROM campaign_creators WHERE id = $1 FOR UPDATE"
+
+	t.Run("success returns row", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &campaignCreatorRepository{db: mock}
+		createdAt := time.Date(2026, 5, 7, 12, 0, 0, 0, time.UTC)
+
+		mock.ExpectQuery(sqlStmt).
+			WithArgs("cc-1").
+			WillReturnRows(pgxmock.NewRows(campaignCreatorRowCols).
+				AddRow("camp-1", createdAt, "cr-1", (*time.Time)(nil), "cc-1",
+					(*time.Time)(nil), 0, (*time.Time)(nil), 0,
+					domain.CampaignCreatorStatusInvited, createdAt))
+
+		got, err := repo.GetByIDForUpdate(context.Background(), "cc-1")
+		require.NoError(t, err)
+		require.Equal(t, "cc-1", got.ID)
+		require.Equal(t, domain.CampaignCreatorStatusInvited, got.Status)
+	})
+
+	t.Run("not found propagates sql.ErrNoRows", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &campaignCreatorRepository{db: mock}
+
+		mock.ExpectQuery(sqlStmt).
+			WithArgs("missing").
+			WillReturnError(sql.ErrNoRows)
+
+		_, err := repo.GetByIDForUpdate(context.Background(), "missing")
+		require.ErrorIs(t, err, sql.ErrNoRows)
+	})
+
+	t.Run("propagates other errors", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &campaignCreatorRepository{db: mock}
+
+		mock.ExpectQuery(sqlStmt).
+			WithArgs("cc-1").
+			WillReturnError(errors.New("db down"))
+
+		_, err := repo.GetByIDForUpdate(context.Background(), "cc-1")
+		require.ErrorContains(t, err, "db down")
+	})
+}
+
+func TestCampaignCreatorRepository_ApplyDecision(t *testing.T) {
+	t.Parallel()
+
+	const sqlStmt = "UPDATE campaign_creators SET status = $1, decided_at = now(), updated_at = now() WHERE id = $2 RETURNING " + campaignCreatorAllCols
+
+	t.Run("success flips status to agreed", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &campaignCreatorRepository{db: mock}
+		createdAt := time.Date(2026, 5, 7, 12, 0, 0, 0, time.UTC)
+		decidedAt := time.Date(2026, 5, 7, 13, 0, 0, 0, time.UTC)
+
+		mock.ExpectQuery(sqlStmt).
+			WithArgs(domain.CampaignCreatorStatusAgreed, "cc-1").
+			WillReturnRows(pgxmock.NewRows(campaignCreatorRowCols).
+				AddRow("camp-1", createdAt, "cr-1", &decidedAt, "cc-1",
+					(*time.Time)(nil), 1, (*time.Time)(nil), 0,
+					domain.CampaignCreatorStatusAgreed, decidedAt))
+
+		got, err := repo.ApplyDecision(context.Background(), "cc-1", domain.CampaignCreatorStatusAgreed)
+		require.NoError(t, err)
+		require.Equal(t, domain.CampaignCreatorStatusAgreed, got.Status)
+		require.NotNil(t, got.DecidedAt)
+	})
+
+	t.Run("propagates errors", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &campaignCreatorRepository{db: mock}
+
+		mock.ExpectQuery(sqlStmt).
+			WithArgs(domain.CampaignCreatorStatusAgreed, "cc-1").
+			WillReturnError(errors.New("db down"))
+
+		_, err := repo.ApplyDecision(context.Background(), "cc-1", domain.CampaignCreatorStatusAgreed)
+		require.ErrorContains(t, err, "db down")
+	})
+}

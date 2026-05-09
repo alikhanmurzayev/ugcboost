@@ -19,7 +19,8 @@ import (
 )
 
 const (
-	BearerAuthScopes = "bearerAuth.Scopes"
+	BearerAuthScopes  = "bearerAuth.Scopes"
+	TmaInitDataScopes = "tmaInitData.Scopes"
 )
 
 // Defines values for CampaignCreatorBatchInvalidReason.
@@ -269,6 +270,7 @@ func (e SortOrder) Valid() bool {
 const (
 	Admin        UserRole = "admin"
 	BrandManager UserRole = "brand_manager"
+	Creator      UserRole = "creator"
 )
 
 // Valid indicates whether the value is a known member of the UserRole enum.
@@ -277,6 +279,8 @@ func (e UserRole) Valid() bool {
 	case Admin:
 		return true
 	case BrandManager:
+		return true
+	case Creator:
 		return true
 	default:
 		return false
@@ -1324,12 +1328,31 @@ type TelegramLink struct {
 	TelegramUsername *string `json:"telegramUsername,omitempty"`
 }
 
+// TmaDecisionResult Result of a TMA agree / decline call. `status` is the
+// post-decision row state (`agreed` | `declined`). `alreadyDecided`
+// is true when the row was already in the requested terminal state —
+// the service skipped both the UPDATE and the audit row, the call is
+// an idempotent no-op.
+type TmaDecisionResult struct {
+	AlreadyDecided bool `json:"alreadyDecided"`
+
+	// Status Lifecycle state of a creator within a campaign.
+	//
+	// - `planned` — admin added the creator to the campaign (default on create).
+	// - `invited` — admin sent an invitation; awaiting creator response.
+	// - `declined` — creator declined via TMA.
+	// - `agreed` — creator accepted via TMA. Terminal for the current scope.
+	Status CampaignCreatorStatus `json:"status"`
+}
+
 // User defines model for User.
 type User struct {
 	Email openapi_types.Email `json:"email"`
 	Id    string              `json:"id"`
 
-	// Role Role of an authenticated user.
+	// Role Role of an authenticated user. `creator` is set by the TMA initData
+	// middleware after a successful HMAC + creator-by-telegram-user-id
+	// lookup; admin / brand_manager come from the JWT auth flow.
 	Role UserRole `json:"role"`
 }
 
@@ -1338,7 +1361,9 @@ type UserResponse struct {
 	Data User `json:"data"`
 }
 
-// UserRole Role of an authenticated user.
+// UserRole Role of an authenticated user. `creator` is set by the TMA initData
+// middleware after a successful HMAC + creator-by-telegram-user-id
+// lookup; admin / brand_manager come from the JWT auth flow.
 type UserRole string
 
 // PageQueryParam defines model for PageQueryParam.
@@ -1346,6 +1371,9 @@ type PageQueryParam = int
 
 // PerPageQueryParam defines model for PerPageQueryParam.
 type PerPageQueryParam = int
+
+// TmaSecretTokenPathParam defines model for TmaSecretTokenPathParam.
+type TmaSecretTokenPathParam = string
 
 // Forbidden defines model for Forbidden.
 type Forbidden = ErrorResponse
@@ -1551,6 +1579,12 @@ type ServerInterface interface {
 	// Health check
 	// (GET /healthz)
 	HealthCheck(w http.ResponseWriter, r *http.Request)
+	// Creator agrees to participate in a campaign (TMA-only)
+	// (POST /tma/campaigns/{secretToken}/agree)
+	TmaAgree(w http.ResponseWriter, r *http.Request, secretToken TmaSecretTokenPathParam)
+	// Creator declines to participate in a campaign (TMA-only)
+	// (POST /tma/campaigns/{secretToken}/decline)
+	TmaDecline(w http.ResponseWriter, r *http.Request, secretToken TmaSecretTokenPathParam)
 	// SendPulse webhook for Instagram DM verification
 	// (POST /webhooks/sendpulse/instagram)
 	SendPulseInstagramWebhook(w http.ResponseWriter, r *http.Request)
@@ -1761,6 +1795,18 @@ func (_ Unimplemented) ListDictionary(w http.ResponseWriter, r *http.Request, pT
 // Health check
 // (GET /healthz)
 func (_ Unimplemented) HealthCheck(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Creator agrees to participate in a campaign (TMA-only)
+// (POST /tma/campaigns/{secretToken}/agree)
+func (_ Unimplemented) TmaAgree(w http.ResponseWriter, r *http.Request, secretToken TmaSecretTokenPathParam) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Creator declines to participate in a campaign (TMA-only)
+// (POST /tma/campaigns/{secretToken}/decline)
+func (_ Unimplemented) TmaDecline(w http.ResponseWriter, r *http.Request, secretToken TmaSecretTokenPathParam) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -2786,6 +2832,68 @@ func (siw *ServerInterfaceWrapper) HealthCheck(w http.ResponseWriter, r *http.Re
 	handler.ServeHTTP(w, r)
 }
 
+// TmaAgree operation middleware
+func (siw *ServerInterfaceWrapper) TmaAgree(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "secretToken" -------------
+	var secretToken TmaSecretTokenPathParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "secretToken", chi.URLParam(r, "secretToken"), &secretToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "secretToken", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, TmaInitDataScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.TmaAgree(w, r, secretToken)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// TmaDecline operation middleware
+func (siw *ServerInterfaceWrapper) TmaDecline(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "secretToken" -------------
+	var secretToken TmaSecretTokenPathParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "secretToken", chi.URLParam(r, "secretToken"), &secretToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "secretToken", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, TmaInitDataScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.TmaDecline(w, r, secretToken)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // SendPulseInstagramWebhook operation middleware
 func (siw *ServerInterfaceWrapper) SendPulseInstagramWebhook(w http.ResponseWriter, r *http.Request) {
 
@@ -3014,6 +3122,12 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/healthz", wrapper.HealthCheck)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/tma/campaigns/{secretToken}/agree", wrapper.TmaAgree)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/tma/campaigns/{secretToken}/decline", wrapper.TmaDecline)
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/webhooks/sendpulse/instagram", wrapper.SendPulseInstagramWebhook)
@@ -4772,6 +4886,136 @@ func (response HealthCheckdefaultJSONResponse) VisitHealthCheckResponse(w http.R
 	return json.NewEncoder(w).Encode(response.Body)
 }
 
+type TmaAgreeRequestObject struct {
+	SecretToken TmaSecretTokenPathParam `json:"secretToken"`
+}
+
+type TmaAgreeResponseObject interface {
+	VisitTmaAgreeResponse(w http.ResponseWriter) error
+}
+
+type TmaAgree200JSONResponse TmaDecisionResult
+
+func (response TmaAgree200JSONResponse) VisitTmaAgreeResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type TmaAgree401JSONResponse ErrorResponse
+
+func (response TmaAgree401JSONResponse) VisitTmaAgreeResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type TmaAgree403JSONResponse ErrorResponse
+
+func (response TmaAgree403JSONResponse) VisitTmaAgreeResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type TmaAgree404JSONResponse ErrorResponse
+
+func (response TmaAgree404JSONResponse) VisitTmaAgreeResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type TmaAgree422JSONResponse ErrorResponse
+
+func (response TmaAgree422JSONResponse) VisitTmaAgreeResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(422)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type TmaAgreedefaultJSONResponse struct {
+	Body       ErrorResponse
+	StatusCode int
+}
+
+func (response TmaAgreedefaultJSONResponse) VisitTmaAgreeResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+
+	return json.NewEncoder(w).Encode(response.Body)
+}
+
+type TmaDeclineRequestObject struct {
+	SecretToken TmaSecretTokenPathParam `json:"secretToken"`
+}
+
+type TmaDeclineResponseObject interface {
+	VisitTmaDeclineResponse(w http.ResponseWriter) error
+}
+
+type TmaDecline200JSONResponse TmaDecisionResult
+
+func (response TmaDecline200JSONResponse) VisitTmaDeclineResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type TmaDecline401JSONResponse ErrorResponse
+
+func (response TmaDecline401JSONResponse) VisitTmaDeclineResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type TmaDecline403JSONResponse ErrorResponse
+
+func (response TmaDecline403JSONResponse) VisitTmaDeclineResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type TmaDecline404JSONResponse ErrorResponse
+
+func (response TmaDecline404JSONResponse) VisitTmaDeclineResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type TmaDecline422JSONResponse ErrorResponse
+
+func (response TmaDecline422JSONResponse) VisitTmaDeclineResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(422)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type TmaDeclinedefaultJSONResponse struct {
+	Body       ErrorResponse
+	StatusCode int
+}
+
+func (response TmaDeclinedefaultJSONResponse) VisitTmaDeclineResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+
+	return json.NewEncoder(w).Encode(response.Body)
+}
+
 type SendPulseInstagramWebhookRequestObject struct {
 	Body *SendPulseInstagramWebhookJSONRequestBody
 }
@@ -4914,6 +5158,12 @@ type StrictServerInterface interface {
 	// Health check
 	// (GET /healthz)
 	HealthCheck(ctx context.Context, request HealthCheckRequestObject) (HealthCheckResponseObject, error)
+	// Creator agrees to participate in a campaign (TMA-only)
+	// (POST /tma/campaigns/{secretToken}/agree)
+	TmaAgree(ctx context.Context, request TmaAgreeRequestObject) (TmaAgreeResponseObject, error)
+	// Creator declines to participate in a campaign (TMA-only)
+	// (POST /tma/campaigns/{secretToken}/decline)
+	TmaDecline(ctx context.Context, request TmaDeclineRequestObject) (TmaDeclineResponseObject, error)
 	// SendPulse webhook for Instagram DM verification
 	// (POST /webhooks/sendpulse/instagram)
 	SendPulseInstagramWebhook(ctx context.Context, request SendPulseInstagramWebhookRequestObject) (SendPulseInstagramWebhookResponseObject, error)
@@ -5918,6 +6168,58 @@ func (sh *strictHandler) HealthCheck(w http.ResponseWriter, r *http.Request) {
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(HealthCheckResponseObject); ok {
 		if err := validResponse.VisitHealthCheckResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// TmaAgree operation middleware
+func (sh *strictHandler) TmaAgree(w http.ResponseWriter, r *http.Request, secretToken TmaSecretTokenPathParam) {
+	var request TmaAgreeRequestObject
+
+	request.SecretToken = secretToken
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.TmaAgree(ctx, request.(TmaAgreeRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "TmaAgree")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(TmaAgreeResponseObject); ok {
+		if err := validResponse.VisitTmaAgreeResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// TmaDecline operation middleware
+func (sh *strictHandler) TmaDecline(w http.ResponseWriter, r *http.Request, secretToken TmaSecretTokenPathParam) {
+	var request TmaDeclineRequestObject
+
+	request.SecretToken = secretToken
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.TmaDecline(ctx, request.(TmaDeclineRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "TmaDecline")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(TmaDeclineResponseObject); ok {
+		if err := validResponse.VisitTmaDeclineResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

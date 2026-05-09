@@ -187,6 +187,37 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /test/tma/sign-init-data:
+    post:
+      operationId: signTMAInitData
+      summary: Mint a valid Telegram WebApp initData payload for tests
+      description: |
+        Returns an `init_data` query string signed with the same HMAC the
+        production middleware verifies. e2e suites paste the value into
+        `Authorization: tma <init-data>` to exercise /tma/* endpoints
+        without driving a real Telegram WebApp client. NEVER enabled in
+        production.
+      tags: [test]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SignTMAInitDataRequest"
+      responses:
+        "200":
+          description: Signed initData payload
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SignTMAInitDataResult"
+        "422":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /test/telegram/spy/fail-next:
     post:
       operationId: telegramSpyFailNext
@@ -376,6 +407,39 @@ components:
             Optional override for the error string the spy returns. Defaults
             to "Forbidden: bot was blocked by the user" so MapTelegramErrorToReason
             classifies it as bot_blocked.
+
+    SignTMAInitDataRequest:
+      type: object
+      required: [telegramUserId]
+      properties:
+        telegramUserId:
+          type: integer
+          format: int64
+          description: Telegram user id to sign on behalf of.
+        authDate:
+          type: integer
+          format: int64
+          description: |
+            Optional Unix timestamp (seconds). Defaults to "now" — used by
+            tests that want to exercise expired / future-dated init_data
+            paths.
+
+    SignTMAInitDataData:
+      type: object
+      required: [initData]
+      properties:
+        initData:
+          type: string
+          description: |
+            Signed query-string ready to be passed in
+            `Authorization: tma <init-data>`.
+
+    SignTMAInitDataResult:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: "#/components/schemas/SignTMAInitDataData"
 
     TelegramSpyFakeChatRequest:
       type: object

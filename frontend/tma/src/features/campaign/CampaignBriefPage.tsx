@@ -12,6 +12,8 @@ import type {
   Mentions,
   ReelsBrief,
 } from "./types";
+import { useAgreeDecision, useDeclineDecision } from "./useDecision";
+import { decisionErrorMessage } from "../../shared/i18n/errors";
 
 type ConfirmTarget = "accept" | "decline" | null;
 
@@ -20,8 +22,8 @@ export function CampaignBriefPage() {
   const campaign = token ? getCampaignByToken(token) : undefined;
   const [ndaAccepted, setNdaAccepted] = useState(false);
   const [confirm, setConfirm] = useState<ConfirmTarget>(null);
-  const [accepted, setAccepted] = useState(false);
-  const [declined, setDeclined] = useState(false);
+  const agree = useAgreeDecision(token);
+  const decline = useDeclineDecision(token);
 
   useEffect(() => {
     const lock = !ndaAccepted || confirm !== null;
@@ -38,28 +40,29 @@ export function CampaignBriefPage() {
     return <NotFoundPage />;
   }
 
-  if (accepted) {
-    return <AcceptedView />;
+  const decisionResult = agree.data ?? decline.data;
+  if (decisionResult?.status === "agreed") {
+    return <AcceptedView alreadyDecided={decisionResult.alreadyDecided} />;
   }
-
-  if (declined) {
-    return <DeclinedView />;
+  if (decisionResult?.status === "declined") {
+    return <DeclinedView alreadyDecided={decisionResult.alreadyDecided} />;
   }
 
   const handleAcceptClick = () => setConfirm("accept");
   const handleDeclineClick = () => setConfirm("decline");
 
   const handleConfirmAccept = () => {
-    // backend integration will be wired by Alikhan later
     setConfirm(null);
-    setAccepted(true);
+    agree.mutate();
   };
 
   const handleConfirmDecline = () => {
-    // backend integration will be wired by Alikhan later
     setConfirm(null);
-    setDeclined(true);
+    decline.mutate();
   };
+
+  const submitting = agree.isPending || decline.isPending;
+  const submitError = agree.error ?? decline.error;
 
   const handleCancel = () => setConfirm(null);
 
@@ -134,7 +137,8 @@ export function CampaignBriefPage() {
           <button
             type="button"
             onClick={handleAcceptClick}
-            className="w-full rounded-button bg-primary py-3 text-base font-semibold text-white transition-colors hover:bg-primary-600 active:bg-primary-700"
+            disabled={submitting}
+            className="w-full rounded-button bg-primary py-3 text-base font-semibold text-white transition-colors hover:bg-primary-600 active:bg-primary-700 disabled:opacity-60"
             data-testid="campaign-accept-button"
           >
             Согласиться
@@ -142,11 +146,20 @@ export function CampaignBriefPage() {
           <button
             type="button"
             onClick={handleDeclineClick}
-            className="w-full rounded-button border border-surface-300 bg-surface-50 py-3 text-base font-semibold text-gray-700 transition-colors hover:bg-surface-200"
+            disabled={submitting}
+            className="w-full rounded-button border border-surface-300 bg-surface-50 py-3 text-base font-semibold text-gray-700 transition-colors hover:bg-surface-200 disabled:opacity-60"
             data-testid="campaign-decline-button"
           >
             Отказаться
           </button>
+          {submitError && (
+            <p
+              data-testid="tma-decision-error"
+              className="rounded-md bg-red-50 px-4 py-2 text-center text-sm text-red-700"
+            >
+              {decisionErrorMessage(submitError.code)}
+            </p>
+          )}
         </div>
       </main>
       </div>

@@ -231,6 +231,74 @@ func (_c *MockCreatorRepo_GetByID_Call) RunAndReturn(run func(ctx context.Contex
 	return _c
 }
 
+// GetByTelegramUserID provides a mock function for the type MockCreatorRepo
+func (_mock *MockCreatorRepo) GetByTelegramUserID(ctx context.Context, tgID int64) (*repository.CreatorRow, error) {
+	ret := _mock.Called(ctx, tgID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetByTelegramUserID")
+	}
+
+	var r0 *repository.CreatorRow
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, int64) (*repository.CreatorRow, error)); ok {
+		return returnFunc(ctx, tgID)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, int64) *repository.CreatorRow); ok {
+		r0 = returnFunc(ctx, tgID)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*repository.CreatorRow)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, int64) error); ok {
+		r1 = returnFunc(ctx, tgID)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockCreatorRepo_GetByTelegramUserID_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetByTelegramUserID'
+type MockCreatorRepo_GetByTelegramUserID_Call struct {
+	*mock.Call
+}
+
+// GetByTelegramUserID is a helper method to define mock.On call
+//   - ctx context.Context
+//   - tgID int64
+func (_e *MockCreatorRepo_Expecter) GetByTelegramUserID(ctx interface{}, tgID interface{}) *MockCreatorRepo_GetByTelegramUserID_Call {
+	return &MockCreatorRepo_GetByTelegramUserID_Call{Call: _e.mock.On("GetByTelegramUserID", ctx, tgID)}
+}
+
+func (_c *MockCreatorRepo_GetByTelegramUserID_Call) Run(run func(ctx context.Context, tgID int64)) *MockCreatorRepo_GetByTelegramUserID_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 int64
+		if args[1] != nil {
+			arg1 = args[1].(int64)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockCreatorRepo_GetByTelegramUserID_Call) Return(creatorRow *repository.CreatorRow, err error) *MockCreatorRepo_GetByTelegramUserID_Call {
+	_c.Call.Return(creatorRow, err)
+	return _c
+}
+
+func (_c *MockCreatorRepo_GetByTelegramUserID_Call) RunAndReturn(run func(ctx context.Context, tgID int64) (*repository.CreatorRow, error)) *MockCreatorRepo_GetByTelegramUserID_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // GetTelegramUserIDsByIDs provides a mock function for the type MockCreatorRepo
 func (_mock *MockCreatorRepo) GetTelegramUserIDsByIDs(ctx context.Context, ids []string) (map[string]int64, error) {
 	ret := _mock.Called(ctx, ids)

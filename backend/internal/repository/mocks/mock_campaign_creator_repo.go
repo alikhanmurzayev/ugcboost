@@ -118,6 +118,80 @@ func (_c *MockCampaignCreatorRepo_Add_Call) RunAndReturn(run func(ctx context.Co
 	return _c
 }
 
+// ApplyDecision provides a mock function for the type MockCampaignCreatorRepo
+func (_mock *MockCampaignCreatorRepo) ApplyDecision(ctx context.Context, id string, status string) (*repository.CampaignCreatorRow, error) {
+	ret := _mock.Called(ctx, id, status)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ApplyDecision")
+	}
+
+	var r0 *repository.CampaignCreatorRow
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) (*repository.CampaignCreatorRow, error)); ok {
+		return returnFunc(ctx, id, status)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) *repository.CampaignCreatorRow); ok {
+		r0 = returnFunc(ctx, id, status)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*repository.CampaignCreatorRow)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string) error); ok {
+		r1 = returnFunc(ctx, id, status)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockCampaignCreatorRepo_ApplyDecision_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ApplyDecision'
+type MockCampaignCreatorRepo_ApplyDecision_Call struct {
+	*mock.Call
+}
+
+// ApplyDecision is a helper method to define mock.On call
+//   - ctx context.Context
+//   - id string
+//   - status string
+func (_e *MockCampaignCreatorRepo_Expecter) ApplyDecision(ctx interface{}, id interface{}, status interface{}) *MockCampaignCreatorRepo_ApplyDecision_Call {
+	return &MockCampaignCreatorRepo_ApplyDecision_Call{Call: _e.mock.On("ApplyDecision", ctx, id, status)}
+}
+
+func (_c *MockCampaignCreatorRepo_ApplyDecision_Call) Run(run func(ctx context.Context, id string, status string)) *MockCampaignCreatorRepo_ApplyDecision_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 string
+		if args[2] != nil {
+			arg2 = args[2].(string)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockCampaignCreatorRepo_ApplyDecision_Call) Return(campaignCreatorRow *repository.CampaignCreatorRow, err error) *MockCampaignCreatorRepo_ApplyDecision_Call {
+	_c.Call.Return(campaignCreatorRow, err)
+	return _c
+}
+
+func (_c *MockCampaignCreatorRepo_ApplyDecision_Call) RunAndReturn(run func(ctx context.Context, id string, status string) (*repository.CampaignCreatorRow, error)) *MockCampaignCreatorRepo_ApplyDecision_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // ApplyInvite provides a mock function for the type MockCampaignCreatorRepo
 func (_mock *MockCampaignCreatorRepo) ApplyInvite(ctx context.Context, id string) (*repository.CampaignCreatorRow, error) {
 	ret := _mock.Called(ctx, id)
@@ -447,6 +521,74 @@ func (_c *MockCampaignCreatorRepo_GetByCampaignAndCreator_Call) Return(campaignC
 }
 
 func (_c *MockCampaignCreatorRepo_GetByCampaignAndCreator_Call) RunAndReturn(run func(ctx context.Context, campaignID string, creatorID string) (*repository.CampaignCreatorRow, error)) *MockCampaignCreatorRepo_GetByCampaignAndCreator_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// GetByIDForUpdate provides a mock function for the type MockCampaignCreatorRepo
+func (_mock *MockCampaignCreatorRepo) GetByIDForUpdate(ctx context.Context, id string) (*repository.CampaignCreatorRow, error) {
+	ret := _mock.Called(ctx, id)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetByIDForUpdate")
+	}
+
+	var r0 *repository.CampaignCreatorRow
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) (*repository.CampaignCreatorRow, error)); ok {
+		return returnFunc(ctx, id)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) *repository.CampaignCreatorRow); ok {
+		r0 = returnFunc(ctx, id)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*repository.CampaignCreatorRow)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string) error); ok {
+		r1 = returnFunc(ctx, id)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockCampaignCreatorRepo_GetByIDForUpdate_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetByIDForUpdate'
+type MockCampaignCreatorRepo_GetByIDForUpdate_Call struct {
+	*mock.Call
+}
+
+// GetByIDForUpdate is a helper method to define mock.On call
+//   - ctx context.Context
+//   - id string
+func (_e *MockCampaignCreatorRepo_Expecter) GetByIDForUpdate(ctx interface{}, id interface{}) *MockCampaignCreatorRepo_GetByIDForUpdate_Call {
+	return &MockCampaignCreatorRepo_GetByIDForUpdate_Call{Call: _e.mock.On("GetByIDForUpdate", ctx, id)}
+}
+
+func (_c *MockCampaignCreatorRepo_GetByIDForUpdate_Call) Run(run func(ctx context.Context, id string)) *MockCampaignCreatorRepo_GetByIDForUpdate_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockCampaignCreatorRepo_GetByIDForUpdate_Call) Return(campaignCreatorRow *repository.CampaignCreatorRow, err error) *MockCampaignCreatorRepo_GetByIDForUpdate_Call {
+	_c.Call.Return(campaignCreatorRow, err)
+	return _c
+}
+
+func (_c *MockCampaignCreatorRepo_GetByIDForUpdate_Call) RunAndReturn(run func(ctx context.Context, id string) (*repository.CampaignCreatorRow, error)) *MockCampaignCreatorRepo_GetByIDForUpdate_Call {
 	_c.Call.Return(run)
 	return _c
 }

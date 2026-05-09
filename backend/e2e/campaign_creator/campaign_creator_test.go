@@ -57,7 +57,13 @@ import (
 	"github.com/alikhanmurzayev/ugcboost/backend/e2e/testutil"
 )
 
-const validTmaURL = "https://tma.ugcboost.kz/tz/abc123secret"
+// freshValidTmaURL returns a deterministically valid tma_url whose last path
+// segment is unique per call. Required because campaigns.secret_token has a
+// partial UNIQUE INDEX (live, non-deleted) — a constant URL would trip
+// TMA_URL_CONFLICT (422) on every call after the first.
+func freshValidTmaURL() string {
+	return "https://tma.ugcboost.kz/tz/" + strings.ReplaceAll(uuid.NewString(), "-", "")
+}
 
 // defaultCreatorOpts mirrors the fixture from creators/list_test.go: one
 // auto-verified Instagram social plus an unverified TikTok handle so the
@@ -77,7 +83,7 @@ func setupCampaign(t *testing.T, c *apiclient.ClientWithResponses, adminToken, n
 	t.Helper()
 	resp, err := c.CreateCampaignWithResponse(context.Background(), apiclient.CreateCampaignJSONRequestBody{
 		Name:   name,
-		TmaUrl: validTmaURL,
+		TmaUrl: freshValidTmaURL(),
 	}, testutil.WithAuth(adminToken))
 	require.NoError(t, err)
 	require.Equalf(t, http.StatusCreated, resp.StatusCode(),

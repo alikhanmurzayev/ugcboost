@@ -25,14 +25,14 @@ func TestAuthzService_CanCreateBrand(t *testing.T) {
 
 	t.Run("manager forbidden", func(t *testing.T) {
 		t.Parallel()
-		svc := NewAuthzService(mocks.NewMockBrandService(t))
+		svc := NewAuthzService(mocks.NewMockBrandService(t), nil, nil)
 		err := svc.CanCreateBrand(ctxWithRole(api.BrandManager))
 		require.ErrorIs(t, err, domain.ErrForbidden)
 	})
 
 	t.Run("admin allowed", func(t *testing.T) {
 		t.Parallel()
-		svc := NewAuthzService(mocks.NewMockBrandService(t))
+		svc := NewAuthzService(mocks.NewMockBrandService(t), nil, nil)
 		err := svc.CanCreateBrand(ctxWithRole(api.Admin))
 		require.NoError(t, err)
 	})
@@ -43,7 +43,7 @@ func TestAuthzService_CanListBrands(t *testing.T) {
 
 	t.Run("admin sees all", func(t *testing.T) {
 		t.Parallel()
-		svc := NewAuthzService(mocks.NewMockBrandService(t))
+		svc := NewAuthzService(mocks.NewMockBrandService(t), nil, nil)
 		canViewAll, userID, err := svc.CanListBrands(ctxWithRole(api.Admin))
 		require.NoError(t, err)
 		require.True(t, canViewAll)
@@ -52,7 +52,7 @@ func TestAuthzService_CanListBrands(t *testing.T) {
 
 	t.Run("manager restricted", func(t *testing.T) {
 		t.Parallel()
-		svc := NewAuthzService(mocks.NewMockBrandService(t))
+		svc := NewAuthzService(mocks.NewMockBrandService(t), nil, nil)
 		canViewAll, userID, err := svc.CanListBrands(ctxWithRole(api.BrandManager))
 		require.NoError(t, err)
 		require.False(t, canViewAll)
@@ -65,7 +65,7 @@ func TestAuthzService_CanViewBrand(t *testing.T) {
 
 	t.Run("admin allowed", func(t *testing.T) {
 		t.Parallel()
-		svc := NewAuthzService(mocks.NewMockBrandService(t))
+		svc := NewAuthzService(mocks.NewMockBrandService(t), nil, nil)
 		require.NoError(t, svc.CanViewBrand(ctxWithRole(api.Admin), "b-1"))
 	})
 
@@ -75,7 +75,7 @@ func TestAuthzService_CanViewBrand(t *testing.T) {
 		boom := errors.New("boom")
 		bs.EXPECT().IsUserBrandManager(mock.Anything, "u-1", "b-1").Return(false, boom)
 
-		svc := NewAuthzService(bs)
+		svc := NewAuthzService(bs, nil, nil)
 		err := svc.CanViewBrand(ctxWithRole(api.BrandManager), "b-1")
 		require.ErrorContains(t, err, "check brand access")
 		require.ErrorIs(t, err, boom)
@@ -86,7 +86,7 @@ func TestAuthzService_CanViewBrand(t *testing.T) {
 		bs := mocks.NewMockBrandService(t)
 		bs.EXPECT().IsUserBrandManager(mock.Anything, "u-1", "b-1").Return(false, nil)
 
-		svc := NewAuthzService(bs)
+		svc := NewAuthzService(bs, nil, nil)
 		err := svc.CanViewBrand(ctxWithRole(api.BrandManager), "b-1")
 		require.ErrorIs(t, err, domain.ErrForbidden)
 	})
@@ -96,7 +96,7 @@ func TestAuthzService_CanViewBrand(t *testing.T) {
 		bs := mocks.NewMockBrandService(t)
 		bs.EXPECT().IsUserBrandManager(mock.Anything, "u-1", "b-1").Return(true, nil)
 
-		svc := NewAuthzService(bs)
+		svc := NewAuthzService(bs, nil, nil)
 		require.NoError(t, svc.CanViewBrand(ctxWithRole(api.BrandManager), "b-1"))
 	})
 }
@@ -117,12 +117,12 @@ func TestAuthzService_AdminOnlyBrandActions(t *testing.T) {
 	for _, tc := range actions {
 		t.Run(tc.name+": manager forbidden", func(t *testing.T) {
 			t.Parallel()
-			svc := NewAuthzService(mocks.NewMockBrandService(t))
+			svc := NewAuthzService(mocks.NewMockBrandService(t), nil, nil)
 			require.ErrorIs(t, tc.call(svc, ctxWithRole(api.BrandManager)), domain.ErrForbidden)
 		})
 		t.Run(tc.name+": admin allowed", func(t *testing.T) {
 			t.Parallel()
-			svc := NewAuthzService(mocks.NewMockBrandService(t))
+			svc := NewAuthzService(mocks.NewMockBrandService(t), nil, nil)
 			require.NoError(t, tc.call(svc, ctxWithRole(api.Admin)))
 		})
 	}

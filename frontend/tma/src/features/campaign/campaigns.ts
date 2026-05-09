@@ -76,6 +76,27 @@ export const campaigns: Record<string, CampaignBrief> = {
   },
 };
 
-export function getCampaignByToken(token: string): CampaignBrief | undefined {
-  return campaigns[token];
+// genericBrief is the fallback for tokens we don't have a hand-crafted
+// brief for yet — backend has the real campaign + invitation, but the brief
+// content (about, reels, mentions) lives only in this static map until we
+// move it into the API. Keeps the decision flow usable for any live
+// campaign without rebuilding the bundle every time admin makes one.
+function genericBrief(token: string): CampaignBrief {
+  return {
+    token,
+    brandName: "UGCBoost",
+    campaignTitle: "Приглашение в кампанию",
+    subtitle: "Подтвердите участие или откажитесь",
+    fromBrand: {
+      title: "Что вас ждёт",
+      items: [
+        "Условия и детали кампании отправит админ в Telegram",
+        "Здесь вы фиксируете решение — согласие или отказ",
+      ],
+    },
+  };
+}
+
+export function getCampaignByToken(token: string): CampaignBrief {
+  return campaigns[token] ?? genericBrief(token);
 }

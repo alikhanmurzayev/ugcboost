@@ -38,6 +38,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -50,8 +51,15 @@ import (
 const (
 	auditActionCampaignCreatorAdd  = "campaign_creator_add"
 	auditEntityTypeCampaignCreator = "campaign_creator"
-	approveCampaignsTmaURL         = "https://tma.ugcboost.kz/tz/approve-with-campaigns"
 )
+
+// freshValidTmaURL returns a deterministically valid tma_url whose last path
+// segment is unique per call. Required because campaigns.secret_token has a
+// partial UNIQUE INDEX (live, non-deleted) — a constant URL would trip
+// TMA_URL_CONFLICT (422) on every call after the first.
+func freshValidTmaURL() string {
+	return "https://tma.ugcboost.kz/tz/" + strings.ReplaceAll(uuid.NewString(), "-", "")
+}
 
 // Error codes mirror domain.Code* — backend/e2e is a separate Go module that
 // cannot import internal/, so the canonical strings live as package-local
@@ -71,7 +79,7 @@ func setupApproveCampaign(t *testing.T, c *apiclient.ClientWithResponses, adminT
 	t.Helper()
 	resp, err := c.CreateCampaignWithResponse(context.Background(), apiclient.CreateCampaignJSONRequestBody{
 		Name:   name,
-		TmaUrl: approveCampaignsTmaURL,
+		TmaUrl: freshValidTmaURL(),
 	}, testutil.WithAuth(adminToken))
 	require.NoError(t, err)
 	require.Equalf(t, http.StatusCreated, resp.StatusCode(),

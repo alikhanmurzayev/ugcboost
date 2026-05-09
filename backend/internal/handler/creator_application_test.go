@@ -51,7 +51,7 @@ func validRequest() api.CreatorApplicationSubmitRequest {
 
 func serverWithCreator(t *testing.T, creator CreatorApplicationService, log *logmocks.MockLogger) *Server {
 	t.Helper()
-	return NewServer(nil, nil, nil, nil, creator, nil, nil, nil, nil, ServerConfig{
+	return NewServer(nil, nil, nil, nil, creator, nil, nil, nil, nil, nil, ServerConfig{
 		Version:               "test-version",
 		TelegramBotUsername:   "ugcboost_test_bot",
 		LegalAgreementVersion: "2026-04-20",
@@ -236,7 +236,7 @@ func TestServer_SubmitCreatorApplication(t *testing.T) {
 
 		// Simulate a misconfigured env: slashes and spaces should be escaped
 		// rather than corrupting the URL path.
-		server := NewServer(nil, nil, nil, nil, creator, nil, nil, nil, nil, ServerConfig{
+		server := NewServer(nil, nil, nil, nil, creator, nil, nil, nil, nil, nil, ServerConfig{
 			Version:               "test-version",
 			TelegramBotUsername:   "bad name/bot",
 			LegalAgreementVersion: "2026-04-20",
@@ -267,7 +267,7 @@ func newTestRouterWithClientIP(t *testing.T, s *Server) chi.Router {
 
 func serverWithAuthzAndCreatorAndDict(t *testing.T, authz AuthzService, creator CreatorApplicationService, dict DictionaryService, log *logmocks.MockLogger) *Server {
 	t.Helper()
-	return NewServer(nil, nil, authz, nil, creator, nil, nil, nil, dict, ServerConfig{
+	return NewServer(nil, nil, authz, nil, creator, nil, nil, nil, nil, dict, ServerConfig{
 		Version:             "test-version",
 		TelegramBotUsername: "ugcboost_test_bot",
 	}, log)
@@ -1746,7 +1746,7 @@ func TestServer_ApproveCreatorApplication(t *testing.T) {
 // end. Other server slots are nil — the route is the only thing exercised.
 func serverWithApproveDeps(t *testing.T, authz AuthzService, creator CreatorApplicationService, campaignSvc CampaignService, log *logmocks.MockLogger) *Server {
 	t.Helper()
-	return NewServer(nil, nil, authz, nil, creator, nil, campaignSvc, nil, nil, ServerConfig{
+	return NewServer(nil, nil, authz, nil, creator, nil, campaignSvc, nil, nil, nil, ServerConfig{
 		Version:             "test-version",
 		TelegramBotUsername: "ugcboost_test_bot",
 	}, log)

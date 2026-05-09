@@ -56,3 +56,27 @@ func ContainsAction(logs []apiclient.AuditLogEntry, action string) bool {
 	}
 	return false
 }
+
+// ListAuditEntriesByAction returns every audit log entry for the given
+// (entityType, entityID) whose `action` matches. Useful for asserting
+// idempotent flows: a TMA agree must write exactly one row, and a repeat
+// agree must NOT add a second one.
+func ListAuditEntriesByAction(t *testing.T, c *apiclient.ClientWithResponses,
+	adminToken, entityType, entityID, action string) []apiclient.AuditLogEntry {
+	t.Helper()
+	resp, err := c.ListAuditLogsWithResponse(context.Background(),
+		&apiclient.ListAuditLogsParams{
+			EntityType: &entityType,
+			EntityId:   &entityID,
+		}, WithAuth(adminToken))
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, resp.StatusCode())
+	require.NotNil(t, resp.JSON200)
+	out := make([]apiclient.AuditLogEntry, 0, len(resp.JSON200.Data.Logs))
+	for _, l := range resp.JSON200.Data.Logs {
+		if l.Action == action {
+			out = append(out, l)
+		}
+	}
+	return out
+}

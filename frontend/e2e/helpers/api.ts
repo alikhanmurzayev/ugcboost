@@ -31,6 +31,10 @@ type SeedUserRequest = testComponents["schemas"]["SeedUserRequest"];
 type SeedUserResult = testComponents["schemas"]["SeedUserResult"];
 type SeedUserRole = SeedUserRequest["role"];
 type CleanupEntityRequest = testComponents["schemas"]["CleanupEntityRequest"];
+type SignTMAInitDataRequest =
+  testComponents["schemas"]["SignTMAInitDataRequest"];
+type SignTMAInitDataResult =
+  testComponents["schemas"]["SignTMAInitDataResult"];
 type SendTelegramMessageRequest =
   testComponents["schemas"]["SendTelegramMessageRequest"];
 type SendTelegramMessageResult =
@@ -804,6 +808,26 @@ export async function notifyAsAdmin(
       `notifyAsAdmin ${campaignId}: ${resp.status()} ${await resp.text()}`,
     );
   }
+}
+
+// signInitDataForCreator drives POST /test/tma/sign-init-data — backend
+// returns a real HMAC-signed initData query string for the given Telegram
+// userId. Usable verbatim as the value of `Authorization: tma <init-data>`
+// or as the `tgWebAppData` URL fragment that
+// @telegram-apps/sdk's retrieveRawInitData reads on app boot.
+export async function signInitDataForCreator(
+  request: APIRequestContext,
+  apiUrl: string,
+  telegramUserId: number,
+): Promise<string> {
+  const body: SignTMAInitDataRequest = { telegramUserId };
+  const result = await postJson<SignTMAInitDataResult>(
+    request,
+    `${apiUrl}/test/tma/sign-init-data`,
+    body,
+    200,
+  );
+  return result.data.initData;
 }
 
 // triggerSendPulseInstagramWebhook posts the canonical "verified" payload
