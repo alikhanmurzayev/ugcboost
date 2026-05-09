@@ -13,6 +13,7 @@ import SocialLink from "@/shared/components/SocialLink";
 import { calcAge } from "@/shared/utils/age";
 import { formatDateTimeShort } from "@/shared/utils/formatDateTime";
 import type { CampaignCreatorStatus } from "@/api/campaignCreators";
+import { CAMPAIGN_CREATOR_STATUS } from "@/shared/constants/campaignCreatorStatus";
 import type { CampaignCreatorRow } from "./hooks/useCampaignCreators";
 
 export type SelectAllState = "unchecked" | "indeterminate" | "checked";
@@ -305,45 +306,51 @@ function buildStatusColumns(
   status: CampaignCreatorStatus,
   tCampaigns: (key: string) => string,
 ): Column<CampaignCreatorRow>[] {
-  if (status === "invited") {
-    return [
-      counterColumn(
-        "invited",
-        tCampaigns("campaignCreators.columns.invitedCount"),
-        (row) => row.campaignCreator.invitedCount,
-      ),
-      timestampColumn(
-        "invited",
-        tCampaigns("campaignCreators.columns.invitedAt"),
-        (row) => row.campaignCreator.invitedAt ?? null,
-      ),
-      counterColumn(
-        "reminded",
-        tCampaigns("campaignCreators.columns.remindedCount"),
-        (row) => row.campaignCreator.remindedCount,
-      ),
-      timestampColumn(
-        "reminded",
-        tCampaigns("campaignCreators.columns.remindedAt"),
-        (row) => row.campaignCreator.remindedAt ?? null,
-      ),
-    ];
+  switch (status) {
+    case CAMPAIGN_CREATOR_STATUS.PLANNED:
+      return [];
+    case CAMPAIGN_CREATOR_STATUS.INVITED:
+      return [
+        counterColumn(
+          "invited",
+          tCampaigns("campaignCreators.columns.invitedCount"),
+          (row) => row.campaignCreator.invitedCount,
+        ),
+        timestampColumn(
+          "invited",
+          tCampaigns("campaignCreators.columns.invitedAt"),
+          (row) => row.campaignCreator.invitedAt ?? null,
+        ),
+        counterColumn(
+          "reminded",
+          tCampaigns("campaignCreators.columns.remindedCount"),
+          (row) => row.campaignCreator.remindedCount,
+        ),
+        timestampColumn(
+          "reminded",
+          tCampaigns("campaignCreators.columns.remindedAt"),
+          (row) => row.campaignCreator.remindedAt ?? null,
+        ),
+      ];
+    case CAMPAIGN_CREATOR_STATUS.DECLINED:
+    case CAMPAIGN_CREATOR_STATUS.AGREED:
+      return [
+        counterColumn(
+          "invited",
+          tCampaigns("campaignCreators.columns.invitedCount"),
+          (row) => row.campaignCreator.invitedCount,
+        ),
+        timestampColumn(
+          "decided",
+          tCampaigns("campaignCreators.columns.decidedAt"),
+          (row) => row.campaignCreator.decidedAt ?? null,
+        ),
+      ];
+    default: {
+      const _exhaustive: never = status;
+      return _exhaustive;
+    }
   }
-  if (status === "declined" || status === "agreed") {
-    return [
-      counterColumn(
-        "invited",
-        tCampaigns("campaignCreators.columns.invitedCount"),
-        (row) => row.campaignCreator.invitedCount,
-      ),
-      timestampColumn(
-        "decided",
-        tCampaigns("campaignCreators.columns.decidedAt"),
-        (row) => row.campaignCreator.decidedAt ?? null,
-      ),
-    ];
-  }
-  return [];
 }
 
 function counterColumn(

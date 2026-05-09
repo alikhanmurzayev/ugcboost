@@ -58,6 +58,11 @@ import { loginAs } from "../helpers/ui-web";
 
 const API_URL = process.env.API_URL || "http://localhost:8080";
 const CLEANUP_TIMEOUT_MS = 5_000;
+// Lock the rendered timestamp shape from `formatDateTimeShort` (chunk 15):
+// «day short_month, HH:MM», ru locale, no year. Tighter than .not.toHaveText("—")
+// — empty string / "Invalid Date" / non-formatted values would slip past
+// the negation but fail this regex.
+const TIMESTAMP_SHAPE = /^\d{1,2} \S+, \d{2}:\d{2}$/;
 
 interface NotifyTestSetup {
   admin: SeededUser;
@@ -157,13 +162,13 @@ test.describe("Admin campaign notify — chunk 13", () => {
     ).toHaveText("1");
     await expect(
       page.getByTestId(`campaign-creator-invited-at-${creatorA.creatorId}`),
-    ).not.toHaveText("—");
+    ).toHaveText(TIMESTAMP_SHAPE);
     await expect(
       page.getByTestId(`campaign-creator-invited-count-${creatorB.creatorId}`),
     ).toHaveText("1");
     await expect(
       page.getByTestId(`campaign-creator-invited-at-${creatorB.creatorId}`),
-    ).not.toHaveText("—");
+    ).toHaveText(TIMESTAMP_SHAPE);
     await expect(
       page.getByTestId(`campaign-creator-reminded-count-${creatorA.creatorId}`),
     ).toHaveText("0");
@@ -237,7 +242,7 @@ test.describe("Admin campaign notify — chunk 13", () => {
     ).toHaveText("1");
     await expect(
       page.getByTestId(`campaign-creator-reminded-at-${creatorA.creatorId}`),
-    ).not.toHaveText("—");
+    ).toHaveText(TIMESTAMP_SHAPE);
     await expect(
       page.getByTestId(`campaign-creator-reminded-count-${creatorB.creatorId}`),
     ).toHaveText("0");

@@ -547,6 +547,21 @@ describe("CampaignCreatorsTable — counter columns by status", () => {
       />,
     );
 
+    // Lock i18n key resolution: a typo in `campaignCreators.columns.*` would
+    // surface here as the raw key, not the translated header.
+    expect(
+      screen.getByRole("columnheader", { name: "Приглашений" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("columnheader", { name: "Когда приглашён" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("columnheader", { name: "Ремайндеров" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("columnheader", { name: "Когда ремайндер" }),
+    ).toBeInTheDocument();
+
     expect(
       screen.getByTestId(`campaign-creator-invited-count-${CREATOR_A}`),
     ).toHaveTextContent("1");
@@ -617,6 +632,10 @@ describe("CampaignCreatorsTable — counter columns by status", () => {
         emptyMessage=""
       />,
     );
+
+    expect(
+      screen.getByRole("columnheader", { name: "Решение от" }),
+    ).toBeInTheDocument();
 
     expect(
       screen.getByTestId(`campaign-creator-invited-count-${CREATOR_A}`),
@@ -694,6 +713,49 @@ describe("CampaignCreatorsTable — counter columns by status", () => {
     expect(
       screen.getByTestId(`campaign-creator-invited-at-${CREATOR_A}`),
     ).toHaveTextContent("—");
+  });
+
+  it("invited: deleted creator (no profile) still gets counter/timestamp from campaignCreator data", () => {
+    // Counter и timestamp ячейки берут данные из row.campaignCreator, который
+    // существует даже когда профиль креатора soft-deleted. data-testid
+    // привязан к creatorId — должен собраться без падения.
+    const rows: CampaignCreatorRow[] = [
+      {
+        campaignCreator: makeCC(CREATOR_A, {
+          status: "invited",
+          invitedCount: 1,
+          invitedAt: "2026-05-06T14:30:00Z",
+          remindedCount: 0,
+          remindedAt: null,
+        }),
+      },
+    ];
+
+    render(
+      <CampaignCreatorsTable
+        rows={rows}
+        status="invited"
+        onRowClick={() => {}}
+        emptyMessage=""
+      />,
+    );
+
+    expect(
+      screen.getByTestId(`campaign-creator-invited-count-${CREATOR_A}`),
+    ).toHaveTextContent("1");
+    expect(
+      screen.getByTestId(`campaign-creator-invited-at-${CREATOR_A}`),
+    ).toHaveTextContent(/6 мая/);
+    expect(
+      screen.getByTestId(`campaign-creator-reminded-count-${CREATOR_A}`),
+    ).toHaveTextContent("0");
+    expect(
+      screen.getByTestId(`campaign-creator-reminded-at-${CREATOR_A}`),
+    ).toHaveTextContent("—");
+    // ФИО-ячейка показывает deleted-плейсхолдер, как и раньше.
+    expect(
+      screen.getByTestId(`campaign-creator-deleted-${CREATOR_A}`),
+    ).toBeInTheDocument();
   });
 });
 

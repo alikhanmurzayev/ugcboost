@@ -21,10 +21,10 @@ describe("formatDateTimeShort", () => {
   it("formats a valid ISO without year, with day-month-time in ru locale", () => {
     const out = formatDateTimeShort("2026-05-06T14:30:00Z");
     // Локаль `ru` рендерит «6 мая, HH:MM» (без года). Час зависит от
-    // часового пояса исполнителя — assert'имся на день/месяц/двоеточие
-    // и на отсутствие года, чтобы тест не флакал в CI.
+    // часового пояса исполнителя — assert'имся на форму (day short_month,
+    // HH:MM), на день/месяц и на отсутствие года, чтобы тест не флакал в CI.
+    expect(out).toMatch(/^\d{1,2} \S+, \d{2}:\d{2}$/);
     expect(out).toMatch(/6 мая/);
-    expect(out).toMatch(/\d{1,2}:\d{2}/);
     expect(out).not.toMatch(/2026/);
   });
 });
