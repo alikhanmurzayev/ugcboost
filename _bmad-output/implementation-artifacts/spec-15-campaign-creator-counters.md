@@ -21,15 +21,15 @@ context:
 ## Boundaries & Constraints
 
 **Always:**
-- Раскладка колонок по `status`:
+- Раскладка колонок по `status` (composite — пары count+at в одной ячейке):
   - `planned` — никаких новых
-  - `invited` — `invitedCount`, `invitedAt`, `remindedCount`, `remindedAt`
-  - `declined` / `agreed` — `invitedCount`, `decidedAt`
+  - `invited` — 2 ячейки: «Приглашение» (`invitedCount · invitedAt`), «Ремайндер» (`remindedCount · remindedAt`)
+  - `declined` / `agreed` — 2 ячейки: «Приглашение» (`invitedCount · invitedAt`), «Решение» (`decidedAt` без count)
 - Порядок в строке: ФИО → соцсети → категории → возраст → город → **новые** → `createdAt` → actions.
-- Counter-ячейка показывает число (включая `0`); timestamp-ячейка — `formatDateTimeShort(iso)` или `—` (через существующий `t("campaignCreators.deletedPlaceholder")`) при `null`/невалидном ISO.
+- Composite-ячейка рендерит `{count}` (число, включая `0`), middot-разделитель `·`, и `formatDateTimeShort(iso)` (`—` при `null`/невалидном ISO). Decided-ячейка — только timestamp без count.
 - Формат timestamp: `6 мая, 14:30` — `toLocaleString("ru", { day:"numeric", month:"short", hour:"2-digit", minute:"2-digit" })`, без года.
-- i18n: новые ключи в `campaignCreators.columns.*`. Литералы в JSX запрещены (стандарт `frontend-components.md`).
-- data-testid на каждой новой ячейке: `campaign-creator-{kind}-{count|at}-{creatorId}`, `kind` ∈ `invited` / `reminded` / `decided`.
+- i18n: новые ключи в `campaignCreators.columns.{invited|reminded|decided}`. Литералы в JSX запрещены (стандарт `frontend-components.md`).
+- data-testid на inner-span'ах внутри composite-ячейки: `campaign-creator-{kind}-{count|at}-{creatorId}`, `kind` ∈ `invited` / `reminded` / `decided`. Decided не имеет count-span'а.
 - Стандарты `docs/standards/frontend-*` обязательны (TS strict, RTL `userEvent`, без `any`/`!`/`as`).
 
 **Ask First:**
@@ -47,10 +47,10 @@ context:
 | Scenario | Input | Expected |
 |---|---|---|
 | `planned` | любая запись | новых колонок в DOM нет |
-| `invited`, после первого notify | `invitedCount=1, invitedAt=ISO_a, remindedCount=0, remindedAt=null` | 4 колонки: `1`, отформатированный `ISO_a`, `0`, `—` |
-| `invited`, после remind | `invitedCount=1, remindedCount=2, remindedAt=ISO_b` | reminded-count=2; reminded-at = formatted `ISO_b` |
-| `declined` / `agreed` | `invitedCount=2, decidedAt=ISO_c` | 2 колонки: `2`, formatted `ISO_c`; reminded-колонок нет |
-| Невалидный или null timestamp | `invitedAt="not-a-date"` или `null` | `—`, без runtime-throws |
+| `invited`, после первого notify | `invitedCount=1, invitedAt=ISO_a, remindedCount=0, remindedAt=null` | 2 ячейки: «Приглашение» = `1 · {ISO_a formatted}`; «Ремайндер» = `0 · —` |
+| `invited`, после remind | `invitedCount=1, invitedAt=ISO_a, remindedCount=2, remindedAt=ISO_b` | «Приглашение» = `1 · {ISO_a}`; «Ремайндер» = `2 · {ISO_b}` |
+| `declined` / `agreed` | `invitedCount=2, invitedAt=ISO_a, decidedAt=ISO_c` | 2 ячейки: «Приглашение» = `2 · {ISO_a}`; «Решение» = formatted `ISO_c`; reminded-ячейки нет |
+| Невалидный или null timestamp | `invitedAt="not-a-date"` или `null` | в composite-ячейке вместо timestamp `—`, без runtime-throws; count-часть рендерится как обычно |
 
 </frozen-after-approval>
 
@@ -89,7 +89,11 @@ context:
 - `make start-web && cd frontend/web && CI=true BASE_URL=http://localhost:3001 API_URL=http://localhost:8082 npx playwright test campaign-notify` -- expected: расширенный `campaign-notify.spec.ts` зелёный.
 
 **Manual checks:**
-- Открыть `/campaigns/:id` живой кампании, проверить новые колонки в `invited`/`declined`/`agreed`; в `planned` — отсутствуют.
+- Открыть `/campaigns/:id` живой кампании, проверить, что новые ячейки помещаются в строку без горизонтального скролла; что в composite-ячейке видно и count, и timestamp, разделённые `·`; в `planned` — отсутствуют.
+
+## Spec Change Log
+
+- **2026-05-09 (post-merge UX-feedback)** — пересмотрено решение «count и timestamp — каждое в своей колонке»: на живых данных таблица не помещалась в строку (4 новых колонки в `invited` пушили contents за viewport). Слиплены пары в composite-ячейку: «Приглашение» = `{invitedCount} · {invitedAt}`, «Ремайндер» = `{remindedCount} · {remindedAt}`, «Решение» = `{decidedAt}` (без count). data-testid'ы count и at сохранены на inner-span'ах — e2e и unit-asserts не ломаются по селекторам, обновляются только assertion'ы по headers и количеству DOM-ячеек. Decided/agreed теперь дополнительно показывают `invitedAt` (раньше был n/a в матрице).
 
 ## Suggested Review Order
 

@@ -524,7 +524,7 @@ describe("CampaignCreatorsTable — counter columns by status", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("invited (после первого notify): 4 cells with values, 0-remindedCount and null remindedAt render literal '0' and em-dash", () => {
+  it("invited (после первого notify): composite cells render count·timestamp; 0-remindedCount and null remindedAt render literal '0' and em-dash", () => {
     const rows: CampaignCreatorRow[] = [
       {
         campaignCreator: makeCC(CREATOR_A, {
@@ -550,16 +550,10 @@ describe("CampaignCreatorsTable — counter columns by status", () => {
     // Lock i18n key resolution: a typo in `campaignCreators.columns.*` would
     // surface here as the raw key, not the translated header.
     expect(
-      screen.getByRole("columnheader", { name: "Приглашений" }),
+      screen.getByRole("columnheader", { name: "Приглашение" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("columnheader", { name: "Когда приглашён" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("columnheader", { name: "Ремайндеров" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("columnheader", { name: "Когда ремайндер" }),
+      screen.getByRole("columnheader", { name: "Ремайндер" }),
     ).toBeInTheDocument();
 
     expect(
@@ -611,7 +605,7 @@ describe("CampaignCreatorsTable — counter columns by status", () => {
     ).toHaveTextContent(/7 мая/);
   });
 
-  it("declined: only invitedCount + decidedAt cells render; reminded columns absent", () => {
+  it("declined: composite invited cell + decided cell render; reminded columns absent", () => {
     const rows: CampaignCreatorRow[] = [
       {
         campaignCreator: makeCC(CREATOR_A, {
@@ -634,18 +628,22 @@ describe("CampaignCreatorsTable — counter columns by status", () => {
     );
 
     expect(
-      screen.getByRole("columnheader", { name: "Решение от" }),
+      screen.getByRole("columnheader", { name: "Приглашение" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("columnheader", { name: "Решение" }),
     ).toBeInTheDocument();
 
     expect(
       screen.getByTestId(`campaign-creator-invited-count-${CREATOR_A}`),
     ).toHaveTextContent("2");
+    // composite-ячейка теперь показывает и invitedAt в declined/agreed.
+    expect(
+      screen.getByTestId(`campaign-creator-invited-at-${CREATOR_A}`),
+    ).toHaveTextContent(/6 мая/);
     expect(
       screen.getByTestId(`campaign-creator-decided-at-${CREATOR_A}`),
     ).toHaveTextContent(/8 мая/);
-    expect(
-      screen.queryByTestId(`campaign-creator-invited-at-${CREATOR_A}`),
-    ).not.toBeInTheDocument();
     expect(
       screen.queryByTestId(`campaign-creator-reminded-count-${CREATOR_A}`),
     ).not.toBeInTheDocument();

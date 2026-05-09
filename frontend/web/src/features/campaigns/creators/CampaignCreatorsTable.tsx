@@ -311,38 +311,30 @@ function buildStatusColumns(
       return [];
     case CAMPAIGN_CREATOR_STATUS.INVITED:
       return [
-        counterColumn(
+        pairColumn(
           "invited",
-          tCampaigns("campaignCreators.columns.invitedCount"),
+          tCampaigns("campaignCreators.columns.invited"),
           (row) => row.campaignCreator.invitedCount,
-        ),
-        timestampColumn(
-          "invited",
-          tCampaigns("campaignCreators.columns.invitedAt"),
           (row) => row.campaignCreator.invitedAt ?? null,
         ),
-        counterColumn(
+        pairColumn(
           "reminded",
-          tCampaigns("campaignCreators.columns.remindedCount"),
+          tCampaigns("campaignCreators.columns.reminded"),
           (row) => row.campaignCreator.remindedCount,
-        ),
-        timestampColumn(
-          "reminded",
-          tCampaigns("campaignCreators.columns.remindedAt"),
           (row) => row.campaignCreator.remindedAt ?? null,
         ),
       ];
     case CAMPAIGN_CREATOR_STATUS.DECLINED:
     case CAMPAIGN_CREATOR_STATUS.AGREED:
       return [
-        counterColumn(
+        pairColumn(
           "invited",
-          tCampaigns("campaignCreators.columns.invitedCount"),
+          tCampaigns("campaignCreators.columns.invited"),
           (row) => row.campaignCreator.invitedCount,
+          (row) => row.campaignCreator.invitedAt ?? null,
         ),
-        timestampColumn(
-          "decided",
-          tCampaigns("campaignCreators.columns.decidedAt"),
+        decidedColumn(
+          tCampaigns("campaignCreators.columns.decided"),
           (row) => row.campaignCreator.decidedAt ?? null,
         ),
       ];
@@ -353,40 +345,46 @@ function buildStatusColumns(
   }
 }
 
-function counterColumn(
+function pairColumn(
   kind: "invited" | "reminded",
   header: string,
   getCount: (row: CampaignCreatorRow) => number,
+  getIso: (row: CampaignCreatorRow) => string | null,
 ): Column<CampaignCreatorRow> {
   return {
-    key: `${kind}-count`,
+    key: `${kind}-pair`,
     header,
-    align: "right",
-    width: "w-24",
+    width: "w-40",
     render: (row) => (
-      <span
-        className="text-gray-700"
-        data-testid={`campaign-creator-${kind}-count-${row.campaignCreator.creatorId}`}
-      >
-        {getCount(row)}
+      <span className="whitespace-nowrap text-gray-700">
+        <span
+          data-testid={`campaign-creator-${kind}-count-${row.campaignCreator.creatorId}`}
+        >
+          {getCount(row)}
+        </span>
+        <span className="mx-1 text-gray-400">·</span>
+        <span
+          data-testid={`campaign-creator-${kind}-at-${row.campaignCreator.creatorId}`}
+        >
+          {formatDateTimeShort(getIso(row))}
+        </span>
       </span>
     ),
   };
 }
 
-function timestampColumn(
-  kind: "invited" | "reminded" | "decided",
+function decidedColumn(
   header: string,
   getIso: (row: CampaignCreatorRow) => string | null,
 ): Column<CampaignCreatorRow> {
   return {
-    key: `${kind}-at`,
+    key: "decided-at",
     header,
     width: "w-32",
     render: (row) => (
       <span
         className="text-gray-700"
-        data-testid={`campaign-creator-${kind}-at-${row.campaignCreator.creatorId}`}
+        data-testid={`campaign-creator-decided-at-${row.campaignCreator.creatorId}`}
       >
         {formatDateTimeShort(getIso(row))}
       </span>
