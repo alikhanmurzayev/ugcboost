@@ -32,7 +32,7 @@ interface CampaignCreatorGroupSectionProps {
   result?: SectionResult | null;
   isSubmitting: boolean;
   isPending: boolean;
-  onRemove: (row: CampaignCreatorRow) => void;
+  onRemove?: (row: CampaignCreatorRow) => void;
   drawerSelectedCreatorId?: string;
   onRowClick: (row: CampaignCreatorRow) => void;
 }
