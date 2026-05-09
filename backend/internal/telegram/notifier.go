@@ -114,10 +114,12 @@ const campaignContractSignedText = "Ура, мы подписали с вами 
 func CampaignContractSignedText() string { return campaignContractSignedText }
 
 // campaignContractSentText — креатору после Phase 3 outbox-worker'а: договор
-// ушёл в TrustMe на подпись, прикладываем shortUrl. Текст лаконичный,
-// fixme/copy-iter — отдельным PR.
+// ушёл в TrustMe на подпись, прикладываем shortUrl. Сама механика подписи
+// (СМС-код, ЭЦП и т.п.) — на стороне TrustMe; они же отдельно пришлют SMS
+// со ссылкой. Здесь только нейтральная формулировка с дублированной
+// ссылкой на случай, если SMS не дошла.
 const campaignContractSentText = "Мы отправили вам соглашение на подпись 📄\n\n" +
-	"Откройте ссылку и подпишите по СМС-OTP: %s"
+	"Откройте ссылку для подписания: %s"
 
 // CampaignContractSentText экспортирует текст для тестов.
 func CampaignContractSentText() string { return campaignContractSentText }
