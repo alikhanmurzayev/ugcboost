@@ -114,23 +114,22 @@ const campaignContractSignedText = "Ура, мы подписали с вами 
 func CampaignContractSignedText() string { return campaignContractSignedText }
 
 // campaignContractSentText — креатору после Phase 3 outbox-worker'а: договор
-// ушёл в TrustMe на подпись, прикладываем shortUrl. Сама механика подписи
-// (СМС-код, ЭЦП и т.п.) — на стороне TrustMe; они же отдельно пришлют SMS
-// со ссылкой. Здесь только нейтральная формулировка с дублированной
-// ссылкой на случай, если SMS не дошла.
-const campaignContractSentText = "Мы отправили вам соглашение на подпись 📄\n\n" +
-	"Откройте ссылку для подписания: %s"
+// ушёл в TrustMe на подпись. TrustMe сам пришлёт SMS со ссылкой на свой
+// сайт, где креатор подпишет — поэтому ссылку здесь не дублируем (TrustMe
+// отдаёт нам не URL, а только short-code, и собирать `tct.kz/uploader/<code>`
+// руками тут смысла нет).
+const campaignContractSentText = "Мы отправили вам соглашение на подпись 📄"
 
 // CampaignContractSentText экспортирует текст для тестов.
 func CampaignContractSentText() string { return campaignContractSentText }
 
 // NotifyContractSent отправляет креатору сообщение «договор отправлен на
-// подпись» с ссылкой shortURL. fire-and-forget — стандарт backend-transactions
-// (бот ПОСЛЕ Tx), без блокирования outbox-worker'а.
-func (n *Notifier) NotifyContractSent(ctx context.Context, chatID int64, shortURL string) {
+// подпись». fire-and-forget — стандарт backend-transactions (бот ПОСЛЕ Tx),
+// без блокирования outbox-worker'а.
+func (n *Notifier) NotifyContractSent(ctx context.Context, chatID int64) {
 	n.fire(ctx, "campaign_contract_sent", chatID, &bot.SendMessageParams{
 		ChatID: chatID,
-		Text:   fmt.Sprintf(campaignContractSentText, shortURL),
+		Text:   campaignContractSentText,
 	})
 }
 

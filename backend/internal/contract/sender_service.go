@@ -52,10 +52,11 @@ type ContractSenderRepoFactory interface {
 }
 
 // CreatorNotifier отправляет «договор отправлен на подпись» в Telegram.
-// Принимает (creatorTGID, contractShortURL). Реализация — fire-and-forget
-// goroutine в Telegram.Notifier; ошибки уходят в notifier-логи.
+// Реализация — fire-and-forget goroutine в Telegram.Notifier; ошибки
+// уходят в notifier-логи. shortURL не передаём: TrustMe сам пришлёт SMS
+// со ссылкой, и в Telegram-сообщении мы её не дублируем.
 type CreatorNotifier interface {
-	NotifyContractSent(ctx context.Context, creatorTelegramUserID int64, contractShortURL string)
+	NotifyContractSent(ctx context.Context, creatorTelegramUserID int64)
 }
 
 // CreatorTelegramResolver резолвит telegram_user_id по creator_id. Используется
@@ -199,7 +200,7 @@ func (s *ContractSenderService) finalizeKnownOrphan(ctx context.Context, contrac
 	}
 	s.logger.Info(ctx, "contract: phase 0 recovered known document",
 		"contract_id", contractID, "trustme_document_id", search.DocumentID)
-	s.notifyCreator(ctx, requisites.CreatorID, search.ShortURL)
+	s.notifyCreator(ctx, requisites.CreatorID)
 }
 
 func (s *ContractSenderService) resendOrphan(ctx context.Context, contractID string, unsignedPDF []byte) {
@@ -231,7 +232,7 @@ func (s *ContractSenderService) resendOrphan(ctx context.Context, contractID str
 		s.logger.Error(ctx, "contract: phase 0 resend finalize", "contract_id", contractID, "err", err)
 		return
 	}
-	s.notifyCreator(ctx, requisites.CreatorID, res.ShortURL)
+	s.notifyCreator(ctx, requisites.CreatorID)
 }
 
 // processAgreed (Phase 1+2+3) — основной flow.
@@ -331,7 +332,7 @@ func (s *ContractSenderService) processClaim(ctx context.Context, c claim) {
 	}
 
 	// Бот-уведомление ПОСЛЕ Tx (стандарт backend-transactions).
-	s.notifyCreator(ctx, c.CC.CreatorID, res.ShortURL)
+	s.notifyCreator(ctx, c.CC.CreatorID)
 }
 
 func (s *ContractSenderService) finalize(ctx context.Context, contractID, ccID string, res *trustme.SendToSignResult, action string) error {
@@ -398,7 +399,7 @@ func (s *ContractSenderService) recordFailedAttempt(ctx context.Context, contrac
 	}
 }
 
-func (s *ContractSenderService) notifyCreator(ctx context.Context, creatorID, shortURL string) {
+func (s *ContractSenderService) notifyCreator(ctx context.Context, creatorID string) {
 	if s.notifier == nil || s.creatorResolver == nil {
 		return
 	}
@@ -411,7 +412,7 @@ func (s *ContractSenderService) notifyCreator(ctx context.Context, creatorID, sh
 	if !ok || tgID == 0 {
 		return
 	}
-	s.notifier.NotifyContractSent(ctx, tgID, shortURL)
+	s.notifier.NotifyContractSent(ctx, tgID)
 }
 
 func composeFIO(last, first string, middle *string) string {

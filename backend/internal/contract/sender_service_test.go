@@ -61,12 +61,11 @@ type stubNotifier struct {
 }
 
 type notifyCall struct {
-	chatID   int64
-	shortURL string
+	chatID int64
 }
 
-func (s *stubNotifier) NotifyContractSent(_ context.Context, chatID int64, shortURL string) {
-	s.calls = append(s.calls, notifyCall{chatID, shortURL})
+func (s *stubNotifier) NotifyContractSent(_ context.Context, chatID int64) {
+	s.calls = append(s.calls, notifyCall{chatID})
 }
 
 // stubResolver — креатор → telegramID без реального DB.
