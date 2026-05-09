@@ -267,13 +267,15 @@ func (s *CampaignService) UploadContractTemplate(ctx context.Context, id string,
 	sum := sha256.Sum256(pdf)
 	hash := hex.EncodeToString(sum[:])
 
+	auditPlaceholders := dedupNames(names)
+
 	auditMeta := struct {
 		Hash         string   `json:"hash"`
 		Placeholders []string `json:"placeholders"`
 		SizeBytes    int      `json:"size_bytes"`
 	}{
 		Hash:         hash,
-		Placeholders: domain.KnownContractPlaceholders,
+		Placeholders: auditPlaceholders,
 		SizeBytes:    len(pdf),
 	}
 
@@ -321,6 +323,19 @@ func (s *CampaignService) GetContractTemplate(ctx context.Context, id string) ([
 		return nil, domain.ErrContractTemplateNotFound
 	}
 	return pdf, nil
+}
+
+func dedupNames(names []string) []string {
+	out := make([]string, 0, len(names))
+	seen := make(map[string]struct{}, len(names))
+	for _, n := range names {
+		if _, ok := seen[n]; ok {
+			continue
+		}
+		seen[n] = struct{}{}
+		out = append(out, n)
+	}
+	return out
 }
 
 func campaignListInputToRepo(in domain.CampaignListInput) repository.CampaignListParams {

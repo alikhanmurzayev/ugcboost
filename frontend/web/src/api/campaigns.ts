@@ -77,6 +77,12 @@ export async function uploadCampaignContractTemplate(
   campaignId: string,
   pdf: Blob,
 ): Promise<UploadCampaignContractTemplateResult> {
+  // openapi-fetch types the body slot per the OpenAPI request schema; for
+  // raw `application/pdf` PUTs the schema is `string/binary`, so the typed
+  // slot resolves to `never`. The cast routes the Blob through the wire
+  // unchanged — bodySerializer hands it to fetch() as a BodyInit. Removing
+  // the cast forces openapi-fetch to JSON-stringify the Blob, which would
+  // upload the literal "[object Blob]" instead of the bytes.
   const { data, error, response } = await client.PUT(
     "/campaigns/{id}/contract-template",
     {
@@ -101,6 +107,9 @@ export async function uploadCampaignContractTemplate(
 export async function downloadCampaignContractTemplate(
   campaignId: string,
 ): Promise<Blob> {
+  // parseAs: "blob" returns the Blob in `data`; the typed slot is `never`
+  // because the schema declares `string/binary`. Cast lets the caller use
+  // the Blob without juggling unions per call site.
   const { data, error, response } = await client.GET(
     "/campaigns/{id}/contract-template",
     {
@@ -109,7 +118,12 @@ export async function downloadCampaignContractTemplate(
     },
   );
   if (error) {
-    throw new ApiError(response.status, extractErrorCode(error));
+    throw new ApiError(
+      response.status,
+      extractErrorCode(error),
+      extractErrorMessage(error),
+      extractErrorDetails(error),
+    );
   }
   return data as unknown as Blob;
 }

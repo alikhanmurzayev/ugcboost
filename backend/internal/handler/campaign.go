@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net/http"
 	"strings"
 
 	"github.com/google/uuid"
@@ -226,10 +227,29 @@ func (s *Server) GetCampaignContractTemplate(ctx context.Context, request api.Ge
 		return nil, err
 	}
 
-	return api.GetCampaignContractTemplate200ApplicationpdfResponse{
-		Body:          bytes.NewReader(pdf),
-		ContentLength: int64(len(pdf)),
+	return contractTemplateDownloadResponse{
+		Inner: api.GetCampaignContractTemplate200ApplicationpdfResponse{
+			Body:          bytes.NewReader(pdf),
+			ContentLength: int64(len(pdf)),
+		},
+		FileName: fmt.Sprintf("contract-template-%s.pdf", request.Id.String()),
 	}, nil
+}
+
+// contractTemplateDownloadResponse layers Cache-Control + Content-Disposition
+// over the strict-server PDF response. The underlying PDF is per-campaign
+// admin content — must not sit in shared caches/proxies (`private, no-store`)
+// and must trigger a download dialog (`attachment; filename=...`) so the
+// admin lands in the OS file picker rather than rendering inline.
+type contractTemplateDownloadResponse struct {
+	Inner    api.GetCampaignContractTemplate200ApplicationpdfResponse
+	FileName string
+}
+
+func (r contractTemplateDownloadResponse) VisitGetCampaignContractTemplateResponse(w http.ResponseWriter) error {
+	w.Header().Set("Cache-Control", "private, no-store")
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename=%q`, r.FileName))
+	return r.Inner.VisitGetCampaignContractTemplateResponse(w)
 }
 
 // domainCampaignToAPI maps the domain campaign onto its strict-server

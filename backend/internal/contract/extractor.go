@@ -3,6 +3,7 @@ package contract
 import (
 	"bytes"
 	"fmt"
+	"math"
 	"regexp"
 	"sort"
 	"strings"
@@ -105,7 +106,7 @@ func groupByLine(chars []pdf.Text) [][]pdf.Text {
 	indexed := make([]pdf.Text, len(chars))
 	copy(indexed, chars)
 	sort.SliceStable(indexed, func(i, j int) bool {
-		if abs(indexed[i].Y-indexed[j].Y) < lineTolerance {
+		if math.Abs(indexed[i].Y-indexed[j].Y) < lineTolerance {
 			return indexed[i].X < indexed[j].X
 		}
 		return indexed[i].Y > indexed[j].Y
@@ -114,7 +115,7 @@ func groupByLine(chars []pdf.Text) [][]pdf.Text {
 	var lines [][]pdf.Text
 	var cur []pdf.Text
 	for _, c := range indexed {
-		if len(cur) == 0 || abs(c.Y-cur[0].Y) < lineTolerance {
+		if len(cur) == 0 || math.Abs(c.Y-cur[0].Y) < lineTolerance {
 			cur = append(cur, c)
 			continue
 		}
@@ -178,11 +179,4 @@ func splitWords(line []pdf.Text) []wordBox {
 		words = append(words, cur)
 	}
 	return words
-}
-
-func abs(x float64) float64 {
-	if x < 0 {
-		return -x
-	}
-	return x
 }

@@ -23,6 +23,7 @@ export const creatorKeys = {
 
 export const campaignKeys = {
   all: () => ["campaigns"] as const,
+  lists: () => ["campaigns", "list"] as const,
   list: (params: Record<string, unknown>) =>
     ["campaigns", "list", params] as const,
   detail: (id: string) => ["campaigns", "detail", id] as const,

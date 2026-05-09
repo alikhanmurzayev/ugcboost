@@ -63,7 +63,7 @@
     "uploadButton": "Загрузить шаблон",
     "replaceButton": "Заменить шаблон",
     "downloadButton": "Скачать существующий шаблон",
-    "uploading": "Загружаем…",
+    "loading": "Загружаем…",
     "placeholdersFound": "Найдены плейсхолдеры:",
     "errorRequired": "Загрузите PDF-шаблон договора. Файл не должен быть пустым.",
     "errorInvalidPDF": "Файл не распознаётся как PDF.",

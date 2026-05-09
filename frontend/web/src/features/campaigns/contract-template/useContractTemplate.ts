@@ -17,6 +17,9 @@ export function useUploadContractTemplate(campaignId: string) {
       void queryClient.invalidateQueries({
         queryKey: campaignKeys.contractTemplate(campaignId),
       });
+      // List view shows hasContractTemplate per row; refetch so the freshly
+      // uploaded template flips the indicator without a manual reload.
+      void queryClient.invalidateQueries({ queryKey: campaignKeys.lists() });
     },
   });
 }

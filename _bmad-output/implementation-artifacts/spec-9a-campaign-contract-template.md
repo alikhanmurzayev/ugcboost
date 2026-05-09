@@ -2,7 +2,7 @@
 title: "Chunk 9a — CRUD шаблона договора в кампании"
 type: feature
 created: "2026-05-09"
-status: in-review
+status: done
 chunk: 9a
 group: "Группа 3 — Фронт кампаний"
 branch_proposed: alikhan/campaign-contract-template
@@ -261,3 +261,171 @@ context:
 - Reference implementation overlay-extractor'а: `_bmad-output/experiments/pdf-overlay/main.go` + `contract-filled.pdf`.
 - Тестовый шаблон Аиданы: `legal-documents/Тест, эксперимент BLACK BURN_Соглашение_UGC.docx-1.pdf`.
 - Стандарты: `docs/standards/`.
+
+## Spec Change Log
+
+**2026-05-09 — review patches**
+
+Адверсариальный ревью (Blind hunter + Edge case hunter + Acceptance auditor) дал 75 finding'ов. После дедупа и классификации intent_gap/bad_spec не обнаружено — loopback не нужен. Применены 11 патчей:
+
+- Audit `placeholders` теперь содержит фактически извлечённые имена (deduped), а не canonical `KnownContractPlaceholders` — audit становится evidentiary `backend/internal/service/campaign.go:285`.
+- `BODY_LIMIT_BYTES` дефолт поднят `1 MB → 5 MB`. Раздел "I/O Matrix" §"Огромный PDF" фиксирует лимит — Google-Docs PDF типично 100 KB – 2 MB, до 3 MB на сканах. Глобальный middleware, env-override `BODY_LIMIT_BYTES` `backend/internal/config/config.go:43`.
+- `Cache-Control: private, no-store` + `Content-Disposition: attachment; filename="..."` на download — PDF никогда не сидит в shared caches/proxies, браузер сразу открывает file dialog `backend/internal/handler/campaign.go:229`.
+- Client-side файл-тип guard в `ContractTemplateField` — отбрасывает не-PDF до mutate (бэкенд CONTRACT_INVALID_PDF остаётся second line of defense) `frontend/web/src/features/campaigns/contract-template/ContractTemplateField.tsx:38`.
+- Download API client пропагирует `serverMessage`/`details` (CONTRACT_TEMPLATE_NOT_FOUND рендерится корректно) `frontend/web/src/api/campaigns.ts:111`.
+- Cache-инвалидация `campaignKeys.lists()` после upload — list-view сразу подхватывает обновлённый `hasContractTemplate` `frontend/web/src/features/campaigns/contract-template/useContractTemplate.ts:14`.
+- i18n key `uploading` → `loading` (соответствие spec line 101).
+- `as unknown as never` casts получили объяснительный комментарий (frontend-quality.md exception) `frontend/web/src/api/campaigns.ts:80`.
+- `abs()` helper заменён на `math.Abs` (backend-libraries.md) `backend/internal/contract/extractor.go:108`.
+- Удалён dead helper `BuildPlainPDF` (testutil/contract_template.go).
+- Spec-level: добавлен `lists()` в `campaignKeys`-фабрике `frontend/web/src/shared/constants/queryKeys.ts:25`.
+
+**Defer (отдельным заданием — не chunk 9a):**
+
+- E2E для soft-deleted кампании PUT/GET → 404 CAMPAIGN_NOT_FOUND. Нет публичного DELETE-endpoint и нет test-API для soft-delete; repo-unit покрывает `is_deleted=false` filter. Включить в chunk, который добавит DELETE `/campaigns/{id}`.
+- Reference PDF от Аиданы (`internal/contract/testdata/template-valid.pdf`). Production-extractor сейчас тестируется на gofpdf-фикстурах. Включить когда получим финальный шаблон.
+- `RealExtractor` thread-safety verification — claim "stateless, safe to share" не покрыт concurrent-тестом. Минор для chunk 9a (single-instance bind в main.go), значимо для chunk 16 outbox-worker.
+- `ledongthuc/pdf` corner case: `page.V.IsNull()` skip silent (extractor.go:74). Edge case, маловероятно на реальных PDF.
+- Slowloris / context-aware reader для `io.ReadAll(request.Body)`. Покрывается глобальными `WriteTimeout`/`ReadTimeout` сейчас.
+- Race UpdateContractTemplate vs concurrent DeleteCampaign. Стандартная гонка, нет defensive `FOR UPDATE`. Минор пока DELETE отсутствует.
+- `GetContractTemplate` использует primary pool (нет read-replica routing). Шаблонная проблема всего проекта.
+
+## Suggested Review Order
+
+**Domain — известные плейсхолдеры и pure-domain валидатор**
+
+- Single source of truth для placeholder-набора, разделяемого с chunk 16 overlay-render'ом.
+  [`contract.go`](../../backend/internal/domain/contract.go)
+
+- Валидатор без PDF-парсинга — отдельные коды для missing vs unknown с структурированными деталями.
+  [`contract_test.go`](../../backend/internal/domain/contract_test.go)
+
+- Пять новых error-кодов в общем enum (CONTRACT_REQUIRED / INVALID_PDF / MISSING / UNKNOWN / TEMPLATE_NOT_FOUND).
+  [`errors.go`](../../backend/internal/domain/errors.go)
+
+**Extractor — порт алгоритма из experiments в production-пакет**
+
+- `RealExtractor.ExtractPlaceholders` — line clustering (Y-tolerance 0.5pt) + word splitting + regex `{{Name}}`.
+  [`extractor.go:51`](../../backend/internal/contract/extractor.go#L51)
+
+- Замена самописного `abs()` на `math.Abs` (backend-libraries.md).
+  [`extractor.go:108`](../../backend/internal/contract/extractor.go#L108)
+
+- Фикстуры через `gofpdf` (in-memory) — production-deps не тащим, тестовый PDF собираем сами.
+  [`extractor_test.go`](../../backend/internal/contract/extractor_test.go)
+
+**Repository — миграция + два метода + computed projection**
+
+- `ALTER TABLE campaigns ADD COLUMN contract_template_pdf BYTEA NOT NULL DEFAULT '\x'` — пустой bytea для существующих рядов.
+  [`20260509041036_campaigns_contract_template.sql`](../../backend/migrations/20260509041036_campaigns_contract_template.sql)
+
+- `campaignSelectColumns` рерайтит `has_contract_template_pdf` → `(octet_length(...) > 0) AS has_contract_template_pdf` — флаг возвращается через дефолтный SELECT, сам PDF — нет.
+  [`campaign.go`](../../backend/internal/repository/campaign.go)
+
+- Captured-SQL тесты на `UpdateContractTemplate` / `GetContractTemplate` со строковыми литералами SQL (двойная проверка констант).
+  [`campaign_test.go`](../../backend/internal/repository/campaign_test.go)
+
+**Service — оркестрация валидации, audit в той же tx**
+
+- `UploadContractTemplate` — empty/parse/validate → WithTx{UPDATE + audit}; deduped placeholder-список в audit (а не canonical hardcode).
+  [`campaign.go:249`](../../backend/internal/service/campaign.go#L249)
+
+- `dedupNames` — package-level helper для audit-точности при репитах в PDF.
+  [`campaign.go:328`](../../backend/internal/service/campaign.go#L328)
+
+- `GetContractTemplate` — sql.ErrNoRows → ErrCampaignNotFound; пустой bytea → ErrContractTemplateNotFound (распознавание двух 404).
+  [`campaign.go:314`](../../backend/internal/service/campaign.go#L314)
+
+- Audit action constant отдельной константой.
+  [`audit_constants.go`](../../backend/internal/service/audit_constants.go)
+
+**Handler — strict-server + custom headers через wrapper**
+
+- `UploadCampaignContractTemplate` — authz → `io.ReadAll(request.Body)` → service. Body-limit middleware (5 MB) защищает заранее.
+  [`campaign.go:186`](../../backend/internal/handler/campaign.go#L186)
+
+- `contractTemplateDownloadResponse` оборачивает strict-server response, выставляет `Cache-Control: private, no-store` + `Content-Disposition: attachment` без правки OpenAPI.
+  [`campaign.go:236`](../../backend/internal/handler/campaign.go#L236)
+
+- Mapping `*ContractValidationError` → 422 с `details.missing`/`details.unknown`; `ErrContractTemplateNotFound` → 404 с собственным кодом.
+  [`response.go`](../../backend/internal/handler/response.go)
+
+**Authz — admin-only для обоих endpoint'ов**
+
+- `CanUpload/GetCampaignContractTemplate` через существующий `AuthzService`-механизм.
+  [`campaign.go`](../../backend/internal/authz/campaign.go)
+
+**API contract — OpenAPI**
+
+- Два новых path с raw `application/pdf` body (PUT) и `application/pdf` response (GET); расширение `Campaign` schema полем `hasContractTemplate`.
+  [`openapi.yaml:1511`](../../backend/api/openapi.yaml#L1511)
+
+**Body limit — глобальный default поднят с 1 MB до 5 MB**
+
+- Раз PDF-шаблоны Google Docs стабильно 100 KB – 2 MB, 1 MB был too tight; 5 MB — безопасный потолок для всех endpoint'ов.
+  [`config.go:43`](../../backend/internal/config/config.go#L43)
+
+**Frontend API client — raw PDF body + blob download**
+
+- `uploadCampaignContractTemplate` — openapi-fetch с `bodySerializer` для raw PDF; cast'ы прокомментированы (frontend-quality.md exception).
+  [`campaigns.ts:80`](../../frontend/web/src/api/campaigns.ts#L80)
+
+- `downloadCampaignContractTemplate` — `parseAs: "blob"`; ApiError несёт `serverMessage`/`details` для CONTRACT_TEMPLATE_NOT_FOUND рендера.
+  [`campaigns.ts:107`](../../frontend/web/src/api/campaigns.ts#L107)
+
+**Frontend hook — invalidation strategy**
+
+- Upload-mutation инвалидирует detail + contractTemplate + lists() — список кампаний сразу видит флаг.
+  [`useContractTemplate.ts:13`](../../frontend/web/src/features/campaigns/contract-template/useContractTemplate.ts#L13)
+
+- `triggerDownloadContractTemplate` — Blob → object URL → anchor click → revoke в finally (без гонки на throw).
+  [`useContractTemplate.ts:30`](../../frontend/web/src/features/campaigns/contract-template/useContractTemplate.ts#L30)
+
+**Frontend компонент — UI binding на CampaignDetailPage**
+
+- Hidden file input + upload/replace/download кнопки + preview-блок чипов плейсхолдеров после успеха.
+  [`ContractTemplateField.tsx`](../../frontend/web/src/features/campaigns/contract-template/ContractTemplateField.tsx)
+
+- Client-side файл-тип guard перед mutate — экономит roundtrip + быстрее даёт фидбек.
+  [`ContractTemplateField.tsx:38`](../../frontend/web/src/features/campaigns/contract-template/ContractTemplateField.tsx#L38)
+
+- Подключение в `CampaignDetailPage` между секцией "о кампании" и креатор-секцией.
+  [`CampaignDetailPage.tsx`](../../frontend/web/src/features/campaigns/CampaignDetailPage.tsx)
+
+**i18n + query keys**
+
+- Все user-facing строки в campaigns.json под `contractTemplate.*`; ключ `loading` (был `uploading`, переименован под spec).
+  [`campaigns.json:59`](../../frontend/web/src/shared/i18n/locales/ru/campaigns.json#L59)
+
+- `campaignKeys.lists()` + `campaignKeys.contractTemplate(id)` — фабричные ключи для invalidation после upload.
+  [`queryKeys.ts:24`](../../frontend/web/src/shared/constants/queryKeys.ts#L24)
+
+**Backend tests**
+
+- Service unit: 7 sub-test'ов на UploadContractTemplate (empty/parse/missing/unknown/replace/db-fail/happy + audit-капчуринг) + 4 на GetContractTemplate.
+  [`campaign_test.go`](../../backend/internal/service/campaign_test.go)
+
+- Handler unit: 7 sub-test'ов на upload + 4 на get с `doPDF` helper'ом.
+  [`campaign_test.go`](../../backend/internal/handler/campaign_test.go)
+
+- Backend e2e: 15 sub-test'ов покрывают всю I/O-матрицу.
+  [`campaign_test.go:1101`](../../backend/e2e/campaign/campaign_test.go#L1101)
+
+**Frontend tests**
+
+- Component unit (RTL + real i18n): hasTemplate=false/true, happy upload рендерит preview, 422 рендерит backend message.
+  [`ContractTemplateField.test.tsx`](../../frontend/web/src/features/campaigns/contract-template/ContractTemplateField.test.tsx)
+
+- Hook unit: upload success/error, download blob, revokeObjectURL даже если click throws.
+  [`useContractTemplate.test.ts`](../../frontend/web/src/features/campaigns/contract-template/useContractTemplate.test.ts)
+
+- Frontend e2e (Playwright): happy upload рендерит preview / reload удерживает replace+download / 422 рендерит backend message inline / download triggers PDF event.
+  [`admin-campaign-contract-template.spec.ts`](../../frontend/e2e/web/admin-campaign-contract-template.spec.ts)
+
+**Standards / fixtures**
+
+- `ledongthuc/pdf` зарегистрирован в библиотечном реестре с обоснованием.
+  [`backend-libraries.md:32`](../../docs/standards/backend-libraries.md#L32)
+
+- Roadmap revision 2026-05-09 фиксирует chunk 9a + redesign Группы 7.
+  [`campaign-roadmap.md`](../planning-artifacts/campaign-roadmap.md)

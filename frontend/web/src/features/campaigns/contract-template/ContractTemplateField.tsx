@@ -36,6 +36,17 @@ export default function ContractTemplateField({
     const file = e.target.files?.[0];
     e.target.value = ""; // allow re-upload of the same file name
     if (!file) return;
+    // Reject obvious non-PDFs before paying for an upload roundtrip — saves
+    // bandwidth on a 50 MB .docx renamed to .pdf and gives the admin
+    // immediate feedback instead of a 422 from the parser. Server-side
+    // CONTRACT_INVALID_PDF still backs this up.
+    const looksLikePDF =
+      file.type === "application/pdf" ||
+      file.name.toLowerCase().endsWith(".pdf");
+    if (!looksLikePDF) {
+      setError(t("contractTemplate.errorInvalidPDF"));
+      return;
+    }
     setIsSubmitting(true);
     setError("");
     upload.mutate(file, {
@@ -110,7 +121,7 @@ export default function ContractTemplateField({
           }
         >
           {submitDisabled
-            ? t("contractTemplate.uploading")
+            ? t("contractTemplate.loading")
             : hasTemplate
               ? t("contractTemplate.replaceButton")
               : t("contractTemplate.uploadButton")}
@@ -134,7 +145,7 @@ export default function ContractTemplateField({
           className="mt-3 text-sm text-gray-500"
           data-testid="contract-template-loading"
         >
-          {t("contractTemplate.uploading")}
+          {t("contractTemplate.loading")}
         </p>
       )}
 

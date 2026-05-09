@@ -79,16 +79,3 @@ func BuildValidContractPDF(t *testing.T) []byte {
 	return BuildContractPDF(t, []string{"CreatorFIO", "CreatorIIN", "IssuedDate"})
 }
 
-// BuildPlainPDF returns a single-page PDF with no `{{...}}` tokens.
-func BuildPlainPDF(t *testing.T) []byte {
-	t.Helper()
-	pdf := gofpdf.New("P", "mm", "A4", "")
-	pdf.AddPage()
-	pdf.SetFont("Helvetica", "", 12)
-	pdf.Cell(0, 8, "Plain contract — no placeholders")
-	pdf.Ln(8)
-	pdf.Cell(0, 8, "Just text.")
-	var buf bytes.Buffer
-	require.NoError(t, pdf.Output(&buf))
-	return buf.Bytes()
-}
