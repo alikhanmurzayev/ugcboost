@@ -94,8 +94,14 @@ func (r Requisite) MarshalJSON() ([]byte, error) {
 }
 
 type sendToSignData struct {
-	URL        string `json:"url"`
+	URL string `json:"url"`
+	// TrustMe в реальности возвращает поле `id`, а blueprint обещает
+	// `document_id` (см. § Отправка документа на подписание в формате BASE64,
+	// Response 200 example). Принимаем оба варианта — приоритет у `document_id`,
+	// fallback на `id`. Совпадает с тем, что возвращает search/Contracts (тоже
+	// `id`), так что договор имеет один и тот же идентификатор обеими ручками.
 	DocumentID string `json:"document_id"`
+	ID         string `json:"id"`
 	FileName   string `json:"fileName"`
 }
 
@@ -171,9 +177,12 @@ func (c *RealClient) SendToSign(ctx context.Context, in SendToSignInput) (*SendT
 		return nil, fmt.Errorf("trustme: unmarshal send-to-sign data: %w", err)
 	}
 	if data.DocumentID == "" {
-		// Diagnostic: если TrustMe вернул success-wrapper без document_id, важно
-		// видеть, что именно лежит в data — возможно поле называется иначе или
-		// прислано пустым. Логируем имена ключей + technical поля, без значений
+		data.DocumentID = data.ID
+	}
+	if data.DocumentID == "" {
+		// Diagnostic: если TrustMe вернул success-wrapper без id и document_id,
+		// важно видеть, что именно лежит в data — возможно поле называется ещё
+		// иначе. Логируем имена ключей + technical поля, без значений
 		// (security.md: PII-фрейминг — не пробрасываем сырой body, который
 		// потенциально содержит echo Requisites).
 		dataKeys := dataObjectKeys(wrapper.Data)
