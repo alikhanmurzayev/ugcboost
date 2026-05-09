@@ -2,11 +2,14 @@ package service
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"strings"
 
+	"github.com/alikhanmurzayev/ugcboost/backend/internal/contract"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/dbutil"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/domain"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/logger"
@@ -22,16 +25,24 @@ type CampaignRepoFactory interface {
 	NewAuditRepo(db dbutil.DB) repository.AuditRepo
 }
 
-// CampaignService owns the marketing-campaign lifecycle.
+type ContractExtractor interface {
+	ExtractPlaceholders(pdfBytes []byte) ([]contract.Placeholder, error)
+}
+
 type CampaignService struct {
 	pool        dbutil.Pool
 	repoFactory CampaignRepoFactory
+	extractor   ContractExtractor
 	logger      logger.Logger
 }
 
-// NewCampaignService creates a new CampaignService.
-func NewCampaignService(pool dbutil.Pool, repoFactory CampaignRepoFactory, log logger.Logger) *CampaignService {
-	return &CampaignService{pool: pool, repoFactory: repoFactory, logger: log}
+func NewCampaignService(pool dbutil.Pool, repoFactory CampaignRepoFactory, extractor ContractExtractor, log logger.Logger) *CampaignService {
+	return &CampaignService{pool: pool, repoFactory: repoFactory, extractor: extractor, logger: log}
+}
+
+type UploadContractTemplateResult struct {
+	Hash         string
+	Placeholders []string
 }
 
 // CreateCampaign inserts a new campaign and writes the matching audit row in
@@ -217,6 +228,94 @@ func (s *CampaignService) List(ctx context.Context, in domain.CampaignListInput)
 	}, nil
 }
 
+func (s *CampaignService) UploadContractTemplate(ctx context.Context, id string, pdf []byte) (*UploadContractTemplateResult, error) {
+	if len(pdf) == 0 {
+		return nil, domain.NewContractRequiredError()
+	}
+
+	placeholders, err := s.extractor.ExtractPlaceholders(pdf)
+	if err != nil {
+		return nil, domain.NewContractInvalidPDFError()
+	}
+
+	names := make([]string, len(placeholders))
+	for i, p := range placeholders {
+		names[i] = p.Name
+	}
+	if err := domain.ValidateContractTemplatePDF(len(pdf), names); err != nil {
+		return nil, err
+	}
+
+	sum := sha256.Sum256(pdf)
+	hash := hex.EncodeToString(sum[:])
+
+	auditPlaceholders := dedupNames(names)
+
+	auditMeta := struct {
+		Hash         string   `json:"hash"`
+		Placeholders []string `json:"placeholders"`
+		SizeBytes    int      `json:"size_bytes"`
+	}{
+		Hash:         hash,
+		Placeholders: auditPlaceholders,
+		SizeBytes:    len(pdf),
+	}
+
+	err = dbutil.WithTx(ctx, s.pool, func(tx dbutil.DB) error {
+		campaignRepo := s.repoFactory.NewCampaignRepo(tx)
+		auditRepo := s.repoFactory.NewAuditRepo(tx)
+
+		if err := campaignRepo.UpdateContractTemplate(ctx, id, pdf); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return domain.ErrCampaignNotFound
+			}
+			return fmt.Errorf("update contract template: %w", err)
+		}
+		return writeAudit(ctx, auditRepo,
+			AuditActionCampaignContractTemplateUploaded, AuditEntityTypeCampaign, id,
+			nil, auditMeta)
+	})
+	if err != nil {
+		return nil, err
+	}
+	s.logger.Info(ctx, "contract template uploaded",
+		"campaign_id", id,
+		"size_bytes", len(pdf),
+		"sha256", hash[:12],
+	)
+	return &UploadContractTemplateResult{
+		Hash:         hash,
+		Placeholders: append([]string(nil), domain.KnownContractPlaceholders...),
+	}, nil
+}
+
+func (s *CampaignService) GetContractTemplate(ctx context.Context, id string) ([]byte, error) {
+	pdf, err := s.repoFactory.NewCampaignRepo(s.pool).GetContractTemplate(ctx, id)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, domain.ErrCampaignNotFound
+		}
+		return nil, fmt.Errorf("get contract template: %w", err)
+	}
+	if len(pdf) == 0 {
+		return nil, domain.ErrContractTemplateNotFound
+	}
+	return pdf, nil
+}
+
+func dedupNames(names []string) []string {
+	out := make([]string, 0, len(names))
+	seen := make(map[string]struct{}, len(names))
+	for _, n := range names {
+		if _, ok := seen[n]; ok {
+			continue
+		}
+		seen[n] = struct{}{}
+		out = append(out, n)
+	}
+	return out
+}
+
 func campaignListInputToRepo(in domain.CampaignListInput) repository.CampaignListParams {
 	return repository.CampaignListParams{
 		Search:    strings.ToLower(strings.TrimSpace(in.Search)),
@@ -230,11 +329,12 @@ func campaignListInputToRepo(in domain.CampaignListInput) repository.CampaignLis
 
 func campaignRowToDomain(row *repository.CampaignRow) *domain.Campaign {
 	return &domain.Campaign{
-		ID:        row.ID,
-		Name:      row.Name,
-		TmaURL:    row.TmaURL,
-		IsDeleted: row.IsDeleted,
-		CreatedAt: row.CreatedAt,
-		UpdatedAt: row.UpdatedAt,
+		ID:                  row.ID,
+		Name:                row.Name,
+		TmaURL:              row.TmaURL,
+		IsDeleted:           row.IsDeleted,
+		HasContractTemplate: row.HasContractTemplate,
+		CreatedAt:           row.CreatedAt,
+		UpdatedAt:           row.UpdatedAt,
 	}
 }

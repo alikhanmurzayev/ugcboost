@@ -160,6 +160,12 @@ type ClientInterface interface {
 
 	UpdateCampaign(ctx context.Context, id openapi_types.UUID, body UpdateCampaignJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// GetCampaignContractTemplate request
+	GetCampaignContractTemplate(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// UploadCampaignContractTemplateWithBody request with any body
+	UploadCampaignContractTemplateWithBody(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// ListCampaignCreators request
 	ListCampaignCreators(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -538,6 +544,30 @@ func (c *Client) UpdateCampaignWithBody(ctx context.Context, id openapi_types.UU
 
 func (c *Client) UpdateCampaign(ctx context.Context, id openapi_types.UUID, body UpdateCampaignJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewUpdateCampaignRequest(c.Server, id, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) GetCampaignContractTemplate(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewGetCampaignContractTemplateRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) UploadCampaignContractTemplateWithBody(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewUploadCampaignContractTemplateRequestWithBody(c.Server, id, contentType, body)
 	if err != nil {
 		return nil, err
 	}
@@ -1750,6 +1780,76 @@ func NewUpdateCampaignRequestWithBody(server string, id openapi_types.UUID, cont
 	return req, nil
 }
 
+// NewGetCampaignContractTemplateRequest generates requests for GetCampaignContractTemplate
+func NewGetCampaignContractTemplateRequest(server string, id openapi_types.UUID) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/campaigns/%s/contract-template", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
+// NewUploadCampaignContractTemplateRequestWithBody generates requests for UploadCampaignContractTemplate with any type of body
+func NewUploadCampaignContractTemplateRequestWithBody(server string, id openapi_types.UUID, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/campaigns/%s/contract-template", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("PUT", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 // NewListCampaignCreatorsRequest generates requests for ListCampaignCreators
 func NewListCampaignCreatorsRequest(server string, id openapi_types.UUID) (*http.Request, error) {
 	var err error
@@ -2598,6 +2698,12 @@ type ClientWithResponsesInterface interface {
 
 	UpdateCampaignWithResponse(ctx context.Context, id openapi_types.UUID, body UpdateCampaignJSONRequestBody, reqEditors ...RequestEditorFn) (*UpdateCampaignResponse, error)
 
+	// GetCampaignContractTemplateWithResponse request
+	GetCampaignContractTemplateWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetCampaignContractTemplateResponse, error)
+
+	// UploadCampaignContractTemplateWithBodyWithResponse request with any body
+	UploadCampaignContractTemplateWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UploadCampaignContractTemplateResponse, error)
+
 	// ListCampaignCreatorsWithResponse request
 	ListCampaignCreatorsWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*ListCampaignCreatorsResponse, error)
 
@@ -3113,6 +3219,58 @@ func (r UpdateCampaignResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r UpdateCampaignResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type GetCampaignContractTemplateResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON401      *ErrorResponse
+	JSON403      *Forbidden
+	JSON404      *ErrorResponse
+	JSONDefault  *UnexpectedError
+}
+
+// Status returns HTTPResponse.Status
+func (r GetCampaignContractTemplateResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r GetCampaignContractTemplateResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type UploadCampaignContractTemplateResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *UploadCampaignContractTemplateResult
+	JSON401      *ErrorResponse
+	JSON403      *Forbidden
+	JSON404      *ErrorResponse
+	JSON422      *ContractValidationErrorResponse
+	JSONDefault  *UnexpectedError
+}
+
+// Status returns HTTPResponse.Status
+func (r UploadCampaignContractTemplateResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r UploadCampaignContractTemplateResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -3841,6 +3999,24 @@ func (c *ClientWithResponses) UpdateCampaignWithResponse(ctx context.Context, id
 		return nil, err
 	}
 	return ParseUpdateCampaignResponse(rsp)
+}
+
+// GetCampaignContractTemplateWithResponse request returning *GetCampaignContractTemplateResponse
+func (c *ClientWithResponses) GetCampaignContractTemplateWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*GetCampaignContractTemplateResponse, error) {
+	rsp, err := c.GetCampaignContractTemplate(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseGetCampaignContractTemplateResponse(rsp)
+}
+
+// UploadCampaignContractTemplateWithBodyWithResponse request with arbitrary body returning *UploadCampaignContractTemplateResponse
+func (c *ClientWithResponses) UploadCampaignContractTemplateWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*UploadCampaignContractTemplateResponse, error) {
+	rsp, err := c.UploadCampaignContractTemplateWithBody(ctx, id, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseUploadCampaignContractTemplateResponse(rsp)
 }
 
 // ListCampaignCreatorsWithResponse request returning *ListCampaignCreatorsResponse
@@ -4880,6 +5056,114 @@ func ParseUpdateCampaignResponse(rsp *http.Response) (*UpdateCampaignResponse, e
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
 		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON422 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest UnexpectedError
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseGetCampaignContractTemplateResponse parses an HTTP response from a GetCampaignContractTemplateWithResponse call
+func ParseGetCampaignContractTemplateResponse(rsp *http.Response) (*GetCampaignContractTemplateResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &GetCampaignContractTemplateResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest UnexpectedError
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseUploadCampaignContractTemplateResponse parses an HTTP response from a UploadCampaignContractTemplateWithResponse call
+func ParseUploadCampaignContractTemplateResponse(rsp *http.Response) (*UploadCampaignContractTemplateResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &UploadCampaignContractTemplateResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest UploadCampaignContractTemplateResult
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest ContractValidationErrorResponse
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
 			return nil, err
 		}

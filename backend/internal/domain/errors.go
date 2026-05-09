@@ -84,6 +84,17 @@ const (
 	CodeCampaignTmaURLLocked = "CAMPAIGN_TMA_URL_LOCKED"
 )
 
+const (
+	CodeContractRequired           = "CONTRACT_REQUIRED"
+	CodeContractInvalidPDF         = "CONTRACT_INVALID_PDF"
+	CodeContractMissingPlaceholder = "CONTRACT_MISSING_PLACEHOLDER"
+	CodeContractUnknownPlaceholder = "CONTRACT_UNKNOWN_PLACEHOLDER"
+	CodeContractTemplateNotFound   = "CONTRACT_TEMPLATE_NOT_FOUND"
+	// CodeContractTemplateRequired — POST /campaigns/{id}/notify upholds it
+	// when the campaign has no contract_template_pdf uploaded yet.
+	CodeContractTemplateRequired = "CONTRACT_TEMPLATE_REQUIRED"
+)
+
 // TMA decision + secret_token codes — surfaced by /tma/* endpoints and by
 // POST/PATCH /campaigns when the admin-provided tma_url fails the
 // secret-token-format check or collides with another live campaign.

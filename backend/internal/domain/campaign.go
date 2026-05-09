@@ -36,12 +36,13 @@ func SecretTokenRegex() *regexp.Regexp { return secretTokenRe }
 // snake_case because the struct is serialized into audit_logs.new_value as-is
 // — adding a field to the struct extends the audit payload automatically.
 type Campaign struct {
-	ID        string    `json:"id"`
-	Name      string    `json:"name"`
-	TmaURL    string    `json:"tma_url"`
-	IsDeleted bool      `json:"is_deleted"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID                  string    `json:"id"`
+	Name                string    `json:"name"`
+	TmaURL              string    `json:"tma_url"`
+	IsDeleted           bool      `json:"is_deleted"`
+	HasContractTemplate bool      `json:"has_contract_template"`
+	CreatedAt           time.Time `json:"created_at"`
+	UpdatedAt           time.Time `json:"updated_at"`
 }
 
 // CampaignInput is the mutable subset of a campaign for create/update services.

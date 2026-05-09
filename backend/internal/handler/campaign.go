@@ -1,8 +1,11 @@
 package handler
 
 import (
+	"bytes"
 	"context"
 	"fmt"
+	"io"
+	"net/http"
 	"strings"
 
 	"github.com/google/uuid"
@@ -171,6 +174,63 @@ func (s *Server) ListCampaigns(ctx context.Context, request api.ListCampaignsReq
 	}, nil
 }
 
+func (s *Server) UploadCampaignContractTemplate(ctx context.Context, request api.UploadCampaignContractTemplateRequestObject) (api.UploadCampaignContractTemplateResponseObject, error) {
+	if err := s.authzService.CanUploadCampaignContractTemplate(ctx); err != nil {
+		return nil, err
+	}
+
+	pdf, err := io.ReadAll(request.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read pdf body: %w", err)
+	}
+
+	result, err := s.campaignService.UploadContractTemplate(ctx, request.Id.String(), pdf)
+	if err != nil {
+		return nil, err
+	}
+
+	placeholders := append([]string(nil), result.Placeholders...)
+	return api.UploadCampaignContractTemplate200JSONResponse{
+		Data: api.UploadCampaignContractTemplateData{
+			Hash:         result.Hash,
+			Placeholders: placeholders,
+		},
+	}, nil
+}
+
+func (s *Server) GetCampaignContractTemplate(ctx context.Context, request api.GetCampaignContractTemplateRequestObject) (api.GetCampaignContractTemplateResponseObject, error) {
+	if err := s.authzService.CanGetCampaignContractTemplate(ctx); err != nil {
+		return nil, err
+	}
+
+	pdf, err := s.campaignService.GetContractTemplate(ctx, request.Id.String())
+	if err != nil {
+		return nil, err
+	}
+
+	return contractTemplateDownloadResponse{
+		Inner: api.GetCampaignContractTemplate200ApplicationpdfResponse{
+			Body:          bytes.NewReader(pdf),
+			ContentLength: int64(len(pdf)),
+		},
+		FileName: fmt.Sprintf("contract-template-%s.pdf", request.Id.String()),
+	}, nil
+}
+
+// contractTemplateDownloadResponse adds Cache-Control + Content-Disposition
+// to the strict-server PDF response — без них браузер откроет inline и шаблон
+// может осесть в shared-кэше.
+type contractTemplateDownloadResponse struct {
+	Inner    api.GetCampaignContractTemplate200ApplicationpdfResponse
+	FileName string
+}
+
+func (r contractTemplateDownloadResponse) VisitGetCampaignContractTemplateResponse(w http.ResponseWriter) error {
+	w.Header().Set("Cache-Control", "private, no-store")
+	w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename=%q`, r.FileName))
+	return r.Inner.VisitGetCampaignContractTemplateResponse(w)
+}
+
 // domainCampaignToAPI maps the domain campaign onto its strict-server
 // counterpart. UUID parse failure on the stored id surfaces as a wrapped
 // error so the strict-server adapter renders 500 — the row is populated by
@@ -181,11 +241,12 @@ func domainCampaignToAPI(c *domain.Campaign) (api.Campaign, error) {
 		return api.Campaign{}, fmt.Errorf("parse campaign id %q: %w", c.ID, err)
 	}
 	return api.Campaign{
-		Id:        openapi_types.UUID(id),
-		Name:      c.Name,
-		TmaUrl:    c.TmaURL,
-		IsDeleted: c.IsDeleted,
-		CreatedAt: c.CreatedAt,
-		UpdatedAt: c.UpdatedAt,
+		Id:                  openapi_types.UUID(id),
+		Name:                c.Name,
+		TmaUrl:              c.TmaURL,
+		IsDeleted:           c.IsDeleted,
+		HasContractTemplate: c.HasContractTemplate,
+		CreatedAt:           c.CreatedAt,
+		UpdatedAt:           c.UpdatedAt,
 	}, nil
 }

@@ -1433,10 +1433,10 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "422":
           description: |
-            Either a shape/format violation (empty array, > 200 ids, duplicate
-            ids) returned as the standard ErrorResponse, or
-            CAMPAIGN_CREATOR_BATCH_INVALID with `details` listing every
-            unattached / wrong-status creator from the batch.
+            Shape/format violation (empty array, > 200 ids, duplicate ids), or
+            CONTRACT_TEMPLATE_REQUIRED if the campaign has no contract template
+            uploaded yet, or CAMPAIGN_CREATOR_BATCH_INVALID with `details`
+            listing every unattached / wrong-status creator from the batch.
           content:
             application/json:
               schema:
@@ -1505,6 +1505,126 @@ paths:
                 oneOf:
                   - $ref: "#/components/schemas/CampaignCreatorBatchInvalidErrorResponse"
                   - $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: "#/components/responses/UnexpectedError"
+
+  /campaigns/{id}/contract-template:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    put:
+      operationId: uploadCampaignContractTemplate
+      summary: Upload the contract-template PDF for a campaign (admin-only)
+      description: |
+        Stores the raw PDF bytes in `campaigns.contract_template_pdf`,
+        replacing any previously uploaded template. The body is the PDF
+        itself, not a multipart form — keeps the wire format simple and
+        avoids buffering through middleware that does not understand
+        multipart streaming.
+
+        Validation runs in fixed order; the first failure short-circuits:
+        empty body → CONTRACT_REQUIRED, unparseable PDF →
+        CONTRACT_INVALID_PDF, any of the three known placeholders missing
+        → CONTRACT_MISSING_PLACEHOLDER (with `details.missing`), any
+        unknown placeholder name → CONTRACT_UNKNOWN_PLACEHOLDER (with
+        `details.unknown`).
+
+        The known set is `CreatorFIO`, `CreatorIIN`, `IssuedDate` —
+        `domain.KnownContractPlaceholders` is the single source of truth
+        and the chunk-16 outbox `Render` step relies on the same list.
+
+        Audit row `campaign.contract_template_uploaded` is written in the
+        same transaction as the column UPDATE. The reply echoes the
+        sha256 hash of the uploaded bytes plus the placeholder set so the
+        UI can render a confirmation block without re-downloading.
+      tags: [campaigns]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        description: |
+          Raw PDF bytes of the contract template. Maximum size is bounded
+          by the global request-body limit configured on the backend.
+        content:
+          application/pdf:
+            schema:
+              type: string
+              format: binary
+      responses:
+        "200":
+          description: Template stored; reply contains the hash and the placeholders.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UploadCampaignContractTemplateResult"
+        "401":
+          description: Unauthenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: Campaign not found (missing or soft-deleted).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: |
+            Validation failed. CONTRACT_REQUIRED / CONTRACT_INVALID_PDF
+            carry no `details`; CONTRACT_MISSING_PLACEHOLDER carries
+            `details.missing`; CONTRACT_UNKNOWN_PLACEHOLDER carries
+            `details.unknown`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ContractValidationErrorResponse"
+        default:
+          $ref: "#/components/responses/UnexpectedError"
+    get:
+      operationId: getCampaignContractTemplate
+      summary: Download the contract-template PDF for a campaign (admin-only)
+      description: |
+        Returns the raw PDF previously stored via PUT. Soft-deleted
+        campaigns are treated as not found (404 CAMPAIGN_NOT_FOUND), like
+        the other campaign-domain admin endpoints. A live campaign with
+        an empty `contract_template_pdf` answers 404
+        CONTRACT_TEMPLATE_NOT_FOUND so the admin UI can distinguish
+        "campaign exists but no template" from "campaign gone".
+      tags: [campaigns]
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Stored PDF contents.
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        "401":
+          description: Unauthenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: |
+            Either the campaign itself is missing or soft-deleted
+            (`CAMPAIGN_NOT_FOUND`), or the campaign exists but no template
+            has been uploaded yet (`CONTRACT_TEMPLATE_NOT_FOUND`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         default:
           $ref: "#/components/responses/UnexpectedError"
 
@@ -3006,7 +3126,7 @@ components:
         Full marketing campaign as returned by GET /campaigns/{id}. The shape
         is shared by upcoming list / patch responses — they reuse this schema
         instead of inlining a copy.
-      required: [id, name, tmaUrl, isDeleted, createdAt, updatedAt]
+      required: [id, name, tmaUrl, isDeleted, hasContractTemplate, createdAt, updatedAt]
       properties:
         id:
           type: string
@@ -3021,6 +3141,13 @@ components:
         isDeleted:
           type: boolean
           description: Soft-delete flag — true means the campaign was removed but is still readable for audit.
+        hasContractTemplate:
+          type: boolean
+          description: |
+            Whether a contract-template PDF has been uploaded for this campaign.
+            Computed on the fly from `octet_length(contract_template_pdf) > 0`
+            so list endpoints stay light — the PDF body itself is only
+            available via GET /campaigns/{id}/contract-template.
         createdAt:
           type: string
           format: date-time
@@ -3034,6 +3161,75 @@ components:
       properties:
         data:
           $ref: "#/components/schemas/Campaign"
+
+    UploadCampaignContractTemplateData:
+      type: object
+      description: |
+        Result of a successful PUT /campaigns/{id}/contract-template upload.
+        Echoes the placeholders extracted from the freshly stored PDF so the
+        admin UI can render a confirmation block ("found CreatorFIO,
+        CreatorIIN, IssuedDate") without a follow-up download.
+      required: [hash, placeholders]
+      properties:
+        hash:
+          type: string
+          description: SHA-256 hash of the raw uploaded PDF bytes (lowercase hex).
+        placeholders:
+          type: array
+          description: |
+            Distinct placeholder names found in the template. After successful
+            validation this set always equals the known set
+            (`CreatorFIO`, `CreatorIIN`, `IssuedDate`) — order matches
+            `domain.KnownContractPlaceholders`.
+          items:
+            type: string
+
+    UploadCampaignContractTemplateResult:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: "#/components/schemas/UploadCampaignContractTemplateData"
+
+    ContractValidationDetails:
+      type: object
+      description: |
+        Optional structured details for contract-template upload validation
+        errors. `missing` lists known placeholders absent from the uploaded
+        PDF. `unknown` lists placeholders found in the PDF that are not part
+        of `domain.KnownContractPlaceholders`. Empty for the empty-body /
+        invalid-PDF cases — the code alone identifies them.
+      properties:
+        missing:
+          type: array
+          items:
+            type: string
+        unknown:
+          type: array
+          items:
+            type: string
+
+    ContractValidationErrorBody:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          description: |
+            One of CONTRACT_REQUIRED / CONTRACT_INVALID_PDF /
+            CONTRACT_MISSING_PLACEHOLDER / CONTRACT_UNKNOWN_PLACEHOLDER.
+        message:
+          type: string
+          description: Human-readable fallback message for the admin UI.
+        details:
+          $ref: "#/components/schemas/ContractValidationDetails"
+
+    ContractValidationErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          $ref: "#/components/schemas/ContractValidationErrorBody"
 
     CampaignListSortField:
       type: string

@@ -1097,3 +1097,288 @@ func TestCampaignList(t *testing.T) {
 		require.WithinDuration(t, time.Now().UTC(), got.UpdatedAt, time.Minute)
 	})
 }
+
+func TestCampaignContractTemplate(t *testing.T) {
+	t.Parallel()
+
+	c, adminToken, _ := testutil.SetupAdminClient(t)
+
+	t.Run("upload happy path", func(t *testing.T) {
+		t.Parallel()
+		id, _ := seedCampaign(t, c, adminToken,
+			"Promo-"+testutil.UniqueEmail("upload-happy"))
+
+		pdf := testutil.BuildValidContractPDF(t)
+		resp := testutil.PutContractTemplate(t, "/campaigns/"+id.String()+"/contract-template",
+			pdf, testutil.WithHeader("Authorization", "Bearer "+adminToken))
+		body := testutil.ReadBody(t, resp)
+		require.Equal(t, http.StatusOK, resp.StatusCode, string(body))
+
+		var result struct {
+			Data struct {
+				Hash         string   `json:"hash"`
+				Placeholders []string `json:"placeholders"`
+			} `json:"data"`
+		}
+		require.NoError(t, json.Unmarshal(body, &result))
+		require.Len(t, result.Data.Hash, 64)
+		require.Equal(t, []string{"CreatorFIO", "CreatorIIN", "IssuedDate"}, result.Data.Placeholders)
+
+		testutil.AssertAuditEntry(t, c, adminToken, "campaign", id.String(),
+			"campaign.contract_template_uploaded")
+	})
+
+	t.Run("upload empty body returns 422 CONTRACT_REQUIRED", func(t *testing.T) {
+		t.Parallel()
+		id, _ := seedCampaign(t, c, adminToken,
+			"Promo-"+testutil.UniqueEmail("upload-empty"))
+
+		resp := testutil.PutContractTemplate(t, "/campaigns/"+id.String()+"/contract-template",
+			nil, testutil.WithHeader("Authorization", "Bearer "+adminToken))
+		body := testutil.ReadBody(t, resp)
+		require.Equal(t, http.StatusUnprocessableEntity, resp.StatusCode, string(body))
+
+		var errResp struct {
+			Error struct {
+				Code string `json:"code"`
+			} `json:"error"`
+		}
+		require.NoError(t, json.Unmarshal(body, &errResp))
+		require.Equal(t, "CONTRACT_REQUIRED", errResp.Error.Code)
+	})
+
+	t.Run("upload non-pdf body returns 422 CONTRACT_INVALID_PDF", func(t *testing.T) {
+		t.Parallel()
+		id, _ := seedCampaign(t, c, adminToken,
+			"Promo-"+testutil.UniqueEmail("upload-invalid"))
+
+		resp := testutil.PutContractTemplate(t, "/campaigns/"+id.String()+"/contract-template",
+			[]byte("definitely not a pdf"),
+			testutil.WithHeader("Authorization", "Bearer "+adminToken))
+		body := testutil.ReadBody(t, resp)
+		require.Equal(t, http.StatusUnprocessableEntity, resp.StatusCode, string(body))
+
+		var errResp struct {
+			Error struct {
+				Code string `json:"code"`
+			} `json:"error"`
+		}
+		require.NoError(t, json.Unmarshal(body, &errResp))
+		require.Equal(t, "CONTRACT_INVALID_PDF", errResp.Error.Code)
+	})
+
+	t.Run("upload missing placeholder returns 422 with details.missing", func(t *testing.T) {
+		t.Parallel()
+		id, _ := seedCampaign(t, c, adminToken,
+			"Promo-"+testutil.UniqueEmail("upload-missing"))
+
+		// Only FIO and Date — IIN is missing.
+		pdf := testutil.BuildContractPDF(t, []string{"CreatorFIO", "IssuedDate"})
+		resp := testutil.PutContractTemplate(t, "/campaigns/"+id.String()+"/contract-template",
+			pdf, testutil.WithHeader("Authorization", "Bearer "+adminToken))
+		body := testutil.ReadBody(t, resp)
+		require.Equal(t, http.StatusUnprocessableEntity, resp.StatusCode, string(body))
+
+		var errResp struct {
+			Error struct {
+				Code    string `json:"code"`
+				Details struct {
+					Missing []string `json:"missing"`
+				} `json:"details"`
+			} `json:"error"`
+		}
+		require.NoError(t, json.Unmarshal(body, &errResp))
+		require.Equal(t, "CONTRACT_MISSING_PLACEHOLDER", errResp.Error.Code)
+		require.Equal(t, []string{"CreatorIIN"}, errResp.Error.Details.Missing)
+	})
+
+	t.Run("upload unknown placeholder returns 422 with details.unknown", func(t *testing.T) {
+		t.Parallel()
+		id, _ := seedCampaign(t, c, adminToken,
+			"Promo-"+testutil.UniqueEmail("upload-unknown"))
+
+		pdf := testutil.BuildContractPDF(t,
+			[]string{"CreatorFIO", "CreatorIIN", "IssuedDate", "BrandName"})
+		resp := testutil.PutContractTemplate(t, "/campaigns/"+id.String()+"/contract-template",
+			pdf, testutil.WithHeader("Authorization", "Bearer "+adminToken))
+		body := testutil.ReadBody(t, resp)
+		require.Equal(t, http.StatusUnprocessableEntity, resp.StatusCode, string(body))
+
+		var errResp struct {
+			Error struct {
+				Code    string `json:"code"`
+				Details struct {
+					Unknown []string `json:"unknown"`
+				} `json:"details"`
+			} `json:"error"`
+		}
+		require.NoError(t, json.Unmarshal(body, &errResp))
+		require.Equal(t, "CONTRACT_UNKNOWN_PLACEHOLDER", errResp.Error.Code)
+		require.Equal(t, []string{"BrandName"}, errResp.Error.Details.Unknown)
+	})
+
+	t.Run("upload replaces existing template", func(t *testing.T) {
+		t.Parallel()
+		campaignID := testutil.SetupCampaignWithContractTemplate(t, c, adminToken,
+			"Promo-"+testutil.UniqueEmail("upload-replace"))
+
+		// First template carries hash X, replace with a slightly modified PDF.
+		// Same placeholders so validation passes; hash differs because the
+		// gofpdf rendering of the extra line changes a few bytes.
+		newPDF := testutil.BuildContractPDF(t,
+			[]string{"CreatorFIO", "CreatorIIN", "IssuedDate"})
+		// Append a marker line so the bytes differ from the seed call.
+		newPDF = append(newPDF, []byte("\n")...) // semantically inert, byte-different
+		resp := testutil.PutContractTemplate(t, "/campaigns/"+campaignID+"/contract-template",
+			newPDF, testutil.WithHeader("Authorization", "Bearer "+adminToken))
+		body := testutil.ReadBody(t, resp)
+		require.Equal(t, http.StatusOK, resp.StatusCode, string(body))
+
+		// At least two audit rows are expected — initial + replace.
+		entries := testutil.ListAuditEntriesByAction(t, c, adminToken,
+			"campaign", campaignID, "campaign.contract_template_uploaded")
+		require.GreaterOrEqual(t, len(entries), 2)
+	})
+
+	t.Run("upload non-existent campaign returns 404", func(t *testing.T) {
+		t.Parallel()
+		ghostID := uuid.NewString()
+		resp := testutil.PutContractTemplate(t, "/campaigns/"+ghostID+"/contract-template",
+			testutil.BuildValidContractPDF(t),
+			testutil.WithHeader("Authorization", "Bearer "+adminToken))
+		body := testutil.ReadBody(t, resp)
+		require.Equal(t, http.StatusNotFound, resp.StatusCode, string(body))
+
+		var errResp struct {
+			Error struct {
+				Code string `json:"code"`
+			} `json:"error"`
+		}
+		require.NoError(t, json.Unmarshal(body, &errResp))
+		require.Equal(t, "CAMPAIGN_NOT_FOUND", errResp.Error.Code)
+	})
+
+	t.Run("upload anonymous returns 401", func(t *testing.T) {
+		t.Parallel()
+		id, _ := seedCampaign(t, c, adminToken,
+			"Promo-"+testutil.UniqueEmail("upload-anon"))
+		resp := testutil.PutContractTemplate(t, "/campaigns/"+id.String()+"/contract-template",
+			testutil.BuildValidContractPDF(t))
+		defer resp.Body.Close()
+		require.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+	})
+
+	t.Run("upload manager returns 403", func(t *testing.T) {
+		t.Parallel()
+		brandID := testutil.SetupBrand(t, c, adminToken,
+			"Brand-"+testutil.UniqueEmail("upload-mgr"))
+		_, mgrToken, _ := testutil.SetupManagerWithLogin(t, c, adminToken, brandID)
+		id, _ := seedCampaign(t, c, adminToken,
+			"Promo-"+testutil.UniqueEmail("upload-mgr-c"))
+
+		resp := testutil.PutContractTemplate(t, "/campaigns/"+id.String()+"/contract-template",
+			testutil.BuildValidContractPDF(t),
+			testutil.WithHeader("Authorization", "Bearer "+mgrToken))
+		defer resp.Body.Close()
+		require.Equal(t, http.StatusForbidden, resp.StatusCode)
+	})
+
+	t.Run("get happy path returns pdf bytes", func(t *testing.T) {
+		t.Parallel()
+		campaignID := testutil.SetupCampaignWithContractTemplate(t, c, adminToken,
+			"Promo-"+testutil.UniqueEmail("get-happy"))
+
+		resp := testutil.GetContractTemplate(t, "/campaigns/"+campaignID+"/contract-template",
+			testutil.WithHeader("Authorization", "Bearer "+adminToken))
+		body := testutil.ReadBody(t, resp)
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+		require.Equal(t, "application/pdf", resp.Header.Get("Content-Type"))
+		require.Greater(t, len(body), 0)
+		require.True(t, strings.HasPrefix(string(body), "%PDF"),
+			"body must start with the PDF magic header, got: %q", string(body[:min(8, len(body))]))
+	})
+
+	t.Run("get without uploaded template returns 404 CONTRACT_TEMPLATE_NOT_FOUND", func(t *testing.T) {
+		t.Parallel()
+		id, _ := seedCampaign(t, c, adminToken,
+			"Promo-"+testutil.UniqueEmail("get-empty"))
+
+		resp := testutil.GetContractTemplate(t, "/campaigns/"+id.String()+"/contract-template",
+			testutil.WithHeader("Authorization", "Bearer "+adminToken))
+		body := testutil.ReadBody(t, resp)
+		require.Equal(t, http.StatusNotFound, resp.StatusCode, string(body))
+
+		var errResp struct {
+			Error struct {
+				Code string `json:"code"`
+			} `json:"error"`
+		}
+		require.NoError(t, json.Unmarshal(body, &errResp))
+		require.Equal(t, "CONTRACT_TEMPLATE_NOT_FOUND", errResp.Error.Code)
+	})
+
+	t.Run("get non-existent campaign returns 404 CAMPAIGN_NOT_FOUND", func(t *testing.T) {
+		t.Parallel()
+		ghostID := uuid.NewString()
+		resp := testutil.GetContractTemplate(t, "/campaigns/"+ghostID+"/contract-template",
+			testutil.WithHeader("Authorization", "Bearer "+adminToken))
+		body := testutil.ReadBody(t, resp)
+		require.Equal(t, http.StatusNotFound, resp.StatusCode, string(body))
+
+		var errResp struct {
+			Error struct {
+				Code string `json:"code"`
+			} `json:"error"`
+		}
+		require.NoError(t, json.Unmarshal(body, &errResp))
+		require.Equal(t, "CAMPAIGN_NOT_FOUND", errResp.Error.Code)
+	})
+
+	t.Run("get anonymous returns 401", func(t *testing.T) {
+		t.Parallel()
+		id, _ := seedCampaign(t, c, adminToken,
+			"Promo-"+testutil.UniqueEmail("get-anon"))
+		resp := testutil.GetContractTemplate(t, "/campaigns/"+id.String()+"/contract-template")
+		defer resp.Body.Close()
+		require.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+	})
+
+	t.Run("get manager returns 403", func(t *testing.T) {
+		t.Parallel()
+		brandID := testutil.SetupBrand(t, c, adminToken,
+			"Brand-"+testutil.UniqueEmail("get-mgr"))
+		_, mgrToken, _ := testutil.SetupManagerWithLogin(t, c, adminToken, brandID)
+		id, _ := seedCampaign(t, c, adminToken,
+			"Promo-"+testutil.UniqueEmail("get-mgr-c"))
+		resp := testutil.GetContractTemplate(t, "/campaigns/"+id.String()+"/contract-template",
+			testutil.WithHeader("Authorization", "Bearer "+mgrToken))
+		defer resp.Body.Close()
+		require.Equal(t, http.StatusForbidden, resp.StatusCode)
+	})
+
+	t.Run("hasContractTemplate flag toggles in GET /campaigns/{id}", func(t *testing.T) {
+		t.Parallel()
+		id, _ := seedCampaign(t, c, adminToken,
+			"Promo-"+testutil.UniqueEmail("flag-toggle"))
+
+		before, err := c.GetCampaignWithResponse(context.Background(),
+			id, testutil.WithAuth(adminToken))
+		require.NoError(t, err)
+		require.Equal(t, http.StatusOK, before.StatusCode())
+		require.NotNil(t, before.JSON200)
+		require.False(t, before.JSON200.Data.HasContractTemplate)
+
+		resp := testutil.PutContractTemplate(t, "/campaigns/"+id.String()+"/contract-template",
+			testutil.BuildValidContractPDF(t),
+			testutil.WithHeader("Authorization", "Bearer "+adminToken))
+		resp.Body.Close()
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+
+		after, err := c.GetCampaignWithResponse(context.Background(),
+			id, testutil.WithAuth(adminToken))
+		require.NoError(t, err)
+		require.Equal(t, http.StatusOK, after.StatusCode())
+		require.NotNil(t, after.JSON200)
+		require.True(t, after.JSON200.Data.HasContractTemplate)
+	})
+}

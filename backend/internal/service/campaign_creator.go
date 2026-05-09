@@ -187,10 +187,11 @@ const (
 // RemindInvitation in one struct so dispatchBatch can look them up instead
 // of switching on op at every step.
 type batchOpSpec struct {
-	allowedStatuses map[string]bool
-	auditAction     string
-	text            string
-	apply           func(repo repository.CampaignCreatorRepo, ctx context.Context, id string) (*repository.CampaignCreatorRow, error)
+	allowedStatuses         map[string]bool
+	auditAction             string
+	text                    string
+	apply                   func(repo repository.CampaignCreatorRepo, ctx context.Context, id string) (*repository.CampaignCreatorRow, error)
+	requireContractTemplate bool
 }
 
 var batchOpSpecs = map[batchOp]batchOpSpec{
@@ -204,6 +205,7 @@ var batchOpSpecs = map[batchOp]batchOpSpec{
 		apply: func(r repository.CampaignCreatorRepo, ctx context.Context, id string) (*repository.CampaignCreatorRow, error) {
 			return r.ApplyInvite(ctx, id)
 		},
+		requireContractTemplate: true,
 	},
 	batchOpRemindInvitation: {
 		allowedStatuses: map[string]bool{
@@ -252,6 +254,9 @@ func (s *CampaignCreatorService) dispatchBatch(ctx context.Context, campaignID s
 	campaign, err := s.getActiveCampaign(ctx, campaignID)
 	if err != nil {
 		return nil, err
+	}
+	if spec.requireContractTemplate && !campaign.HasContractTemplate {
+		return nil, domain.NewContractTemplateRequiredForNotifyError()
 	}
 
 	rows, err := s.repoFactory.NewCampaignCreatorRepo(s.pool).

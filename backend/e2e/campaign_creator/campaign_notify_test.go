@@ -179,10 +179,34 @@ func TestNotifyCampaignCreators(t *testing.T) {
 		require.Equal(t, "CAMPAIGN_NOT_FOUND", resp.JSON404.Error.Code)
 	})
 
+	t.Run("rejects 422 CONTRACT_TEMPLATE_REQUIRED when campaign has no contract template", func(t *testing.T) {
+		t.Parallel()
+		adminClient, adminToken, _ := testutil.SetupAdminClient(t)
+		campaignID := setupCampaign(t, adminClient, adminToken, "ccA4-no-tpl-"+testutil.UniqueEmail("camp"))
+		creator := testutil.SetupApprovedCreator(t, defaultCreatorOpts(testutil.UniqueIIN()[6:]))
+		addCreatorToCampaign(t, adminClient, adminToken, campaignID, creator.CreatorID)
+
+		resp, err := adminClient.NotifyCampaignCreatorsWithResponse(context.Background(), campaignID,
+			apiclient.NotifyCampaignCreatorsJSONRequestBody{
+				CreatorIds: []uuid.UUID{uuid.MustParse(creator.CreatorID)},
+			}, testutil.WithAuth(adminToken))
+		require.NoError(t, err)
+		require.Equal(t, http.StatusUnprocessableEntity, resp.StatusCode())
+
+		var body struct {
+			Error struct {
+				Code string `json:"code"`
+			} `json:"error"`
+		}
+		require.NoError(t, json.Unmarshal(resp.Body, &body))
+		require.Equal(t, "CONTRACT_TEMPLATE_REQUIRED", body.Error.Code)
+	})
+
 	t.Run("batch-invalid: not_in_campaign + wrong_status collected together", func(t *testing.T) {
 		t.Parallel()
 		adminClient, adminToken, _ := testutil.SetupAdminClient(t)
 		campaignID := setupCampaign(t, adminClient, adminToken, "ccA4-422-"+testutil.UniqueEmail("camp"))
+		uploadDummyContractTemplate(t, adminToken, campaignID)
 
 		// Already-attached creator that we will invite once → status moves to
 		// invited; the second A4 call must surface him as wrong_status.
@@ -267,9 +291,18 @@ func TestNotifyCampaignCreators(t *testing.T) {
 	})
 }
 
-// setupCampaignWithTmaURL mirrors setupCampaign but lets the caller pin a
-// specific tmaUrl — chunk-12 spy assertions need the exact URL the bot
-// embedded in the inline web_app button.
+func uploadDummyContractTemplate(t *testing.T, adminToken string, campaignID uuid.UUID) {
+	t.Helper()
+	resp := testutil.PutContractTemplate(t,
+		"/campaigns/"+campaignID.String()+"/contract-template",
+		testutil.BuildValidContractPDF(t),
+		testutil.WithHeader("Authorization", "Bearer "+adminToken))
+	resp.Body.Close()
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+}
+
+// setupCampaignWithTmaURL mirrors setupCampaign но pin'ит tmaUrl и сразу
+// заливает PDF-шаблон — Notify требует шаблон (chunk 9a guard).
 func setupCampaignWithTmaURL(t *testing.T, c *apiclient.ClientWithResponses, adminToken, name, tmaURL string) uuid.UUID {
 	t.Helper()
 	resp, err := c.CreateCampaignWithResponse(context.Background(), apiclient.CreateCampaignJSONRequestBody{
@@ -280,6 +313,12 @@ func setupCampaignWithTmaURL(t *testing.T, c *apiclient.ClientWithResponses, adm
 	require.Equal(t, http.StatusCreated, resp.StatusCode())
 	id := resp.JSON201.Data.Id
 	testutil.RegisterCampaignCleanup(t, id.String())
+	uploadResp := testutil.PutContractTemplate(t,
+		"/campaigns/"+id.String()+"/contract-template",
+		testutil.BuildValidContractPDF(t),
+		testutil.WithHeader("Authorization", "Bearer "+adminToken))
+	uploadResp.Body.Close()
+	require.Equal(t, http.StatusOK, uploadResp.StatusCode)
 	return id
 }
 
@@ -326,6 +365,7 @@ func TestRemindCampaignCreatorsInvitation(t *testing.T) {
 		t.Parallel()
 		adminClient, adminToken, _ := testutil.SetupAdminClient(t)
 		campaignID := setupCampaign(t, adminClient, adminToken, "ccA5-happy-"+testutil.UniqueEmail("camp"))
+		uploadDummyContractTemplate(t, adminToken, campaignID)
 		creator := testutil.SetupApprovedCreator(t, defaultCreatorOpts(testutil.UniqueIIN()[6:]))
 		addCreatorToCampaign(t, adminClient, adminToken, campaignID, creator.CreatorID)
 
@@ -360,6 +400,7 @@ func TestNotifyPartialSuccess(t *testing.T) {
 	t.Parallel()
 	adminClient, adminToken, _ := testutil.SetupAdminClient(t)
 	campaignID := setupCampaign(t, adminClient, adminToken, "ccA4-partial-"+testutil.UniqueEmail("camp"))
+	uploadDummyContractTemplate(t, adminToken, campaignID)
 
 	delivered := testutil.SetupApprovedCreator(t, defaultCreatorOpts(testutil.UniqueIIN()[6:]))
 	failing := testutil.SetupApprovedCreator(t, defaultCreatorOpts(testutil.UniqueIIN()[6:]))

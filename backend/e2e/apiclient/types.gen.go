@@ -405,6 +405,12 @@ type BrandResult struct {
 type Campaign struct {
 	CreatedAt time.Time `json:"createdAt"`
 
+	// HasContractTemplate Whether a contract-template PDF has been uploaded for this campaign.
+	// Computed on the fly from `octet_length(contract_template_pdf) > 0`
+	// so list endpoints stay light — the PDF body itself is only
+	// available via GET /campaigns/{id}/contract-template.
+	HasContractTemplate bool `json:"hasContractTemplate"`
+
 	// Id Server-stamped UUID of the campaign.
 	Id openapi_types.UUID `json:"id"`
 
@@ -590,6 +596,38 @@ type CampaignsListResult struct {
 
 // ConsentType Canonical consent type captured at creator application submission.
 type ConsentType string
+
+// ContractValidationDetails Optional structured details for contract-template upload validation
+// errors. `missing` lists known placeholders absent from the uploaded
+// PDF. `unknown` lists placeholders found in the PDF that are not part
+// of `domain.KnownContractPlaceholders`. Empty for the empty-body /
+// invalid-PDF cases — the code alone identifies them.
+type ContractValidationDetails struct {
+	Missing *[]string `json:"missing,omitempty"`
+	Unknown *[]string `json:"unknown,omitempty"`
+}
+
+// ContractValidationErrorBody defines model for ContractValidationErrorBody.
+type ContractValidationErrorBody struct {
+	// Code One of CONTRACT_REQUIRED / CONTRACT_INVALID_PDF /
+	// CONTRACT_MISSING_PLACEHOLDER / CONTRACT_UNKNOWN_PLACEHOLDER.
+	Code string `json:"code"`
+
+	// Details Optional structured details for contract-template upload validation
+	// errors. `missing` lists known placeholders absent from the uploaded
+	// PDF. `unknown` lists placeholders found in the PDF that are not part
+	// of `domain.KnownContractPlaceholders`. Empty for the empty-body /
+	// invalid-PDF cases — the code alone identifies them.
+	Details *ContractValidationDetails `json:"details,omitempty"`
+
+	// Message Human-readable fallback message for the admin UI.
+	Message string `json:"message"`
+}
+
+// ContractValidationErrorResponse defines model for ContractValidationErrorResponse.
+type ContractValidationErrorResponse struct {
+	Error ContractValidationErrorBody `json:"error"`
+}
 
 // CreatorAggregate Full creator profile assembled from `creators` plus the snapshot tables
 // `creator_socials` and `creator_categories`. The Telegram block is
@@ -1334,6 +1372,30 @@ type TmaDecisionResult struct {
 	// - `declined` — creator declined via TMA.
 	// - `agreed` — creator accepted via TMA. Terminal for the current scope.
 	Status CampaignCreatorStatus `json:"status"`
+}
+
+// UploadCampaignContractTemplateData Result of a successful PUT /campaigns/{id}/contract-template upload.
+// Echoes the placeholders extracted from the freshly stored PDF so the
+// admin UI can render a confirmation block ("found CreatorFIO,
+// CreatorIIN, IssuedDate") without a follow-up download.
+type UploadCampaignContractTemplateData struct {
+	// Hash SHA-256 hash of the raw uploaded PDF bytes (lowercase hex).
+	Hash string `json:"hash"`
+
+	// Placeholders Distinct placeholder names found in the template. After successful
+	// validation this set always equals the known set
+	// (`CreatorFIO`, `CreatorIIN`, `IssuedDate`) — order matches
+	// `domain.KnownContractPlaceholders`.
+	Placeholders []string `json:"placeholders"`
+}
+
+// UploadCampaignContractTemplateResult defines model for UploadCampaignContractTemplateResult.
+type UploadCampaignContractTemplateResult struct {
+	// Data Result of a successful PUT /campaigns/{id}/contract-template upload.
+	// Echoes the placeholders extracted from the freshly stored PDF so the
+	// admin UI can render a confirmation block ("found CreatorFIO,
+	// CreatorIIN, IssuedDate") without a follow-up download.
+	Data UploadCampaignContractTemplateData `json:"data"`
 }
 
 // User defines model for User.

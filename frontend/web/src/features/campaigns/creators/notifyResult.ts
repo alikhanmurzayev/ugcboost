@@ -12,6 +12,7 @@ export const MAX_NOTIFY_BATCH = 200;
 export type SectionResultKind =
   | "success"
   | "validation_error"
+  | "contract_template_required"
   | "validation_unknown"
   | "network_error";
 
@@ -59,6 +60,9 @@ export function parseSettled(
         validationDetails,
         detailNames: namesSnapshot,
       };
+    }
+    if (error.code === "CONTRACT_TEMPLATE_REQUIRED") {
+      return { kind: "contract_template_required" };
     }
     return { kind: "validation_unknown" };
   }

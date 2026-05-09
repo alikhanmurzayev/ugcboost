@@ -40,7 +40,7 @@ type Config struct {
 	ReadTimeout     time.Duration `env:"READ_TIMEOUT" envDefault:"10s"`
 	WriteTimeout    time.Duration `env:"WRITE_TIMEOUT" envDefault:"30s"`
 	IdleTimeout     time.Duration `env:"IDLE_TIMEOUT" envDefault:"60s"`
-	BodyLimitBytes  int           `env:"BODY_LIMIT_BYTES" envDefault:"1048576"` // 1 MB
+	BodyLimitBytes  int           `env:"BODY_LIMIT_BYTES" envDefault:"5242880"` // 5 MB — accommodates raw-PDF uploads on PUT /campaigns/{id}/contract-template (Google-Docs export typical 100 KB – 2 MB; legal-style scans up to ~3 MB).
 	ShutdownTimeout time.Duration `env:"SHUTDOWN_TIMEOUT" envDefault:"10s"`
 
 	// Pagination

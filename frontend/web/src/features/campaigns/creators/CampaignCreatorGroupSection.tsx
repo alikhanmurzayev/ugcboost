@@ -244,6 +244,18 @@ function ResultBlock({ status, result, t, testidBase }: ResultBlockProps) {
     );
   }
 
+  if (result.kind === "contract_template_required") {
+    return (
+      <p
+        className="mt-3 rounded-button border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800"
+        role="alert"
+        data-testid={`${testidBase}-contract-template-required`}
+      >
+        {t("campaignCreators.result.contractTemplateRequired")}
+      </p>
+    );
+  }
+
   if (result.kind === "validation_unknown") {
     return (
       <p

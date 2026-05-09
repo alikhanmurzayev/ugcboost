@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	"github.com/alikhanmurzayev/ugcboost/backend/internal/contract"
 	dbmocks "github.com/alikhanmurzayev/ugcboost/backend/internal/dbutil/mocks"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/domain"
 	logmocks "github.com/alikhanmurzayev/ugcboost/backend/internal/logger/mocks"
@@ -36,7 +37,7 @@ func TestCampaignService_CreateCampaign(t *testing.T) {
 		campaigns.EXPECT().Create(mock.Anything, "Promo X", "https://tma.ugcboost.kz/tz/abc_padding_secrettokenxx", "abc_padding_secrettokenxx").
 			Return((*repository.CampaignRow)(nil), errors.New("db error"))
 
-		svc := NewCampaignService(pool, factory, logmocks.NewMockLogger(t))
+		svc := NewCampaignService(pool, factory, nil, logmocks.NewMockLogger(t))
 		_, err := svc.CreateCampaign(context.Background(), domain.CampaignInput{Name: "Promo X", TmaURL: "https://tma.ugcboost.kz/tz/abc_padding_secrettokenxx"})
 		require.ErrorContains(t, err, "db error")
 	})
@@ -54,7 +55,7 @@ func TestCampaignService_CreateCampaign(t *testing.T) {
 		campaigns.EXPECT().Create(mock.Anything, "Promo X", "https://tma.ugcboost.kz/tz/abc_padding_secrettokenxx", "abc_padding_secrettokenxx").
 			Return((*repository.CampaignRow)(nil), domain.ErrCampaignNameTaken)
 
-		svc := NewCampaignService(pool, factory, logmocks.NewMockLogger(t))
+		svc := NewCampaignService(pool, factory, nil, logmocks.NewMockLogger(t))
 		_, err := svc.CreateCampaign(context.Background(), domain.CampaignInput{Name: "Promo X", TmaURL: "https://tma.ugcboost.kz/tz/abc_padding_secrettokenxx"})
 		require.ErrorIs(t, err, domain.ErrCampaignNameTaken)
 	})
@@ -81,7 +82,7 @@ func TestCampaignService_CreateCampaign(t *testing.T) {
 			}, nil)
 		audit.EXPECT().Create(mock.Anything, mock.Anything).Return(errors.New("audit failed"))
 
-		svc := NewCampaignService(pool, factory, logmocks.NewMockLogger(t))
+		svc := NewCampaignService(pool, factory, nil, logmocks.NewMockLogger(t))
 		_, err := svc.CreateCampaign(context.Background(), domain.CampaignInput{Name: "Promo X", TmaURL: "https://tma.ugcboost.kz/tz/abc_padding_secrettokenxx"})
 		require.ErrorContains(t, err, "audit failed")
 	})
@@ -131,7 +132,7 @@ func TestCampaignService_CreateCampaign(t *testing.T) {
 			}).Return(nil).Once()
 		log.EXPECT().Info(mock.Anything, "campaign created", []any{"campaign_id", "c-1"}).Once()
 
-		svc := NewCampaignService(pool, factory, log)
+		svc := NewCampaignService(pool, factory, nil, log)
 		got, err := svc.CreateCampaign(context.Background(), domain.CampaignInput{Name: "Promo X", TmaURL: "https://tma.ugcboost.kz/tz/abc_padding_secrettokenxx"})
 		require.NoError(t, err)
 		require.Equal(t, expected, got)
@@ -151,7 +152,7 @@ func TestCampaignService_GetByID(t *testing.T) {
 		campaigns.EXPECT().GetByID(mock.Anything, "missing").
 			Return((*repository.CampaignRow)(nil), sql.ErrNoRows)
 
-		svc := NewCampaignService(pool, factory, logmocks.NewMockLogger(t))
+		svc := NewCampaignService(pool, factory, nil, logmocks.NewMockLogger(t))
 		_, err := svc.GetByID(context.Background(), "missing")
 		require.ErrorIs(t, err, domain.ErrCampaignNotFound)
 	})
@@ -166,7 +167,7 @@ func TestCampaignService_GetByID(t *testing.T) {
 		campaigns.EXPECT().GetByID(mock.Anything, "c-1").
 			Return((*repository.CampaignRow)(nil), errors.New("db unavailable"))
 
-		svc := NewCampaignService(pool, factory, logmocks.NewMockLogger(t))
+		svc := NewCampaignService(pool, factory, nil, logmocks.NewMockLogger(t))
 		_, err := svc.GetByID(context.Background(), "c-1")
 		require.ErrorContains(t, err, "get campaign")
 		require.ErrorContains(t, err, "db unavailable")
@@ -190,7 +191,7 @@ func TestCampaignService_GetByID(t *testing.T) {
 				UpdatedAt: created,
 			}, nil)
 
-		svc := NewCampaignService(pool, factory, logmocks.NewMockLogger(t))
+		svc := NewCampaignService(pool, factory, nil, logmocks.NewMockLogger(t))
 		got, err := svc.GetByID(context.Background(), "c-1")
 		require.NoError(t, err)
 		require.Equal(t, &domain.Campaign{
@@ -220,7 +221,7 @@ func TestCampaignService_UpdateCampaign(t *testing.T) {
 		campaigns.EXPECT().GetByID(mock.Anything, "missing").
 			Return((*repository.CampaignRow)(nil), sql.ErrNoRows)
 
-		svc := NewCampaignService(pool, factory, logmocks.NewMockLogger(t))
+		svc := NewCampaignService(pool, factory, nil, logmocks.NewMockLogger(t))
 		err := svc.UpdateCampaign(context.Background(), "missing",
 			domain.CampaignInput{Name: "Promo Y", TmaURL: "https://tma.ugcboost.kz/tz/new_padding_secrettokenxx"})
 		require.ErrorIs(t, err, domain.ErrCampaignNotFound)
@@ -239,7 +240,7 @@ func TestCampaignService_UpdateCampaign(t *testing.T) {
 		campaigns.EXPECT().GetByID(mock.Anything, "c-1").
 			Return((*repository.CampaignRow)(nil), errors.New("db unavailable"))
 
-		svc := NewCampaignService(pool, factory, logmocks.NewMockLogger(t))
+		svc := NewCampaignService(pool, factory, nil, logmocks.NewMockLogger(t))
 		err := svc.UpdateCampaign(context.Background(), "c-1",
 			domain.CampaignInput{Name: "Promo Y", TmaURL: "https://tma.ugcboost.kz/tz/new_padding_secrettokenxx"})
 		require.ErrorContains(t, err, "get campaign")
@@ -267,7 +268,7 @@ func TestCampaignService_UpdateCampaign(t *testing.T) {
 				UpdatedAt: created,
 			}, nil)
 
-		svc := NewCampaignService(pool, factory, logmocks.NewMockLogger(t))
+		svc := NewCampaignService(pool, factory, nil, logmocks.NewMockLogger(t))
 		err := svc.UpdateCampaign(context.Background(), "c-1",
 			domain.CampaignInput{Name: "Promo Y", TmaURL: "https://tma.ugcboost.kz/tz/new_padding_secrettokenxx"})
 		require.ErrorIs(t, err, domain.ErrCampaignNotFound)
@@ -299,7 +300,7 @@ func TestCampaignService_UpdateCampaign(t *testing.T) {
 		campaigns.EXPECT().Update(mock.Anything, "c-1", "Promo Y", "https://tma.ugcboost.kz/tz/new_padding_secrettokenxx", "new_padding_secrettokenxx").
 			Return((*repository.CampaignRow)(nil), sql.ErrNoRows)
 
-		svc := NewCampaignService(pool, factory, logmocks.NewMockLogger(t))
+		svc := NewCampaignService(pool, factory, nil, logmocks.NewMockLogger(t))
 		err := svc.UpdateCampaign(context.Background(), "c-1",
 			domain.CampaignInput{Name: "Promo Y", TmaURL: "https://tma.ugcboost.kz/tz/new_padding_secrettokenxx"})
 		require.ErrorIs(t, err, domain.ErrCampaignNotFound)
@@ -331,7 +332,7 @@ func TestCampaignService_UpdateCampaign(t *testing.T) {
 		campaigns.EXPECT().Update(mock.Anything, "c-1", "Promo Y", "https://tma.ugcboost.kz/tz/new_padding_secrettokenxx", "new_padding_secrettokenxx").
 			Return((*repository.CampaignRow)(nil), domain.ErrCampaignNameTaken)
 
-		svc := NewCampaignService(pool, factory, logmocks.NewMockLogger(t))
+		svc := NewCampaignService(pool, factory, nil, logmocks.NewMockLogger(t))
 		err := svc.UpdateCampaign(context.Background(), "c-1",
 			domain.CampaignInput{Name: "Promo Y", TmaURL: "https://tma.ugcboost.kz/tz/new_padding_secrettokenxx"})
 		require.ErrorIs(t, err, domain.ErrCampaignNameTaken)
@@ -363,7 +364,7 @@ func TestCampaignService_UpdateCampaign(t *testing.T) {
 		campaigns.EXPECT().Update(mock.Anything, "c-1", "Promo Y", "https://tma.ugcboost.kz/tz/new_padding_secrettokenxx", "new_padding_secrettokenxx").
 			Return((*repository.CampaignRow)(nil), errors.New("db unavailable"))
 
-		svc := NewCampaignService(pool, factory, logmocks.NewMockLogger(t))
+		svc := NewCampaignService(pool, factory, nil, logmocks.NewMockLogger(t))
 		err := svc.UpdateCampaign(context.Background(), "c-1",
 			domain.CampaignInput{Name: "Promo Y", TmaURL: "https://tma.ugcboost.kz/tz/new_padding_secrettokenxx"})
 		require.ErrorContains(t, err, "update campaign")
@@ -405,7 +406,7 @@ func TestCampaignService_UpdateCampaign(t *testing.T) {
 			}, nil)
 		audit.EXPECT().Create(mock.Anything, mock.Anything).Return(errors.New("audit failed"))
 
-		svc := NewCampaignService(pool, factory, logmocks.NewMockLogger(t))
+		svc := NewCampaignService(pool, factory, nil, logmocks.NewMockLogger(t))
 		err := svc.UpdateCampaign(context.Background(), "c-1",
 			domain.CampaignInput{Name: "Promo Y", TmaURL: "https://tma.ugcboost.kz/tz/new_padding_secrettokenxx"})
 		require.ErrorContains(t, err, "audit failed")
@@ -481,7 +482,7 @@ func TestCampaignService_UpdateCampaign(t *testing.T) {
 			}).Return(nil).Once()
 		log.EXPECT().Info(mock.Anything, "campaign updated", []any{"campaign_id", "c-1"}).Once()
 
-		svc := NewCampaignService(pool, factory, log)
+		svc := NewCampaignService(pool, factory, nil, log)
 		err = svc.UpdateCampaign(context.Background(), "c-1",
 			domain.CampaignInput{Name: "Promo Y", TmaURL: "https://tma.ugcboost.kz/tz/new_padding_secrettokenxx"})
 		require.NoError(t, err)
@@ -511,7 +512,7 @@ func TestCampaignService_UpdateCampaign(t *testing.T) {
 			}, nil)
 		ccRepo.EXPECT().ExistsInvitedInCampaign(mock.Anything, "c-1").Return(true, nil)
 
-		svc := NewCampaignService(pool, factory, logmocks.NewMockLogger(t))
+		svc := NewCampaignService(pool, factory, nil, logmocks.NewMockLogger(t))
 		err := svc.UpdateCampaign(context.Background(), "c-1",
 			domain.CampaignInput{Name: "Promo Y", TmaURL: "https://tma.ugcboost.kz/tz/new_padding_secrettokenxx"})
 		require.ErrorIs(t, err, domain.ErrCampaignTmaURLLocked)
@@ -553,7 +554,7 @@ func TestCampaignService_UpdateCampaign(t *testing.T) {
 		audit.EXPECT().Create(mock.Anything, mock.Anything).Return(nil).Once()
 		log.EXPECT().Info(mock.Anything, "campaign updated", mock.Anything).Once()
 
-		svc := NewCampaignService(pool, factory, log)
+		svc := NewCampaignService(pool, factory, nil, log)
 		err := svc.UpdateCampaign(context.Background(), "c-1",
 			domain.CampaignInput{Name: "Promo Y", TmaURL: "https://tma.ugcboost.kz/tz/abc_padding_secrettokenxx"})
 		require.NoError(t, err)
@@ -580,7 +581,7 @@ func TestCampaignService_UpdateCampaign(t *testing.T) {
 		ccRepo.EXPECT().ExistsInvitedInCampaign(mock.Anything, "c-1").
 			Return(false, errors.New("db down"))
 
-		svc := NewCampaignService(pool, factory, logmocks.NewMockLogger(t))
+		svc := NewCampaignService(pool, factory, nil, logmocks.NewMockLogger(t))
 		err := svc.UpdateCampaign(context.Background(), "c-1",
 			domain.CampaignInput{Name: "Promo Y", TmaURL: "https://tma.ugcboost.kz/tz/new_padding_secrettokenxx"})
 		require.ErrorContains(t, err, "check tma_url lock")
@@ -615,7 +616,7 @@ func TestCampaignService_List(t *testing.T) {
 			}).
 			Return(nil, int64(0), errors.New("db down"))
 
-		svc := NewCampaignService(pool, factory, logmocks.NewMockLogger(t))
+		svc := NewCampaignService(pool, factory, nil, logmocks.NewMockLogger(t))
 		_, err := svc.List(context.Background(), domain.CampaignListInput{
 			Search:  "  PROMO  ", // trim + lowercase happen in the service
 			Sort:    domain.CampaignSortCreatedAt,
@@ -637,7 +638,7 @@ func TestCampaignService_List(t *testing.T) {
 		campaigns.EXPECT().List(mock.Anything, mock.Anything).
 			Return(nil, int64(0), nil)
 
-		svc := NewCampaignService(pool, factory, logmocks.NewMockLogger(t))
+		svc := NewCampaignService(pool, factory, nil, logmocks.NewMockLogger(t))
 		got, err := svc.List(context.Background(), domain.CampaignListInput{
 			Sort:    domain.CampaignSortCreatedAt,
 			Order:   domain.SortOrderAsc,
@@ -679,7 +680,7 @@ func TestCampaignService_List(t *testing.T) {
 				{ID: "c-2", Name: "Promo B", TmaURL: "https://tma.ugcboost.kz/tz/b_padding_secrettokenxxxx", IsDeleted: true, CreatedAt: created, UpdatedAt: updated},
 			}, int64(7), nil)
 
-		svc := NewCampaignService(pool, factory, logmocks.NewMockLogger(t))
+		svc := NewCampaignService(pool, factory, nil, logmocks.NewMockLogger(t))
 		got, err := svc.List(context.Background(), domain.CampaignListInput{
 			Search:    "promo",
 			IsDeleted: &isDeleted,
@@ -709,7 +710,7 @@ func TestCampaignService_AssertActiveCampaigns(t *testing.T) {
 		pool := dbmocks.NewMockPool(t)
 		factory := svcmocks.NewMockCampaignRepoFactory(t)
 
-		svc := NewCampaignService(pool, factory, logmocks.NewMockLogger(t))
+		svc := NewCampaignService(pool, factory, nil, logmocks.NewMockLogger(t))
 		require.NoError(t, svc.AssertActiveCampaigns(context.Background(), nil))
 		require.NoError(t, svc.AssertActiveCampaigns(context.Background(), []string{}))
 	})
@@ -724,7 +725,7 @@ func TestCampaignService_AssertActiveCampaigns(t *testing.T) {
 		campaigns.EXPECT().ListByIDs(mock.Anything, []string{"c-1"}).
 			Return(nil, errors.New("db unavailable"))
 
-		svc := NewCampaignService(pool, factory, logmocks.NewMockLogger(t))
+		svc := NewCampaignService(pool, factory, nil, logmocks.NewMockLogger(t))
 		err := svc.AssertActiveCampaigns(context.Background(), []string{"c-1"})
 		require.ErrorContains(t, err, "list campaigns by ids")
 		require.ErrorContains(t, err, "db unavailable")
@@ -744,7 +745,7 @@ func TestCampaignService_AssertActiveCampaigns(t *testing.T) {
 				{ID: "c-2", Name: "B", TmaURL: "u-b", IsDeleted: false, CreatedAt: created, UpdatedAt: created},
 			}, nil)
 
-		svc := NewCampaignService(pool, factory, logmocks.NewMockLogger(t))
+		svc := NewCampaignService(pool, factory, nil, logmocks.NewMockLogger(t))
 		require.NoError(t, svc.AssertActiveCampaigns(context.Background(), []string{"c-1", "c-2"}))
 	})
 
@@ -761,7 +762,7 @@ func TestCampaignService_AssertActiveCampaigns(t *testing.T) {
 				{ID: "c-1", Name: "A", TmaURL: "u-a", IsDeleted: false, CreatedAt: created, UpdatedAt: created},
 			}, nil)
 
-		svc := NewCampaignService(pool, factory, logmocks.NewMockLogger(t))
+		svc := NewCampaignService(pool, factory, nil, logmocks.NewMockLogger(t))
 		err := svc.AssertActiveCampaigns(context.Background(), []string{"c-1", "c-missing"})
 		require.ErrorIs(t, err, domain.ErrCampaignNotAvailableForAdd)
 	})
@@ -780,8 +781,259 @@ func TestCampaignService_AssertActiveCampaigns(t *testing.T) {
 				{ID: "c-deleted", Name: "B", TmaURL: "u-b", IsDeleted: true, CreatedAt: created, UpdatedAt: created},
 			}, nil)
 
-		svc := NewCampaignService(pool, factory, logmocks.NewMockLogger(t))
+		svc := NewCampaignService(pool, factory, nil, logmocks.NewMockLogger(t))
 		err := svc.AssertActiveCampaigns(context.Background(), []string{"c-1", "c-deleted"})
 		require.ErrorIs(t, err, domain.ErrCampaignNotAvailableForAdd)
+	})
+}
+
+func TestCampaignService_UploadContractTemplate(t *testing.T) {
+	t.Parallel()
+
+	const campaignID = "c-1"
+	validPDF := []byte("%PDF-1.4 fake template body")
+
+	t.Run("empty body returns ContractRequired", func(t *testing.T) {
+		t.Parallel()
+		pool := dbmocks.NewMockPool(t)
+		factory := svcmocks.NewMockCampaignRepoFactory(t)
+		extractor := svcmocks.NewMockContractExtractor(t)
+
+		svc := NewCampaignService(pool, factory, extractor, logmocks.NewMockLogger(t))
+		_, err := svc.UploadContractTemplate(context.Background(), campaignID, nil)
+		var cve *domain.ContractValidationError
+		require.ErrorAs(t, err, &cve)
+		require.Equal(t, domain.CodeContractRequired, cve.Code)
+	})
+
+	t.Run("extractor failure returns ContractInvalidPDF", func(t *testing.T) {
+		t.Parallel()
+		pool := dbmocks.NewMockPool(t)
+		factory := svcmocks.NewMockCampaignRepoFactory(t)
+		extractor := svcmocks.NewMockContractExtractor(t)
+
+		extractor.EXPECT().ExtractPlaceholders(validPDF).
+			Return(nil, errors.New("pdf.NewReader: malformed"))
+
+		svc := NewCampaignService(pool, factory, extractor, logmocks.NewMockLogger(t))
+		_, err := svc.UploadContractTemplate(context.Background(), campaignID, validPDF)
+		var cve *domain.ContractValidationError
+		require.ErrorAs(t, err, &cve)
+		require.Equal(t, domain.CodeContractInvalidPDF, cve.Code)
+	})
+
+	t.Run("missing placeholder returns ContractMissingPlaceholder with details", func(t *testing.T) {
+		t.Parallel()
+		pool := dbmocks.NewMockPool(t)
+		factory := svcmocks.NewMockCampaignRepoFactory(t)
+		extractor := svcmocks.NewMockContractExtractor(t)
+
+		extractor.EXPECT().ExtractPlaceholders(validPDF).
+			Return([]contract.Placeholder{
+				{Page: 1, Name: "CreatorFIO"},
+				{Page: 1, Name: "CreatorIIN"},
+			}, nil)
+
+		svc := NewCampaignService(pool, factory, extractor, logmocks.NewMockLogger(t))
+		_, err := svc.UploadContractTemplate(context.Background(), campaignID, validPDF)
+		var cve *domain.ContractValidationError
+		require.ErrorAs(t, err, &cve)
+		require.Equal(t, domain.CodeContractMissingPlaceholder, cve.Code)
+		require.Equal(t, []string{"IssuedDate"}, cve.Missing)
+	})
+
+	t.Run("unknown placeholder returns ContractUnknownPlaceholder with details", func(t *testing.T) {
+		t.Parallel()
+		pool := dbmocks.NewMockPool(t)
+		factory := svcmocks.NewMockCampaignRepoFactory(t)
+		extractor := svcmocks.NewMockContractExtractor(t)
+
+		extractor.EXPECT().ExtractPlaceholders(validPDF).
+			Return([]contract.Placeholder{
+				{Page: 1, Name: "CreatorFIO"},
+				{Page: 1, Name: "CreatorIIN"},
+				{Page: 1, Name: "IssuedDate"},
+				{Page: 1, Name: "BrandName"},
+			}, nil)
+
+		svc := NewCampaignService(pool, factory, extractor, logmocks.NewMockLogger(t))
+		_, err := svc.UploadContractTemplate(context.Background(), campaignID, validPDF)
+		var cve *domain.ContractValidationError
+		require.ErrorAs(t, err, &cve)
+		require.Equal(t, domain.CodeContractUnknownPlaceholder, cve.Code)
+		require.Equal(t, []string{"BrandName"}, cve.Unknown)
+	})
+
+	t.Run("repo update sql.ErrNoRows maps to ErrCampaignNotFound", func(t *testing.T) {
+		t.Parallel()
+		pool := dbmocks.NewMockPool(t)
+		factory := svcmocks.NewMockCampaignRepoFactory(t)
+		extractor := svcmocks.NewMockContractExtractor(t)
+		campaigns := repomocks.NewMockCampaignRepo(t)
+		audit := repomocks.NewMockAuditRepo(t)
+
+		extractor.EXPECT().ExtractPlaceholders(validPDF).
+			Return([]contract.Placeholder{
+				{Page: 1, Name: "CreatorFIO"},
+				{Page: 1, Name: "CreatorIIN"},
+				{Page: 1, Name: "IssuedDate"},
+			}, nil)
+		pool.EXPECT().Begin(mock.Anything).Return(testTx{}, nil)
+		factory.EXPECT().NewCampaignRepo(mock.Anything).Return(campaigns)
+		factory.EXPECT().NewAuditRepo(mock.Anything).Return(audit)
+		campaigns.EXPECT().UpdateContractTemplate(mock.Anything, campaignID, validPDF).
+			Return(sql.ErrNoRows)
+
+		svc := NewCampaignService(pool, factory, extractor, logmocks.NewMockLogger(t))
+		_, err := svc.UploadContractTemplate(context.Background(), campaignID, validPDF)
+		require.ErrorIs(t, err, domain.ErrCampaignNotFound)
+	})
+
+	t.Run("repo update other error wrapped", func(t *testing.T) {
+		t.Parallel()
+		pool := dbmocks.NewMockPool(t)
+		factory := svcmocks.NewMockCampaignRepoFactory(t)
+		extractor := svcmocks.NewMockContractExtractor(t)
+		campaigns := repomocks.NewMockCampaignRepo(t)
+		audit := repomocks.NewMockAuditRepo(t)
+
+		extractor.EXPECT().ExtractPlaceholders(validPDF).
+			Return([]contract.Placeholder{
+				{Page: 1, Name: "CreatorFIO"},
+				{Page: 1, Name: "CreatorIIN"},
+				{Page: 1, Name: "IssuedDate"},
+			}, nil)
+		pool.EXPECT().Begin(mock.Anything).Return(testTx{}, nil)
+		factory.EXPECT().NewCampaignRepo(mock.Anything).Return(campaigns)
+		factory.EXPECT().NewAuditRepo(mock.Anything).Return(audit)
+		campaigns.EXPECT().UpdateContractTemplate(mock.Anything, campaignID, validPDF).
+			Return(errors.New("db unavailable"))
+
+		svc := NewCampaignService(pool, factory, extractor, logmocks.NewMockLogger(t))
+		_, err := svc.UploadContractTemplate(context.Background(), campaignID, validPDF)
+		require.ErrorContains(t, err, "update contract template")
+		require.ErrorContains(t, err, "db unavailable")
+	})
+
+	t.Run("happy path writes audit + returns hash and placeholders", func(t *testing.T) {
+		t.Parallel()
+		pool := dbmocks.NewMockPool(t)
+		factory := svcmocks.NewMockCampaignRepoFactory(t)
+		extractor := svcmocks.NewMockContractExtractor(t)
+		campaigns := repomocks.NewMockCampaignRepo(t)
+		audit := repomocks.NewMockAuditRepo(t)
+		log := logmocks.NewMockLogger(t)
+
+		extractor.EXPECT().ExtractPlaceholders(validPDF).
+			Return([]contract.Placeholder{
+				{Page: 1, Name: "CreatorFIO"},
+				{Page: 1, Name: "CreatorIIN"},
+				{Page: 1, Name: "IssuedDate"},
+			}, nil)
+		pool.EXPECT().Begin(mock.Anything).Return(testTx{}, nil)
+		factory.EXPECT().NewCampaignRepo(mock.Anything).Return(campaigns)
+		factory.EXPECT().NewAuditRepo(mock.Anything).Return(audit)
+		campaigns.EXPECT().UpdateContractTemplate(mock.Anything, campaignID, validPDF).
+			Return(nil)
+
+		var capturedAuditNewValue []byte
+		audit.EXPECT().Create(mock.Anything, mock.Anything).
+			Run(func(_ context.Context, row repository.AuditLogRow) {
+				require.Equal(t, AuditActionCampaignContractTemplateUploaded, row.Action)
+				require.Equal(t, AuditEntityTypeCampaign, row.EntityType)
+				require.Equal(t, pointer.ToString(campaignID), row.EntityID)
+				require.Nil(t, row.OldValue)
+				require.NotEmpty(t, row.NewValue)
+				capturedAuditNewValue = row.NewValue
+			}).Return(nil).Once()
+
+		log.EXPECT().Info(mock.Anything, "contract template uploaded", mock.Anything).Once()
+
+		svc := NewCampaignService(pool, factory, extractor, log)
+		got, err := svc.UploadContractTemplate(context.Background(), campaignID, validPDF)
+		require.NoError(t, err)
+		require.Len(t, got.Hash, 64)
+		require.Equal(t, domain.KnownContractPlaceholders, got.Placeholders)
+
+		var auditMeta map[string]any
+		require.NoError(t, json.Unmarshal(capturedAuditNewValue, &auditMeta))
+		require.Equal(t, got.Hash, auditMeta["hash"])
+		require.Equal(t, float64(len(validPDF)), auditMeta["size_bytes"])
+		placeholdersAny, ok := auditMeta["placeholders"].([]any)
+		require.True(t, ok)
+		var placeholders []string
+		for _, p := range placeholdersAny {
+			placeholders = append(placeholders, p.(string))
+		}
+		require.Equal(t, domain.KnownContractPlaceholders, placeholders)
+	})
+}
+
+func TestCampaignService_GetContractTemplate(t *testing.T) {
+	t.Parallel()
+
+	const campaignID = "c-1"
+
+	t.Run("not found maps sql.ErrNoRows to ErrCampaignNotFound", func(t *testing.T) {
+		t.Parallel()
+		pool := dbmocks.NewMockPool(t)
+		factory := svcmocks.NewMockCampaignRepoFactory(t)
+		campaigns := repomocks.NewMockCampaignRepo(t)
+
+		factory.EXPECT().NewCampaignRepo(pool).Return(campaigns)
+		campaigns.EXPECT().GetContractTemplate(mock.Anything, campaignID).
+			Return(nil, sql.ErrNoRows)
+
+		svc := NewCampaignService(pool, factory, nil, logmocks.NewMockLogger(t))
+		_, err := svc.GetContractTemplate(context.Background(), campaignID)
+		require.ErrorIs(t, err, domain.ErrCampaignNotFound)
+	})
+
+	t.Run("empty pdf maps to ErrContractTemplateNotFound", func(t *testing.T) {
+		t.Parallel()
+		pool := dbmocks.NewMockPool(t)
+		factory := svcmocks.NewMockCampaignRepoFactory(t)
+		campaigns := repomocks.NewMockCampaignRepo(t)
+
+		factory.EXPECT().NewCampaignRepo(pool).Return(campaigns)
+		campaigns.EXPECT().GetContractTemplate(mock.Anything, campaignID).
+			Return([]byte{}, nil)
+
+		svc := NewCampaignService(pool, factory, nil, logmocks.NewMockLogger(t))
+		_, err := svc.GetContractTemplate(context.Background(), campaignID)
+		require.ErrorIs(t, err, domain.ErrContractTemplateNotFound)
+	})
+
+	t.Run("propagates other repo errors wrapped", func(t *testing.T) {
+		t.Parallel()
+		pool := dbmocks.NewMockPool(t)
+		factory := svcmocks.NewMockCampaignRepoFactory(t)
+		campaigns := repomocks.NewMockCampaignRepo(t)
+
+		factory.EXPECT().NewCampaignRepo(pool).Return(campaigns)
+		campaigns.EXPECT().GetContractTemplate(mock.Anything, campaignID).
+			Return(nil, errors.New("db unavailable"))
+
+		svc := NewCampaignService(pool, factory, nil, logmocks.NewMockLogger(t))
+		_, err := svc.GetContractTemplate(context.Background(), campaignID)
+		require.ErrorContains(t, err, "get contract template")
+		require.ErrorContains(t, err, "db unavailable")
+	})
+
+	t.Run("happy path returns bytes", func(t *testing.T) {
+		t.Parallel()
+		pool := dbmocks.NewMockPool(t)
+		factory := svcmocks.NewMockCampaignRepoFactory(t)
+		campaigns := repomocks.NewMockCampaignRepo(t)
+		pdf := []byte("%PDF-1.4 stored bytes")
+
+		factory.EXPECT().NewCampaignRepo(pool).Return(campaigns)
+		campaigns.EXPECT().GetContractTemplate(mock.Anything, campaignID).
+			Return(pdf, nil)
+
+		svc := NewCampaignService(pool, factory, nil, logmocks.NewMockLogger(t))
+		got, err := svc.GetContractTemplate(context.Background(), campaignID)
+		require.NoError(t, err)
+		require.Equal(t, pdf, got)
 	})
 }

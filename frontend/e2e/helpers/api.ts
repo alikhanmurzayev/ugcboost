@@ -735,6 +735,75 @@ export async function seedCampaign(
   };
 }
 
+// uploadDummyContractTemplate загружает мини-PDF c тремя плейсхолдерами через
+// PUT /campaigns/{id}/contract-template. Notify-guard (chunk 9a) требует
+// загруженный шаблон, поэтому notify-сценарии вызывают этот helper после
+// seedCampaign.
+export async function uploadDummyContractTemplate(
+  request: APIRequestContext,
+  apiUrl: string,
+  campaignId: string,
+  adminToken: string,
+): Promise<void> {
+  const pdf = makeContractFixturePDF();
+  const resp = await request.put(
+    `${apiUrl}/campaigns/${campaignId}/contract-template`,
+    {
+      headers: {
+        Authorization: `Bearer ${adminToken}`,
+        "Content-Type": "application/pdf",
+      },
+      data: pdf,
+    },
+  );
+  if (resp.status() !== 200) {
+    throw new Error(
+      `uploadDummyContractTemplate ${campaignId}: ${resp.status()} ${await resp.text()}`,
+    );
+  }
+}
+
+// makeContractFixturePDF строит минимальный PDF/1.4 с тремя известными
+// плейсхолдерами, чтобы прошёл validator на бэкенде. Алгоритм совпадает с
+// admin-campaign-contract-template.spec.ts — handcrafted, без внешних деп.
+function makeContractFixturePDF(): Buffer {
+  const lines = [
+    "Contract template (e2e fixture)",
+    "{{CreatorFIO}}",
+    "{{CreatorIIN}}",
+    "{{IssuedDate}}",
+  ];
+  const escape = (s: string) =>
+    s.replaceAll("\\", "\\\\").replaceAll("(", "\\(").replaceAll(")", "\\)");
+  const stream =
+    "BT\n/F1 12 Tf\n14 TL\n50 780 Td\n" +
+    lines
+      .map((l, i) => (i === 0 ? `(${escape(l)}) Tj\n` : `T*\n(${escape(l)}) Tj\n`))
+      .join("") +
+    "ET\n";
+  const objs: string[] = [];
+  objs.push("<< /Type /Catalog /Pages 2 0 R >>");
+  objs.push("<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
+  objs.push(
+    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Contents 4 0 R " +
+      "/Resources << /Font << /F1 5 0 R >> >> >>",
+  );
+  objs.push(`<< /Length ${stream.length} >>\nstream\n${stream}endstream`);
+  objs.push("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>");
+  const header = "%PDF-1.4\n";
+  const offsets: number[] = [];
+  let body = "";
+  for (let i = 0; i < objs.length; i++) {
+    offsets.push(header.length + body.length);
+    body += `${i + 1} 0 obj\n${objs[i]}\nendobj\n`;
+  }
+  const xrefOffset = header.length + body.length;
+  let xref = `xref\n0 ${objs.length + 1}\n0000000000 65535 f \n`;
+  for (const o of offsets) xref += `${String(o).padStart(10, "0")} 00000 n \n`;
+  const trailer = `trailer\n<< /Size ${objs.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`;
+  return Buffer.from(header + body + xref + trailer, "binary");
+}
+
 // SendPulseWebhookSecret defaults to the local-dev value baked into
 // backend/.env so out-of-the-box `make test-e2e-frontend` works against a
 // hand-spun stack. Override via the SENDPULSE_WEBHOOK_SECRET env var when

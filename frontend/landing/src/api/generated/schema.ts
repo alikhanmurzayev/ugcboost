@@ -768,6 +768,57 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/campaigns/{id}/contract-template": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * Download the contract-template PDF for a campaign (admin-only)
+         * @description Returns the raw PDF previously stored via PUT. Soft-deleted
+         *     campaigns are treated as not found (404 CAMPAIGN_NOT_FOUND), like
+         *     the other campaign-domain admin endpoints. A live campaign with
+         *     an empty `contract_template_pdf` answers 404
+         *     CONTRACT_TEMPLATE_NOT_FOUND so the admin UI can distinguish
+         *     "campaign exists but no template" from "campaign gone".
+         */
+        get: operations["getCampaignContractTemplate"];
+        /**
+         * Upload the contract-template PDF for a campaign (admin-only)
+         * @description Stores the raw PDF bytes in `campaigns.contract_template_pdf`,
+         *     replacing any previously uploaded template. The body is the PDF
+         *     itself, not a multipart form — keeps the wire format simple and
+         *     avoids buffering through middleware that does not understand
+         *     multipart streaming.
+         *
+         *     Validation runs in fixed order; the first failure short-circuits:
+         *     empty body → CONTRACT_REQUIRED, unparseable PDF →
+         *     CONTRACT_INVALID_PDF, any of the three known placeholders missing
+         *     → CONTRACT_MISSING_PLACEHOLDER (with `details.missing`), any
+         *     unknown placeholder name → CONTRACT_UNKNOWN_PLACEHOLDER (with
+         *     `details.unknown`).
+         *
+         *     The known set is `CreatorFIO`, `CreatorIIN`, `IssuedDate` —
+         *     `domain.KnownContractPlaceholders` is the single source of truth
+         *     and the chunk-16 outbox `Render` step relies on the same list.
+         *
+         *     Audit row `campaign.contract_template_uploaded` is written in the
+         *     same transaction as the column UPDATE. The reply echoes the
+         *     sha256 hash of the uploaded bytes plus the placeholder set so the
+         *     UI can render a confirmation block without re-downloading.
+         */
+        put: operations["uploadCampaignContractTemplate"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/tma/campaigns/{secretToken}/agree": {
         parameters: {
             query?: never;
@@ -1630,6 +1681,13 @@ export interface components {
             tmaUrl: string;
             /** @description Soft-delete flag — true means the campaign was removed but is still readable for audit. */
             isDeleted: boolean;
+            /**
+             * @description Whether a contract-template PDF has been uploaded for this campaign.
+             *     Computed on the fly from `octet_length(contract_template_pdf) > 0`
+             *     so list endpoints stay light — the PDF body itself is only
+             *     available via GET /campaigns/{id}/contract-template.
+             */
+            hasContractTemplate: boolean;
             /** Format: date-time */
             createdAt: string;
             /** Format: date-time */
@@ -1637,6 +1695,50 @@ export interface components {
         };
         GetCampaignResult: {
             data: components["schemas"]["Campaign"];
+        };
+        /**
+         * @description Result of a successful PUT /campaigns/{id}/contract-template upload.
+         *     Echoes the placeholders extracted from the freshly stored PDF so the
+         *     admin UI can render a confirmation block ("found CreatorFIO,
+         *     CreatorIIN, IssuedDate") without a follow-up download.
+         */
+        UploadCampaignContractTemplateData: {
+            /** @description SHA-256 hash of the raw uploaded PDF bytes (lowercase hex). */
+            hash: string;
+            /**
+             * @description Distinct placeholder names found in the template. After successful
+             *     validation this set always equals the known set
+             *     (`CreatorFIO`, `CreatorIIN`, `IssuedDate`) — order matches
+             *     `domain.KnownContractPlaceholders`.
+             */
+            placeholders: string[];
+        };
+        UploadCampaignContractTemplateResult: {
+            data: components["schemas"]["UploadCampaignContractTemplateData"];
+        };
+        /**
+         * @description Optional structured details for contract-template upload validation
+         *     errors. `missing` lists known placeholders absent from the uploaded
+         *     PDF. `unknown` lists placeholders found in the PDF that are not part
+         *     of `domain.KnownContractPlaceholders`. Empty for the empty-body /
+         *     invalid-PDF cases — the code alone identifies them.
+         */
+        ContractValidationDetails: {
+            missing?: string[];
+            unknown?: string[];
+        };
+        ContractValidationErrorBody: {
+            /**
+             * @description One of CONTRACT_REQUIRED / CONTRACT_INVALID_PDF /
+             *     CONTRACT_MISSING_PLACEHOLDER / CONTRACT_UNKNOWN_PLACEHOLDER.
+             */
+            code: string;
+            /** @description Human-readable fallback message for the admin UI. */
+            message: string;
+            details?: components["schemas"]["ContractValidationDetails"];
+        };
+        ContractValidationErrorResponse: {
+            error: components["schemas"]["ContractValidationErrorBody"];
         };
         /**
          * @description Sort field for the admin list. Mapped to a SQL column on the backend.
@@ -3178,10 +3280,10 @@ export interface operations {
                 };
             };
             /**
-             * @description Either a shape/format violation (empty array, > 200 ids, duplicate
-             *     ids) returned as the standard ErrorResponse, or
-             *     CAMPAIGN_CREATOR_BATCH_INVALID with `details` listing every
-             *     unattached / wrong-status creator from the batch.
+             * @description Shape/format violation (empty array, > 200 ids, duplicate ids), or
+             *     CONTRACT_TEMPLATE_REQUIRED if the campaign has no contract template
+             *     uploaded yet, or CAMPAIGN_CREATOR_BATCH_INVALID with `details`
+             *     listing every unattached / wrong-status creator from the batch.
              */
             422: {
                 headers: {
@@ -3249,6 +3351,116 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CampaignCreatorBatchInvalidErrorResponse"] | components["schemas"]["ErrorResponse"];
+                };
+            };
+            default: components["responses"]["UnexpectedError"];
+        };
+    };
+    getCampaignContractTemplate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Stored PDF contents. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/pdf": string;
+                };
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            /**
+             * @description Either the campaign itself is missing or soft-deleted
+             *     (`CAMPAIGN_NOT_FOUND`), or the campaign exists but no template
+             *     has been uploaded yet (`CONTRACT_TEMPLATE_NOT_FOUND`).
+             */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            default: components["responses"]["UnexpectedError"];
+        };
+    };
+    uploadCampaignContractTemplate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * @description Raw PDF bytes of the contract template. Maximum size is bounded
+         *     by the global request-body limit configured on the backend.
+         */
+        requestBody: {
+            content: {
+                "application/pdf": string;
+            };
+        };
+        responses: {
+            /** @description Template stored; reply contains the hash and the placeholders. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UploadCampaignContractTemplateResult"];
+                };
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            /** @description Campaign not found (missing or soft-deleted). */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /**
+             * @description Validation failed. CONTRACT_REQUIRED / CONTRACT_INVALID_PDF
+             *     carry no `details`; CONTRACT_MISSING_PLACEHOLDER carries
+             *     `details.missing`; CONTRACT_UNKNOWN_PLACEHOLDER carries
+             *     `details.unknown`.
+             */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ContractValidationErrorResponse"];
                 };
             };
             default: components["responses"]["UnexpectedError"];

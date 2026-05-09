@@ -57,6 +57,8 @@ type AuthzService interface {
 	CanGetCampaign(ctx context.Context) error
 	CanUpdateCampaign(ctx context.Context) error
 	CanListCampaigns(ctx context.Context) error
+	CanUploadCampaignContractTemplate(ctx context.Context) error
+	CanGetCampaignContractTemplate(ctx context.Context) error
 	CanAddCampaignCreators(ctx context.Context) error
 	CanRemoveCampaignCreator(ctx context.Context) error
 	CanListCampaignCreators(ctx context.Context) error
@@ -109,6 +111,8 @@ type CampaignService interface {
 	UpdateCampaign(ctx context.Context, id string, in domain.CampaignInput) error
 	List(ctx context.Context, in domain.CampaignListInput) (*domain.CampaignListPage, error)
 	AssertActiveCampaigns(ctx context.Context, ids []string) error
+	UploadContractTemplate(ctx context.Context, id string, pdf []byte) (*service.UploadContractTemplateResult, error)
+	GetContractTemplate(ctx context.Context, id string) ([]byte, error)
 }
 
 // CampaignCreatorService is the interface Server needs from the campaign-

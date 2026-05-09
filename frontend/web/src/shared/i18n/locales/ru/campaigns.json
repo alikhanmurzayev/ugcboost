@@ -56,6 +56,22 @@
     "submittingButton": "Сохранение…",
     "cancelButton": "Отмена"
   },
+  "contractTemplate": {
+    "sectionTitle": "Шаблон договора",
+    "label": "Шаблон договора (PDF)",
+    "descriptionEmpty": "Загрузите PDF-шаблон с тремя плейсхолдерами: {{CreatorFIO}}, {{CreatorIIN}}, {{IssuedDate}}.",
+    "uploadButton": "Загрузить шаблон",
+    "replaceButton": "Заменить шаблон",
+    "downloadButton": "Скачать существующий шаблон",
+    "loading": "Загружаем…",
+    "placeholdersFound": "Найдены плейсхолдеры:",
+    "errorRequired": "Загрузите PDF-шаблон договора. Файл не должен быть пустым.",
+    "errorInvalidPDF": "Файл не распознаётся как PDF.",
+    "errorContractTemplateRequired": "Загрузите шаблон договора в кампанию, прежде чем приглашать креаторов.",
+    "errorMissingPlaceholder": "В шаблоне не найдены обязательные плейсхолдеры.",
+    "errorUnknownPlaceholder": "В шаблоне найдены незнакомые плейсхолдеры.",
+    "networkError": "Не удалось загрузить шаблон. Попробуйте снова."
+  },
   "campaignCreators": {
     "title": "Креаторы кампании",
     "count": "{{count}} в кампании",
@@ -106,6 +122,7 @@
       "undelivered_many": "Не доставлено {{count}}:",
       "undelivered_other": "Не доставлено {{count}}:",
       "validationError": "Часть выбранных уже в другом статусе. Список обновлён.",
+      "contractTemplateRequired": "Загрузите шаблон договора в кампанию, прежде чем приглашать креаторов.",
       "validationUnknown": "Некорректный запрос. Сообщите разработчику.",
       "networkError": "Не удалось разослать. Попробуйте снова."
     },

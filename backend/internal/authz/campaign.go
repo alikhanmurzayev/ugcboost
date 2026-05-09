@@ -42,3 +42,22 @@ func (a *AuthzService) CanListCampaigns(ctx context.Context) error {
 	}
 	return nil
 }
+
+// CanUploadCampaignContractTemplate gates PUT /campaigns/{id}/contract-template
+// to admins only — the template is admin-curated content (Аидана), brand
+// managers do not see this section in the UI either.
+func (a *AuthzService) CanUploadCampaignContractTemplate(ctx context.Context) error {
+	if middleware.RoleFromContext(ctx) != api.Admin {
+		return domain.ErrForbidden
+	}
+	return nil
+}
+
+// CanGetCampaignContractTemplate gates GET /campaigns/{id}/contract-template
+// to admins only — the PDF body is internal admin-only content.
+func (a *AuthzService) CanGetCampaignContractTemplate(ctx context.Context) error {
+	if middleware.RoleFromContext(ctx) != api.Admin {
+		return domain.ErrForbidden
+	}
+	return nil
+}

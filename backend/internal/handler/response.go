@@ -37,6 +37,12 @@ func respondError(w http.ResponseWriter, r *http.Request, err error, log logger.
 		return
 	}
 
+	var cve *domain.ContractValidationError
+	if errors.As(err, &cve) {
+		writeContractValidation(w, r, cve, log)
+		return
+	}
+
 	var ve *domain.ValidationError
 	if errors.As(err, &ve) {
 		writeError(w, r, http.StatusUnprocessableEntity, ve.Code, ve.Message, log)
@@ -82,6 +88,9 @@ func respondError(w http.ResponseWriter, r *http.Request, err error, log logger.
 	case errors.Is(err, domain.ErrCampaignNotFound):
 		writeError(w, r, http.StatusNotFound, domain.CodeCampaignNotFound,
 			"Кампания не найдена.", log)
+	case errors.Is(err, domain.ErrContractTemplateNotFound):
+		writeError(w, r, http.StatusNotFound, domain.CodeContractTemplateNotFound,
+			"Шаблон договора для этой кампании ещё не загружен.", log)
 	case errors.Is(err, domain.ErrCampaignCreatorNotFound):
 		writeError(w, r, http.StatusNotFound, domain.CodeCampaignCreatorNotFound,
 			"Креатор не найден в этой кампании.", log)
@@ -145,4 +154,26 @@ func writeBatchInvalid(w http.ResponseWriter, r *http.Request, bie *domain.Campa
 			Details: details,
 		},
 	}, log)
+}
+
+func writeContractValidation(w http.ResponseWriter, r *http.Request, cve *domain.ContractValidationError, log logger.Logger) {
+	body := api.ContractValidationErrorBody{
+		Code:    cve.Code,
+		Message: cve.Message,
+	}
+	if len(cve.Missing) > 0 || len(cve.Unknown) > 0 {
+		details := api.ContractValidationDetails{}
+		if len(cve.Missing) > 0 {
+			missing := append([]string(nil), cve.Missing...)
+			details.Missing = &missing
+		}
+		if len(cve.Unknown) > 0 {
+			unknown := append([]string(nil), cve.Unknown...)
+			details.Unknown = &unknown
+		}
+		body.Details = &details
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusUnprocessableEntity)
+	encodeJSON(w, r, api.ContractValidationErrorResponse{Error: body}, log)
 }

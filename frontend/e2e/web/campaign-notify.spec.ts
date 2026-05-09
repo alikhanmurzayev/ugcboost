@@ -50,6 +50,7 @@ import {
   seedAdmin,
   seedApprovedCreator,
   seedCampaign,
+  uploadDummyContractTemplate,
   type SeededApprovedCreator,
   type SeededCampaign,
   type SeededUser,
@@ -404,6 +405,12 @@ async function setupNotify(
 
   const campaign = await seedCampaign(request, API_URL, adminToken);
   cleanupStack.push(campaign.cleanup);
+  await uploadDummyContractTemplate(
+    request,
+    API_URL,
+    campaign.campaignId,
+    adminToken,
+  );
 
   await addCampaignCreators(
     request,
