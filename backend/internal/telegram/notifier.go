@@ -113,6 +113,25 @@ const campaignContractSignedText = "Ура, мы подписали с вами 
 // and (later) for the chunk-17 notifier method.
 func CampaignContractSignedText() string { return campaignContractSignedText }
 
+// campaignContractSentText — креатору после Phase 3 outbox-worker'а: договор
+// ушёл в TrustMe на подпись, прикладываем shortUrl. Текст лаконичный,
+// fixme/copy-iter — отдельным PR.
+const campaignContractSentText = "Мы отправили вам соглашение на подпись 📄\n\n" +
+	"Откройте ссылку и подпишите по СМС-OTP: %s"
+
+// CampaignContractSentText экспортирует текст для тестов.
+func CampaignContractSentText() string { return campaignContractSentText }
+
+// NotifyContractSent отправляет креатору сообщение «договор отправлен на
+// подпись» с ссылкой shortURL. fire-and-forget — стандарт backend-transactions
+// (бот ПОСЛЕ Tx), без блокирования outbox-worker'а.
+func (n *Notifier) NotifyContractSent(ctx context.Context, chatID int64, shortURL string) {
+	n.fire(ctx, "campaign_contract_sent", chatID, &bot.SendMessageParams{
+		ChatID: chatID,
+		Text:   fmt.Sprintf(campaignContractSentText, shortURL),
+	})
+}
+
 // ApplicationLinkedPayload carries everything NotifyApplicationLinked needs
 // to pick the right welcome variant and substitute the verification code.
 type ApplicationLinkedPayload struct {

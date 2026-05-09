@@ -52,9 +52,19 @@ type Config struct {
 
 	// Feature flags for mock integrations
 	LiveDuneMock bool `env:"LIVEDUNE_MOCK" envDefault:"false"`
-	TrustMeMock  bool `env:"TRUSTME_MOCK" envDefault:"false"`
-	EmailMock    bool `env:"EMAIL_MOCK" envDefault:"false"`
-	StorageMock  bool `env:"STORAGE_MOCK" envDefault:"false"`
+	// TrustMeMock — true → SpyOnlyClient (default local + staging). false →
+	// RealClient (default prod). На staging вручную меняем для one-off
+	// real-теста с прод-токеном (см. project_trustme_no_sandbox memory).
+	TrustMeMock bool `env:"TRUSTME_MOCK" envDefault:"true"`
+	EmailMock   bool `env:"EMAIL_MOCK" envDefault:"false"`
+	StorageMock bool `env:"STORAGE_MOCK" envDefault:"false"`
+
+	// TrustMe HTTP integration. BaseURL без trailing slash. Token — статичный
+	// per-окружение (см. blueprint.apib §2: «Authorization: {token}» без
+	// Bearer-префикса). Для local/staging значения не обязательны (spy не
+	// ходит в сеть); для прода RealClient их валидирует при старте.
+	TrustMeBaseURL string `env:"TRUSTME_BASE_URL" envDefault:"https://test.trustme.kz/trust_contract_public_apis"`
+	TrustMeToken   string `env:"TRUSTME_TOKEN" envDefault:""`
 
 	// Telegram bot — used when assembling deep-link returned to creators
 	// after a public application is accepted (https://t.me/<username>?start=<application_id>).

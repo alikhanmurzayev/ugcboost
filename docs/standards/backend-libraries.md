@@ -24,12 +24,16 @@
 | Случайные значения (id, токены, фикстуры) | `crypto/rand` (stdlib) |
 | Retry с backoff'ом (transient errors) | `github.com/cenkalti/backoff/v5` |
 | PDF text + bbox extraction | `github.com/ledongthuc/pdf` |
+| PDF overlay rendering (TrustMe outbox) | `github.com/signintech/gopdf` |
+| Rate-limit для исходящих HTTP-вызовов | `golang.org/x/time/rate` |
 
 ### Правила
 
 - **Поинтеры — `AlekSi/pointer`.** `pointer.ToString`, `pointer.GetString` для безопасного дереференса. Кастомные `ptrTo[T]`, `strptr`, инлайн `&local` — не писать.
 - **Случайность — `crypto/rand`.** `math/rand` и `math/rand/v2` забанены в `golangci.yml` (depguard). Детерминированный seeded PRNG (fuzz, property-based) — `//nolint:depguard` с комментарием почему.
 - **PDF extraction — `ledongthuc/pdf`.** Используется только в `internal/contract/Extractor` для валидации шаблонов договора и chunk-16 outbox-render'а. Достаёт глифы с координатами per word (X/Y/FontSize), что критично для overlay-рендера. Mainstream pure-Go альтернатив без CGo нет: `pdfcpu` не отдаёт bbox per глиф, MuPDF доступен только через CGo. Production-код — только в этом пакете; тестовые фикстуры PDF генерируются `github.com/jung-kurt/gofpdf` в test files (не production dep).
+- **PDF overlay — `signintech/gopdf`.** Парная библиотека к `ledongthuc/pdf` для chunk-16 `ContractPDFRenderer`. Импортирует страницу шаблона через `ImportPage(file, n, "/MediaBox")` и рисует поверх белые прямоугольники + текст значений. Pure-Go без CGo, без sidecar'ов; шрифт читается из embedded `internal/contract/fonts/LiberationSerif-Regular.ttf`. Альтернатива `pdfcpu` для overlay не подходит — нет bbox-aware rendering API.
+- **Rate-limit — `golang.org/x/time/rate`.** Используется в `internal/trustme/RealClient` под TrustMe blueprint требование «не более 4 RPS». `rate.NewLimiter(rate.Limit(4), 1)` — sliding window без накопления budget'а. Самописная реализация (channel + ticker) даст ту же семантику, но проигрывает в тестируемости (rate.Limiter принимает ctx и корректно отменяется). Обязательно использовать `Limiter.Wait(ctx)` перед каждым исходящим запросом.
 - Новая библиотека — через PR. Если в реестре уже есть библиотека для смежной задачи — расширяем, не добавляем вторую.
 - Удаляя зависимость — обновить реестр тем же PR'ом.
 

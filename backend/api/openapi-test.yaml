@@ -245,6 +245,100 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /test/trustme/run-outbox-once:
+    post:
+      operationId: trustMeRunOutboxOnce
+      summary: Synchronously run one tick of the contract outbox-worker
+      description: |
+        Invokes ContractSenderService.RunOnce in-process so e2e suites do not
+        wait for the @every 10s cron tick. Returns 204 once the tick finishes.
+        NEVER enabled in production.
+      tags: [test]
+      responses:
+        "204":
+          description: Tick complete
+
+  /test/trustme/spy-list:
+    get:
+      operationId: trustMeSpyList
+      summary: Read recorded outbound TrustMe SendToSign requests
+      description: |
+        Returns SentRecord rows captured by the in-process spy store every
+        time the backend's TrustMe client is invoked. Used by e2e suites to
+        assert that overlay PDF + requisites were sent correctly. NEVER
+        enabled in production.
+      tags: [test]
+      responses:
+        "200":
+          description: Recorded TrustMe SendToSign attempts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TrustMeSpyListResult"
+
+  /test/trustme/spy-clear:
+    post:
+      operationId: trustMeSpyClear
+      summary: Clear the TrustMe spy store
+      description: |
+        Drops all recorded SendToSign attempts + fail-next + known-document
+        registrations. Used between e2e scenarios. NEVER enabled in production.
+      tags: [test]
+      responses:
+        "204":
+          description: Spy store cleared
+
+  /test/trustme/spy-fail-next:
+    post:
+      operationId: trustMeSpyFailNext
+      summary: Force the next TrustMe SendToSign for additionalInfo to fail
+      description: |
+        Registers a synthetic failure for the next `count` SendToSign calls
+        with the given AdditionalInfo. Used to exercise Phase 2c failure +
+        Phase 0 recovery in e2e. NEVER enabled in production.
+      tags: [test]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TrustMeSpyFailNextRequest"
+      responses:
+        "204":
+          description: Failure registered
+        "422":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /test/trustme/spy-register-document:
+    post:
+      operationId: trustMeSpyRegisterDocument
+      summary: Pre-register a TrustMe-known document for Phase 0 recovery
+      description: |
+        Imitates "TrustMe already accepted this document" — the next
+        SearchContractByAdditionalInfo for the given additionalInfo returns
+        the registered document instead of ErrTrustMeNotFound. Used by e2e
+        Phase 0 finalize-without-resend scenario. NEVER enabled in production.
+      tags: [test]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TrustMeSpyRegisterDocumentRequest"
+      responses:
+        "204":
+          description: Document registered
+        "422":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
 components:
   schemas:
     SeedUserRequest:
@@ -407,6 +501,98 @@ components:
             Optional override for the error string the spy returns. Defaults
             to "Forbidden: bot was blocked by the user" so MapTelegramErrorToReason
             classifies it as bot_blocked.
+
+    TrustMeSentRecord:
+      type: object
+      required: [additionalInfo, contractName, fioFingerprint, iinFingerprint, phoneFingerprint, pdfBase64, sentAt]
+      properties:
+        documentId:
+          type: string
+          description: trustme_document_id assigned by the spy (empty when send was forced to fail).
+        shortUrl:
+          type: string
+          description: Short URL (empty when send failed).
+        additionalInfo:
+          type: string
+          description: contracts.id passed in AdditionalInfo when SendToSign was invoked.
+        contractName:
+          type: string
+        fioFingerprint:
+          type: string
+          description: |
+            sha256 prefix (first 16 hex chars) of the first Requisite.FIO. PII
+            is hashed before exposure per security.md hard rule. Same FIO →
+            same fingerprint, so e2e can assert via `domain/spy.Fingerprint("Иванов ...")`.
+        iinFingerprint:
+          type: string
+          description: sha256 prefix of the first Requisite.IIN_BIN.
+        phoneFingerprint:
+          type: string
+          description: sha256 prefix of the first Requisite.PhoneNumber (already E.164).
+        pdfBase64:
+          type: string
+          description: Base64-encoded PDF that was sent (verbatim copy).
+        sentAt:
+          type: string
+          format: date-time
+        err:
+          type: string
+          description: Error string when fail-next caused this attempt to fail.
+
+    TrustMeSpyListData:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/TrustMeSentRecord"
+
+    TrustMeSpyListResult:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: "#/components/schemas/TrustMeSpyListData"
+
+    TrustMeSpyFailNextRequest:
+      type: object
+      required: [additionalInfo]
+      properties:
+        additionalInfo:
+          type: string
+          description: |
+            contracts.id whose next SendToSign should fail. Empty string —
+            wildcard, fails next `count` SendToSign'ов независимо от
+            additionalInfo (нужно e2e Phase 0 recovery, где contract_id
+            ещё не существует на момент регистрации failure).
+        reason:
+          type: string
+          description: Optional override for the error string the spy returns.
+        count:
+          type: integer
+          minimum: 1
+          description: How many subsequent calls to fail. Defaults to 1.
+
+    TrustMeSpyRegisterDocumentRequest:
+      type: object
+      required: [additionalInfo, documentId]
+      properties:
+        additionalInfo:
+          type: string
+          minLength: 1
+        documentId:
+          type: string
+          minLength: 1
+          description: trustme_document_id the spy returns from search/Contracts.
+        shortUrl:
+          type: string
+          description: shortUrl the spy returns. Defaults to a synthetic URL.
+        contractStatus:
+          type: integer
+          minimum: 0
+          maximum: 9
+          description: TrustMe contract_status to attach. Defaults to 0.
 
     SignTMAInitDataRequest:
       type: object

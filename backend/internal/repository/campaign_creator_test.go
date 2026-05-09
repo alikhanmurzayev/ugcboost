@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	campaignCreatorAllCols                      = "campaign_id, created_at, creator_id, decided_at, id, invited_at, invited_count, reminded_at, reminded_count, status, updated_at"
+	campaignCreatorAllCols                      = "campaign_id, contract_id, created_at, creator_id, decided_at, id, invited_at, invited_count, reminded_at, reminded_count, status, updated_at"
 	campaignCreatorAddSQL                       = "INSERT INTO campaign_creators (campaign_id,creator_id,status) VALUES ($1,$2,$3) RETURNING " + campaignCreatorAllCols
 	campaignCreatorGetSQL                       = "SELECT " + campaignCreatorAllCols + " FROM campaign_creators WHERE campaign_id = $1 AND creator_id = $2"
 	campaignCreatorListSQL                      = "SELECT " + campaignCreatorAllCols + " FROM campaign_creators WHERE campaign_id = $1 ORDER BY created_at ASC, id ASC"
@@ -27,7 +27,7 @@ const (
 )
 
 var campaignCreatorRowCols = []string{
-	"campaign_id", "created_at", "creator_id", "decided_at", "id",
+	"campaign_id", "contract_id", "created_at", "creator_id", "decided_at", "id",
 	"invited_at", "invited_count", "reminded_at", "reminded_count",
 	"status", "updated_at",
 }
@@ -44,7 +44,7 @@ func TestCampaignCreatorRepository_Add(t *testing.T) {
 		mock.ExpectQuery(campaignCreatorAddSQL).
 			WithArgs("camp-1", "cr-1", domain.CampaignCreatorStatusPlanned).
 			WillReturnRows(pgxmock.NewRows(campaignCreatorRowCols).
-				AddRow("camp-1", createdAt, "cr-1", (*time.Time)(nil), "cc-1",
+				AddRow("camp-1", (*string)(nil), createdAt, "cr-1", (*time.Time)(nil), "cc-1",
 					(*time.Time)(nil), 0, (*time.Time)(nil), 0,
 					domain.CampaignCreatorStatusPlanned, createdAt))
 
@@ -155,7 +155,7 @@ func TestCampaignCreatorRepository_GetByCampaignAndCreator(t *testing.T) {
 		mock.ExpectQuery(campaignCreatorGetSQL).
 			WithArgs("camp-1", "cr-1").
 			WillReturnRows(pgxmock.NewRows(campaignCreatorRowCols).
-				AddRow("camp-1", createdAt, "cr-1", (*time.Time)(nil), "cc-1",
+				AddRow("camp-1", (*string)(nil), createdAt, "cr-1", (*time.Time)(nil), "cc-1",
 					&invitedAt, 1, (*time.Time)(nil), 0,
 					domain.CampaignCreatorStatusInvited, createdAt))
 
@@ -213,10 +213,10 @@ func TestCampaignCreatorRepository_ListByCampaign(t *testing.T) {
 		mock.ExpectQuery(campaignCreatorListSQL).
 			WithArgs("camp-1").
 			WillReturnRows(pgxmock.NewRows(campaignCreatorRowCols).
-				AddRow("camp-1", t1, "cr-1", (*time.Time)(nil), "cc-1",
+				AddRow("camp-1", (*string)(nil), t1, "cr-1", (*time.Time)(nil), "cc-1",
 					(*time.Time)(nil), 0, (*time.Time)(nil), 0,
 					domain.CampaignCreatorStatusPlanned, t1).
-				AddRow("camp-1", t2, "cr-2", (*time.Time)(nil), "cc-2",
+				AddRow("camp-1", (*string)(nil), t2, "cr-2", (*time.Time)(nil), "cc-2",
 					(*time.Time)(nil), 0, (*time.Time)(nil), 0,
 					domain.CampaignCreatorStatusPlanned, t2))
 
@@ -331,10 +331,10 @@ func TestCampaignCreatorRepository_ListByCampaignAndCreators(t *testing.T) {
 		mock.ExpectQuery(campaignCreatorListByCampaignAndCreatorsSQL).
 			WithArgs("camp-1", "cr-1", "cr-2").
 			WillReturnRows(pgxmock.NewRows(campaignCreatorRowCols).
-				AddRow("camp-1", t1, "cr-1", (*time.Time)(nil), "cc-1",
+				AddRow("camp-1", (*string)(nil), t1, "cr-1", (*time.Time)(nil), "cc-1",
 					(*time.Time)(nil), 0, (*time.Time)(nil), 0,
 					domain.CampaignCreatorStatusPlanned, t1).
-				AddRow("camp-1", t1, "cr-2", (*time.Time)(nil), "cc-2",
+				AddRow("camp-1", (*string)(nil), t1, "cr-2", (*time.Time)(nil), "cc-2",
 					(*time.Time)(nil), 0, (*time.Time)(nil), 0,
 					domain.CampaignCreatorStatusInvited, t1))
 
@@ -386,7 +386,7 @@ func TestCampaignCreatorRepository_ApplyInvite(t *testing.T) {
 				"cc-1",
 			).
 			WillReturnRows(pgxmock.NewRows(campaignCreatorRowCols).
-				AddRow("camp-1", now, "cr-1", (*time.Time)(nil), "cc-1",
+				AddRow("camp-1", (*string)(nil), now, "cr-1", (*time.Time)(nil), "cc-1",
 					&now, 1, (*time.Time)(nil), 0,
 					domain.CampaignCreatorStatusInvited, now))
 
@@ -434,7 +434,7 @@ func TestCampaignCreatorRepository_ApplyRemind(t *testing.T) {
 		mock.ExpectQuery(campaignCreatorApplyRemindSQL).
 			WithArgs("cc-1").
 			WillReturnRows(pgxmock.NewRows(campaignCreatorRowCols).
-				AddRow("camp-1", t1, "cr-1", (*time.Time)(nil), "cc-1",
+				AddRow("camp-1", (*string)(nil), t1, "cr-1", (*time.Time)(nil), "cc-1",
 					&t1, 1, &t2, 1,
 					domain.CampaignCreatorStatusInvited, t2))
 
@@ -525,7 +525,7 @@ func TestCampaignCreatorRepository_GetByIDForUpdate(t *testing.T) {
 		mock.ExpectQuery(sqlStmt).
 			WithArgs("cc-1").
 			WillReturnRows(pgxmock.NewRows(campaignCreatorRowCols).
-				AddRow("camp-1", createdAt, "cr-1", (*time.Time)(nil), "cc-1",
+				AddRow("camp-1", (*string)(nil), createdAt, "cr-1", (*time.Time)(nil), "cc-1",
 					&invitedAt, 1, (*time.Time)(nil), 0,
 					domain.CampaignCreatorStatusInvited, createdAt))
 
@@ -589,7 +589,7 @@ func TestCampaignCreatorRepository_ApplyDecision(t *testing.T) {
 		mock.ExpectQuery(sqlStmt).
 			WithArgs(domain.CampaignCreatorStatusAgreed, "cc-1").
 			WillReturnRows(pgxmock.NewRows(campaignCreatorRowCols).
-				AddRow("camp-1", createdAt, "cr-1", &decidedAt, "cc-1",
+				AddRow("camp-1", (*string)(nil), createdAt, "cr-1", &decidedAt, "cc-1",
 					&invitedAt, 1, (*time.Time)(nil), 0,
 					domain.CampaignCreatorStatusAgreed, decidedAt))
 
@@ -621,5 +621,93 @@ func TestCampaignCreatorRepository_ApplyDecision(t *testing.T) {
 
 		_, err := repo.ApplyDecision(context.Background(), "cc-1", domain.CampaignCreatorStatusAgreed)
 		require.ErrorContains(t, err, "db down")
+	})
+}
+
+func TestCampaignCreatorRepository_UpdateContractIDAndStatus(t *testing.T) {
+	t.Parallel()
+
+	const sqlStmt = "UPDATE campaign_creators SET contract_id = $1, status = $2, updated_at = now() WHERE id = $3"
+
+	t.Run("success", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &campaignCreatorRepository{db: mock}
+
+		mock.ExpectExec(sqlStmt).
+			WithArgs("ct-1", domain.CampaignCreatorStatusSigning, "cc-1").
+			WillReturnResult(pgxmock.NewResult("UPDATE", 1))
+
+		require.NoError(t, repo.UpdateContractIDAndStatus(
+			context.Background(), "cc-1", "ct-1", domain.CampaignCreatorStatusSigning))
+	})
+
+	t.Run("missing row returns sql.ErrNoRows", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &campaignCreatorRepository{db: mock}
+
+		mock.ExpectExec(sqlStmt).
+			WithArgs("ct-1", domain.CampaignCreatorStatusSigning, "cc-missing").
+			WillReturnResult(pgxmock.NewResult("UPDATE", 0))
+
+		err := repo.UpdateContractIDAndStatus(
+			context.Background(), "cc-missing", "ct-1", domain.CampaignCreatorStatusSigning)
+		require.ErrorIs(t, err, sql.ErrNoRows)
+	})
+
+	t.Run("propagates other errors", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &campaignCreatorRepository{db: mock}
+
+		mock.ExpectExec(sqlStmt).
+			WithArgs("ct-1", domain.CampaignCreatorStatusSigning, "cc-1").
+			WillReturnError(errors.New("db down"))
+
+		err := repo.UpdateContractIDAndStatus(
+			context.Background(), "cc-1", "ct-1", domain.CampaignCreatorStatusSigning)
+		require.ErrorContains(t, err, "db down")
+	})
+}
+
+func TestCampaignCreatorRepository_GetByContractID(t *testing.T) {
+	t.Parallel()
+
+	const sqlStmt = "SELECT " + campaignCreatorAllCols + " FROM campaign_creators WHERE contract_id = $1"
+
+	t.Run("success", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &campaignCreatorRepository{db: mock}
+		now := time.Date(2026, 5, 9, 12, 0, 0, 0, time.UTC)
+		ctID := "ct-1"
+
+		mock.ExpectQuery(sqlStmt).
+			WithArgs("ct-1").
+			WillReturnRows(pgxmock.NewRows(campaignCreatorRowCols).
+				AddRow("camp-1", &ctID, now, "cr-1", &now, "cc-1",
+					&now, 1, (*time.Time)(nil), 0,
+					domain.CampaignCreatorStatusSigning, now))
+
+		got, err := repo.GetByContractID(context.Background(), "ct-1")
+		require.NoError(t, err)
+		require.NotNil(t, got)
+		require.Equal(t, "cc-1", got.ID)
+		require.NotNil(t, got.ContractID)
+		require.Equal(t, "ct-1", *got.ContractID)
+	})
+
+	t.Run("not found propagates sql.ErrNoRows", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &campaignCreatorRepository{db: mock}
+
+		mock.ExpectQuery(sqlStmt).
+			WithArgs("missing").
+			WillReturnError(sql.ErrNoRows)
+
+		_, err := repo.GetByContractID(context.Background(), "missing")
+		require.ErrorIs(t, err, sql.ErrNoRows)
 	})
 }

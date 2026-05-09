@@ -35,6 +35,7 @@ const (
 	CampaignCreatorColumnRemindedAt    = "reminded_at"
 	CampaignCreatorColumnRemindedCount = "reminded_count"
 	CampaignCreatorColumnDecidedAt     = "decided_at"
+	CampaignCreatorColumnContractID    = "contract_id"
 	CampaignCreatorColumnCreatedAt     = "created_at"
 	CampaignCreatorColumnUpdatedAt     = "updated_at"
 )
@@ -42,7 +43,8 @@ const (
 // CampaignCreatorRow maps to the campaign_creators table. Insert tags cover
 // only the three fields the service supplies — id / counters / timestamps
 // are DB-defaulted, nullable timestamps stay NULL until notify / remind /
-// TMA-side flows flip them.
+// TMA-side flows flip them. ContractID is set by the outbox-worker once the
+// row reaches `signing` (chunk 16).
 type CampaignCreatorRow struct {
 	ID            string     `db:"id"`
 	CampaignID    string     `db:"campaign_id"     insert:"campaign_id"`
@@ -53,6 +55,7 @@ type CampaignCreatorRow struct {
 	RemindedAt    *time.Time `db:"reminded_at"`
 	RemindedCount int        `db:"reminded_count"`
 	DecidedAt     *time.Time `db:"decided_at"`
+	ContractID    *string    `db:"contract_id"`
 	CreatedAt     time.Time  `db:"created_at"`
 	UpdatedAt     time.Time  `db:"updated_at"`
 }
@@ -67,11 +70,13 @@ type CampaignCreatorRepo interface {
 	Add(ctx context.Context, campaignID, creatorID, status string) (*CampaignCreatorRow, error)
 	GetByCampaignAndCreator(ctx context.Context, campaignID, creatorID string) (*CampaignCreatorRow, error)
 	GetByIDForUpdate(ctx context.Context, id string) (*CampaignCreatorRow, error)
+	GetByContractID(ctx context.Context, contractID string) (*CampaignCreatorRow, error)
 	ListByCampaign(ctx context.Context, campaignID string) ([]*CampaignCreatorRow, error)
 	ListByCampaignAndCreators(ctx context.Context, campaignID string, creatorIDs []string) ([]*CampaignCreatorRow, error)
 	ApplyInvite(ctx context.Context, id string) (*CampaignCreatorRow, error)
 	ApplyRemind(ctx context.Context, id string) (*CampaignCreatorRow, error)
 	ApplyDecision(ctx context.Context, id, status string) (*CampaignCreatorRow, error)
+	UpdateContractIDAndStatus(ctx context.Context, id, contractID, status string) error
 	ExistsInvitedInCampaign(ctx context.Context, campaignID string) (bool, error)
 	DeleteByID(ctx context.Context, id string) error
 }
@@ -256,6 +261,38 @@ func (r *campaignCreatorRepository) ApplyDecision(ctx context.Context, id, statu
 		Where(sq.Eq{CampaignCreatorColumnID: id}).
 		Suffix(returningClause(campaignCreatorSelectColumns))
 	return dbutil.One[CampaignCreatorRow](ctx, r.db, q)
+}
+
+// GetByContractID returns the campaign_creators row whose contract_id points
+// to the given contracts.id. Used by chunk 17 webhook handler; chunk 16 keeps
+// it on the interface so the worker can verify post-COMMIT state in tests.
+func (r *campaignCreatorRepository) GetByContractID(ctx context.Context, contractID string) (*CampaignCreatorRow, error) {
+	q := sq.Select(campaignCreatorSelectColumns...).
+		From(TableCampaignCreators).
+		Where(sq.Eq{CampaignCreatorColumnContractID: contractID})
+	return dbutil.One[CampaignCreatorRow](ctx, r.db, q)
+}
+
+// UpdateContractIDAndStatus stamps contract_id + flips the row to the given
+// status. Used by the outbox-worker Phase 1 inside the claim transaction:
+// `agreed → signing` once a contracts row has been inserted. Single mutating
+// statement — atomic without an extra Tx wrapper, but the caller usually
+// runs it inside `dbutil.WithTx` together with the contract INSERT and
+// audit row.
+func (r *campaignCreatorRepository) UpdateContractIDAndStatus(ctx context.Context, id, contractID, status string) error {
+	q := sq.Update(TableCampaignCreators).
+		Set(CampaignCreatorColumnContractID, contractID).
+		Set(CampaignCreatorColumnStatus, status).
+		Set(CampaignCreatorColumnUpdatedAt, sq.Expr("now()")).
+		Where(sq.Eq{CampaignCreatorColumnID: id})
+	n, err := dbutil.Exec(ctx, r.db, q)
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
 }
 
 // ExistsInvitedInCampaign returns true if any campaign_creators row in this

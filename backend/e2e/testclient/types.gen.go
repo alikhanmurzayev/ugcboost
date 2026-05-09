@@ -218,6 +218,76 @@ type TelegramSpyFakeChatRequest struct {
 	ChatId int64 `json:"chatId"`
 }
 
+// TrustMeSentRecord defines model for TrustMeSentRecord.
+type TrustMeSentRecord struct {
+	// AdditionalInfo contracts.id passed in AdditionalInfo when SendToSign was invoked.
+	AdditionalInfo string `json:"additionalInfo"`
+	ContractName   string `json:"contractName"`
+
+	// DocumentId trustme_document_id assigned by the spy (empty when send was forced to fail).
+	DocumentId *string `json:"documentId,omitempty"`
+
+	// Err Error string when fail-next caused this attempt to fail.
+	Err *string `json:"err,omitempty"`
+
+	// FioFingerprint sha256 prefix (first 16 hex chars) of the first Requisite.FIO. PII
+	// is hashed before exposure per security.md hard rule. Same FIO →
+	// same fingerprint, so e2e can assert via `domain/spy.Fingerprint("Иванов ...")`.
+	FioFingerprint string `json:"fioFingerprint"`
+
+	// IinFingerprint sha256 prefix of the first Requisite.IIN_BIN.
+	IinFingerprint string `json:"iinFingerprint"`
+
+	// PdfBase64 Base64-encoded PDF that was sent (verbatim copy).
+	PdfBase64 string `json:"pdfBase64"`
+
+	// PhoneFingerprint sha256 prefix of the first Requisite.PhoneNumber (already E.164).
+	PhoneFingerprint string    `json:"phoneFingerprint"`
+	SentAt           time.Time `json:"sentAt"`
+
+	// ShortUrl Short URL (empty when send failed).
+	ShortUrl *string `json:"shortUrl,omitempty"`
+}
+
+// TrustMeSpyFailNextRequest defines model for TrustMeSpyFailNextRequest.
+type TrustMeSpyFailNextRequest struct {
+	// AdditionalInfo contracts.id whose next SendToSign should fail. Empty string —
+	// wildcard, fails next `count` SendToSign'ов независимо от
+	// additionalInfo (нужно e2e Phase 0 recovery, где contract_id
+	// ещё не существует на момент регистрации failure).
+	AdditionalInfo string `json:"additionalInfo"`
+
+	// Count How many subsequent calls to fail. Defaults to 1.
+	Count *int `json:"count,omitempty"`
+
+	// Reason Optional override for the error string the spy returns.
+	Reason *string `json:"reason,omitempty"`
+}
+
+// TrustMeSpyListData defines model for TrustMeSpyListData.
+type TrustMeSpyListData struct {
+	Items []TrustMeSentRecord `json:"items"`
+}
+
+// TrustMeSpyListResult defines model for TrustMeSpyListResult.
+type TrustMeSpyListResult struct {
+	Data TrustMeSpyListData `json:"data"`
+}
+
+// TrustMeSpyRegisterDocumentRequest defines model for TrustMeSpyRegisterDocumentRequest.
+type TrustMeSpyRegisterDocumentRequest struct {
+	AdditionalInfo string `json:"additionalInfo"`
+
+	// ContractStatus TrustMe contract_status to attach. Defaults to 0.
+	ContractStatus *int `json:"contractStatus,omitempty"`
+
+	// DocumentId trustme_document_id the spy returns from search/Contracts.
+	DocumentId string `json:"documentId"`
+
+	// ShortUrl shortUrl the spy returns. Defaults to a synthetic URL.
+	ShortUrl *string `json:"shortUrl,omitempty"`
+}
+
 // GetResetTokenParams defines parameters for GetResetToken.
 type GetResetTokenParams struct {
 	Email openapi_types.Email `form:"email" json:"email"`
@@ -249,3 +319,9 @@ type TelegramSpyFakeChatJSONRequestBody = TelegramSpyFakeChatRequest
 
 // SignTMAInitDataJSONRequestBody defines body for SignTMAInitData for application/json ContentType.
 type SignTMAInitDataJSONRequestBody = SignTMAInitDataRequest
+
+// TrustMeSpyFailNextJSONRequestBody defines body for TrustMeSpyFailNext for application/json ContentType.
+type TrustMeSpyFailNextJSONRequestBody = TrustMeSpyFailNextRequest
+
+// TrustMeSpyRegisterDocumentJSONRequestBody defines body for TrustMeSpyRegisterDocument for application/json ContentType.
+type TrustMeSpyRegisterDocumentJSONRequestBody = TrustMeSpyRegisterDocumentRequest
