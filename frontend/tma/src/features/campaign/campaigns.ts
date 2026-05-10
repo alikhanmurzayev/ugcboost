@@ -349,7 +349,6 @@ export const campaigns: Record<string, CampaignBrief> = {
       title: "От креатора",
       items: [
         "Осветить KIDS FASHION DAY — 1 Reels, 3 Stories",
-        "Дополнительный контент с Недели моды — по желанию",
       ],
     },
     reels: {
