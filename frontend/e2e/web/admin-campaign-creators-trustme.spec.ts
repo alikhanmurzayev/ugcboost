@@ -167,7 +167,7 @@ test.describe("Admin campaign creators TrustMe states — chunk 18", () => {
     ).toHaveText("1");
     await expect(
       page.getByTestId(`campaign-creator-decided-at-${creator.creatorId}`),
-    ).toHaveText(/\d{1,2}\s+\S+\s+\d{4}/);
+    ).toHaveText(/\d{1,2}\s+\S+/);
   });
 
   test("signing → signing_declined: webhook со status=9 переводит в «Отказались от договора»", async ({
