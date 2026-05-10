@@ -65,14 +65,16 @@ var (
 	campaignCreatorInsertMapper  = stom.MustNewStom(CampaignCreatorRow{}).SetTag(string(tagInsert))
 )
 
-// CampaignCreatorWebhookView projects cc.id, cc.status, c.is_deleted and
-// cr.telegram_user_id за один JOIN по contracts.id. Используется webhook-
-// service'ом chunk 17 для дispatch'а terminal-state-transition + post-Tx
-// notify (skipped at c.is_deleted=true).
+// CampaignCreatorWebhookView projects cc.id, cc.status, c.is_deleted,
+// c.tma_url and cr.telegram_user_id за один JOIN по contracts.id.
+// Используется webhook-service'ом chunk 17 для дispatch'а terminal-state-
+// transition + post-Tx notify (skipped at c.is_deleted=true). CampaignTmaURL
+// прокидывается в NotifyCampaignContractSigned для inline WebApp-кнопки с ТЗ.
 type CampaignCreatorWebhookView struct {
 	CampaignCreatorID     string
 	CampaignCreatorStatus string
 	CampaignIsDeleted     bool
+	CampaignTmaURL        string
 	CreatorTelegramUserID int64
 }
 
@@ -288,9 +290,10 @@ func (r *campaignCreatorRepository) GetByContractID(ctx context.Context, contrac
 
 // GetWithCampaignAndCreatorByContractID JOIN'ит campaign_creators + campaigns
 // + creators по contracts.id и проектирует cc.id, cc.status, c.is_deleted,
-// cr.telegram_user_id. Webhook-service chunk 17 использует view внутри Tx
-// после LockByTrustMeDocumentID, чтобы решить ветку state-transition и
-// нужен ли post-Tx notify (soft-deleted кампания → notify skipped).
+// c.tma_url, cr.telegram_user_id. Webhook-service chunk 17 использует view
+// внутри Tx после LockByTrustMeDocumentID, чтобы решить ветку state-
+// transition и собрать post-Tx notify payload (skipped at
+// c.is_deleted=true; tma_url пробрасывается в WebApp-кнопку signed-сообщения).
 func (r *campaignCreatorRepository) GetWithCampaignAndCreatorByContractID(ctx context.Context, contractID string) (*CampaignCreatorWebhookView, error) {
 	const ccAlias = "cc"
 	const cAlias = "c"
@@ -299,6 +302,7 @@ func (r *campaignCreatorRepository) GetWithCampaignAndCreatorByContractID(ctx co
 		ccAlias+"."+CampaignCreatorColumnID,
 		ccAlias+"."+CampaignCreatorColumnStatus,
 		cAlias+"."+CampaignColumnIsDeleted,
+		cAlias+"."+CampaignColumnTmaURL,
 		crAlias+"."+CreatorColumnTelegramUserID,
 	).
 		From(TableCampaignCreators + " " + ccAlias).
@@ -331,6 +335,7 @@ func (r *campaignCreatorRepository) GetWithCampaignAndCreatorByContractID(ctx co
 		&view.CampaignCreatorID,
 		&view.CampaignCreatorStatus,
 		&view.CampaignIsDeleted,
+		&view.CampaignTmaURL,
 		&view.CreatorTelegramUserID,
 	); err != nil {
 		return nil, err

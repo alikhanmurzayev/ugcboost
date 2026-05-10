@@ -84,8 +84,8 @@ func (_c *MockWebhookNotifier_NotifyCampaignContractDeclined_Call) RunAndReturn(
 }
 
 // NotifyCampaignContractSigned provides a mock function for the type MockWebhookNotifier
-func (_mock *MockWebhookNotifier) NotifyCampaignContractSigned(ctx context.Context, chatID int64) {
-	_mock.Called(ctx, chatID)
+func (_mock *MockWebhookNotifier) NotifyCampaignContractSigned(ctx context.Context, chatID int64, tmaURL string) {
+	_mock.Called(ctx, chatID, tmaURL)
 	return
 }
 
@@ -97,11 +97,12 @@ type MockWebhookNotifier_NotifyCampaignContractSigned_Call struct {
 // NotifyCampaignContractSigned is a helper method to define mock.On call
 //   - ctx context.Context
 //   - chatID int64
-func (_e *MockWebhookNotifier_Expecter) NotifyCampaignContractSigned(ctx interface{}, chatID interface{}) *MockWebhookNotifier_NotifyCampaignContractSigned_Call {
-	return &MockWebhookNotifier_NotifyCampaignContractSigned_Call{Call: _e.mock.On("NotifyCampaignContractSigned", ctx, chatID)}
+//   - tmaURL string
+func (_e *MockWebhookNotifier_Expecter) NotifyCampaignContractSigned(ctx interface{}, chatID interface{}, tmaURL interface{}) *MockWebhookNotifier_NotifyCampaignContractSigned_Call {
+	return &MockWebhookNotifier_NotifyCampaignContractSigned_Call{Call: _e.mock.On("NotifyCampaignContractSigned", ctx, chatID, tmaURL)}
 }
 
-func (_c *MockWebhookNotifier_NotifyCampaignContractSigned_Call) Run(run func(ctx context.Context, chatID int64)) *MockWebhookNotifier_NotifyCampaignContractSigned_Call {
+func (_c *MockWebhookNotifier_NotifyCampaignContractSigned_Call) Run(run func(ctx context.Context, chatID int64, tmaURL string)) *MockWebhookNotifier_NotifyCampaignContractSigned_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -111,9 +112,14 @@ func (_c *MockWebhookNotifier_NotifyCampaignContractSigned_Call) Run(run func(ct
 		if args[1] != nil {
 			arg1 = args[1].(int64)
 		}
+		var arg2 string
+		if args[2] != nil {
+			arg2 = args[2].(string)
+		}
 		run(
 			arg0,
 			arg1,
+			arg2,
 		)
 	})
 	return _c
@@ -124,7 +130,7 @@ func (_c *MockWebhookNotifier_NotifyCampaignContractSigned_Call) Return() *MockW
 	return _c
 }
 
-func (_c *MockWebhookNotifier_NotifyCampaignContractSigned_Call) RunAndReturn(run func(ctx context.Context, chatID int64)) *MockWebhookNotifier_NotifyCampaignContractSigned_Call {
+func (_c *MockWebhookNotifier_NotifyCampaignContractSigned_Call) RunAndReturn(run func(ctx context.Context, chatID int64, tmaURL string)) *MockWebhookNotifier_NotifyCampaignContractSigned_Call {
 	_c.Run(run)
 	return _c
 }

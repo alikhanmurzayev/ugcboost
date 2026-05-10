@@ -364,8 +364,9 @@ func TestRemindCampaignCreatorsInvitation(t *testing.T) {
 	t.Run("happy: bumps reminded_count and writes remind audit", func(t *testing.T) {
 		t.Parallel()
 		adminClient, adminToken, _ := testutil.SetupAdminClient(t)
-		campaignID := setupCampaign(t, adminClient, adminToken, "ccA5-happy-"+testutil.UniqueEmail("camp"))
-		uploadDummyContractTemplate(t, adminToken, campaignID)
+		tmaURL := testutil.FreshValidTmaURL()
+		campaignID := setupCampaignWithTmaURL(t, adminClient, adminToken,
+			"ccA5-happy-"+testutil.UniqueEmail("camp"), tmaURL)
 		creator := testutil.SetupApprovedCreator(t, defaultCreatorOpts(testutil.UniqueIIN()[6:]))
 		addCreatorToCampaign(t, adminClient, adminToken, campaignID, creator.CreatorID)
 
@@ -377,6 +378,7 @@ func TestRemindCampaignCreatorsInvitation(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, http.StatusOK, notifyResp.StatusCode())
 
+		remindStartedAt := time.Now().UTC().Add(-time.Second)
 		remindResp, err := adminClient.RemindCampaignCreatorsInvitationWithResponse(context.Background(), campaignID,
 			apiclient.RemindCampaignCreatorsInvitationJSONRequestBody{
 				CreatorIds: []uuid.UUID{uuid.MustParse(creator.CreatorID)},
@@ -393,14 +395,21 @@ func TestRemindCampaignCreatorsInvitation(t *testing.T) {
 		require.NotNil(t, cc.RemindedAt)
 		testutil.AssertAuditEntry(t, adminClient, adminToken,
 			"campaign_creator", cc.Id.String(), "campaign_creator_remind")
+
+		// Remind text + WebApp URL — кнопка на ту же tma_url, что и invite.
+		remindMsg := waitInviteSent(t, creator.TelegramUserID, remindStartedAt, chunk12RemindText)
+		require.Nil(t, remindMsg.Error, "happy remind delivery must not record a spy error")
+		require.NotNil(t, remindMsg.WebAppUrl)
+		require.Equal(t, tmaURL, *remindMsg.WebAppUrl)
 	})
 }
 
 func TestNotifyPartialSuccess(t *testing.T) {
 	t.Parallel()
 	adminClient, adminToken, _ := testutil.SetupAdminClient(t)
-	campaignID := setupCampaign(t, adminClient, adminToken, "ccA4-partial-"+testutil.UniqueEmail("camp"))
-	uploadDummyContractTemplate(t, adminToken, campaignID)
+	tmaURL := testutil.FreshValidTmaURL()
+	campaignID := setupCampaignWithTmaURL(t, adminClient, adminToken,
+		"ccA4-partial-"+testutil.UniqueEmail("camp"), tmaURL)
 
 	delivered := testutil.SetupApprovedCreator(t, defaultCreatorOpts(testutil.UniqueIIN()[6:]))
 	failing := testutil.SetupApprovedCreator(t, defaultCreatorOpts(testutil.UniqueIIN()[6:]))
@@ -440,6 +449,8 @@ func TestNotifyPartialSuccess(t *testing.T) {
 
 	deliveredMsg := waitInviteSent(t, delivered.TelegramUserID, startedAt, chunk12InviteText)
 	require.Nil(t, deliveredMsg.Error)
+	require.NotNil(t, deliveredMsg.WebAppUrl)
+	require.Equal(t, tmaURL, *deliveredMsg.WebAppUrl)
 
 	failingMsg := waitInviteSent(t, failing.TelegramUserID, startedAt, chunk12InviteText)
 	require.NotNil(t, failingMsg.Error)

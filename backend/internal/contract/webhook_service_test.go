@@ -87,6 +87,7 @@ func ccView(ccID string, isDeleted bool, tgID int64) *repository.CampaignCreator
 		CampaignCreatorID:     ccID,
 		CampaignCreatorStatus: domain.CampaignCreatorStatusSigning,
 		CampaignIsDeleted:     isDeleted,
+		CampaignTmaURL:        "https://tma.example/tz/" + ccID,
 		CreatorTelegramUserID: tgID,
 	}
 }
@@ -105,7 +106,7 @@ func TestWebhookService_HandleEvent_Signed(t *testing.T) {
 	rig.cc.EXPECT().UpdateStatus(mock.Anything, "cc-1", domain.CampaignCreatorStatusSigned).Return(nil)
 	expectWebhookAudit(t, rig, "campaign_creator.contract_signed", "cc-1",
 		`{"contract_id":"ct-1","trustme_status_code_old":0,"trustme_status_code_new":3}`)
-	rig.notifier.EXPECT().NotifyCampaignContractSigned(mock.Anything, int64(5001))
+	rig.notifier.EXPECT().NotifyCampaignContractSigned(mock.Anything, int64(5001), "https://tma.example/tz/cc-1")
 
 	svc := rig.build(t)
 	ev, err := domain.NewTrustMeWebhookEvent("doc-ct-1", 3)

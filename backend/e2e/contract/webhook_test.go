@@ -39,7 +39,18 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/alikhanmurzayev/ugcboost/backend/e2e/apiclient"
+	"github.com/alikhanmurzayev/ugcboost/backend/e2e/testclient"
 	"github.com/alikhanmurzayev/ugcboost/backend/e2e/testutil"
+)
+
+// expectedCampaignContractSignedText / expectedCampaignContractDeclinedText
+// mirror internal/telegram/notifier.go::campaignContract{Signed,Declined}Text
+// so e2e ассертит точный текст без импорта internal (e2e — отдельный модуль).
+// Изменился production-текст? — обновляем константы здесь синхронно.
+const (
+	expectedCampaignContractSignedText = "Ура, мы подписали с вами соглашение ✅ Скоро отправим вам онлайн пригласительный на показы 😍\n\n" +
+		"ТЗ — по кнопке ниже, чтобы не потерялось 💫"
+	expectedCampaignContractDeclinedText = "Поняли, в этот раз не подписываем. Если появятся другие подходящие предложения — обязательно вам напишем 💫"
 )
 
 func TestTrustMeWebhook(t *testing.T) {
@@ -59,10 +70,18 @@ func TestTrustMeWebhook(t *testing.T) {
 		testutil.AssertAuditEntry(t, fx.AdminClient, fx.AdminToken,
 			"campaign_creator", fx.CampaignCreatorID, "campaign_creator.contract_signed")
 
-		// Bot-сообщение signed после COMMIT'а — ждём ровно baseline+1.
-		testutil.WaitForTelegramSent(t, fx.CreatorTelegramID, testutil.TelegramSentOptions{
+		// Bot-сообщение signed после COMMIT'а — ждём ровно baseline+1, новый
+		// message — последний по sentAt. Ассертим точный текст + inline
+		// WebApp-кнопку с ТЗ кампании (chunk-12 lock гарантирует, что tma_url
+		// в кнопке совпадает с tma_url из исходного invite).
+		messages := testutil.WaitForTelegramSent(t, fx.CreatorTelegramID, testutil.TelegramSentOptions{
 			ExpectCount: baselineSize + 1,
 		})
+		require.GreaterOrEqual(t, len(messages), baselineSize+1)
+		signedMsg := newestSpyMessage(t, messages, expectedCampaignContractSignedText)
+		require.Equal(t, fx.CreatorTelegramID, signedMsg.ChatId)
+		require.NotNil(t, signedMsg.WebAppUrl, "signed message must carry an inline WebApp button")
+		require.Equal(t, fx.TmaURL, *signedMsg.WebAppUrl)
 	})
 
 	t.Run("declined (status=9) flips cc to signing_declined + audit + decline bot message", func(t *testing.T) {
@@ -79,9 +98,12 @@ func TestTrustMeWebhook(t *testing.T) {
 		testutil.AssertAuditEntry(t, fx.AdminClient, fx.AdminToken,
 			"campaign_creator", fx.CampaignCreatorID, "campaign_creator.contract_signing_declined")
 
-		testutil.WaitForTelegramSent(t, fx.CreatorTelegramID, testutil.TelegramSentOptions{
+		messages := testutil.WaitForTelegramSent(t, fx.CreatorTelegramID, testutil.TelegramSentOptions{
 			ExpectCount: baselineSize + 1,
 		})
+		declinedMsg := newestSpyMessage(t, messages, expectedCampaignContractDeclinedText)
+		require.Equal(t, fx.CreatorTelegramID, declinedMsg.ChatId)
+		require.Nil(t, declinedMsg.WebAppUrl, "declined message must be plain text — no WebApp button")
 	})
 
 	t.Run("idempotent repeat (signed twice) — second call adds nothing", func(t *testing.T) {
@@ -197,6 +219,22 @@ func TestTrustMeWebhook(t *testing.T) {
 		status, body := testutil.PostTrustMeWebhook(t, payload, token)
 		require.Equal(t, 422, status, "invalid status body=%s", string(body))
 	})
+}
+
+// newestSpyMessage возвращает first spy record с текстом expectedText из
+// набора. Ошибается тестом, если такого нет — гарант предсказуемой
+// поломки при drift'е production-копии. Spy возвращает все сообщения
+// чата, expected-text используется как фильтр (другие baseline-сообщения,
+// invite/welcome/contract-sent, имеют отличный текст).
+func newestSpyMessage(t *testing.T, messages []testclient.TelegramSentMessage, expectedText string) testclient.TelegramSentMessage {
+	t.Helper()
+	for _, m := range messages {
+		if m.Text == expectedText {
+			return m
+		}
+	}
+	t.Fatalf("expected spy message with text=%q not found in %d records", expectedText, len(messages))
+	return testclient.TelegramSentMessage{}
 }
 
 // assertCCStatus — admin GET /campaigns/{id}/creators ищет cc.id и

@@ -103,7 +103,11 @@ const (
 
 // campaignContractSignedText is the post-signing congrat message — sent by
 // chunk 17 webhook once TrustMe confirms the creator signed the contract.
-const campaignContractSignedText = "Ура, мы подписали с вами соглашение ✅ Скоро отправим вам онлайн пригласительный на показы 😍"
+// Inline WebApp button ("Посмотреть") attaches campaign tma_url so the
+// creator can re-open the brief without scrolling back to the original
+// invite.
+const campaignContractSignedText = "Ура, мы подписали с вами соглашение ✅ Скоро отправим вам онлайн пригласительный на показы 😍\n\n" +
+	"ТЗ — по кнопке ниже, чтобы не потерялось 💫"
 
 // campaignContractDeclinedText — креатору после отказа подписать договор
 // (TrustMe webhook status=9). Стиль одной строкой с эмодзи в конце —
@@ -120,12 +124,20 @@ func CampaignContractSignedText() string { return campaignContractSignedText }
 func CampaignContractDeclinedText() string { return campaignContractDeclinedText }
 
 // NotifyCampaignContractSigned отправляет креатору поздравительное
-// сообщение после того как TrustMe подтвердил подписание договора. fire-
-// and-forget — стандарт backend-transactions (бот ПОСЛЕ Tx).
-func (n *Notifier) NotifyCampaignContractSigned(ctx context.Context, chatID int64) {
+// сообщение после того как TrustMe подтвердил подписание договора, плюс
+// inline WebApp-кнопку с ТЗ кампании. fire-and-forget — стандарт
+// backend-transactions (бот ПОСЛЕ Tx). tmaURL — campaigns.tma_url из view,
+// тот же что в исходном invite (chunk-12 lock гарантирует совпадение).
+func (n *Notifier) NotifyCampaignContractSigned(ctx context.Context, chatID int64, tmaURL string) {
 	n.fire(ctx, "campaign_contract_signed", chatID, &bot.SendMessageParams{
 		ChatID: chatID,
 		Text:   campaignContractSignedText,
+		ReplyMarkup: &models.InlineKeyboardMarkup{
+			InlineKeyboard: [][]models.InlineKeyboardButton{{{
+				Text:   campaignInviteWebAppButtonText,
+				WebApp: &models.WebAppInfo{URL: tmaURL},
+			}}},
+		},
 	})
 }
 
