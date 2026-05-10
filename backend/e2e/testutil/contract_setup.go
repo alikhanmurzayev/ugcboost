@@ -12,6 +12,13 @@ import (
 	"github.com/alikhanmurzayev/ugcboost/backend/e2e/testclient"
 )
 
+// ExpectedCampaignContractSentText mirrors internal/telegram/notifier.go::
+// campaignContractSentText so e2e ассертит точный Phase-3 ContractSent
+// текст без импорта internal. Изменился production-текст — обновляем здесь.
+const ExpectedCampaignContractSentText = "Мы отправили вам соглашение на подпись по СМС на номер телефона, указанный при регистрации 📄\n\n" +
+	"Перейдите по ссылке из СМС и подпишите соглашение\n\n" +
+	"Если есть вопросы, можете обратиться к @iskarova"
+
 // RunTrustMeOutboxOnce синхронно прогоняет один тик ContractSenderService —
 // гейтит /test/trustme/run-outbox-once. e2e webhook scenario использует это
 // чтобы перевести cc.status в `signing` и получить TrustMe document_id в
@@ -134,6 +141,15 @@ func SetupCampaignWithSigningCreator(t *testing.T) SigningCampaignFixture {
 		TelegramSentOptions{ExpectCount: 3, Timeout: 10 * time.Second})
 	stableBaseline := waitSpyStable(t, fx.TelegramUserID, len(notifyBaseline), 5*time.Second)
 
+	// Phase 3 contract-sent проверяется здесь — every contract e2e сценарий
+	// проходит через эту фикстуру, поэтому drift production-текста или
+	// случайное добавление inline-кнопки сразу ломает любой контрактный тест.
+	finalBaseline := currentSpyForChat(t, fx.TelegramUserID)
+	contractSentMsg, found := findSpyMessageByText(finalBaseline, ExpectedCampaignContractSentText)
+	require.True(t, found, "Phase 3 contract-sent message not found in baseline; checked %d records", len(finalBaseline))
+	require.Equal(t, fx.TelegramUserID, contractSentMsg.ChatId)
+	require.Nil(t, contractSentMsg.WebAppUrl, "contract-sent message must be plain text — no WebApp keyboard")
+
 	return SigningCampaignFixture{
 		TmaCampaignFixture: fx,
 		ContractID:         rec.AdditionalInfo, // contracts.id (наш UUID)
@@ -141,6 +157,18 @@ func SetupCampaignWithSigningCreator(t *testing.T) SigningCampaignFixture {
 		CreatorTelegramID:  fx.TelegramUserID,
 		NotifyBaselineSize: stableBaseline,
 	}
+}
+
+// findSpyMessageByText returns the first spy record matching expectedText.
+// Helper for e2e assertions that filter by exact production copy without
+// caring about ordering.
+func findSpyMessageByText(messages []testclient.TelegramSentMessage, expectedText string) (testclient.TelegramSentMessage, bool) {
+	for _, m := range messages {
+		if m.Text == expectedText {
+			return m, true
+		}
+	}
+	return testclient.TelegramSentMessage{}, false
 }
 
 // waitSpyStable polls the telegram spy until the recorded message count for

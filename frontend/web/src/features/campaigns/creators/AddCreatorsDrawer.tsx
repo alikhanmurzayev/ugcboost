@@ -220,6 +220,47 @@ export default function AddCreatorsDrawer({
           </p>
         )}
 
+        <div className="mt-4 flex items-center justify-between border-y border-surface-200 py-3">
+          <div
+            className={`text-sm font-medium ${
+              capReached ? "text-amber-600" : "text-gray-700"
+            }`}
+            data-testid="add-creators-drawer-counter"
+          >
+            {t("campaignCreators.capCounter", { count: size })}
+            {capReached && (
+              <span
+                className="ml-2 text-xs font-normal text-amber-700"
+                data-testid="add-creators-drawer-cap-hint"
+              >
+                {t("campaignCreators.capHint")}
+              </span>
+            )}
+          </div>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={handleCancel}
+              disabled={isSubmitting || addMutation.isPending}
+              className="rounded-button border border-surface-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 transition hover:bg-surface-100 disabled:cursor-not-allowed disabled:opacity-50"
+              data-testid="add-creators-drawer-cancel"
+            >
+              {t("campaignCreators.cancelButton")}
+            </button>
+            <button
+              type="button"
+              onClick={handleSubmit}
+              disabled={submitDisabled}
+              className="rounded-button bg-primary px-3 py-1.5 text-sm font-medium text-white transition hover:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-50"
+              data-testid="add-creators-drawer-submit"
+            >
+              {isSubmitting || addMutation.isPending
+                ? t("campaignCreators.addSubmittingButton")
+                : t("campaignCreators.addSubmitButton", { count: size })}
+            </button>
+          </div>
+        </div>
+
         {listQuery.isLoading ? (
           <Spinner className="mt-6" />
         ) : listQuery.isError ? (
@@ -285,47 +326,6 @@ export default function AddCreatorsDrawer({
             )}
           </>
         )}
-
-        <div className="mt-6 flex items-center justify-between border-t border-surface-200 pt-4">
-          <div
-            className={`text-sm font-medium ${
-              capReached ? "text-amber-600" : "text-gray-700"
-            }`}
-            data-testid="add-creators-drawer-counter"
-          >
-            {t("campaignCreators.capCounter", { count: size })}
-            {capReached && (
-              <span
-                className="ml-2 text-xs font-normal text-amber-700"
-                data-testid="add-creators-drawer-cap-hint"
-              >
-                {t("campaignCreators.capHint")}
-              </span>
-            )}
-          </div>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={handleCancel}
-              disabled={isSubmitting || addMutation.isPending}
-              className="rounded-button border border-surface-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 transition hover:bg-surface-100 disabled:cursor-not-allowed disabled:opacity-50"
-              data-testid="add-creators-drawer-cancel"
-            >
-              {t("campaignCreators.cancelButton")}
-            </button>
-            <button
-              type="button"
-              onClick={handleSubmit}
-              disabled={submitDisabled}
-              className="rounded-button bg-primary px-3 py-1.5 text-sm font-medium text-white transition hover:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-50"
-              data-testid="add-creators-drawer-submit"
-            >
-              {isSubmitting || addMutation.isPending
-                ? t("campaignCreators.addSubmittingButton")
-                : t("campaignCreators.addSubmitButton", { count: size })}
-            </button>
-          </div>
-        </div>
       </div>
     </Drawer>
   );

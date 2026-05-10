@@ -117,7 +117,8 @@ const (
 		"После Недели моды мы планируем запустить приложение в App Store и добавить новые возможности для UGC-сотрудничества с брендами и партнерами EURASIAN FASHION WEEK.\n\n" +
 		"Оставайтесь с нами — впереди много масштабных проектов!"
 
-	expectedCampaignContractSigned   = "Ура, мы подписали с вами соглашение ✅ Скоро отправим вам онлайн пригласительный на показы 😍"
+	expectedCampaignContractSigned = "Ура, мы подписали с вами соглашение ✅ Скоро отправим вам онлайн пригласительный на показы 😍\n\n" +
+		"ТЗ — по кнопке ниже, чтобы не потерялось 💫"
 	expectedCampaignContractDeclined = "Поняли, в этот раз не подписываем. Если появятся другие подходящие предложения — обязательно вам напишем 💫"
 )
 
@@ -335,14 +336,14 @@ func TestNotifier_NotifyApplicationApproved(t *testing.T) {
 func TestNotifier_NotifyCampaignContractSigned(t *testing.T) {
 	t.Parallel()
 
-	t.Run("posts exact signed copy as plain text", func(t *testing.T) {
+	t.Run("posts signed copy with WebApp button to campaign tma_url", func(t *testing.T) {
 		t.Parallel()
 		sender := tgmocks.NewMockSender(t)
 		log := logmocks.NewMockLogger(t)
 		captured, sendDone := captureSend(t, sender, nil)
 
 		n := telegram.NewNotifier(sender, log)
-		n.NotifyCampaignContractSigned(context.Background(), 555)
+		n.NotifyCampaignContractSigned(context.Background(), 555, "https://tma.example/tz/abc")
 		waitFor(t, t.Name(), sendDone)
 		n.Wait()
 
@@ -352,7 +353,14 @@ func TestNotifier_NotifyCampaignContractSigned(t *testing.T) {
 		require.Equal(t, int64(555), chatID)
 		require.Equal(t, expectedCampaignContractSigned, (*captured).Text)
 		require.Empty(t, (*captured).ParseMode)
-		require.Nil(t, (*captured).ReplyMarkup)
+		markup, ok := (*captured).ReplyMarkup.(*models.InlineKeyboardMarkup)
+		require.True(t, ok, "signed message must carry an InlineKeyboardMarkup with the ТЗ button")
+		require.Len(t, markup.InlineKeyboard, 1)
+		require.Len(t, markup.InlineKeyboard[0], 1)
+		button := markup.InlineKeyboard[0][0]
+		require.Equal(t, "Посмотреть", button.Text)
+		require.NotNil(t, button.WebApp)
+		require.Equal(t, "https://tma.example/tz/abc", button.WebApp.URL)
 	})
 
 	t.Run("sender error logged with op campaign_contract_signed", func(t *testing.T) {
@@ -373,7 +381,7 @@ func TestNotifier_NotifyCampaignContractSigned(t *testing.T) {
 
 		n := newSingleShotNotifier(sender, log)
 		require.NotPanics(t, func() {
-			n.NotifyCampaignContractSigned(context.Background(), 606)
+			n.NotifyCampaignContractSigned(context.Background(), 606, "https://tma.example/tz/err")
 		})
 		waitFor(t, t.Name(), sendDone)
 		n.Wait()

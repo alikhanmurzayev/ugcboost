@@ -715,7 +715,7 @@ func TestCampaignCreatorRepository_GetByContractID(t *testing.T) {
 func TestCampaignCreatorRepository_GetWithCampaignAndCreatorByContractID(t *testing.T) {
 	t.Parallel()
 
-	const sqlStmt = "SELECT cc.id, cc.status, c.is_deleted, cr.telegram_user_id FROM campaign_creators cc JOIN campaigns c ON c.id = cc.campaign_id JOIN creators cr ON cr.id = cc.creator_id WHERE cc.contract_id = $1"
+	const sqlStmt = "SELECT cc.id, cc.status, c.is_deleted, c.tma_url, cr.telegram_user_id FROM campaign_creators cc JOIN campaigns c ON c.id = cc.campaign_id JOIN creators cr ON cr.id = cc.creator_id WHERE cc.contract_id = $1"
 
 	t.Run("scans projected columns", func(t *testing.T) {
 		t.Parallel()
@@ -724,8 +724,8 @@ func TestCampaignCreatorRepository_GetWithCampaignAndCreatorByContractID(t *test
 
 		mock.ExpectQuery(sqlStmt).
 			WithArgs("ct-1").
-			WillReturnRows(pgxmock.NewRows([]string{"id", "status", "is_deleted", "telegram_user_id"}).
-				AddRow("cc-1", domain.CampaignCreatorStatusSigning, false, int64(123456789)))
+			WillReturnRows(pgxmock.NewRows([]string{"id", "status", "is_deleted", "tma_url", "telegram_user_id"}).
+				AddRow("cc-1", domain.CampaignCreatorStatusSigning, false, "https://tma.example/tz/abc", int64(123456789)))
 
 		got, err := repo.GetWithCampaignAndCreatorByContractID(context.Background(), "ct-1")
 		require.NoError(t, err)
@@ -733,6 +733,7 @@ func TestCampaignCreatorRepository_GetWithCampaignAndCreatorByContractID(t *test
 			CampaignCreatorID:     "cc-1",
 			CampaignCreatorStatus: domain.CampaignCreatorStatusSigning,
 			CampaignIsDeleted:     false,
+			CampaignTmaURL:        "https://tma.example/tz/abc",
 			CreatorTelegramUserID: 123456789,
 		}, got)
 	})
@@ -744,12 +745,13 @@ func TestCampaignCreatorRepository_GetWithCampaignAndCreatorByContractID(t *test
 
 		mock.ExpectQuery(sqlStmt).
 			WithArgs("ct-2").
-			WillReturnRows(pgxmock.NewRows([]string{"id", "status", "is_deleted", "telegram_user_id"}).
-				AddRow("cc-2", domain.CampaignCreatorStatusSigning, true, int64(42)))
+			WillReturnRows(pgxmock.NewRows([]string{"id", "status", "is_deleted", "tma_url", "telegram_user_id"}).
+				AddRow("cc-2", domain.CampaignCreatorStatusSigning, true, "https://tma.example/tz/xyz", int64(42)))
 
 		got, err := repo.GetWithCampaignAndCreatorByContractID(context.Background(), "ct-2")
 		require.NoError(t, err)
 		require.True(t, got.CampaignIsDeleted)
+		require.Equal(t, "https://tma.example/tz/xyz", got.CampaignTmaURL)
 	})
 
 	t.Run("not found returns sql.ErrNoRows", func(t *testing.T) {
@@ -759,7 +761,7 @@ func TestCampaignCreatorRepository_GetWithCampaignAndCreatorByContractID(t *test
 
 		mock.ExpectQuery(sqlStmt).
 			WithArgs("missing").
-			WillReturnRows(pgxmock.NewRows([]string{"id", "status", "is_deleted", "telegram_user_id"}))
+			WillReturnRows(pgxmock.NewRows([]string{"id", "status", "is_deleted", "tma_url", "telegram_user_id"}))
 
 		_, err := repo.GetWithCampaignAndCreatorByContractID(context.Background(), "missing")
 		require.ErrorIs(t, err, sql.ErrNoRows)

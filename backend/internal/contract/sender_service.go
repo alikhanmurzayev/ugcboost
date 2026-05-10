@@ -33,9 +33,7 @@ const (
 	auditEntityTypeCampaignCreator = "campaign_creator"
 	auditActorRoleSystem           = "system"
 	defaultContractName            = "Договор UGC"
-	// trustMeCreatorCompanyName per intent Decision #13.
-	trustMeCreatorCompanyName = "Креатор"
-	contractNumberPrefix      = "UGC-"
+	contractNumberPrefix           = "UGC-"
 )
 
 // ContractSenderRepoFactory — подмножество RepoFactory, нужное worker'у.
@@ -197,14 +195,15 @@ func (s *ContractSenderService) resendOrphan(ctx context.Context, contractID str
 		return
 	}
 
+	fio := composeFIO(requisites.CreatorLastName, requisites.CreatorFirstName, requisites.CreatorMiddleName)
 	in := trustme.SendToSignInput{
 		PDFBase64:      base64.StdEncoding.EncodeToString(unsignedPDF),
 		AdditionalInfo: contractID,
 		ContractName:   defaultContractName,
 		NumberDial:     formatContractNumber(requisites.SerialNumber),
 		Requisites: []trustme.Requisite{{
-			CompanyName: trustMeCreatorCompanyName,
-			FIO:         composeFIO(requisites.CreatorLastName, requisites.CreatorFirstName, requisites.CreatorMiddleName),
+			CompanyName: fio,
+			FIO:         fio,
 			IINBIN:      requisites.CreatorIIN,
 			PhoneNumber: domain.NormalizePhoneE164(requisites.CreatorPhone),
 		}},
@@ -279,9 +278,11 @@ func (s *ContractSenderService) claimAgreedBatch(ctx context.Context) ([]claim, 
 }
 
 func (s *ContractSenderService) processClaim(ctx context.Context, c claim) {
+	fio := composeFIO(c.CC.CreatorLastName, c.CC.CreatorFirstName, c.CC.CreatorMiddleName)
+
 	// Phase 2a — render
 	pdf, err := s.renderer.Render(c.CC.ContractTemplatePDF, ContractData{
-		CreatorFIO: composeFIO(c.CC.CreatorLastName, c.CC.CreatorFirstName, c.CC.CreatorMiddleName),
+		CreatorFIO: fio,
 		CreatorIIN: c.CC.CreatorIIN,
 		IssuedDate: domain.FormatIssuedDate(s.now(), s.loc),
 	})
@@ -306,8 +307,8 @@ func (s *ContractSenderService) processClaim(ctx context.Context, c claim) {
 		ContractName:   defaultContractName,
 		NumberDial:     formatContractNumber(c.SerialNumber),
 		Requisites: []trustme.Requisite{{
-			CompanyName: trustMeCreatorCompanyName,
-			FIO:         composeFIO(c.CC.CreatorLastName, c.CC.CreatorFirstName, c.CC.CreatorMiddleName),
+			CompanyName: fio,
+			FIO:         fio,
 			IINBIN:      c.CC.CreatorIIN,
 			PhoneNumber: domain.NormalizePhoneE164(c.CC.CreatorPhone),
 		}},

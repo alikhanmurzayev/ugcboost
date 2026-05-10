@@ -165,6 +165,7 @@ func TestContractSenderService_RunOnce_HappyPath(t *testing.T) {
 		return in.AdditionalInfo == "ct-1" &&
 			in.NumberDial == "UGC-42" &&
 			len(in.Requisites) == 1 &&
+			in.Requisites[0].CompanyName == "Иванов Иван Иванович" &&
 			in.Requisites[0].FIO == "Иванов Иван Иванович" &&
 			in.Requisites[0].IINBIN == "880101300123" &&
 			in.Requisites[0].PhoneNumber == "+77071234567"
@@ -262,6 +263,7 @@ func TestContractSenderService_Phase0_Resend_WithRealRequisites(t *testing.T) {
 	rig.tm.EXPECT().SendToSign(mock.Anything, mock.MatchedBy(func(in trustme.SendToSignInput) bool {
 		return in.AdditionalInfo == "ct-orphan" &&
 			in.NumberDial == "UGC-77" &&
+			in.Requisites[0].CompanyName == "Иванов Иван Иванович" &&
 			in.Requisites[0].FIO == "Иванов Иван Иванович" &&
 			in.Requisites[0].IINBIN == "880101300123" &&
 			in.Requisites[0].PhoneNumber == "+77071234567" &&

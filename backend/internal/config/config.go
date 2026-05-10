@@ -72,6 +72,12 @@ type Config struct {
 	// staging/prod обязателен (Load() валидирует не-локальные окружения),
 	// локально — допустим пустой (e2e через test-окружение задаёт явно).
 	TrustMeWebhookToken string `env:"TRUSTME_WEBHOOK_TOKEN" envDefault:""`
+	// TrustMeKzBmg — feature-flag для prod-trial проверки TrustMe «База
+	// мобильных граждан»: если true, в payload SendToSign передаётся
+	// `KzBmg=true`, и TrustMe сверяет связку ИИН↔Phone по госреестру до
+	// отправки SMS. Default false: фича требует подключения у TrustMe и
+	// прогоняется one-off на проде, не должна ломать local/staging.
+	TrustMeKzBmg bool `env:"TRUSTME_KZ_BMG" envDefault:"false"`
 	// TrustMeRetryBackoffSeconds — пауза перед повторной попыткой Phase 0
 	// recovery, если предыдущий SendToSign упал. Константный, не
 	// экспоненциальный. Default 300 (5 минут): достаточно длинно, чтобы
