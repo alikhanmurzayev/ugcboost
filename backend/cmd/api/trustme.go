@@ -33,7 +33,7 @@ func setupTrustMe(cfg *config.Config) (*trustMeRig, error) {
 		return nil, fmt.Errorf("TRUSTME_TOKEN must be a non-empty value when TRUSTME_MOCK=false")
 	}
 	return &trustMeRig{
-		Client: trustme.NewRealClient(cfg.TrustMeBaseURL, cfg.TrustMeToken, nil),
+		Client: trustme.NewRealClient(cfg.TrustMeBaseURL, cfg.TrustMeToken, cfg.TrustMeKzBmg, nil),
 	}, nil
 }
 

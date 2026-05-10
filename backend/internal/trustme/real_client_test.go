@@ -34,7 +34,7 @@ func TestRealClient_SendToSign(t *testing.T) {
 		}))
 		defer srv.Close()
 
-		client := NewRealClient(srv.URL, "tokenZ", srv.Client())
+		client := NewRealClient(srv.URL, "tokenZ", false, srv.Client())
 		got, err := client.SendToSign(context.Background(), SendToSignInput{
 			PDFBase64:      "JVBERi0xLg==",
 			AdditionalInfo: "ct-1",
@@ -60,6 +60,7 @@ func TestRealClient_SendToSign(t *testing.T) {
 		require.Contains(t, string(receivedBody), `"AdditionalInfo":"ct-1"`)
 		require.Contains(t, string(receivedBody), `"NumberDial":"UGC-42"`)
 		require.Contains(t, string(receivedBody), "JVBERi0xLg==")
+		require.Contains(t, string(receivedBody), `"KzBmg":false`)
 	})
 
 	t.Run("error status returns error with code description", func(t *testing.T) {
@@ -70,7 +71,7 @@ func TestRealClient_SendToSign(t *testing.T) {
 		}))
 		defer srv.Close()
 
-		client := NewRealClient(srv.URL, "tk", srv.Client())
+		client := NewRealClient(srv.URL, "tk", false, srv.Client())
 		_, err := client.SendToSign(context.Background(), SendToSignInput{
 			PDFBase64:      "JVBERi0xLg==",
 			AdditionalInfo: "ct-2",
@@ -90,7 +91,7 @@ func TestRealClient_SendToSign(t *testing.T) {
 			http.Error(w, "boom", http.StatusServiceUnavailable)
 		}))
 		defer srv.Close()
-		client := NewRealClient(srv.URL, "tk", srv.Client())
+		client := NewRealClient(srv.URL, "tk", false, srv.Client())
 		_, err := client.SendToSign(context.Background(), SendToSignInput{
 			PDFBase64: "x", AdditionalInfo: "ct-3", ContractName: "x",
 			Requisites: []Requisite{{FIO: "x", IINBIN: "1", PhoneNumber: "+77"}},
@@ -109,13 +110,35 @@ func TestRealClient_SendToSign(t *testing.T) {
 			}`))
 		}))
 		defer srv.Close()
-		client := NewRealClient(srv.URL, "tk", srv.Client())
+		client := NewRealClient(srv.URL, "tk", false, srv.Client())
 		_, err := client.SendToSign(context.Background(), SendToSignInput{
 			PDFBase64: "x", AdditionalInfo: "ct-empty", ContractName: "x",
 			Requisites: []Requisite{{FIO: "x", IINBIN: "1", PhoneNumber: "+77"}},
 		})
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "empty id")
+	})
+
+	t.Run("kzBmg flag flows into details JSON", func(t *testing.T) {
+		t.Parallel()
+		var receivedBody []byte
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			receivedBody, _ = io.ReadAll(r.Body)
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{
+				"status":"Ok","errorText":"",
+				"data":{"url":"https://t.tct.kz/uploader/k","id":"k","fileName":"k.pdf"}
+			}`))
+		}))
+		defer srv.Close()
+
+		client := NewRealClient(srv.URL, "tk", true, srv.Client())
+		_, err := client.SendToSign(context.Background(), SendToSignInput{
+			PDFBase64: "x", AdditionalInfo: "ct-kz", ContractName: "x",
+			Requisites: []Requisite{{FIO: "x", IINBIN: "1", PhoneNumber: "+77"}},
+		})
+		require.NoError(t, err)
+		require.Contains(t, string(receivedBody), `"KzBmg":true`)
 	})
 }
 
@@ -136,7 +159,7 @@ func TestRealClient_SearchContractByAdditionalInfo(t *testing.T) {
 		}))
 		defer srv.Close()
 
-		client := NewRealClient(srv.URL, "tk", srv.Client())
+		client := NewRealClient(srv.URL, "tk", false, srv.Client())
 		got, err := client.SearchContractByAdditionalInfo(context.Background(), "ct-1")
 		require.NoError(t, err)
 		require.Equal(t, &SearchContractResult{
@@ -153,14 +176,14 @@ func TestRealClient_SearchContractByAdditionalInfo(t *testing.T) {
 			_, _ = w.Write([]byte(`{"status":"Ok","errorText":"","data":[]}`))
 		}))
 		defer srv.Close()
-		client := NewRealClient(srv.URL, "tk", srv.Client())
+		client := NewRealClient(srv.URL, "tk", false, srv.Client())
 		_, err := client.SearchContractByAdditionalInfo(context.Background(), "ct-missing")
 		require.True(t, errors.Is(err, ErrTrustMeNotFound))
 	})
 
 	t.Run("empty additionalInfo errors", func(t *testing.T) {
 		t.Parallel()
-		client := NewRealClient("http://localhost", "tk", nil)
+		client := NewRealClient("http://localhost", "tk", false, nil)
 		_, err := client.SearchContractByAdditionalInfo(context.Background(), "")
 		require.Error(t, err)
 	})
@@ -177,7 +200,7 @@ func TestRealClient_DownloadContractFile(t *testing.T) {
 			_, _ = w.Write([]byte("PDF-bytes"))
 		}))
 		defer srv.Close()
-		client := NewRealClient(srv.URL, "tk", srv.Client())
+		client := NewRealClient(srv.URL, "tk", false, srv.Client())
 		body, err := client.DownloadContractFile(context.Background(), "doc-xyz")
 		require.NoError(t, err)
 		require.Equal(t, []byte("PDF-bytes"), body)
@@ -185,7 +208,7 @@ func TestRealClient_DownloadContractFile(t *testing.T) {
 
 	t.Run("empty id errors", func(t *testing.T) {
 		t.Parallel()
-		client := NewRealClient("http://localhost", "tk", nil)
+		client := NewRealClient("http://localhost", "tk", false, nil)
 		_, err := client.DownloadContractFile(context.Background(), "")
 		require.Error(t, err)
 	})
@@ -196,7 +219,7 @@ func TestRealClient_DownloadContractFile(t *testing.T) {
 			http.Error(w, "missing", http.StatusNotFound)
 		}))
 		defer srv.Close()
-		client := NewRealClient(srv.URL, "tk", srv.Client())
+		client := NewRealClient(srv.URL, "tk", false, srv.Client())
 		_, err := client.DownloadContractFile(context.Background(), "missing")
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "404")

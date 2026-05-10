@@ -26,19 +26,22 @@ const (
 type RealClient struct {
 	baseURL    string
 	token      string
+	kzBmg      bool
 	httpClient *http.Client
 	limiter    *rate.Limiter
 }
 
 // NewRealClient собирает клиента. baseURL — без trailing slash. nil http.Client
-// → дефолт с 60s timeout.
-func NewRealClient(baseURL, token string, httpClient *http.Client) *RealClient {
+// → дефолт с 60s timeout. kzBmg — feature-flag, флоит в `KzBmg` поле details
+// каждого SendToSign (см. config.TrustMeKzBmg).
+func NewRealClient(baseURL, token string, kzBmg bool, httpClient *http.Client) *RealClient {
 	if httpClient == nil {
 		httpClient = &http.Client{Timeout: defaultTimeout}
 	}
 	return &RealClient{
 		baseURL:    strings.TrimRight(baseURL, "/"),
 		token:      token,
+		kzBmg:      kzBmg,
 		httpClient: httpClient,
 		limiter:    rate.NewLimiter(rate.Limit(rateLimitRPS), 1),
 	}
@@ -104,6 +107,7 @@ func (c *RealClient) SendToSign(ctx context.Context, in SendToSignInput) (*SendT
 
 	details := sendToSignDetails{
 		NumberDial:     in.NumberDial,
+		KzBmg:          c.kzBmg,
 		AdditionalInfo: in.AdditionalInfo,
 		Requisites:     in.Requisites,
 	}
