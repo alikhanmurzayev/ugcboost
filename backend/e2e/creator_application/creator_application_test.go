@@ -373,10 +373,18 @@ func TestSubmitCreatorApplicationWithUTM(t *testing.T) {
 	require.Equal(t, http.StatusOK, detail.StatusCode())
 	require.NotNil(t, detail.JSON200)
 	got := detail.JSON200.Data
+	// Each pointer is asserted non-nil before dereferencing so a missing
+	// column or omitted JSON field surfaces as a clean test failure
+	// instead of a nil-deref panic.
+	require.NotNil(t, got.UtmSource)
 	require.Equal(t, "telegram_chat", *got.UtmSource)
+	require.NotNil(t, got.UtmMedium)
 	require.Equal(t, "tg", *got.UtmMedium)
+	require.NotNil(t, got.UtmCampaign)
 	require.Equal(t, "spring2026", *got.UtmCampaign)
+	require.NotNil(t, got.UtmTerm)
 	require.Equal(t, "ugc", *got.UtmTerm)
+	require.NotNil(t, got.UtmContent)
 	require.Equal(t, "banner", *got.UtmContent)
 
 	// Audit details echo: same five flat keys mirror the input markers; nothing

@@ -1095,7 +1095,17 @@ import {
           // Success screen takes over the viewport — leave the button alone.
         } catch (err) {
           if (err instanceof ApiError) {
-            showFormError(err.serverMessage || "Не удалось отправить заявку");
+            // UTM-related validation errors mention internal field names
+            // (utmSource, utmCampaign, …) that the creator never typed.
+            // Replace those messages with a neutral copy so the user is
+            // not confronted with backend jargon they cannot act on.
+            const message = err.serverMessage || "";
+            const isUtmComplaint = /utm[A-Za-z]+/.test(message);
+            showFormError(
+              isUtmComplaint || message === ""
+                ? "Не удалось отправить заявку. Попробуй ещё раз."
+                : message,
+            );
           } else {
             console.error(err);
             showFormError("Сеть недоступна. Попробуй позже.");

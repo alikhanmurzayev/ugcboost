@@ -244,41 +244,106 @@ func TestServer_SubmitCreatorApplication(t *testing.T) {
 		require.Nil(t, captured.UTMContent)
 	})
 
-	t.Run("utm oversize rejected with 422 VALIDATION_ERROR", func(t *testing.T) {
+	t.Run("utm boundary at maxLen — 256 accepted, 257 rejected", func(t *testing.T) {
 		t.Parallel()
-		// 257 characters — strict-server does not enforce maxLength so the
-		// handler must guard the column-cap explicitly.
+		appID := uuid.MustParse("dddddddd-eeee-ffff-aaaa-bbbbbbbbbbbb")
 		creator := mocks.NewMockCreatorApplicationService(t)
-		// Service must NOT be called; if the validator slips, the missing
-		// EXPECT'ed call surfaces here as a panic instead of a silent pass.
+		var captured domain.CreatorApplicationInput
+		creator.EXPECT().Submit(mock.Anything, mock.Anything).
+			Run(func(_ context.Context, in domain.CreatorApplicationInput) {
+				captured = in
+			}).
+			Return(&domain.CreatorApplicationSubmission{
+				ApplicationID: appID.String(),
+				BirthDate:     time.Date(1995, 5, 15, 0, 0, 0, 0, time.UTC),
+			}, nil)
 
+		exact := strings.Repeat("a", 256)
 		req := validRequest()
-		req.UtmSource = pointer.ToString(strings.Repeat("a", 257))
+		req.UtmSource = pointer.ToString(exact)
 
 		router := newTestRouter(t, serverWithCreator(t, creator, logmocks.NewMockLogger(t)))
-		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/creators/applications", req)
+		w, _ := doJSON[api.CreatorApplicationSubmitResult](t, router, http.MethodPost, "/creators/applications", req)
 
-		require.Equal(t, http.StatusUnprocessableEntity, w.Code)
-		require.Equal(t, domain.CodeValidation, resp.Error.Code)
-		require.Contains(t, resp.Error.Message, "utmSource")
+		require.Equal(t, http.StatusCreated, w.Code)
+		require.Equal(t, exact, pointer.GetString(captured.UTMSource))
 	})
 
-	t.Run("utm with control chars rejected with 422", func(t *testing.T) {
+	t.Run("utm oversize rejected with 422 VALIDATION_ERROR — message pinned per field", func(t *testing.T) {
 		t.Parallel()
-		// NUL is the typical Postgres-killer; \x1F covers the rest of the
-		// ASCII control range. The validator rejects anything below 0x20 or
-		// 0x7F up front so the request never reaches the DB.
-		creator := mocks.NewMockCreatorApplicationService(t)
+		// 257 characters — strict-server does not enforce maxLength so the
+		// handler must guard the column-cap explicitly. The exact error
+		// message is pinned per-field so a copy-paste regression in
+		// validateUTMField (e.g. swapping field names) surfaces here.
+		cases := []struct{ name, field string }{
+			{"utmSource", "utmSource"},
+			{"utmMedium", "utmMedium"},
+			{"utmCampaign", "utmCampaign"},
+			{"utmTerm", "utmTerm"},
+			{"utmContent", "utmContent"},
+		}
+		for _, tc := range cases {
+			tc := tc
+			t.Run(tc.name, func(t *testing.T) {
+				t.Parallel()
+				creator := mocks.NewMockCreatorApplicationService(t)
+				req := validRequest()
+				oversize := strings.Repeat("a", 257)
+				switch tc.field {
+				case "utmSource":
+					req.UtmSource = pointer.ToString(oversize)
+				case "utmMedium":
+					req.UtmMedium = pointer.ToString(oversize)
+				case "utmCampaign":
+					req.UtmCampaign = pointer.ToString(oversize)
+				case "utmTerm":
+					req.UtmTerm = pointer.ToString(oversize)
+				case "utmContent":
+					req.UtmContent = pointer.ToString(oversize)
+				}
 
-		req := validRequest()
-		req.UtmCampaign = pointer.ToString("spring\x00campaign")
+				router := newTestRouter(t, serverWithCreator(t, creator, logmocks.NewMockLogger(t)))
+				w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/creators/applications", req)
 
-		router := newTestRouter(t, serverWithCreator(t, creator, logmocks.NewMockLogger(t)))
-		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/creators/applications", req)
+				require.Equal(t, http.StatusUnprocessableEntity, w.Code)
+				require.Equal(t, domain.CodeValidation, resp.Error.Code)
+				require.Equal(t, "Поле "+tc.field+" не должно превышать 256 символов", resp.Error.Message)
+			})
+		}
+	})
 
-		require.Equal(t, http.StatusUnprocessableEntity, w.Code)
-		require.Equal(t, domain.CodeValidation, resp.Error.Code)
-		require.Contains(t, resp.Error.Message, "utmCampaign")
+	t.Run("utm with control chars rejected with 422 — covers NUL and DEL", func(t *testing.T) {
+		t.Parallel()
+		// NUL (\x00) is the typical Postgres-killer; \x7F (DEL) sits at the
+		// other end of the ASCII control range. The validator rejects
+		// anything below 0x20 or equal to 0x7F up front so the request never
+		// reaches the DB. Per-field exact-message assertion locks the
+		// validator's per-field error wording.
+		cases := []struct{ name, field, payload string }{
+			{"utmCampaign-nul", "utmCampaign", "spring\x00campaign"},
+			{"utmTerm-del", "utmTerm", "ugc\x7Fbanner"},
+		}
+		for _, tc := range cases {
+			tc := tc
+			t.Run(tc.name, func(t *testing.T) {
+				t.Parallel()
+				creator := mocks.NewMockCreatorApplicationService(t)
+				req := validRequest()
+				switch tc.field {
+				case "utmCampaign":
+					req.UtmCampaign = pointer.ToString(tc.payload)
+				case "utmTerm":
+					req.UtmTerm = pointer.ToString(tc.payload)
+				}
+
+				router := newTestRouter(t, serverWithCreator(t, creator, logmocks.NewMockLogger(t)))
+				w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/creators/applications", req)
+
+				require.Equal(t, http.StatusUnprocessableEntity, w.Code)
+				require.Equal(t, domain.CodeValidation, resp.Error.Code)
+				require.Equal(t, "Поле "+tc.field+" содержит недопустимые управляющие символы", resp.Error.Message)
+			})
+		}
 	})
 
 	t.Run("utm whitespace-only collapses to nil", func(t *testing.T) {

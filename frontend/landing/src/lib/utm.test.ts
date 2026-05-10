@@ -113,7 +113,11 @@ describe("captureUTM", () => {
     });
   });
 
-  it("falls back silently when sessionStorage throws", () => {
+  it("falls back silently when sessionStorage throws and leaves the previous entry untouched", () => {
+    storage.setItem(
+      "ugc_utm",
+      JSON.stringify({ utm_source: "previous" }),
+    );
     const throwingStorage: MockStorage = {
       ...storage,
       setItem() {
@@ -123,6 +127,11 @@ describe("captureUTM", () => {
     stubWindow("?utm_source=chat", throwingStorage);
 
     expect(() => captureUTM()).not.toThrow();
+    // The previous capture survives the throw — we never mutate storage in
+    // a partial way, and the underlying Map is shared via the spread above.
+    expect(JSON.parse(storage.data.get("ugc_utm") ?? "{}")).toEqual({
+      utm_source: "previous",
+    });
   });
 
   it("ignores keys outside the canonical UTM_KEYS set", () => {
@@ -202,5 +211,33 @@ describe("readUTM", () => {
     stubWindow("", storage);
 
     expect(readUTM()).toEqual({ utm_campaign: "ok" });
+  });
+
+  it("returns empty when the stored value is a JSON array", () => {
+    // isStringRecord rejects arrays; the early-return must hit before any
+    // index access so a corrupted entry never leaks into the form payload.
+    storage.setItem("ugc_utm", JSON.stringify(["utm_source", "chat"]));
+    stubWindow("", storage);
+
+    expect(readUTM()).toEqual({});
+  });
+
+  it("returns empty when the stored value is the literal `null`", () => {
+    storage.setItem("ugc_utm", "null");
+    stubWindow("", storage);
+
+    expect(readUTM()).toEqual({});
+  });
+
+  it("returns empty when sessionStorage.getItem throws", () => {
+    const throwingStorage: MockStorage = {
+      ...storage,
+      getItem() {
+        throw new Error("storage disabled");
+      },
+    };
+    stubWindow("", throwingStorage);
+
+    expect(readUTM()).toEqual({});
   });
 });

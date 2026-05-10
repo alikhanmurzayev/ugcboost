@@ -237,6 +237,10 @@ test.describe("Landing submission flow", () => {
       const detail = await fetchApplicationDetail(request, API_URL, applicationId, token);
       expect(detail.utmSource).toBe("test_chat");
       expect(detail.utmCampaign).toBe("spring2026");
+      // oapi-codegen emits `*string \`json:"utmSource,omitempty"\``, which
+      // drops the JSON key for nil pointers rather than writing null. Both
+      // outcomes are accepted here via `?? null` until the wire contract is
+      // tightened (see deferred-work.md, "UTM detail wire-contract").
       expect(detail.utmMedium ?? null).toBeNull();
       expect(detail.utmTerm ?? null).toBeNull();
       expect(detail.utmContent ?? null).toBeNull();

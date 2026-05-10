@@ -513,7 +513,9 @@ function UtmSection({ application }: { application: ApplicationDetail }) {
           {present.map((key) => (
             <span key={key} className="text-sm text-gray-900">
               <span className="text-gray-500">{t(`drawer.utm.${key}`)}:</span>{" "}
-              <span data-testid={`utm-${key}-value`}>{values[key]}</span>
+              <span data-testid={`utm-${key}-value`} className="break-all">
+                {values[key]}
+              </span>
             </span>
           ))}
         </div>

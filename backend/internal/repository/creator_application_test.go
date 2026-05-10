@@ -226,11 +226,27 @@ func TestCreatorApplicationRepository_Create(t *testing.T) {
 			VerificationCode: verificationCode,
 		})
 		require.NoError(t, err)
-		require.Equal(t, "chat", pointer.GetString(got.UTMSource))
-		require.Equal(t, "tg", pointer.GetString(got.UTMMedium))
-		require.Equal(t, "spring", pointer.GetString(got.UTMCampaign))
-		require.Equal(t, "ugc", pointer.GetString(got.UTMTerm))
-		require.Equal(t, "banner", pointer.GetString(got.UTMContent))
+		require.Equal(t, &CreatorApplicationRow{
+			ID:                "app-utm",
+			LastName:          "Муратова",
+			FirstName:         "Айдана",
+			MiddleName:        nil,
+			IIN:               "950515312348",
+			BirthDate:         birth,
+			Phone:             "+77001234567",
+			CityCode:          "almaty",
+			Address:           nil,
+			CategoryOtherText: nil,
+			UTMSource:         pointer.ToString("chat"),
+			UTMMedium:         pointer.ToString("tg"),
+			UTMCampaign:       pointer.ToString("spring"),
+			UTMTerm:           pointer.ToString("ugc"),
+			UTMContent:        pointer.ToString("banner"),
+			Status:            "verification",
+			VerificationCode:  verificationCode,
+			CreatedAt:         created,
+			UpdatedAt:         created,
+		}, got)
 	})
 
 	t.Run("address omitted — repo passes nil to insert and reads it back", func(t *testing.T) {
