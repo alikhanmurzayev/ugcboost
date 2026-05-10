@@ -242,20 +242,10 @@ export default function CampaignCreatorsSection({
           message={t("campaignCreators.loadError")}
           onRetry={refetch}
         />
-      ) : total === 0 && !hasAnyResult(resultsByStatus) ? (
-        <p
-          className="mt-6 text-gray-500"
-          data-testid="campaign-creators-empty-all"
-        >
-          {t("campaignCreators.emptyAll")}
-        </p>
       ) : (
         CAMPAIGN_CREATOR_GROUP_ORDER.map((status) => {
           const groupRows = groupedRows[status];
           const result = resultsByStatus[status] ?? null;
-          // Keep the section visible while a result is on screen, even if
-          // every row has moved to another group after a successful submit.
-          if (groupRows.length === 0 && !result) return null;
           const action = actionForStatus(status, notifyMutations, t);
           const isPending = action.mutation?.isPending ?? false;
           const isSubmitting = submittingByStatus[status] ?? false;
@@ -306,15 +296,6 @@ export default function CampaignCreatorsSection({
       />
     </section>
   );
-}
-
-function hasAnyResult(
-  map: Partial<Record<CampaignCreatorStatus, SectionResult>>,
-): boolean {
-  for (const key of CAMPAIGN_CREATOR_GROUP_ORDER) {
-    if (map[key]) return true;
-  }
-  return false;
 }
 
 function actionForStatus(

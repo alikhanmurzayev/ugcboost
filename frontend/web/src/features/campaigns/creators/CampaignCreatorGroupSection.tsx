@@ -186,7 +186,7 @@ export default function CampaignCreatorGroupSection({
         />
       )}
 
-      {rows.length > 0 && (
+      {rows.length > 0 ? (
         <CampaignCreatorsTable
           rows={rows}
           status={status}
@@ -201,6 +201,13 @@ export default function CampaignCreatorGroupSection({
           selectAllTestId={`campaign-creators-select-all-${status}`}
           rowSelectionDisabled={isBusy}
         />
+      ) : (
+        <p
+          className="mt-4 text-sm text-gray-400"
+          data-testid={`campaign-creators-group-empty-${status}`}
+        >
+          {t("campaignCreators.emptyGroup")}
+        </p>
       )}
     </section>
   );

@@ -714,7 +714,7 @@ describe("CampaignCreatorGroupSection — result rendering", () => {
     ).toHaveTextContent(/Не удалось разослать/i);
   });
 
-  it("section renders heading + result even with rows.length=0 (after success → group emptied)", () => {
+  it("section renders heading + result + empty placeholder even with rows.length=0 (after success → group emptied)", () => {
     const result: SectionResult = {
       kind: "success",
       deliveredCount: 3,
@@ -736,6 +736,46 @@ describe("CampaignCreatorGroupSection — result rendering", () => {
     // Heading still visible — count is now 0.
     const header = screen.getByTestId("campaign-creators-group-planned");
     expect(within(header).getByRole("heading")).toHaveTextContent(/group planned/);
+    expect(
+      screen.getByTestId("campaign-creators-group-empty-planned"),
+    ).toBeInTheDocument();
+  });
+});
+
+describe("CampaignCreatorGroupSection — empty placeholder", () => {
+  it("renders empty placeholder when rows is empty and no result", () => {
+    renderGroup({
+      status: "invited",
+      rows: [],
+      actionLabel: "Разослать ремайндер",
+      onSubmit: () => {},
+    });
+
+    expect(
+      screen.getByTestId("campaign-creators-group-empty-invited"),
+    ).toHaveTextContent("Нет креаторов");
+    // The select-all checkbox lives inside CampaignCreatorsTable; its absence
+    // proves the table is not mounted while rows is empty.
+    expect(
+      screen.queryByTestId("campaign-creators-select-all-invited"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("hides empty placeholder once a row is present", () => {
+    const rows: CampaignCreatorRow[] = [
+      { campaignCreator: makeCC(CREATOR_A), creator: makeCreator(CREATOR_A, "Иванова") },
+    ];
+
+    renderGroup({
+      status: "planned",
+      rows,
+      actionLabel: "Разослать приглашение",
+      onSubmit: () => {},
+    });
+
+    expect(
+      screen.queryByTestId("campaign-creators-group-empty-planned"),
+    ).not.toBeInTheDocument();
   });
 });
 

@@ -26,9 +26,10 @@
  * закрывает AC «после slice 2/2 управление активно».
  *
  * Live + 0 креаторов — admin переходит на /campaigns/:id живой кампании
- * без добавленных. Ожидается empty-state `campaign-creators-empty-all`
- * с текстом «Креаторов в кампании пока нет», счётчик отсутствует, кнопка
- * `campaign-creators-add-button` enabled.
+ * без добавленных. Ожидается, что все 7 секций по статусам всё равно
+ * рендерятся и каждая показывает empty-placeholder
+ * `campaign-creators-group-empty-{status}` с текстом «Нет креаторов»;
+ * счётчик отсутствует, кнопка `campaign-creators-add-button` enabled.
  *
  * Click row → drawer — admin кликает строку креатора в секции; ожидается,
  * что URL обновляется до `?creatorId=<uuid>` и открывается существующий
@@ -159,7 +160,7 @@ test.describe("Admin campaign creators — read-only section behavior", () => {
     await expect(addBtn).toBeEnabled();
   });
 
-  test("Live campaign + 0 creators — empty state, counter absent, Add button enabled", async ({
+  test("Live campaign + 0 creators — every status group renders an empty placeholder, counter absent, Add button enabled", async ({
     page,
     request,
   }) => {
@@ -179,9 +180,24 @@ test.describe("Admin campaign creators — read-only section behavior", () => {
     await page.goto(`/campaigns/${campaign.campaignId}`);
 
     await expect(page.getByTestId("campaign-creators-section")).toBeVisible();
-    await expect(
-      page.getByTestId("campaign-creators-empty-all"),
-    ).toHaveText("Креаторов в кампании пока нет");
+
+    for (const status of [
+      "planned",
+      "invited",
+      "declined",
+      "agreed",
+      "signing",
+      "signed",
+      "signing_declined",
+    ] as const) {
+      await expect(
+        page.getByTestId(`campaign-creators-group-${status}`),
+      ).toBeVisible();
+      await expect(
+        page.getByTestId(`campaign-creators-group-empty-${status}`),
+      ).toHaveText("Нет креаторов");
+    }
+
     await expect(page.getByTestId("campaign-creators-counter")).toHaveCount(0);
 
     const addBtn = page.getByTestId("campaign-creators-add-button");
