@@ -70,16 +70,31 @@ func spyList(t *testing.T) []testclient.TrustMeSentRecord {
 	return resp.JSON200.Data.Items
 }
 
-func spyFailNext(t *testing.T, additionalInfo string, count int) {
+func spyFailNext(t *testing.T, iin string, count int) {
 	t.Helper()
 	tc := testutil.NewTestClient(t)
 	body := testclient.TrustMeSpyFailNextRequest{
-		AdditionalInfo: additionalInfo,
-		Count:          &count,
+		Iin:   iin,
+		Count: &count,
 	}
 	resp, err := tc.TrustMeSpyFailNextWithResponse(context.Background(), body)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusNoContent, resp.StatusCode())
+}
+
+// spyMatchingByIIN читает spy-list и фильтрует по нашему IIN. Повторно
+// вызывается между outbox-тиками: каждый тик добавляет ровно одну запись
+// (fail или success), мы фиксируем factual после каждого тика, не угадываем
+// порядок «оба тика прошли — посмотрим что в spy».
+func spyMatchingByIIN(t *testing.T, iin string) []testclient.TrustMeSentRecord {
+	t.Helper()
+	var ours []testclient.TrustMeSentRecord
+	for _, r := range spyList(t) {
+		if r.Iin == iin {
+			ours = append(ours, r)
+		}
+	}
+	return ours
 }
 
 // pdfShaIsHex64 — sanity-чек: spy положил полный hex sha256 (64 chars).
@@ -168,44 +183,50 @@ func TestContractSending(t *testing.T) {
 		fx := testutil.SetupCampaignWithInvitedCreator(t)
 		initData := testutil.SignInitData(t, fx.TelegramUserID, testutil.SignInitDataOpts{})
 
+		// Регистрируем fail на наш IIN ДО agree, чтобы первый же SendToSign
+		// от outbox'а гарантированно был зафейлен. IIN-key изолирует нас от
+		// параллельных тестов в других packages, которые шарят spy-store.
+		spyFailNext(t, fx.CreatorIIN, 1)
+
 		status, _ := tmaPostAgree(t, fx.SecretToken, initData)
 		require.Equal(t, http.StatusOK, status)
 
-		// Wildcard fail-next: ровно одну следующую отправку SpyClient зафейлит
-		// независимо от additionalInfo (contract_id ещё не существует на момент
-		// регистрации). Используется в Phase 0 recovery e2e сценарии.
-		spyFailNext(t, "", 1)
-
-		// Tick #1: Phase 1 создаёт contract_id, Phase 2b persist'ит PDF, Phase
-		// 2c фейлит. Ряд остаётся orphan'ом.
+		// Tick #1: Phase 1 создаёт contract_id, Phase 2b persist'ит PDF,
+		// Phase 2c вызывает SendToSign — spy фейлит по нашему IIN. Ряд
+		// остаётся orphan'ом (contract без trustme_document_id).
 		runOutboxOnce(t)
 
-		// Tick #2: Phase 0 поднимает orphan → search вернёт ErrTrustMeNotFound
-		// → resend с persisted PDF. Sha256 должен совпасть.
+		afterFail := spyMatchingByIIN(t, fx.CreatorIIN)
+		require.Len(t, afterFail, 1,
+			"Tick #1 must produce exactly one SendToSign attempt on our IIN")
+		require.NotNil(t, afterFail[0].Err)
+		require.NotEmpty(t, *afterFail[0].Err, "Tick #1 attempt must record err (spyFailNext)")
+		require.True(t, afterFail[0].DocumentId == nil || *afterFail[0].DocumentId == "",
+			"failed attempt must not carry a document_id")
+
+		// Tick #2: spyFailNext exhausted (count=1). Phase 0 поднимает orphan
+		// (search вернёт ErrTrustMeNotFound) → resend с persisted PDF.
 		runOutboxOnce(t)
 
-		records := spyList(t)
-		var ours []testclient.TrustMeSentRecord
-		for _, r := range records {
-			if r.Iin == fx.CreatorIIN {
-				ours = append(ours, r)
-			}
-		}
-		require.Len(t, ours, 2, "recovery requires exactly fail + success attempts on our IIN")
+		afterRecovery := spyMatchingByIIN(t, fx.CreatorIIN)
+		require.Len(t, afterRecovery, 2,
+			"Tick #2 must add a recovery SendToSign on our IIN")
+		fail, success := afterRecovery[0], afterRecovery[1]
 
-		// Первая попытка должна быть с error (spyFailNext), вторая успешная.
-		require.NotNil(t, ours[0].Err)
-		require.NotEmpty(t, *ours[0].Err)
-		require.Nil(t, ours[1].Err, "second attempt (recovery) must succeed")
-		require.NotNil(t, ours[1].DocumentId)
-		require.NotEmpty(t, *ours[1].DocumentId)
+		require.NotNil(t, fail.Err)
+		require.NotEmpty(t, *fail.Err)
+		require.True(t, fail.DocumentId == nil || *fail.DocumentId == "")
+		require.True(t, success.Err == nil || *success.Err == "",
+			"recovery attempt must succeed")
+		require.NotNil(t, success.DocumentId)
+		require.NotEmpty(t, *success.DocumentId)
 
 		// Sha256 PDF идентичный — Phase 0 resend без re-render (Decision #10).
-		require.Equal(t, ours[0].PdfSha256, ours[1].PdfSha256,
+		require.Equal(t, fail.PdfSha256, success.PdfSha256,
 			"PdfSha256 must equal between fail and recovery (no re-render)")
-		require.Equal(t, ours[0].AdditionalInfo, ours[1].AdditionalInfo,
+		require.Equal(t, fail.AdditionalInfo, success.AdditionalInfo,
 			"additionalInfo (=contract.id) must equal between attempts")
-		require.Equal(t, ours[0].NumberDial, ours[1].NumberDial,
+		require.Equal(t, fail.NumberDial, success.NumberDial,
 			"NumberDial (UGC-{serial}) одинаковый — serial_number один на ряд")
 	})
 

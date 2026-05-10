@@ -174,8 +174,8 @@ func (_c *MockSpyStore_RegisterDocument_Call) RunAndReturn(run func(additionalIn
 }
 
 // RegisterFailNext provides a mock function for the type MockSpyStore
-func (_mock *MockSpyStore) RegisterFailNext(additionalInfo string, reason string, count int) {
-	_mock.Called(additionalInfo, reason, count)
+func (_mock *MockSpyStore) RegisterFailNext(iin string, reason string, count int) {
+	_mock.Called(iin, reason, count)
 	return
 }
 
@@ -185,14 +185,14 @@ type MockSpyStore_RegisterFailNext_Call struct {
 }
 
 // RegisterFailNext is a helper method to define mock.On call
-//   - additionalInfo string
+//   - iin string
 //   - reason string
 //   - count int
-func (_e *MockSpyStore_Expecter) RegisterFailNext(additionalInfo interface{}, reason interface{}, count interface{}) *MockSpyStore_RegisterFailNext_Call {
-	return &MockSpyStore_RegisterFailNext_Call{Call: _e.mock.On("RegisterFailNext", additionalInfo, reason, count)}
+func (_e *MockSpyStore_Expecter) RegisterFailNext(iin interface{}, reason interface{}, count interface{}) *MockSpyStore_RegisterFailNext_Call {
+	return &MockSpyStore_RegisterFailNext_Call{Call: _e.mock.On("RegisterFailNext", iin, reason, count)}
 }
 
-func (_c *MockSpyStore_RegisterFailNext_Call) Run(run func(additionalInfo string, reason string, count int)) *MockSpyStore_RegisterFailNext_Call {
+func (_c *MockSpyStore_RegisterFailNext_Call) Run(run func(iin string, reason string, count int)) *MockSpyStore_RegisterFailNext_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 string
 		if args[0] != nil {
@@ -220,7 +220,7 @@ func (_c *MockSpyStore_RegisterFailNext_Call) Return() *MockSpyStore_RegisterFai
 	return _c
 }
 
-func (_c *MockSpyStore_RegisterFailNext_Call) RunAndReturn(run func(additionalInfo string, reason string, count int)) *MockSpyStore_RegisterFailNext_Call {
+func (_c *MockSpyStore_RegisterFailNext_Call) RunAndReturn(run func(iin string, reason string, count int)) *MockSpyStore_RegisterFailNext_Call {
 	_c.Run(run)
 	return _c
 }

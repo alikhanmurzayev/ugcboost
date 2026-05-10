@@ -390,10 +390,10 @@ func (h *TestAPIHandler) TrustMeSpyClear(_ context.Context, _ testapi.TrustMeSpy
 	return testapi.TrustMeSpyClear204Response{}, nil
 }
 
-// TrustMeSpyFailNext handles POST /test/trustme/spy-fail-next. Empty
-// additionalInfo — wildcard, fails next `count` SendToSign'ов независимо от
-// additionalInfo. Используется e2e Phase 0 recovery test где contract_id
-// присваивается worker'ом и не известен заранее.
+// TrustMeSpyFailNext handles POST /test/trustme/spy-fail-next. Failure is
+// keyed by IIN — known to the test before the creator agrees, isolates
+// our failure from parallel tests in other packages that share this
+// backend's spy-store.
 func (h *TestAPIHandler) TrustMeSpyFailNext(_ context.Context, request testapi.TrustMeSpyFailNextRequestObject) (testapi.TrustMeSpyFailNextResponseObject, error) {
 	if h.trustMeSpy == nil {
 		return nil, domain.ErrNotFound
@@ -409,7 +409,7 @@ func (h *TestAPIHandler) TrustMeSpyFailNext(_ context.Context, request testapi.T
 	if request.Body.Count != nil && *request.Body.Count > 0 {
 		count = *request.Body.Count
 	}
-	h.trustMeSpy.RegisterFailNext(request.Body.AdditionalInfo, reason, count)
+	h.trustMeSpy.RegisterFailNext(request.Body.Iin, reason, count)
 	return testapi.TrustMeSpyFailNext204Response{}, nil
 }
 
