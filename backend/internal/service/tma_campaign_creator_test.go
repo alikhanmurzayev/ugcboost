@@ -179,6 +179,42 @@ func TestTmaCampaignCreatorService_ApplyDecision(t *testing.T) {
 		auditRepo.AssertNotCalled(t, "Create", mock.Anything, mock.Anything)
 	})
 
+	postAgreed := []string{
+		domain.CampaignCreatorStatusSigning,
+		domain.CampaignCreatorStatusSigned,
+		domain.CampaignCreatorStatusSigningDeclined,
+	}
+
+	for _, status := range postAgreed {
+		t.Run("idempotent agree from "+status+" → AlreadyDecided=true preserves current status", func(t *testing.T) {
+			t.Parallel()
+			svc, _, ccRepo, auditRepo := newTmaCampaignCreatorTestRig(t)
+			ccRepo.EXPECT().GetByIDForUpdate(mock.Anything, tmaTestCCID).
+				Return(&repository.CampaignCreatorRow{ID: tmaTestCCID, Status: status}, nil).Once()
+
+			got, err := svc.ApplyDecision(context.Background(), tmaTestAuth(), domain.CampaignCreatorDecisionAgree)
+			require.NoError(t, err)
+			require.Equal(t, domain.CampaignCreatorDecisionResult{
+				Status:         status,
+				AlreadyDecided: true,
+			}, got)
+			ccRepo.AssertNotCalled(t, "ApplyDecision", mock.Anything, mock.Anything, mock.Anything)
+			auditRepo.AssertNotCalled(t, "Create", mock.Anything, mock.Anything)
+		})
+
+		t.Run("decline from "+status+" → ErrCampaignCreatorAlreadyAgreed", func(t *testing.T) {
+			t.Parallel()
+			svc, _, ccRepo, auditRepo := newTmaCampaignCreatorTestRig(t)
+			ccRepo.EXPECT().GetByIDForUpdate(mock.Anything, tmaTestCCID).
+				Return(&repository.CampaignCreatorRow{ID: tmaTestCCID, Status: status}, nil).Once()
+
+			_, err := svc.ApplyDecision(context.Background(), tmaTestAuth(), domain.CampaignCreatorDecisionDecline)
+			require.ErrorIs(t, err, domain.ErrCampaignCreatorAlreadyAgreed)
+			ccRepo.AssertNotCalled(t, "ApplyDecision", mock.Anything, mock.Anything, mock.Anything)
+			auditRepo.AssertNotCalled(t, "Create", mock.Anything, mock.Anything)
+		})
+	}
+
 	t.Run("agree from declined → ErrCampaignCreatorDeclinedNeedReinvite", func(t *testing.T) {
 		t.Parallel()
 		svc, _, ccRepo, auditRepo := newTmaCampaignCreatorTestRig(t)
