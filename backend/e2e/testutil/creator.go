@@ -66,6 +66,7 @@ func SetupApprovedCreator(t *testing.T, opts CreatorApplicationFixture) Approved
 	c := NewAPIClient(t)
 	appUUID, err := uuid.Parse(app.ApplicationID)
 	require.NoError(t, err)
+	approveStartedAt := time.Now().UTC().Add(-time.Second)
 	approveResp, err := c.ApproveCreatorApplicationWithResponse(context.Background(), appUUID,
 		apiclient.CreatorApprovalInput{}, WithAuth(app.AdminToken))
 	require.NoError(t, err)
@@ -81,6 +82,17 @@ func SetupApprovedCreator(t *testing.T, opts CreatorApplicationFixture) Approved
 	// bot token. SpyOnlySender ignores the registration; TeeSender skips
 	// the real call. No-op when the test never sends to this chat.
 	RegisterTelegramSpyFakeChat(t, app.TelegramUserID)
+
+	// Drain the async NotifyApplicationApproved fired by ApproveCreatorApplication
+	// (fire-and-forget through Notifier — see service/creator_application.go).
+	// Without this wait the post-approve SendMessage races with any subsequent
+	// test action that touches this chat's spy state — most notably
+	// RegisterTelegramSpyFailNext, which gets consumed by the in-flight approve
+	// message and silently disarms the partial-success scenario.
+	_ = WaitForTelegramSent(t, app.TelegramUserID, TelegramSentOptions{
+		Since:       approveStartedAt,
+		ExpectCount: 1,
+	})
 
 	return ApprovedCreatorFixture{
 		CreatorID:        creatorID.String(),
