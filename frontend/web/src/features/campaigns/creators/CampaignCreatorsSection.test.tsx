@@ -32,7 +32,6 @@ vi.mock("@/api/dictionaries", () => ({
 
 import {
   listCampaignCreators,
-  addCampaignCreators,
   removeCampaignCreator,
   notifyCampaignCreators,
   remindCampaignCreatorsInvitation,
