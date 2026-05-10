@@ -282,6 +282,26 @@ describe("CampaignsListPage — row navigation", () => {
     expect(await screen.findByTestId("detail-page")).toBeInTheDocument();
   });
 
+  it("tmaUrl renders as a target=_blank link and clicking it does not navigate to detail", async () => {
+    vi.mocked(listCampaigns).mockResolvedValue({
+      data: { items: [FIXTURE_LIVE], total: 1, page: 1, perPage: 50 },
+    });
+
+    renderPage("/campaigns");
+
+    const link = await screen.findByTestId(
+      `campaign-tma-link-${FIXTURE_LIVE.id}`,
+    );
+    expect(link).toHaveAttribute("href", FIXTURE_LIVE.tmaUrl);
+    expect(link).toHaveAttribute("target", "_blank");
+    expect(link).toHaveAttribute("rel", "noreferrer noopener");
+
+    await userEvent.click(link);
+
+    expect(screen.queryByTestId("detail-page")).not.toBeInTheDocument();
+    expect(screen.getByTestId("campaigns-list-page")).toBeInTheDocument();
+  });
+
   it("disabled delete renders with tooltip and click is a no-op", async () => {
     vi.mocked(listCampaigns).mockResolvedValue({
       data: { items: [FIXTURE_LIVE], total: 1, page: 1, perPage: 50 },
