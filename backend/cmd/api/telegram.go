@@ -21,13 +21,22 @@ type telegramRig struct {
 	Spy      *telegram.SentSpyStore
 }
 
-// setupTelegram builds the Sender per the (TelegramMock, EnableTestEndpoints)
-// matrix and wraps it in a Notifier. The four resulting modes are: spy-only
-// (mock=true, anywhere), real+spy Tee (mock=false + test endpoints, i.e.
-// staging), real flat (mock=false + production), and the impossible
-// (mock=true + production would be configurable but pointless — production
-// never has test endpoints so the spy would dangle; we still build a
-// SpyOnlySender so the service layer always has a working Sender).
+// setupTelegram wires the outbound sender used by service-side notifications.
+// Two independent switches drive the matrix:
+//
+//   - TelegramBotToken set → a real bot is constructed; outbound messages
+//     reach actual Telegram users and the long-polling runner can consume
+//     incoming updates.
+//   - EnableTestEndpoints true → a SentSpyStore is created so the test-API
+//     can replay incoming updates against the bot handler and read back the
+//     replies.
+//
+// When both apply (staging) the sender is a Tee that fans out to the real
+// API and the spy in parallel — real users receive the message AND e2e
+// tests can inspect it. Token-only is production. Spy-only is local/CI where
+// no token is configured. Neither is rejected at config load time outside
+// production, but local/staging accept a missing token because the test-API
+// keeps the bot surface usable from inside the test harness.
 func setupTelegram(cfg *config.Config, log logger.Logger) (*telegramRig, error) {
 	rig := &telegramRig{}
 	if cfg.EnableTestEndpoints {
@@ -35,12 +44,8 @@ func setupTelegram(cfg *config.Config, log logger.Logger) (*telegramRig, error) 
 	}
 
 	var sender telegram.Sender
-	if cfg.TelegramMock {
-		if rig.Spy == nil {
-			rig.Spy = telegram.NewSentSpyStore()
-		}
-		sender = telegram.NewSpyOnlySender(rig.Spy)
-	} else {
+	switch {
+	case cfg.TelegramBotToken != "":
 		realBot, err := telegram.NewSendOnlyBot(cfg.TelegramBotToken)
 		if err != nil {
 			return nil, fmt.Errorf("create telegram send-only bot: %w", err)
@@ -50,18 +55,26 @@ func setupTelegram(cfg *config.Config, log logger.Logger) (*telegramRig, error) 
 		} else {
 			sender = realBot
 		}
+	case rig.Spy != nil:
+		sender = telegram.NewSpyOnlySender(rig.Spy)
+	default:
+		// config.Load already rejects this combo in production; if it slips
+		// through (a future env added without updating the guard), surface it
+		// here rather than handing the service layer a nil sender.
+		return nil, fmt.Errorf("telegram: neither TELEGRAM_BOT_TOKEN nor EnableTestEndpoints configured")
 	}
 	rig.Notifier = telegram.NewNotifier(sender, log)
 	return rig, nil
 }
 
-// startTelegramRunner spins up the long-polling goroutine when a real bot
-// token is configured AND mock mode is off. Mock mode skips polling because
-// no real bot would respond. The runner is registered in cl so SIGTERM
-// cancels it before the pool closes.
+// startTelegramRunner spins up the long-polling goroutine whenever a real bot
+// token is present. Local/CI runs without a token rely on the test-API to
+// replay updates against the handler in-process; the runner is the only path
+// that pulls updates from real Telegram, so its trigger is solely the token.
+// The runner is registered in cl so SIGTERM cancels it before the pool closes.
 func startTelegramRunner(ctx context.Context, cfg *config.Config, handler *telegram.Handler, log logger.Logger, cl *closer.Closer) {
-	if cfg.TelegramMock || cfg.TelegramBotToken == "" {
-		log.Info(ctx, "telegram bot polling disabled", "mock", cfg.TelegramMock, "token_set", cfg.TelegramBotToken != "")
+	if cfg.TelegramBotToken == "" {
+		log.Info(ctx, "telegram bot polling disabled", "token_set", false)
 		return
 	}
 	runnerCtx, runnerCancel := context.WithCancel(context.Background())

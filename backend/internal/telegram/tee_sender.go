@@ -9,7 +9,8 @@ import (
 )
 
 // SpyOnlySender records every send into a SentSpyStore and never touches the
-// network. Used in local/CI when TELEGRAM_MOCK=true.
+// network. Used in local/CI where no TELEGRAM_BOT_TOKEN is configured but
+// EnableTestEndpoints is true — the test-API drives the bot in-process.
 type SpyOnlySender struct {
 	store *SentSpyStore
 }
@@ -40,8 +41,8 @@ func (s *SpyOnlySender) SendMessage(_ context.Context, params *bot.SendMessagePa
 }
 
 // TeeSender forwards each send to the real upstream Sender and records the
-// outcome (including error) in the SentSpyStore. Used in staging where
-// EnableTestEndpoints=true and TELEGRAM_MOCK=false: real Telegram delivery
+// outcome (including error) in the SentSpyStore. Used on staging where both
+// TELEGRAM_BOT_TOKEN and EnableTestEndpoints are set: real Telegram delivery
 // happens AND e2e tests can inspect what the backend sent.
 type TeeSender struct {
 	real  Sender
