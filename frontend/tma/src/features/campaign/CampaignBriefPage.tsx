@@ -225,7 +225,10 @@ export function CampaignBriefPage() {
               </li>
               <li>
                 После подписания договора ожидайте онлайн-пригласительный
-                билет на показы {campaign.inviteEventLabel}
+                билет
+                {campaign.inviteEventLabel
+                  ? ` на показы ${campaign.inviteEventLabel}`
+                  : ""}
               </li>
             </ol>
           }

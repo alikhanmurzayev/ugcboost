@@ -69,5 +69,5 @@ export type CampaignBrief = {
   aboutNote?: string;
   aboutImageUrl?: string;
   aboutImageAlt?: string;
-  inviteEventLabel: string;
+  inviteEventLabel?: string;
 };
