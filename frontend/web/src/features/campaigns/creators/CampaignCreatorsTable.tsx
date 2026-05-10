@@ -326,6 +326,8 @@ function buildStatusColumns(
       ];
     case CAMPAIGN_CREATOR_STATUS.DECLINED:
     case CAMPAIGN_CREATOR_STATUS.AGREED:
+    case CAMPAIGN_CREATOR_STATUS.SIGNED:
+    case CAMPAIGN_CREATOR_STATUS.SIGNING_DECLINED:
       return [
         pairColumn(
           "invited",
@@ -333,6 +335,13 @@ function buildStatusColumns(
           (row) => row.campaignCreator.invitedCount,
           (row) => row.campaignCreator.invitedAt ?? null,
         ),
+        decidedColumn(
+          tCampaigns("campaignCreators.columns.decided"),
+          (row) => row.campaignCreator.decidedAt ?? null,
+        ),
+      ];
+    case CAMPAIGN_CREATOR_STATUS.SIGNING:
+      return [
         decidedColumn(
           tCampaigns("campaignCreators.columns.decided"),
           (row) => row.campaignCreator.decidedAt ?? null,

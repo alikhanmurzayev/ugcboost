@@ -472,6 +472,7 @@ jobs:
           CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
           CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
           SENDPULSE_WEBHOOK_SECRET: ${{ secrets.STAGING_SENDPULSE_WEBHOOK_SECRET }}
+          TRUSTME_WEBHOOK_TOKEN: ${{ secrets.CI_TRUSTME_WEBHOOK_TOKEN }}
       - name: Upload report
         if: always()
         uses: actions/upload-artifact@v4

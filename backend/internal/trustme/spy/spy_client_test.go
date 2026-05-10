@@ -15,6 +15,7 @@ func newClient(t *testing.T) (*Client, *SpyStore) {
 	t.Helper()
 	store := NewSpyStore()
 	fixed := time.Date(2026, 5, 9, 12, 0, 0, 0, time.UTC)
+	store.now = func() time.Time { return fixed }
 	c := NewClient(store, func() time.Time { return fixed })
 	return c, store
 }
@@ -150,9 +151,26 @@ func TestSpyClient_DownloadContractFile(t *testing.T) {
 
 func TestSpyStore_RingEvictsOldest(t *testing.T) {
 	t.Parallel()
+	base := time.Date(2026, 5, 9, 12, 0, 0, 0, time.UTC)
 	store := NewSpyStore()
+	store.now = func() time.Time { return base }
 	for i := 0; i < storeCapacity+5; i++ {
-		store.Record(SentRecord{AdditionalInfo: "x"})
+		store.Record(SentRecord{AdditionalInfo: "x", SentAt: base})
 	}
 	require.Len(t, store.List(), storeCapacity)
+}
+
+func TestSpyStore_TTLEvictsOldRecords(t *testing.T) {
+	t.Parallel()
+	base := time.Date(2026, 5, 9, 12, 0, 0, 0, time.UTC)
+	store := NewSpyStore()
+	store.now = func() time.Time { return base }
+
+	store.Record(SentRecord{AdditionalInfo: "old", SentAt: base})
+	store.Record(SentRecord{AdditionalInfo: "fresh", SentAt: base.Add(30 * time.Minute)})
+
+	store.now = func() time.Time { return base.Add(90 * time.Minute) }
+	list := store.List()
+	require.Len(t, list, 1)
+	require.Equal(t, "fresh", list[0].AdditionalInfo)
 }

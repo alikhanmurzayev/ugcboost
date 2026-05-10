@@ -144,12 +144,12 @@ func run() error {
 		appLogger,
 		time.Duration(cfg.TrustMeRetryBackoffSeconds)*time.Second,
 	)
-	if _, err := scheduler.AddFunc("@every 10s", func() {
+	if _, err := scheduler.AddFunc("@every 3s", func() {
 		contractSenderSvc.RunOnce(workerCtx)
 	}); err != nil {
 		return fmt.Errorf("schedule contract sender: %w", err)
 	}
-	appLogger.Info(ctx, "contract sender scheduled", "every", "10s", "trustme_mock", cfg.TrustMeMock)
+	appLogger.Info(ctx, "contract sender scheduled", "every", "3s", "trustme_mock", cfg.TrustMeMock)
 
 	contractWebhookSvc := contract.NewWebhookService(
 		pool,

@@ -32,6 +32,17 @@ import AddCreatorsDrawer from "./AddCreatorsDrawer";
 import RemoveCreatorConfirm from "./RemoveCreatorConfirm";
 import { parseSettled, type SectionResult } from "./notifyResult";
 
+// Once a creator has agreed (or moved past agreed into the contract-signing
+// pipeline) admin removal is forbidden — backend rejects with 422
+// CAMPAIGN_CREATOR_REMOVE_AFTER_AGREED. Hide the trash button upstream so
+// the user does not click into a guaranteed error.
+const STATUSES_WITHOUT_REMOVE = new Set<CampaignCreatorStatus>([
+  CAMPAIGN_CREATOR_STATUS.AGREED,
+  CAMPAIGN_CREATOR_STATUS.SIGNING,
+  CAMPAIGN_CREATOR_STATUS.SIGNED,
+  CAMPAIGN_CREATOR_STATUS.SIGNING_DECLINED,
+]);
+
 interface CampaignCreatorsSectionProps {
   campaign: Campaign;
 }
@@ -109,6 +120,9 @@ export default function CampaignCreatorsSection({
       invited: [],
       declined: [],
       agreed: [],
+      signing: [],
+      signed: [],
+      signing_declined: [],
     };
     for (const row of rows) {
       const bucket = acc[row.campaignCreator.status];
@@ -262,7 +276,7 @@ export default function CampaignCreatorsSection({
               isPending={isPending}
               isSubmitting={isSubmitting}
               onRemove={
-                status === CAMPAIGN_CREATOR_STATUS.AGREED
+                STATUSES_WITHOUT_REMOVE.has(status)
                   ? undefined
                   : handleRemoveRequest
               }
@@ -314,24 +328,30 @@ function actionForStatus(
     | CampaignNotifyMutations["notify"]
     | CampaignNotifyMutations["remind"];
 } {
-  if (
-    status === CAMPAIGN_CREATOR_STATUS.PLANNED ||
-    status === CAMPAIGN_CREATOR_STATUS.DECLINED
-  ) {
-    return {
-      actionLabel: t("campaignCreators.notifyButton"),
-      actionSubmittingLabel: t("campaignCreators.notifySubmitting"),
-      mutation: mutations.notify,
-    };
+  switch (status) {
+    case CAMPAIGN_CREATOR_STATUS.PLANNED:
+    case CAMPAIGN_CREATOR_STATUS.DECLINED:
+      return {
+        actionLabel: t("campaignCreators.notifyButton"),
+        actionSubmittingLabel: t("campaignCreators.notifySubmitting"),
+        mutation: mutations.notify,
+      };
+    case CAMPAIGN_CREATOR_STATUS.INVITED:
+      return {
+        actionLabel: t("campaignCreators.remindButton"),
+        actionSubmittingLabel: t("campaignCreators.remindSubmitting"),
+        mutation: mutations.remind,
+      };
+    case CAMPAIGN_CREATOR_STATUS.AGREED:
+    case CAMPAIGN_CREATOR_STATUS.SIGNING:
+    case CAMPAIGN_CREATOR_STATUS.SIGNED:
+    case CAMPAIGN_CREATOR_STATUS.SIGNING_DECLINED:
+      return {};
+    default: {
+      const _exhaustive: never = status;
+      return _exhaustive;
+    }
   }
-  if (status === CAMPAIGN_CREATOR_STATUS.INVITED) {
-    return {
-      actionLabel: t("campaignCreators.remindButton"),
-      actionSubmittingLabel: t("campaignCreators.remindSubmitting"),
-      mutation: mutations.remind,
-    };
-  }
-  return {};
 }
 
 function removeTargetName(

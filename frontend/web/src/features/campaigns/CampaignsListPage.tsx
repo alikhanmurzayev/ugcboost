@@ -243,7 +243,16 @@ function buildColumns(t: (key: string) => string): Column<Campaign>[] {
       key: "tmaUrl",
       header: t("columns.tmaUrl"),
       render: (row) => (
-        <span className="block max-w-xs truncate text-gray-700">{row.tmaUrl}</span>
+        <a
+          href={row.tmaUrl}
+          target="_blank"
+          rel="noreferrer noopener"
+          onClick={(e) => e.stopPropagation()}
+          data-testid={`campaign-tma-link-${row.id}`}
+          className="block max-w-xs truncate text-primary hover:underline"
+        >
+          {row.tmaUrl}
+        </a>
       ),
     },
     {

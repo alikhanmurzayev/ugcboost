@@ -32,7 +32,6 @@ vi.mock("@/api/dictionaries", () => ({
 
 import {
   listCampaignCreators,
-  addCampaignCreators,
   removeCampaignCreator,
   notifyCampaignCreators,
   remindCampaignCreatorsInvitation,
@@ -253,6 +252,65 @@ describe("CampaignCreatorsSection — grouped rendering", () => {
     expect(
       screen.queryByTestId("campaign-creators-group-action-agreed"),
     ).not.toBeInTheDocument();
+  });
+
+  it("renders all 7 status groups in pipeline order (chunk 18: signing → signed → signing_declined appended)", async () => {
+    const CREATOR_E = "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee";
+    const CREATOR_F = "ffffffff-ffff-ffff-ffff-ffffffffffff";
+    const CREATOR_G = "99999999-9999-9999-9999-999999999999";
+    vi.mocked(listCampaignCreators).mockResolvedValueOnce([
+      makeCC(CREATOR_A, "planned"),
+      makeCC(CREATOR_B, "invited"),
+      makeCC(CREATOR_C, "declined"),
+      makeCC(CREATOR_D, "agreed"),
+      makeCC(CREATOR_E, "signing"),
+      makeCC(CREATOR_F, "signed"),
+      makeCC(CREATOR_G, "signing_declined"),
+    ]);
+    vi.mocked(listCreators).mockResolvedValueOnce({
+      data: {
+        items: [
+          makeCreator(CREATOR_A, "Иванова"),
+          makeCreator(CREATOR_B, "Петрова"),
+          makeCreator(CREATOR_C, "Сидорова"),
+          makeCreator(CREATOR_D, "Орлова"),
+          makeCreator(CREATOR_E, "Соколова"),
+          makeCreator(CREATOR_F, "Кузнецова"),
+          makeCreator(CREATOR_G, "Морозова"),
+        ],
+        total: 7,
+        page: 1,
+        perPage: 200,
+      },
+    });
+
+    renderSection(FIXTURE_CAMPAIGN_LIVE);
+
+    await screen.findByTestId("campaign-creators-group-signed");
+    const groups = screen.getAllByTestId(
+      /^campaign-creators-group-(planned|invited|declined|agreed|signing|signed|signing_declined)$/,
+    );
+    expect(groups.map((g) => g.dataset.testid)).toEqual([
+      "campaign-creators-group-planned",
+      "campaign-creators-group-invited",
+      "campaign-creators-group-declined",
+      "campaign-creators-group-agreed",
+      "campaign-creators-group-signing",
+      "campaign-creators-group-signed",
+      "campaign-creators-group-signing_declined",
+    ]);
+
+    // Three new groups are read-only — no action button and no trash icon.
+    for (const status of ["signing", "signed", "signing_declined"] as const) {
+      expect(
+        screen.queryByTestId(`campaign-creators-group-action-${status}`),
+      ).not.toBeInTheDocument();
+    }
+    for (const id of [CREATOR_E, CREATOR_F, CREATOR_G]) {
+      expect(
+        screen.queryByTestId(`campaign-creator-remove-${id}`),
+      ).not.toBeInTheDocument();
+    }
   });
 
   it("skips groups with zero rows but rest stays visible", async () => {
@@ -898,6 +956,5 @@ describe("CampaignCreatorsSection — pass-through to drawer", () => {
     expect(
       screen.getByTestId(`drawer-row-checkbox-${CREATOR_B}`),
     ).not.toBeDisabled();
-    expect(addCampaignCreators).toBeDefined();
   });
 });

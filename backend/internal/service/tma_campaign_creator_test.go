@@ -179,6 +179,42 @@ func TestTmaCampaignCreatorService_ApplyDecision(t *testing.T) {
 		auditRepo.AssertNotCalled(t, "Create", mock.Anything, mock.Anything)
 	})
 
+	postAgreed := []string{
+		domain.CampaignCreatorStatusSigning,
+		domain.CampaignCreatorStatusSigned,
+		domain.CampaignCreatorStatusSigningDeclined,
+	}
+
+	for _, status := range postAgreed {
+		t.Run("idempotent agree from "+status+" → AlreadyDecided=true preserves current status", func(t *testing.T) {
+			t.Parallel()
+			svc, _, ccRepo, auditRepo := newTmaCampaignCreatorTestRig(t)
+			ccRepo.EXPECT().GetByIDForUpdate(mock.Anything, tmaTestCCID).
+				Return(&repository.CampaignCreatorRow{ID: tmaTestCCID, Status: status}, nil).Once()
+
+			got, err := svc.ApplyDecision(context.Background(), tmaTestAuth(), domain.CampaignCreatorDecisionAgree)
+			require.NoError(t, err)
+			require.Equal(t, domain.CampaignCreatorDecisionResult{
+				Status:         status,
+				AlreadyDecided: true,
+			}, got)
+			ccRepo.AssertNotCalled(t, "ApplyDecision", mock.Anything, mock.Anything, mock.Anything)
+			auditRepo.AssertNotCalled(t, "Create", mock.Anything, mock.Anything)
+		})
+
+		t.Run("decline from "+status+" → ErrCampaignCreatorAlreadyAgreed", func(t *testing.T) {
+			t.Parallel()
+			svc, _, ccRepo, auditRepo := newTmaCampaignCreatorTestRig(t)
+			ccRepo.EXPECT().GetByIDForUpdate(mock.Anything, tmaTestCCID).
+				Return(&repository.CampaignCreatorRow{ID: tmaTestCCID, Status: status}, nil).Once()
+
+			_, err := svc.ApplyDecision(context.Background(), tmaTestAuth(), domain.CampaignCreatorDecisionDecline)
+			require.ErrorIs(t, err, domain.ErrCampaignCreatorAlreadyAgreed)
+			ccRepo.AssertNotCalled(t, "ApplyDecision", mock.Anything, mock.Anything, mock.Anything)
+			auditRepo.AssertNotCalled(t, "Create", mock.Anything, mock.Anything)
+		})
+	}
+
 	t.Run("agree from declined → ErrCampaignCreatorDeclinedNeedReinvite", func(t *testing.T) {
 		t.Parallel()
 		svc, _, ccRepo, auditRepo := newTmaCampaignCreatorTestRig(t)
@@ -256,7 +292,19 @@ func TestTmaCampaignCreatorService_ApplyDecision(t *testing.T) {
 			Return(&repository.CampaignCreatorRow{ID: tmaTestCCID, Status: domain.CampaignCreatorStatusInvited}, nil).Once()
 		ccRepo.EXPECT().ApplyDecision(mock.Anything, tmaTestCCID, domain.CampaignCreatorStatusAgreed).
 			Return(&repository.CampaignCreatorRow{ID: tmaTestCCID, Status: domain.CampaignCreatorStatusAgreed}, nil).Once()
-		auditRepo.EXPECT().Create(mock.Anything, mock.Anything).Return(errors.New("audit down")).Once()
+		expectedPayload, marshalErr := json.Marshal(map[string]string{
+			"campaign_id": tmaTestCampaignID,
+			"creator_id":  tmaTestCreatorID,
+		})
+		require.NoError(t, marshalErr)
+		auditRepo.EXPECT().Create(mock.Anything, mock.AnythingOfType("repository.AuditLogRow")).
+			Run(captureAuditEntry(t,
+				AuditActionCampaignCreatorAgree,
+				AuditEntityTypeCampaignCreator,
+				tmaTestCCID,
+				string(expectedPayload),
+			)).
+			Return(errors.New("audit down")).Once()
 
 		_, err := svc.ApplyDecision(context.Background(), tmaTestAuth(), domain.CampaignCreatorDecisionAgree)
 		require.ErrorContains(t, err, "audit decision")

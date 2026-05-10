@@ -50,8 +50,15 @@ type failNextEntry struct {
 	count  int
 }
 
+// defaultRecordTTL — окно, после которого SentRecord считается протухшим и
+// отбрасывается из List() / Record(). Spy-store держит сырые ПД между
+// тестами одного процесса; час — компромисс между «не мешать ретраю в
+// рамках одного прогона» и «не накапливать staging-замусоривание».
+const defaultRecordTTL = time.Hour
+
 // SpyStore — потокобезопасное хранилище записей + fail-next + known-документов
-// (Phase 0 finalize-without-resend сценарий).
+// (Phase 0 finalize-without-resend сценарий). Записи затухают по TTL —
+// без этого IIN-collision между прогонами на staging теоретически возможен.
 type SpyStore struct {
 	mu             sync.Mutex
 	records        []SentRecord
@@ -59,6 +66,8 @@ type SpyStore struct {
 	failNextAnyN   int
 	failNextAnyMsg string
 	known          map[string]knownDocument
+	ttl            time.Duration
+	now            func() time.Time
 }
 
 type knownDocument struct {
@@ -72,6 +81,8 @@ func NewSpyStore() *SpyStore {
 		records:  make([]SentRecord, 0, storeCapacity),
 		failNext: make(map[string]*failNextEntry),
 		known:    make(map[string]knownDocument),
+		ttl:      defaultRecordTTL,
+		now:      func() time.Time { return time.Now().UTC() },
 	}
 }
 
@@ -118,23 +129,42 @@ func (s *SpyStore) Clear() {
 	s.known = make(map[string]knownDocument)
 }
 
-// Record добавляет запись. Старые вытесняются FIFO.
+// Record добавляет запись. Старые вытесняются FIFO либо по TTL.
 func (s *SpyStore) Record(rec SentRecord) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.evictExpiredLocked()
 	if len(s.records) >= storeCapacity {
 		s.records = s.records[1:]
 	}
 	s.records = append(s.records, rec)
 }
 
-// List возвращает копию ring в порядке вставки.
+// List возвращает копию ring в порядке вставки. Перед копированием
+// отбрасывает записи старше TTL.
 func (s *SpyStore) List() []SentRecord {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	s.evictExpiredLocked()
 	out := make([]SentRecord, len(s.records))
 	copy(out, s.records)
 	return out
+}
+
+// evictExpiredLocked отбрасывает протухшие записи. Caller обязан держать
+// s.mu. Дёргается из List() и Record() — ленивый GC, без отдельной горутины.
+func (s *SpyStore) evictExpiredLocked() {
+	if s.ttl <= 0 {
+		return
+	}
+	cutoff := s.now().Add(-s.ttl)
+	i := 0
+	for i < len(s.records) && s.records[i].SentAt.Before(cutoff) {
+		i++
+	}
+	if i > 0 {
+		s.records = s.records[i:]
+	}
 }
 
 // consumeFailNext возвращает (reason, true), если для additionalInfo есть

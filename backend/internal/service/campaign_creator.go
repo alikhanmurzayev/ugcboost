@@ -105,6 +105,19 @@ func (s *CampaignCreatorService) Add(ctx context.Context, campaignID string, cre
 	return result, nil
 }
 
+// statusLockedFromRemove enumerates campaign_creator statuses where admin
+// remove is forbidden: once the creator commits to the contract flow
+// (agreed → signing → signed/declined), the row stays for audit / TrustMe
+// reconciliation. Mirrors STATUSES_WITHOUT_REMOVE on the web front-end
+// (frontend/web/src/features/campaigns/creators/CampaignCreatorsSection.tsx) —
+// any change here must update the front-end set or the two will diverge.
+var statusLockedFromRemove = map[string]bool{
+	domain.CampaignCreatorStatusAgreed:          true,
+	domain.CampaignCreatorStatusSigning:         true,
+	domain.CampaignCreatorStatusSigned:          true,
+	domain.CampaignCreatorStatusSigningDeclined: true,
+}
+
 // Remove hard-deletes the (campaignId, creatorId) row and writes the
 // matching audit-row in the same transaction. Pre-fetch enforces "soft-
 // deleted campaign = 404"; the row read inside WithTx fills the audit
@@ -127,7 +140,7 @@ func (s *CampaignCreatorService) Remove(ctx context.Context, campaignID, creator
 			}
 			return fmt.Errorf("get campaign creator: %w", err)
 		}
-		if row.Status == domain.CampaignCreatorStatusAgreed {
+		if statusLockedFromRemove[row.Status] {
 			return domain.ErrCampaignCreatorRemoveAfterAgreed
 		}
 		oldCC := campaignCreatorRowToDomain(row)

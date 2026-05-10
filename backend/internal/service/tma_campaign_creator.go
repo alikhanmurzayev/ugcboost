@@ -122,9 +122,17 @@ func decideTransition(current string, decision domain.CampaignCreatorDecision) (
 		default:
 			return "", false, fmt.Errorf("unexpected campaign_creator decision %q", decision)
 		}
-	case domain.CampaignCreatorStatusAgreed:
+	case domain.CampaignCreatorStatusAgreed,
+		domain.CampaignCreatorStatusSigning,
+		domain.CampaignCreatorStatusSigned,
+		domain.CampaignCreatorStatusSigningDeclined:
+		// signing / signed / signing_declined are downstream of agreed —
+		// the cron contract sender (and TrustMe webhook) move the row past
+		// agreed without TMA involvement. Treat repeat agree as idempotent
+		// against the *current* status (so the frontend sees the real
+		// state) and reject decline as ALREADY_AGREED for all four.
 		if decision == domain.CampaignCreatorDecisionAgree {
-			return domain.CampaignCreatorStatusAgreed, false, nil
+			return current, false, nil
 		}
 		return "", false, domain.ErrCampaignCreatorAlreadyAgreed
 	case domain.CampaignCreatorStatusDeclined:
