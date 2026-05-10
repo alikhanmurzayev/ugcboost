@@ -17,7 +17,7 @@ import (
 // текст без импорта internal. Изменился production-текст — обновляем здесь.
 const ExpectedCampaignContractSentText = "Мы отправили вам соглашение на подпись по СМС на номер телефона, указанный при регистрации 📄\n\n" +
 	"Перейдите по ссылке из СМС и подпишите соглашение\n\n" +
-	"Если есть вопросы, можете обратиться к @iskarova"
+	"Если есть вопросы, можете обратиться к @aizerealzair"
 
 // RunTrustMeOutboxOnce синхронно прогоняет один тик ContractSenderService —
 // гейтит /test/trustme/run-outbox-once. e2e webhook scenario использует это

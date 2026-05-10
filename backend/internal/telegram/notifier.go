@@ -158,7 +158,7 @@ func (n *Notifier) NotifyCampaignContractDeclined(ctx context.Context, chatID in
 // `tct.kz/uploader/<code>` руками тут смысла нет).
 const campaignContractSentText = "Мы отправили вам соглашение на подпись по СМС на номер телефона, указанный при регистрации 📄\n\n" +
 	"Перейдите по ссылке из СМС и подпишите соглашение\n\n" +
-	"Если есть вопросы, можете обратиться к @iskarova"
+	"Если есть вопросы, можете обратиться к @aizerealzair"
 
 // CampaignContractSentText экспортирует текст для тестов.
 func CampaignContractSentText() string { return campaignContractSentText }
