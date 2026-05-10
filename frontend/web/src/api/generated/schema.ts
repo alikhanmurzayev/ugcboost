@@ -1163,6 +1163,17 @@ export interface components {
              *     rejected with 422 VALIDATION_ERROR). Ignored when "other" is absent.
              */
             categoryOtherText?: string | null;
+            /**
+             * @description UTM tracking metadata captured by the landing form when the creator
+             *     arrives via a tagged link. All five `utm*` fields use the last-click
+             *     model (sessionStorage on the landing) and are purely metadata —
+             *     never validated against a catalogue, never PII.
+             */
+            utmSource?: string | null;
+            utmMedium?: string | null;
+            utmCampaign?: string | null;
+            utmTerm?: string | null;
+            utmContent?: string | null;
             /** @description One or more social accounts. Multiple handles on the same platform are allowed. */
             socials: components["schemas"]["SocialAccountInput"][];
             /**
@@ -1268,6 +1279,16 @@ export interface components {
             address?: string | null;
             /** @description Free-text niche description when categories include "other". */
             categoryOtherText?: string | null;
+            /**
+             * @description UTM marker captured at submit time. All five `utm*` fields are
+             *     purely tracking metadata — never PII, never validated against a
+             *     catalogue.
+             */
+            utmSource?: string | null;
+            utmMedium?: string | null;
+            utmCampaign?: string | null;
+            utmTerm?: string | null;
+            utmContent?: string | null;
             status: components["schemas"]["CreatorApplicationStatus"];
             /** Format: date-time */
             createdAt: string;

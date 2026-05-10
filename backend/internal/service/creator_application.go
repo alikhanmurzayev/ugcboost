@@ -223,6 +223,11 @@ func (s *CreatorApplicationService) submitOnce(
 			CityCode:          trimmed.CityCode,
 			Address:           trimmed.Address,
 			CategoryOtherText: categoryOtherText,
+			UTMSource:         in.UTMSource,
+			UTMMedium:         in.UTMMedium,
+			UTMCampaign:       in.UTMCampaign,
+			UTMTerm:           in.UTMTerm,
+			UTMContent:        in.UTMContent,
 			Status:            domain.CreatorApplicationStatusVerification,
 			VerificationCode:  verificationCode,
 		})
@@ -504,19 +509,38 @@ func (s *CreatorApplicationService) buildConsentRows(applicationID string, in do
 
 // auditNewValue assembles the sanitised payload that goes into audit_logs.
 // Personal data (IIN, names, phone, address, handles) is deliberately absent —
-// administrators reading audit_logs should only see non-PII context.
+// administrators reading audit_logs should only see non-PII context. UTM
+// markers are non-PII tracking metadata and are added when present so the
+// audit row reflects the campaign attribution at the moment of submission;
+// nil UTM fields are omitted to keep the payload compact for direct submits.
 func (s *CreatorApplicationService) auditNewValue(in domain.CreatorApplicationInput, applicationID string) map[string]any {
 	platforms := make([]string, len(in.Socials))
 	for i, a := range in.Socials {
 		platforms[i] = a.Platform
 	}
-	return map[string]any{
+	out := map[string]any{
 		"application_id": applicationID,
 		"status":         domain.CreatorApplicationStatusVerification,
 		"city":           in.CityCode,
 		"categories":     in.CategoryCodes,
 		"platforms":      platforms,
 	}
+	if in.UTMSource != nil {
+		out["utm_source"] = *in.UTMSource
+	}
+	if in.UTMMedium != nil {
+		out["utm_medium"] = *in.UTMMedium
+	}
+	if in.UTMCampaign != nil {
+		out["utm_campaign"] = *in.UTMCampaign
+	}
+	if in.UTMTerm != nil {
+		out["utm_term"] = *in.UTMTerm
+	}
+	if in.UTMContent != nil {
+		out["utm_content"] = *in.UTMContent
+	}
+	return out
 }
 
 // trimOptional returns a trimmed copy of the pointer's string, or nil if the
@@ -793,6 +817,11 @@ func (s *CreatorApplicationService) creatorApplicationDetailFromRows(
 		CityCode:          app.CityCode,
 		Address:           app.Address,
 		CategoryOtherText: app.CategoryOtherText,
+		UTMSource:         app.UTMSource,
+		UTMMedium:         app.UTMMedium,
+		UTMCampaign:       app.UTMCampaign,
+		UTMTerm:           app.UTMTerm,
+		UTMContent:        app.UTMContent,
 		Status:            app.Status,
 		VerificationCode:  app.VerificationCode,
 		CreatedAt:         app.CreatedAt,

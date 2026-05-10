@@ -75,6 +75,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/AlekSi/pointer"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
@@ -137,8 +138,14 @@ func TestSubmitCreatorApplication(t *testing.T) {
 
 	// Audit-entry sanity: the same admin client can read the audit log filtered
 	// by entity, and the creator_application_submit action must be present.
-	testutil.AssertAuditEntry(t, adminClient, adminToken,
+	// A direct submit without UTM markers must leave audit details compact —
+	// no utm_* keys leak in when the landing did not carry any.
+	entry := testutil.FindAuditEntry(t, adminClient, adminToken,
 		"creator_application", data.ApplicationId.String(), "creator_application_submit")
+	for _, k := range []string{"utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content"} {
+		_, present := auditDetailsMap(t, entry)[k]
+		require.False(t, present, "audit details unexpectedly carried %q for direct submit", k)
+	}
 }
 
 func TestSubmitCreatorApplicationDuplicate(t *testing.T) {
@@ -325,6 +332,76 @@ func TestSubmitCreatorApplicationOther(t *testing.T) {
 
 	adminClient, adminToken, _ := testutil.SetupAdminClient(t)
 	verifyCreatorApplicationByID(t, adminClient, adminToken, resp.JSON201.Data.ApplicationId.String(), req, other)
+}
+
+// TestSubmitCreatorApplicationWithUTM закрывает end-to-end UTM-цепочку:
+// лендинг отдаёт пять `utm_*` маркеров в submit, бэк сохраняет их в новые
+// колонки и возвращает в админский Detail-эндпоинт; audit-строка submit-а
+// получает эти же значения в `details` плоскими ключами `utm_source` и т.д.
+// Тест отправляет полный набор маркеров вместе с обычной заявкой и проверяет
+// (1) detail-API echo — пять полей с теми же значениями; (2) audit `details`
+// содержит ровно пять utm-ключей и совпадает с input. Базовый
+// TestSubmitCreatorApplication уже закрывает обратную ветку (без UTM →
+// audit-details без utm-ключей), так что split на две точки даёт обе
+// границы инварианта.
+func TestSubmitCreatorApplicationWithUTM(t *testing.T) {
+	t.Parallel()
+
+	c := testutil.NewAPIClient(t)
+	iin := testutil.UniqueIIN()
+	req := validRequest(iin)
+	req.UtmSource = pointer.ToString("telegram_chat")
+	req.UtmMedium = pointer.ToString("tg")
+	req.UtmCampaign = pointer.ToString("spring2026")
+	req.UtmTerm = pointer.ToString("ugc")
+	req.UtmContent = pointer.ToString("banner")
+
+	resp, err := c.SubmitCreatorApplicationWithResponse(context.Background(), req)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusCreated, resp.StatusCode())
+	require.NotNil(t, resp.JSON201)
+	applicationID := resp.JSON201.Data.ApplicationId.String()
+	testutil.RegisterCreatorApplicationCleanup(t, applicationID)
+
+	adminClient, adminToken, _ := testutil.SetupAdminClient(t)
+
+	// Detail echo: every UTM marker round-trips through DB to the admin GET.
+	appUUID, err := uuid.Parse(applicationID)
+	require.NoError(t, err)
+	detail, err := adminClient.GetCreatorApplicationWithResponse(context.Background(), appUUID, testutil.WithAuth(adminToken))
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, detail.StatusCode())
+	require.NotNil(t, detail.JSON200)
+	got := detail.JSON200.Data
+	require.Equal(t, "telegram_chat", *got.UtmSource)
+	require.Equal(t, "tg", *got.UtmMedium)
+	require.Equal(t, "spring2026", *got.UtmCampaign)
+	require.Equal(t, "ugc", *got.UtmTerm)
+	require.Equal(t, "banner", *got.UtmContent)
+
+	// Audit details echo: same five flat keys mirror the input markers; nothing
+	// else UTM-shaped sneaks in.
+	entry := testutil.FindAuditEntry(t, adminClient, adminToken,
+		"creator_application", applicationID, "creator_application_submit")
+	details := auditDetailsMap(t, entry)
+	require.Equal(t, "telegram_chat", details["utm_source"])
+	require.Equal(t, "tg", details["utm_medium"])
+	require.Equal(t, "spring2026", details["utm_campaign"])
+	require.Equal(t, "ugc", details["utm_term"])
+	require.Equal(t, "banner", details["utm_content"])
+}
+
+// auditDetailsMap decodes AuditLogEntry.NewValue (interface{} from the
+// generated client) into a string-keyed map for ad-hoc assertions on the
+// payload. Fails the test if NewValue is not a JSON object — every audit row
+// in this surface is supposed to carry one.
+func auditDetailsMap(t *testing.T, entry *apiclient.AuditLogEntry) map[string]any {
+	t.Helper()
+	require.NotNil(t, entry)
+	require.NotNil(t, entry.NewValue, "audit entry NewValue must not be nil")
+	m, ok := entry.NewValue.(map[string]any)
+	require.True(t, ok, "audit entry NewValue must decode as map, got %T", entry.NewValue)
+	return m
 }
 
 // TestSubmitCreatorApplicationCFIP closes the GH-39 regression: behind the

@@ -34,6 +34,11 @@ const (
 	CreatorApplicationColumnCityCode          = "city_code"
 	CreatorApplicationColumnAddress           = "address"
 	CreatorApplicationColumnCategoryOtherText = "category_other_text"
+	CreatorApplicationColumnUTMSource         = "utm_source"
+	CreatorApplicationColumnUTMMedium         = "utm_medium"
+	CreatorApplicationColumnUTMCampaign       = "utm_campaign"
+	CreatorApplicationColumnUTMTerm           = "utm_term"
+	CreatorApplicationColumnUTMContent        = "utm_content"
 	CreatorApplicationColumnStatus            = "status"
 	CreatorApplicationColumnVerificationCode  = "verification_code"
 	CreatorApplicationColumnCreatedAt         = "created_at"
@@ -55,6 +60,11 @@ type CreatorApplicationRow struct {
 	CityCode          string    `db:"city_code"           insert:"city_code"`
 	Address           *string   `db:"address"             insert:"address"`
 	CategoryOtherText *string   `db:"category_other_text" insert:"category_other_text"`
+	UTMSource         *string   `db:"utm_source"          insert:"utm_source"`
+	UTMMedium         *string   `db:"utm_medium"          insert:"utm_medium"`
+	UTMCampaign       *string   `db:"utm_campaign"        insert:"utm_campaign"`
+	UTMTerm           *string   `db:"utm_term"            insert:"utm_term"`
+	UTMContent        *string   `db:"utm_content"         insert:"utm_content"`
 	Status            string    `db:"status"              insert:"status"`
 	VerificationCode  string    `db:"verification_code"   insert:"verification_code"`
 	CreatedAt         time.Time `db:"created_at"`

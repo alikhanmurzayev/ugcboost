@@ -183,6 +183,132 @@ func TestServer_SubmitCreatorApplication(t *testing.T) {
 		require.Nil(t, captured.Address)
 	})
 
+	t.Run("utm full set forwards trimmed pointers and remaining fields stay nil", func(t *testing.T) {
+		t.Parallel()
+		appID := uuid.MustParse("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")
+		creator := mocks.NewMockCreatorApplicationService(t)
+		var captured domain.CreatorApplicationInput
+		creator.EXPECT().Submit(mock.Anything, mock.Anything).
+			Run(func(_ context.Context, in domain.CreatorApplicationInput) {
+				captured = in
+			}).
+			Return(&domain.CreatorApplicationSubmission{
+				ApplicationID: appID.String(),
+				BirthDate:     time.Date(1995, 5, 15, 0, 0, 0, 0, time.UTC),
+			}, nil)
+
+		req := validRequest()
+		req.UtmSource = pointer.ToString(" telegram_chat ")
+		req.UtmMedium = pointer.ToString("tg")
+		req.UtmCampaign = pointer.ToString("spring")
+		req.UtmTerm = pointer.ToString("ugc")
+		req.UtmContent = pointer.ToString("banner")
+
+		router := newTestRouter(t, serverWithCreator(t, creator, logmocks.NewMockLogger(t)))
+		w, _ := doJSON[api.CreatorApplicationSubmitResult](t, router, http.MethodPost, "/creators/applications", req)
+
+		require.Equal(t, http.StatusCreated, w.Code)
+		require.Equal(t, "telegram_chat", pointer.GetString(captured.UTMSource))
+		require.Equal(t, "tg", pointer.GetString(captured.UTMMedium))
+		require.Equal(t, "spring", pointer.GetString(captured.UTMCampaign))
+		require.Equal(t, "ugc", pointer.GetString(captured.UTMTerm))
+		require.Equal(t, "banner", pointer.GetString(captured.UTMContent))
+	})
+
+	t.Run("utm partial set forwards present markers and leaves rest nil", func(t *testing.T) {
+		t.Parallel()
+		appID := uuid.MustParse("bbbbbbbb-cccc-dddd-eeee-ffffffffffff")
+		creator := mocks.NewMockCreatorApplicationService(t)
+		var captured domain.CreatorApplicationInput
+		creator.EXPECT().Submit(mock.Anything, mock.Anything).
+			Run(func(_ context.Context, in domain.CreatorApplicationInput) {
+				captured = in
+			}).
+			Return(&domain.CreatorApplicationSubmission{
+				ApplicationID: appID.String(),
+				BirthDate:     time.Date(1995, 5, 15, 0, 0, 0, 0, time.UTC),
+			}, nil)
+
+		req := validRequest()
+		req.UtmSource = pointer.ToString("fb")
+		req.UtmCampaign = pointer.ToString("q2")
+
+		router := newTestRouter(t, serverWithCreator(t, creator, logmocks.NewMockLogger(t)))
+		w, _ := doJSON[api.CreatorApplicationSubmitResult](t, router, http.MethodPost, "/creators/applications", req)
+
+		require.Equal(t, http.StatusCreated, w.Code)
+		require.Equal(t, "fb", pointer.GetString(captured.UTMSource))
+		require.Equal(t, "q2", pointer.GetString(captured.UTMCampaign))
+		require.Nil(t, captured.UTMMedium)
+		require.Nil(t, captured.UTMTerm)
+		require.Nil(t, captured.UTMContent)
+	})
+
+	t.Run("utm oversize rejected with 422 VALIDATION_ERROR", func(t *testing.T) {
+		t.Parallel()
+		// 257 characters — strict-server does not enforce maxLength so the
+		// handler must guard the column-cap explicitly.
+		creator := mocks.NewMockCreatorApplicationService(t)
+		// Service must NOT be called; if the validator slips, the missing
+		// EXPECT'ed call surfaces here as a panic instead of a silent pass.
+
+		req := validRequest()
+		req.UtmSource = pointer.ToString(strings.Repeat("a", 257))
+
+		router := newTestRouter(t, serverWithCreator(t, creator, logmocks.NewMockLogger(t)))
+		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/creators/applications", req)
+
+		require.Equal(t, http.StatusUnprocessableEntity, w.Code)
+		require.Equal(t, domain.CodeValidation, resp.Error.Code)
+		require.Contains(t, resp.Error.Message, "utmSource")
+	})
+
+	t.Run("utm with control chars rejected with 422", func(t *testing.T) {
+		t.Parallel()
+		// NUL is the typical Postgres-killer; \x1F covers the rest of the
+		// ASCII control range. The validator rejects anything below 0x20 or
+		// 0x7F up front so the request never reaches the DB.
+		creator := mocks.NewMockCreatorApplicationService(t)
+
+		req := validRequest()
+		req.UtmCampaign = pointer.ToString("spring\x00campaign")
+
+		router := newTestRouter(t, serverWithCreator(t, creator, logmocks.NewMockLogger(t)))
+		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/creators/applications", req)
+
+		require.Equal(t, http.StatusUnprocessableEntity, w.Code)
+		require.Equal(t, domain.CodeValidation, resp.Error.Code)
+		require.Contains(t, resp.Error.Message, "utmCampaign")
+	})
+
+	t.Run("utm whitespace-only collapses to nil", func(t *testing.T) {
+		t.Parallel()
+		appID := uuid.MustParse("cccccccc-dddd-eeee-ffff-aaaaaaaaaaaa")
+		creator := mocks.NewMockCreatorApplicationService(t)
+		var captured domain.CreatorApplicationInput
+		creator.EXPECT().Submit(mock.Anything, mock.Anything).
+			Run(func(_ context.Context, in domain.CreatorApplicationInput) {
+				captured = in
+			}).
+			Return(&domain.CreatorApplicationSubmission{
+				ApplicationID: appID.String(),
+				BirthDate:     time.Date(1995, 5, 15, 0, 0, 0, 0, time.UTC),
+			}, nil)
+
+		req := validRequest()
+		req.UtmSource = pointer.ToString("   ")
+		req.UtmMedium = pointer.ToString("")
+		req.UtmCampaign = pointer.ToString("\t\n")
+
+		router := newTestRouter(t, serverWithCreator(t, creator, logmocks.NewMockLogger(t)))
+		w, _ := doJSON[api.CreatorApplicationSubmitResult](t, router, http.MethodPost, "/creators/applications", req)
+
+		require.Equal(t, http.StatusCreated, w.Code)
+		require.Nil(t, captured.UTMSource)
+		require.Nil(t, captured.UTMMedium)
+		require.Nil(t, captured.UTMCampaign)
+	})
+
 	t.Run("oversized user agent is truncated", func(t *testing.T) {
 		t.Parallel()
 		appID := uuid.MustParse("22222222-3333-4444-5555-666666666666")

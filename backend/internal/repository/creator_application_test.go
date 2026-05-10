@@ -69,7 +69,7 @@ func TestCreatorApplicationRepository_HasActiveByIIN(t *testing.T) {
 func TestCreatorApplicationRepository_Create(t *testing.T) {
 	t.Parallel()
 
-	const sqlStmt = "INSERT INTO creator_applications (address,birth_date,category_other_text,city_code,first_name,iin,last_name,middle_name,phone,status,verification_code) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING address, birth_date, category_other_text, city_code, created_at, first_name, id, iin, last_name, middle_name, phone, status, updated_at, verification_code"
+	const sqlStmt = "INSERT INTO creator_applications (address,birth_date,category_other_text,city_code,first_name,iin,last_name,middle_name,phone,status,utm_campaign,utm_content,utm_medium,utm_source,utm_term,verification_code) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING address, birth_date, category_other_text, city_code, created_at, first_name, id, iin, last_name, middle_name, phone, status, updated_at, utm_campaign, utm_content, utm_medium, utm_source, utm_term, verification_code"
 	const verificationCode = "UGC-000123"
 
 	t.Run("success returns persisted row", func(t *testing.T) {
@@ -84,9 +84,9 @@ func TestCreatorApplicationRepository_Create(t *testing.T) {
 		// scanner which requires the source kind to match the destination kind
 		// (*string), so the address/middle/other columns are sourced as pointers.
 		mock.ExpectQuery(sqlStmt).
-			WithArgs("ул. Абая 1", birth, "Авторские ASMR-видео", "almaty", "Айдана", "950515312348", "Муратова", "Ивановна", "+77001234567", "verification", verificationCode).
-			WillReturnRows(pgxmock.NewRows([]string{"address", "birth_date", "category_other_text", "city_code", "created_at", "first_name", "id", "iin", "last_name", "middle_name", "phone", "status", "updated_at", "verification_code"}).
-				AddRow(pointer.ToString("ул. Абая 1"), birth, pointer.ToString("Авторские ASMR-видео"), "almaty", created, "Айдана", "app-1", "950515312348", "Муратова", pointer.ToString("Ивановна"), "+77001234567", "verification", created, verificationCode))
+			WithArgs("ул. Абая 1", birth, "Авторские ASMR-видео", "almaty", "Айдана", "950515312348", "Муратова", "Ивановна", "+77001234567", "verification", nil, nil, nil, nil, nil, verificationCode).
+			WillReturnRows(pgxmock.NewRows([]string{"address", "birth_date", "category_other_text", "city_code", "created_at", "first_name", "id", "iin", "last_name", "middle_name", "phone", "status", "updated_at", "utm_campaign", "utm_content", "utm_medium", "utm_source", "utm_term", "verification_code"}).
+				AddRow(pointer.ToString("ул. Абая 1"), birth, pointer.ToString("Авторские ASMR-видео"), "almaty", created, "Айдана", "app-1", "950515312348", "Муратова", pointer.ToString("Ивановна"), "+77001234567", "verification", created, nil, nil, nil, nil, nil, verificationCode))
 
 		row := CreatorApplicationRow{
 			LastName:          "Муратова",
@@ -128,7 +128,7 @@ func TestCreatorApplicationRepository_Create(t *testing.T) {
 		birth := time.Date(1995, 5, 15, 0, 0, 0, 0, time.UTC)
 
 		mock.ExpectQuery(sqlStmt).
-			WithArgs("ул. Абая 1", birth, nil, "almaty", "Айдана", "950515312348", "Муратова", nil, "+77001234567", "verification", verificationCode).
+			WithArgs("ул. Абая 1", birth, nil, "almaty", "Айдана", "950515312348", "Муратова", nil, "+77001234567", "verification", nil, nil, nil, nil, nil, verificationCode).
 			WillReturnError(&pgconn.PgError{Code: "23505", ConstraintName: CreatorApplicationsIINActiveIdx})
 
 		_, err := repo.Create(context.Background(), CreatorApplicationRow{
@@ -152,7 +152,7 @@ func TestCreatorApplicationRepository_Create(t *testing.T) {
 		birth := time.Date(1995, 5, 15, 0, 0, 0, 0, time.UTC)
 
 		mock.ExpectQuery(sqlStmt).
-			WithArgs("ул. Абая 1", birth, nil, "almaty", "Айдана", "950515312348", "Муратова", nil, "+77001234567", "verification", verificationCode).
+			WithArgs("ул. Абая 1", birth, nil, "almaty", "Айдана", "950515312348", "Муратова", nil, "+77001234567", "verification", nil, nil, nil, nil, nil, verificationCode).
 			WillReturnError(&pgconn.PgError{Code: "23505", ConstraintName: CreatorApplicationsVerificationCodeVerificationIdx})
 
 		_, err := repo.Create(context.Background(), CreatorApplicationRow{
@@ -176,7 +176,7 @@ func TestCreatorApplicationRepository_Create(t *testing.T) {
 		birth := time.Date(1995, 5, 15, 0, 0, 0, 0, time.UTC)
 
 		mock.ExpectQuery(sqlStmt).
-			WithArgs("ул. Абая 1", birth, nil, "almaty", "Айдана", "950515312348", "Муратова", nil, "+77001234567", "verification", verificationCode).
+			WithArgs("ул. Абая 1", birth, nil, "almaty", "Айдана", "950515312348", "Муратова", nil, "+77001234567", "verification", nil, nil, nil, nil, nil, verificationCode).
 			WillReturnError(&pgconn.PgError{Code: "23505", ConstraintName: "some_other_idx"})
 
 		_, err := repo.Create(context.Background(), CreatorApplicationRow{
@@ -195,6 +195,44 @@ func TestCreatorApplicationRepository_Create(t *testing.T) {
 		require.NotErrorIs(t, err, domain.ErrCreatorApplicationVerificationCodeConflict)
 	})
 
+	t.Run("utm round-trip — repo binds five non-null markers and reads them back", func(t *testing.T) {
+		t.Parallel()
+		// Five UTM markers travel through INSERT params and RETURNING; the
+		// pointers stay non-nil end-to-end so the SELECT-projection contract
+		// for the new columns is locked.
+		mock := newPgxmock(t)
+		repo := &creatorApplicationRepository{db: mock}
+		birth := time.Date(1995, 5, 15, 0, 0, 0, 0, time.UTC)
+		created := time.Date(2026, 4, 20, 18, 0, 0, 0, time.UTC)
+
+		mock.ExpectQuery(sqlStmt).
+			WithArgs(nil, birth, nil, "almaty", "Айдана", "950515312348", "Муратова", nil, "+77001234567", "verification", "spring", "banner", "tg", "chat", "ugc", verificationCode).
+			WillReturnRows(pgxmock.NewRows([]string{"address", "birth_date", "category_other_text", "city_code", "created_at", "first_name", "id", "iin", "last_name", "middle_name", "phone", "status", "updated_at", "utm_campaign", "utm_content", "utm_medium", "utm_source", "utm_term", "verification_code"}).
+				AddRow(nil, birth, nil, "almaty", created, "Айдана", "app-utm", "950515312348", "Муратова", nil, "+77001234567", "verification", created, pointer.ToString("spring"), pointer.ToString("banner"), pointer.ToString("tg"), pointer.ToString("chat"), pointer.ToString("ugc"), verificationCode))
+
+		got, err := repo.Create(context.Background(), CreatorApplicationRow{
+			LastName:         "Муратова",
+			FirstName:        "Айдана",
+			IIN:              "950515312348",
+			BirthDate:        birth,
+			Phone:            "+77001234567",
+			CityCode:         "almaty",
+			UTMSource:        pointer.ToString("chat"),
+			UTMMedium:        pointer.ToString("tg"),
+			UTMCampaign:      pointer.ToString("spring"),
+			UTMTerm:          pointer.ToString("ugc"),
+			UTMContent:       pointer.ToString("banner"),
+			Status:           "verification",
+			VerificationCode: verificationCode,
+		})
+		require.NoError(t, err)
+		require.Equal(t, "chat", pointer.GetString(got.UTMSource))
+		require.Equal(t, "tg", pointer.GetString(got.UTMMedium))
+		require.Equal(t, "spring", pointer.GetString(got.UTMCampaign))
+		require.Equal(t, "ugc", pointer.GetString(got.UTMTerm))
+		require.Equal(t, "banner", pointer.GetString(got.UTMContent))
+	})
+
 	t.Run("address omitted — repo passes nil to insert and reads it back", func(t *testing.T) {
 		t.Parallel()
 		// Landing form does not collect an address; the row hits the DB with
@@ -205,9 +243,9 @@ func TestCreatorApplicationRepository_Create(t *testing.T) {
 		created := time.Date(2026, 4, 20, 18, 0, 0, 0, time.UTC)
 
 		mock.ExpectQuery(sqlStmt).
-			WithArgs(nil, birth, nil, "almaty", "Айдана", "950515312348", "Муратова", "Ивановна", "+77001234567", "verification", verificationCode).
-			WillReturnRows(pgxmock.NewRows([]string{"address", "birth_date", "category_other_text", "city_code", "created_at", "first_name", "id", "iin", "last_name", "middle_name", "phone", "status", "updated_at", "verification_code"}).
-				AddRow(nil, birth, nil, "almaty", created, "Айдана", "app-2", "950515312348", "Муратова", pointer.ToString("Ивановна"), "+77001234567", "verification", created, verificationCode))
+			WithArgs(nil, birth, nil, "almaty", "Айдана", "950515312348", "Муратова", "Ивановна", "+77001234567", "verification", nil, nil, nil, nil, nil, verificationCode).
+			WillReturnRows(pgxmock.NewRows([]string{"address", "birth_date", "category_other_text", "city_code", "created_at", "first_name", "id", "iin", "last_name", "middle_name", "phone", "status", "updated_at", "utm_campaign", "utm_content", "utm_medium", "utm_source", "utm_term", "verification_code"}).
+				AddRow(nil, birth, nil, "almaty", created, "Айдана", "app-2", "950515312348", "Муратова", pointer.ToString("Ивановна"), "+77001234567", "verification", created, nil, nil, nil, nil, nil, verificationCode))
 
 		got, err := repo.Create(context.Background(), CreatorApplicationRow{
 			LastName:         "Муратова",
@@ -228,7 +266,7 @@ func TestCreatorApplicationRepository_Create(t *testing.T) {
 func TestCreatorApplicationRepository_GetByID(t *testing.T) {
 	t.Parallel()
 
-	const sqlStmt = "SELECT address, birth_date, category_other_text, city_code, created_at, first_name, id, iin, last_name, middle_name, phone, status, updated_at, verification_code FROM creator_applications WHERE id = $1"
+	const sqlStmt = "SELECT address, birth_date, category_other_text, city_code, created_at, first_name, id, iin, last_name, middle_name, phone, status, updated_at, utm_campaign, utm_content, utm_medium, utm_source, utm_term, verification_code FROM creator_applications WHERE id = $1"
 
 	t.Run("success maps row to struct", func(t *testing.T) {
 		t.Parallel()
@@ -240,8 +278,8 @@ func TestCreatorApplicationRepository_GetByID(t *testing.T) {
 
 		mock.ExpectQuery(sqlStmt).
 			WithArgs("app-1").
-			WillReturnRows(pgxmock.NewRows([]string{"address", "birth_date", "category_other_text", "city_code", "created_at", "first_name", "id", "iin", "last_name", "middle_name", "phone", "status", "updated_at", "verification_code"}).
-				AddRow(pointer.ToString("ул. Абая 1"), birth, pointer.ToString("Авторские ASMR"), "almaty", created, "Айдана", "app-1", "950515312348", "Муратова", pointer.ToString("Ивановна"), "+77001234567", "verification", updated, "UGC-000777"))
+			WillReturnRows(pgxmock.NewRows([]string{"address", "birth_date", "category_other_text", "city_code", "created_at", "first_name", "id", "iin", "last_name", "middle_name", "phone", "status", "updated_at", "utm_campaign", "utm_content", "utm_medium", "utm_source", "utm_term", "verification_code"}).
+				AddRow(pointer.ToString("ул. Абая 1"), birth, pointer.ToString("Авторские ASMR"), "almaty", created, "Айдана", "app-1", "950515312348", "Муратова", pointer.ToString("Ивановна"), "+77001234567", "verification", updated, nil, nil, nil, nil, nil, "UGC-000777"))
 
 		got, err := repo.GetByID(context.Background(), "app-1")
 		require.NoError(t, err)
@@ -293,7 +331,7 @@ func TestCreatorApplicationRepository_GetByID(t *testing.T) {
 func TestCreatorApplicationRepository_GetByIDForUpdate(t *testing.T) {
 	t.Parallel()
 
-	const sqlStmt = "SELECT address, birth_date, category_other_text, city_code, created_at, first_name, id, iin, last_name, middle_name, phone, status, updated_at, verification_code FROM creator_applications WHERE id = $1 FOR UPDATE"
+	const sqlStmt = "SELECT address, birth_date, category_other_text, city_code, created_at, first_name, id, iin, last_name, middle_name, phone, status, updated_at, utm_campaign, utm_content, utm_medium, utm_source, utm_term, verification_code FROM creator_applications WHERE id = $1 FOR UPDATE"
 
 	t.Run("success maps row with FOR UPDATE clause", func(t *testing.T) {
 		t.Parallel()
@@ -305,8 +343,8 @@ func TestCreatorApplicationRepository_GetByIDForUpdate(t *testing.T) {
 
 		mock.ExpectQuery(sqlStmt).
 			WithArgs("app-1").
-			WillReturnRows(pgxmock.NewRows([]string{"address", "birth_date", "category_other_text", "city_code", "created_at", "first_name", "id", "iin", "last_name", "middle_name", "phone", "status", "updated_at", "verification_code"}).
-				AddRow(nil, birth, nil, "almaty", created, "Айдана", "app-1", "950515312348", "Муратова", pointer.ToString("Ивановна"), "+77001234567", "moderation", updated, "UGC-000777"))
+			WillReturnRows(pgxmock.NewRows([]string{"address", "birth_date", "category_other_text", "city_code", "created_at", "first_name", "id", "iin", "last_name", "middle_name", "phone", "status", "updated_at", "utm_campaign", "utm_content", "utm_medium", "utm_source", "utm_term", "verification_code"}).
+				AddRow(nil, birth, nil, "almaty", created, "Айдана", "app-1", "950515312348", "Муратова", pointer.ToString("Ивановна"), "+77001234567", "moderation", updated, nil, nil, nil, nil, nil, "UGC-000777"))
 
 		got, err := repo.GetByIDForUpdate(context.Background(), "app-1")
 		require.NoError(t, err)
@@ -344,7 +382,7 @@ func TestCreatorApplicationRepository_GetByIDForUpdate(t *testing.T) {
 func TestCreatorApplicationRepository_GetByVerificationCodeAndStatus(t *testing.T) {
 	t.Parallel()
 
-	const sqlStmt = "SELECT address, birth_date, category_other_text, city_code, created_at, first_name, id, iin, last_name, middle_name, phone, status, updated_at, verification_code FROM creator_applications WHERE verification_code = $1 AND status = $2"
+	const sqlStmt = "SELECT address, birth_date, category_other_text, city_code, created_at, first_name, id, iin, last_name, middle_name, phone, status, updated_at, utm_campaign, utm_content, utm_medium, utm_source, utm_term, verification_code FROM creator_applications WHERE verification_code = $1 AND status = $2"
 
 	t.Run("success maps row", func(t *testing.T) {
 		t.Parallel()
@@ -355,8 +393,8 @@ func TestCreatorApplicationRepository_GetByVerificationCodeAndStatus(t *testing.
 
 		mock.ExpectQuery(sqlStmt).
 			WithArgs("UGC-111111", "verification").
-			WillReturnRows(pgxmock.NewRows([]string{"address", "birth_date", "category_other_text", "city_code", "created_at", "first_name", "id", "iin", "last_name", "middle_name", "phone", "status", "updated_at", "verification_code"}).
-				AddRow(nil, birth, nil, "almaty", created, "Айдана", "app-1", "950515312348", "Муратова", pointer.ToString("Ивановна"), "+77001234567", "verification", created, "UGC-111111"))
+			WillReturnRows(pgxmock.NewRows([]string{"address", "birth_date", "category_other_text", "city_code", "created_at", "first_name", "id", "iin", "last_name", "middle_name", "phone", "status", "updated_at", "utm_campaign", "utm_content", "utm_medium", "utm_source", "utm_term", "verification_code"}).
+				AddRow(nil, birth, nil, "almaty", created, "Айдана", "app-1", "950515312348", "Муратова", pointer.ToString("Ивановна"), "+77001234567", "verification", created, nil, nil, nil, nil, nil, "UGC-111111"))
 
 		got, err := repo.GetByVerificationCodeAndStatus(context.Background(), "UGC-111111", "verification")
 		require.NoError(t, err)

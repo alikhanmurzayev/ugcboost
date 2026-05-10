@@ -656,6 +656,13 @@ import {
         type CreatorApplicationSubmitRequest,
       } from "../api/creator-applications";
       import { ApiError } from "../api/client";
+      import { captureUTM, readUTM } from "../lib/utm";
+
+      // Capture UTM markers as early as possible so a creator who lands on a
+      // tagged link and then keeps the tab open across reloads still ships the
+      // attribution with their submit. Last-click overwrites; reload without
+      // markers keeps the previous capture (see lib/utm.ts).
+      captureUTM();
 
       // Form-time constants flow from Astro frontmatter via the JSON island
       // above — Astro renders them at build time, this module reads them at
@@ -1000,6 +1007,8 @@ import {
           })
           .filter((s): s is { platform: string; handle: string } => s !== null);
 
+        const utm = readUTM();
+
         return {
           lastName: String(fd.get("lastName") ?? "").trim(),
           firstName: String(fd.get("firstName") ?? "").trim(),
@@ -1012,6 +1021,11 @@ import {
           // the field absent from the JSON body.
           categories,
           categoryOtherText,
+          utmSource: utm.utm_source,
+          utmMedium: utm.utm_medium,
+          utmCampaign: utm.utm_campaign,
+          utmTerm: utm.utm_term,
+          utmContent: utm.utm_content,
           socials: socials as CreatorApplicationSubmitRequest["socials"],
           acceptedAll: fd.get("acceptedAll") === "on",
         };
