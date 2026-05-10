@@ -201,6 +201,11 @@ type CreatorApplicationInput struct {
 	Address           *string
 	CategoryCodes     []string
 	CategoryOtherText *string
+	UTMSource         *string
+	UTMMedium         *string
+	UTMCampaign       *string
+	UTMTerm           *string
+	UTMContent        *string
 	Socials           []SocialAccountInput
 	Consents          ConsentsInput
 	IPAddress         string
@@ -253,6 +258,11 @@ type CreatorApplicationDetail struct {
 	CityCode          string
 	Address           *string
 	CategoryOtherText *string
+	UTMSource         *string
+	UTMMedium         *string
+	UTMCampaign       *string
+	UTMTerm           *string
+	UTMContent        *string
 	Status            string
 	VerificationCode  string
 	CreatedAt         time.Time

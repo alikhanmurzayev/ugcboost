@@ -38,7 +38,14 @@
  */
 import { test, expect, type Page } from "@playwright/test";
 
-import { cleanupCreatorApplication, underageIIN, uniqueIIN } from "../helpers/api";
+import {
+  cleanupCreatorApplication,
+  fetchApplicationDetail,
+  loginAsAdmin,
+  seedAdmin,
+  underageIIN,
+  uniqueIIN,
+} from "../helpers/api";
 
 const API_URL = process.env.API_URL || "http://localhost:8080";
 
@@ -195,6 +202,51 @@ test.describe("Landing submission flow", () => {
     const href = await page.getByTestId("success-cta").getAttribute("href");
     expect(href ?? "").toMatch(/^https:\/\/t\.me\/[^?]+\?start=[0-9a-f-]{36}$/);
     if (href) created.push(extractApplicationIdFromBotUrl(href));
+  });
+
+  test("UTM — markers from query string round-trip into the application detail", async ({
+    page,
+    request,
+  }) => {
+    // Open the landing with a tagged URL: captureUTM() runs at module-load
+    // time and stashes the markers into sessionStorage; collectFormData()
+    // pulls them back out at submit time. The test asserts the chain end-to-
+    // end by reading the persisted detail through the admin API. Asserting
+    // through the wire instead of poking sessionStorage in the page proves
+    // the markers actually leave the browser and land in the DB.
+    await page.goto("/?utm_source=test_chat&utm_campaign=spring2026", {
+      waitUntil: "domcontentloaded",
+    });
+    await waitForDictionaries(page);
+
+    await fillRequiredFields(page, uniqueIIN());
+    await page.getByTestId("category-label-beauty").click();
+    await page.getByTestId("submit-button").click();
+
+    await expect(page.getByTestId("success-screen")).toBeVisible();
+    const href = await page.getByTestId("success-cta").getAttribute("href");
+    expect(href ?? "").toMatch(/^https:\/\/t\.me\/[^?]+\?start=[0-9a-f-]{36}$/);
+    if (!href) throw new Error("success CTA missing href");
+    const applicationId = extractApplicationIdFromBotUrl(href);
+    created.push(applicationId);
+
+    let admin: Awaited<ReturnType<typeof seedAdmin>> | undefined;
+    try {
+      admin = await seedAdmin(request, API_URL);
+      const token = await loginAsAdmin(request, API_URL, admin.email, admin.password);
+      const detail = await fetchApplicationDetail(request, API_URL, applicationId, token);
+      expect(detail.utmSource).toBe("test_chat");
+      expect(detail.utmCampaign).toBe("spring2026");
+      // oapi-codegen emits `*string \`json:"utmSource,omitempty"\``, which
+      // drops the JSON key for nil pointers rather than writing null. Both
+      // outcomes are accepted here via `?? null` until the wire contract is
+      // tightened (see deferred-work.md, "UTM detail wire-contract").
+      expect(detail.utmMedium ?? null).toBeNull();
+      expect(detail.utmTerm ?? null).toBeNull();
+      expect(detail.utmContent ?? null).toBeNull();
+    } finally {
+      if (admin) await admin.cleanup();
+    }
   });
 
   test("Server validation — under-age IIN surfaces form error, no success", async ({

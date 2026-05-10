@@ -192,6 +192,54 @@ describe("ApplicationDrawer — footer slot", () => {
   });
 });
 
+describe("ApplicationDrawer — UTM section", () => {
+  it("renders no utm-section when every utm field is null", () => {
+    renderDrawer(makeDetail());
+
+    expect(screen.queryByTestId("utm-section")).not.toBeInTheDocument();
+  });
+
+  it("renders five labelled rows when every utm field carries a value", () => {
+    renderDrawer(
+      makeDetail({
+        utmSource: "telegram_chat",
+        utmMedium: "tg",
+        utmCampaign: "spring2026",
+        utmTerm: "ugc",
+        utmContent: "banner",
+      }),
+    );
+
+    expect(screen.getByTestId("utm-section")).toBeInTheDocument();
+    expect(screen.getByText("Источник трафика")).toBeInTheDocument();
+    expect(screen.getByTestId("utm-source-value")).toHaveTextContent(
+      "telegram_chat",
+    );
+    expect(screen.getByTestId("utm-medium-value")).toHaveTextContent("tg");
+    expect(screen.getByTestId("utm-campaign-value")).toHaveTextContent(
+      "spring2026",
+    );
+    expect(screen.getByTestId("utm-term-value")).toHaveTextContent("ugc");
+    expect(screen.getByTestId("utm-content-value")).toHaveTextContent("banner");
+  });
+
+  it("renders only the populated rows on a partial utm payload", () => {
+    renderDrawer(
+      makeDetail({
+        utmSource: "fb",
+        utmCampaign: "q2",
+      }),
+    );
+
+    expect(screen.getByTestId("utm-section")).toBeInTheDocument();
+    expect(screen.getByTestId("utm-source-value")).toHaveTextContent("fb");
+    expect(screen.getByTestId("utm-campaign-value")).toHaveTextContent("q2");
+    expect(screen.queryByTestId("utm-medium-value")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("utm-term-value")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("utm-content-value")).not.toBeInTheDocument();
+  });
+});
+
 describe("ApplicationDrawer — DrawerContext + apiError banner", () => {
   function FooterErrorTrigger() {
     const { onApiError } = useDrawerContext();

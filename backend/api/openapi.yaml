@@ -2312,6 +2312,31 @@ components:
             Free-text description of the creator's niche when "other" appears in
             categories. Required when "other" is present (otherwise the request is
             rejected with 422 VALIDATION_ERROR). Ignored when "other" is absent.
+        utmSource:
+          type: string
+          nullable: true
+          maxLength: 256
+          description: |
+            UTM tracking metadata captured by the landing form when the creator
+            arrives via a tagged link. All five `utm*` fields use the last-click
+            model (sessionStorage on the landing) and are purely metadata —
+            never validated against a catalogue, never PII.
+        utmMedium:
+          type: string
+          nullable: true
+          maxLength: 256
+        utmCampaign:
+          type: string
+          nullable: true
+          maxLength: 256
+        utmTerm:
+          type: string
+          nullable: true
+          maxLength: 256
+        utmContent:
+          type: string
+          nullable: true
+          maxLength: 256
         socials:
           type: array
           description: One or more social accounts. Multiple handles on the same platform are allowed.
@@ -2478,6 +2503,25 @@ components:
           type: string
           nullable: true
           description: Free-text niche description when categories include "other".
+        utmSource:
+          type: string
+          nullable: true
+          description: |
+            UTM marker captured at submit time. All five `utm*` fields are
+            purely tracking metadata — never PII, never validated against a
+            catalogue.
+        utmMedium:
+          type: string
+          nullable: true
+        utmCampaign:
+          type: string
+          nullable: true
+        utmTerm:
+          type: string
+          nullable: true
+        utmContent:
+          type: string
+          nullable: true
         status:
           $ref: "#/components/schemas/CreatorApplicationStatus"
         createdAt:

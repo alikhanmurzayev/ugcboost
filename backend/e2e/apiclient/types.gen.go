@@ -806,6 +806,15 @@ type CreatorApplicationDetailData struct {
 	// has not yet opened the bot.
 	TelegramLink *TelegramLink `json:"telegramLink,omitempty"`
 	UpdatedAt    time.Time     `json:"updatedAt"`
+	UtmCampaign  *string       `json:"utmCampaign,omitempty"`
+	UtmContent   *string       `json:"utmContent,omitempty"`
+	UtmMedium    *string       `json:"utmMedium,omitempty"`
+
+	// UtmSource UTM marker captured at submit time. All five `utm*` fields are
+	// purely tracking metadata — never PII, never validated against a
+	// catalogue.
+	UtmSource *string `json:"utmSource,omitempty"`
+	UtmTerm   *string `json:"utmTerm,omitempty"`
 
 	// VerificationCode 6-digit `UGC-NNNNNN` code the creator must DM to the official
 	// Instagram for auto-verification. Visible only via this admin
@@ -941,7 +950,17 @@ type CreatorApplicationSubmitRequest struct {
 	Phone      string  `json:"phone"`
 
 	// Socials One or more social accounts. Multiple handles on the same platform are allowed.
-	Socials []SocialAccountInput `json:"socials"`
+	Socials     []SocialAccountInput `json:"socials"`
+	UtmCampaign *string              `json:"utmCampaign,omitempty"`
+	UtmContent  *string              `json:"utmContent,omitempty"`
+	UtmMedium   *string              `json:"utmMedium,omitempty"`
+
+	// UtmSource UTM tracking metadata captured by the landing form when the creator
+	// arrives via a tagged link. All five `utm*` fields use the last-click
+	// model (sessionStorage on the landing) and are purely metadata —
+	// never validated against a catalogue, never PII.
+	UtmSource *string `json:"utmSource,omitempty"`
+	UtmTerm   *string `json:"utmTerm,omitempty"`
 }
 
 // CreatorApplicationSubmitResult defines model for CreatorApplicationSubmitResult.

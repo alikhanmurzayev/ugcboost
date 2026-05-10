@@ -135,6 +135,72 @@ func expectCityLookupSuccess(rig creatorServiceRig, code string) {
 		Return([]*repository.DictionaryEntryRow{{Code: code, Active: true}}, nil)
 }
 
+// jsonEqRaw lets a mock matcher assert audit-payload equality without freezing
+// key order. It compares two JSON byte sequences as semantic objects through
+// json.RawMessage, so a mock predicate can return true when the marshalled map
+// matches the expected literal regardless of how json.Marshal ordered the keys
+// from a map[string]any source.
+func jsonEqRaw(t *testing.T, expected string, actual []byte) bool {
+	t.Helper()
+	var got, want any
+	if err := json.Unmarshal([]byte(expected), &want); err != nil {
+		t.Fatalf("expected JSON literal is invalid: %v", err)
+	}
+	if err := json.Unmarshal(actual, &got); err != nil {
+		t.Fatalf("actual audit payload is not valid JSON: %v", err)
+	}
+	if a, ok := got.(map[string]any); ok {
+		if b, ok := want.(map[string]any); ok {
+			if len(a) != len(b) {
+				return false
+			}
+			for k, v := range b {
+				gv, present := a[k]
+				if !present {
+					return false
+				}
+				if !jsonValueEquals(v, gv) {
+					return false
+				}
+			}
+			return true
+		}
+	}
+	return jsonValueEquals(want, got)
+}
+
+// jsonValueEquals compares two json-decoded values structurally, treating
+// numeric types loosely (json.Unmarshal yields float64 for numbers regardless
+// of source) and recursing through maps and slices.
+func jsonValueEquals(a, b any) bool {
+	switch av := a.(type) {
+	case map[string]any:
+		bv, ok := b.(map[string]any)
+		if !ok || len(av) != len(bv) {
+			return false
+		}
+		for k, v := range av {
+			if !jsonValueEquals(v, bv[k]) {
+				return false
+			}
+		}
+		return true
+	case []any:
+		bv, ok := b.([]any)
+		if !ok || len(av) != len(bv) {
+			return false
+		}
+		for i := range av {
+			if !jsonValueEquals(av[i], bv[i]) {
+				return false
+			}
+		}
+		return true
+	default:
+		return a == b
+	}
+}
+
 // hasValidVerificationCodeFormat confirms a verification_code looks like
 // "UGC-NNNNNN" — used by Submit-mock matchers so they can assert the rest of
 // the row exactly without freezing the random digit sequence.
@@ -673,6 +739,150 @@ func TestCreatorApplicationService_Submit(t *testing.T) {
 		rig.appConsentRepo.EXPECT().InsertMany(mock.Anything, mock.Anything).Return(nil)
 		rig.auditRepo.EXPECT().Create(mock.Anything, mock.Anything).Return(nil)
 		rig.logger.EXPECT().Info(mock.Anything, "creator application submitted", []any{"application_id", "app-blank"}).Once()
+
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.notifier, rig.campaignCreatorAdder, rig.logger)
+		_, err := svc.Submit(context.Background(), in)
+		require.NoError(t, err)
+	})
+
+	t.Run("utm full set forwards every marker and audit details mirrors them", func(t *testing.T) {
+		t.Parallel()
+		// Five UTM markers travel verbatim from input → Row → audit details.
+		// The audit payload expectation is asserted with JSONEq because Marshal
+		// of a map[string]any has no key-order guarantee, but the content must
+		// match on the dot.
+		rig := newCreatorServiceRig(t)
+		in := validCreatorInput(t)
+		in.UTMSource = pointer.ToString("chat")
+		in.UTMMedium = pointer.ToString("tg")
+		in.UTMCampaign = pointer.ToString("spring")
+		in.UTMTerm = pointer.ToString("ugc")
+		in.UTMContent = pointer.ToString("banner")
+
+		expectTxBegin(rig)
+		expectFactoryWiring(rig)
+		expectDictionaryWiring(rig)
+		rig.appRepo.EXPECT().HasActiveByIIN(mock.Anything, in.IIN).Return(false, nil)
+		rig.dictRepo.EXPECT().GetActiveByCodes(mock.Anything, repository.TableCategories, []string{"beauty", "fashion"}).
+			Return([]*repository.DictionaryEntryRow{
+				{Code: "beauty", Active: true},
+				{Code: "fashion", Active: true},
+			}, nil)
+		expectCityLookupSuccess(rig, "almaty")
+		rig.appRepo.EXPECT().Create(mock.Anything, mock.MatchedBy(func(row repository.CreatorApplicationRow) bool {
+			return pointer.GetString(row.UTMSource) == "chat" &&
+				pointer.GetString(row.UTMMedium) == "tg" &&
+				pointer.GetString(row.UTMCampaign) == "spring" &&
+				pointer.GetString(row.UTMTerm) == "ugc" &&
+				pointer.GetString(row.UTMContent) == "banner"
+		})).Return(&repository.CreatorApplicationRow{ID: "app-utm-full"}, nil)
+		rig.appCategoryRepo.EXPECT().InsertMany(mock.Anything, mock.Anything).Return(nil)
+		rig.appSocialRepo.EXPECT().InsertMany(mock.Anything, mock.Anything).Return(nil)
+		rig.appConsentRepo.EXPECT().InsertMany(mock.Anything, mock.Anything).Return(nil)
+		rig.auditRepo.EXPECT().Create(mock.Anything, mock.MatchedBy(func(row repository.AuditLogRow) bool {
+			expected := `{
+				"application_id": "app-utm-full",
+				"status":         "verification",
+				"city":           "almaty",
+				"categories":     ["beauty", "fashion"],
+				"platforms":      ["instagram", "tiktok"],
+				"utm_source":     "chat",
+				"utm_medium":     "tg",
+				"utm_campaign":   "spring",
+				"utm_term":       "ugc",
+				"utm_content":    "banner"
+			}`
+			return jsonEqRaw(t, expected, row.NewValue)
+		})).Return(nil)
+		rig.logger.EXPECT().Info(mock.Anything, "creator application submitted", []any{"application_id", "app-utm-full"}).Once()
+
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.notifier, rig.campaignCreatorAdder, rig.logger)
+		_, err := svc.Submit(context.Background(), in)
+		require.NoError(t, err)
+	})
+
+	t.Run("utm partial set keeps present keys and omits absent ones from audit", func(t *testing.T) {
+		t.Parallel()
+		// Only utm_source and utm_campaign are set; the other three stay nil
+		// in input. Row must reflect the same nil-ness, and audit details must
+		// carry exactly the two present keys (no nullified slots).
+		rig := newCreatorServiceRig(t)
+		in := validCreatorInput(t)
+		in.UTMSource = pointer.ToString("fb")
+		in.UTMCampaign = pointer.ToString("q2")
+
+		expectTxBegin(rig)
+		expectFactoryWiring(rig)
+		expectDictionaryWiring(rig)
+		rig.appRepo.EXPECT().HasActiveByIIN(mock.Anything, in.IIN).Return(false, nil)
+		rig.dictRepo.EXPECT().GetActiveByCodes(mock.Anything, repository.TableCategories, []string{"beauty", "fashion"}).
+			Return([]*repository.DictionaryEntryRow{
+				{Code: "beauty", Active: true},
+				{Code: "fashion", Active: true},
+			}, nil)
+		expectCityLookupSuccess(rig, "almaty")
+		rig.appRepo.EXPECT().Create(mock.Anything, mock.MatchedBy(func(row repository.CreatorApplicationRow) bool {
+			return pointer.GetString(row.UTMSource) == "fb" &&
+				pointer.GetString(row.UTMCampaign) == "q2" &&
+				row.UTMMedium == nil && row.UTMTerm == nil && row.UTMContent == nil
+		})).Return(&repository.CreatorApplicationRow{ID: "app-utm-partial"}, nil)
+		rig.appCategoryRepo.EXPECT().InsertMany(mock.Anything, mock.Anything).Return(nil)
+		rig.appSocialRepo.EXPECT().InsertMany(mock.Anything, mock.Anything).Return(nil)
+		rig.appConsentRepo.EXPECT().InsertMany(mock.Anything, mock.Anything).Return(nil)
+		rig.auditRepo.EXPECT().Create(mock.Anything, mock.MatchedBy(func(row repository.AuditLogRow) bool {
+			expected := `{
+				"application_id": "app-utm-partial",
+				"status":         "verification",
+				"city":           "almaty",
+				"categories":     ["beauty", "fashion"],
+				"platforms":      ["instagram", "tiktok"],
+				"utm_source":     "fb",
+				"utm_campaign":   "q2"
+			}`
+			return jsonEqRaw(t, expected, row.NewValue)
+		})).Return(nil)
+		rig.logger.EXPECT().Info(mock.Anything, "creator application submitted", []any{"application_id", "app-utm-partial"}).Once()
+
+		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.notifier, rig.campaignCreatorAdder, rig.logger)
+		_, err := svc.Submit(context.Background(), in)
+		require.NoError(t, err)
+	})
+
+	t.Run("utm absent leaves audit details without utm keys", func(t *testing.T) {
+		t.Parallel()
+		// Default validCreatorInput has nil UTM pointers — verify the audit
+		// payload stays compact and Row UTM-pointers stay nil too.
+		rig := newCreatorServiceRig(t)
+		in := validCreatorInput(t)
+
+		expectTxBegin(rig)
+		expectFactoryWiring(rig)
+		expectDictionaryWiring(rig)
+		rig.appRepo.EXPECT().HasActiveByIIN(mock.Anything, in.IIN).Return(false, nil)
+		rig.dictRepo.EXPECT().GetActiveByCodes(mock.Anything, repository.TableCategories, []string{"beauty", "fashion"}).
+			Return([]*repository.DictionaryEntryRow{
+				{Code: "beauty", Active: true},
+				{Code: "fashion", Active: true},
+			}, nil)
+		expectCityLookupSuccess(rig, "almaty")
+		rig.appRepo.EXPECT().Create(mock.Anything, mock.MatchedBy(func(row repository.CreatorApplicationRow) bool {
+			return row.UTMSource == nil && row.UTMMedium == nil && row.UTMCampaign == nil &&
+				row.UTMTerm == nil && row.UTMContent == nil
+		})).Return(&repository.CreatorApplicationRow{ID: "app-utm-none"}, nil)
+		rig.appCategoryRepo.EXPECT().InsertMany(mock.Anything, mock.Anything).Return(nil)
+		rig.appSocialRepo.EXPECT().InsertMany(mock.Anything, mock.Anything).Return(nil)
+		rig.appConsentRepo.EXPECT().InsertMany(mock.Anything, mock.Anything).Return(nil)
+		rig.auditRepo.EXPECT().Create(mock.Anything, mock.MatchedBy(func(row repository.AuditLogRow) bool {
+			expected := `{
+				"application_id": "app-utm-none",
+				"status":         "verification",
+				"city":           "almaty",
+				"categories":     ["beauty", "fashion"],
+				"platforms":      ["instagram", "tiktok"]
+			}`
+			return jsonEqRaw(t, expected, row.NewValue)
+		})).Return(nil)
+		rig.logger.EXPECT().Info(mock.Anything, "creator application submitted", []any{"application_id", "app-utm-none"}).Once()
 
 		svc := NewCreatorApplicationService(rig.pool, rig.factory, rig.notifier, rig.campaignCreatorAdder, rig.logger)
 		_, err := svc.Submit(context.Background(), in)

@@ -91,9 +91,11 @@ type Config struct {
 	// Different bot per environment.
 	TelegramBotUsername string `env:"TELEGRAM_BOT_USERNAME,required"`
 
-	// Required when TelegramMock is false. With TelegramMock=true the sender
-	// runs in spy-only mode and the token is irrelevant. Doubles as the HMAC
-	// key for /tma/* initData verification — same secret, different scope.
+	// Bot token from @BotFather. When set, the runtime starts long-polling
+	// against Telegram and the outbound sender delivers to real users; when
+	// empty, both are skipped — useful for local/CI where EnableTestEndpoints
+	// drives a parallel fake bot. Doubles as the HMAC key for /tma/* initData
+	// verification — same secret, different scope.
 	TelegramBotToken string `env:"TELEGRAM_BOT_TOKEN" envDefault:""`
 
 	// Freshness window for Telegram WebApp initData. Older / future-dated
@@ -105,13 +107,6 @@ type Config struct {
 	// like `86400` are NOT valid (caarlos0/env parses through
 	// time.ParseDuration which would treat them as nanoseconds).
 	TMAInitDataTTL time.Duration `env:"TMA_INITDATA_TTL" envDefault:"24h"`
-
-	// When true the outbound Telegram sender records into an in-memory spy
-	// store and never touches the network. Used by local dev and CI so tests
-	// can assert on what would have been sent without a real bot. On staging
-	// false enables real delivery; the spy still records (Tee mode) because
-	// EnableTestEndpoints is also true there.
-	TelegramMock bool `env:"TELEGRAM_MOCK" envDefault:"false"`
 
 	// Bearer secret SendPulse signs the IG webhook with. Constant-time
 	// compared in middleware before the handler runs.
@@ -155,8 +150,13 @@ func Load() (*Config, error) {
 	if cfg.SendPulseWebhookSecret == "" {
 		return nil, fmt.Errorf("SENDPULSE_WEBHOOK_SECRET must be a non-empty value")
 	}
-	if !cfg.TelegramMock && cfg.TelegramBotToken == "" {
-		return nil, fmt.Errorf("TELEGRAM_BOT_TOKEN must be a non-empty value when TELEGRAM_MOCK=false")
+	// Refuse to boot a deployment with no Telegram surface at all: without
+	// either a real bot token or test endpoints, services that reach for the
+	// notifier would fall back to a no-op silently. Surfacing the misconfig
+	// up front is cheaper than chasing a "creator never got the message"
+	// ticket in production.
+	if cfg.TelegramBotToken == "" && cfg.Environment == EnvProduction {
+		return nil, fmt.Errorf("TELEGRAM_BOT_TOKEN must be set in production")
 	}
 	// TrustMe webhook token guard — required outside local окружения. На
 	// staging/prod TrustMe доставляет webhook'и с этим токеном; пустой

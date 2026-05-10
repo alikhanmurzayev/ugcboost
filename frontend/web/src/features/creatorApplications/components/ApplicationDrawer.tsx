@@ -305,6 +305,8 @@ function ApplicationBody({
           }
         />
 
+        <UtmSection application={application} />
+
         <Field
           fullWidth
           label={t("drawer.socials")}
@@ -480,6 +482,45 @@ function Field({
         {value}
       </dd>
     </div>
+  );
+}
+
+const UTM_KEYS = ["source", "medium", "campaign", "term", "content"] as const;
+type UtmKey = (typeof UTM_KEYS)[number];
+
+function UtmSection({ application }: { application: ApplicationDetail }) {
+  const { t } = useTranslation("creatorApplications");
+  const values: Record<UtmKey, string | null | undefined> = {
+    source: application.utmSource,
+    medium: application.utmMedium,
+    campaign: application.utmCampaign,
+    term: application.utmTerm,
+    content: application.utmContent,
+  };
+  const present = UTM_KEYS.filter((key) => {
+    const v = values[key];
+    return typeof v === "string" && v.length > 0;
+  });
+  if (present.length === 0) return null;
+
+  return (
+    <Field
+      fullWidth
+      testid="utm-section"
+      label={t("drawer.utm.title")}
+      value={
+        <div className="flex flex-col gap-0.5">
+          {present.map((key) => (
+            <span key={key} className="text-sm text-gray-900">
+              <span className="text-gray-500">{t(`drawer.utm.${key}`)}:</span>{" "}
+              <span data-testid={`utm-${key}-value`} className="break-all">
+                {values[key]}
+              </span>
+            </span>
+          ))}
+        </div>
+      }
+    />
   );
 }
 

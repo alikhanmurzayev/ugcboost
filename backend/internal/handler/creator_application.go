@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/AlekSi/pointer"
 	"github.com/google/uuid"
 	openapi_types "github.com/oapi-codegen/runtime/types"
 
@@ -19,6 +20,27 @@ import (
 func (s *Server) SubmitCreatorApplication(ctx context.Context, request api.SubmitCreatorApplicationRequestObject) (api.SubmitCreatorApplicationResponseObject, error) {
 	req := request.Body
 
+	utmSource, err := validateUTMField("utmSource", req.UtmSource)
+	if err != nil {
+		return nil, err
+	}
+	utmMedium, err := validateUTMField("utmMedium", req.UtmMedium)
+	if err != nil {
+		return nil, err
+	}
+	utmCampaign, err := validateUTMField("utmCampaign", req.UtmCampaign)
+	if err != nil {
+		return nil, err
+	}
+	utmTerm, err := validateUTMField("utmTerm", req.UtmTerm)
+	if err != nil {
+		return nil, err
+	}
+	utmContent, err := validateUTMField("utmContent", req.UtmContent)
+	if err != nil {
+		return nil, err
+	}
+
 	input := domain.CreatorApplicationInput{
 		LastName:          req.LastName,
 		FirstName:         req.FirstName,
@@ -29,6 +51,11 @@ func (s *Server) SubmitCreatorApplication(ctx context.Context, request api.Submi
 		Address:           req.Address,
 		CategoryCodes:     req.Categories,
 		CategoryOtherText: req.CategoryOtherText,
+		UTMSource:         utmSource,
+		UTMMedium:         utmMedium,
+		UTMCampaign:       utmCampaign,
+		UTMTerm:           utmTerm,
+		UTMContent:        utmContent,
 		Socials:           apiSocialsToDomain(req.Socials),
 		Consents:          domain.ConsentsInput{AcceptedAll: req.AcceptedAll},
 		IPAddress:         middleware.ClientIPFromContext(ctx),
@@ -67,6 +94,38 @@ func (s *Server) SubmitCreatorApplication(ctx context.Context, request api.Submi
 // against a malformed env var smuggling characters into the path or query.
 func (s *Server) buildTelegramBotURL(applicationID string) string {
 	return "https://t.me/" + url.PathEscape(s.telegramBotUsername) + "?start=" + url.QueryEscape(applicationID)
+}
+
+// utmFieldMaxLen mirrors the OpenAPI maxLength on every utm* field. Enforced
+// here because oapi-codegen does not generate runtime length validation for
+// strings, and the receiving columns are TEXT (no DB-level CAP either).
+const utmFieldMaxLen = 256
+
+// validateUTMField parses one optional UTM marker. nil input forwards as nil.
+// Strings exceeding utmFieldMaxLen runes or carrying ASCII control bytes
+// (which Postgres TEXT cannot store and which are not valid in real UTM
+// payloads) are rejected with 422. Whitespace-only after trim collapses to
+// nil so the column stays NULL — landing forms send `undefined` already, but
+// direct API callers can still send `"   "`.
+func validateUTMField(field string, p *string) (*string, error) {
+	if p == nil {
+		return nil, nil
+	}
+	trimmed := strings.TrimSpace(*p)
+	if trimmed == "" {
+		return nil, nil
+	}
+	for _, r := range trimmed {
+		if r < 0x20 || r == 0x7F {
+			return nil, domain.NewValidationError(domain.CodeValidation,
+				fmt.Sprintf("Поле %s содержит недопустимые управляющие символы", field))
+		}
+	}
+	if len([]rune(trimmed)) > utmFieldMaxLen {
+		return nil, domain.NewValidationError(domain.CodeValidation,
+			fmt.Sprintf("Поле %s не должно превышать %d символов", field, utmFieldMaxLen))
+	}
+	return pointer.ToString(trimmed), nil
 }
 
 func apiSocialsToDomain(in []api.SocialAccountInput) []domain.SocialAccountInput {
@@ -211,6 +270,11 @@ func domainCreatorApplicationDetailToAPI(
 		City:              resolveDictionaryItem(d.CityCode, cityByCode),
 		Address:           d.Address,
 		CategoryOtherText: d.CategoryOtherText,
+		UtmSource:         d.UTMSource,
+		UtmMedium:         d.UTMMedium,
+		UtmCampaign:       d.UTMCampaign,
+		UtmTerm:           d.UTMTerm,
+		UtmContent:        d.UTMContent,
 		Status:            status,
 		VerificationCode:  d.VerificationCode,
 		CreatedAt:         d.CreatedAt,

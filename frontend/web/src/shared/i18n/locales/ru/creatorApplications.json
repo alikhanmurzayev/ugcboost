@@ -24,6 +24,14 @@
     "city": "Город",
     "categories": "Категории",
     "categoryOther": "Другое",
+    "utm": {
+      "title": "Источник трафика",
+      "source": "Источник",
+      "medium": "Канал",
+      "campaign": "Кампания",
+      "term": "Поисковый термин",
+      "content": "Контент"
+    },
     "socials": "Соцсети",
     "telegram": "Telegram",
     "telegramNotLinked": "Не привязан",
