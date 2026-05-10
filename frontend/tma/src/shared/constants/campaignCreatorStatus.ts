@@ -7,6 +7,9 @@ export const CAMPAIGN_CREATOR_STATUS = {
   INVITED: "invited",
   DECLINED: "declined",
   AGREED: "agreed",
+  SIGNING: "signing",
+  SIGNED: "signed",
+  SIGNING_DECLINED: "signing_declined",
 } as const satisfies Record<string, CampaignCreatorStatus>;
 
 type MissingStatus = Exclude<
