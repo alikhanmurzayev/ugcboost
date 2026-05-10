@@ -140,10 +140,17 @@ func TestTmaDecisionFlow(t *testing.T) {
 		require.NotNil(t, entry.NewValue)
 
 		// Idempotent repeat — must NOT add a second audit row.
+		// We deliberately do NOT assert repeat.Status here: between the two
+		// POST requests the outbox worker may pick up the freshly-agreed row,
+		// hand the contract off to TrustMe, and flip status from "agreed" to
+		// "signing". Both outcomes satisfy the idempotency contract — the
+		// invariants we actually care about are (a) AlreadyDecided=true on
+		// the repeat call, and (b) only one campaign_creator_agree audit row
+		// gets written. Pinning a specific transient status would re-introduce
+		// a flake we already had to fix once with TrustMe SpyOnly mocking.
 		status, body = tmaPost(t, fx.SecretToken, "agree", initData)
 		require.Equalf(t, http.StatusOK, status, "repeat agree body=%s", string(body))
 		repeat := decodeDecision(t, body)
-		require.Equal(t, apiclient.CampaignCreatorStatus(apiclient.Agreed), repeat.Status)
 		require.True(t, repeat.AlreadyDecided)
 
 		entries := testutil.ListAuditEntriesByAction(t, fx.AdminClient, fx.AdminToken,
