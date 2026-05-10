@@ -427,15 +427,16 @@ export interface components {
         };
         TrustMeSpyFailNextRequest: {
             /**
-             * @description contracts.id whose next SendToSign should fail. Empty string —
-             *     wildcard, fails next `count` SendToSign'ов независимо от
-             *     additionalInfo (нужно e2e Phase 0 recovery, где contract_id
-             *     ещё не существует на момент регистрации failure).
+             * @description IIN of the creator whose next SendToSign should fail. Tests
+             *     register BEFORE the creator agrees, so the outbox tick consumes
+             *     the registered failure on its first attempt at this IIN. Mirrors
+             *     telegramSpyFailNext (chatId-keyed) — no wildcard, otherwise a
+             *     parallel test in another package would consume our failure.
              */
-            additionalInfo: string;
+            iin: string;
             /** @description Optional override for the error string the spy returns. */
             reason?: string;
-            /** @description How many subsequent calls to fail. Defaults to 1. */
+            /** @description How many subsequent calls on this IIN to fail. Defaults to 1. */
             count?: number;
         };
         TrustMeSpyRegisterDocumentRequest: {

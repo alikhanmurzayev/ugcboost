@@ -59,15 +59,17 @@ const defaultRecordTTL = time.Hour
 // SpyStore — потокобезопасное хранилище записей + fail-next + known-документов
 // (Phase 0 finalize-without-resend сценарий). Записи затухают по TTL —
 // без этого IIN-collision между прогонами на staging теоретически возможен.
+//
+// fail-next ключуется по IIN (а не по contract.id, как раньше): IIN
+// известен тесту до того, как outbox создаёт contract.id, и не пересекается
+// между параллельными tests/packages в одном backend-процессе.
 type SpyStore struct {
-	mu             sync.Mutex
-	records        []SentRecord
-	failNext       map[string]*failNextEntry
-	failNextAnyN   int
-	failNextAnyMsg string
-	known          map[string]knownDocument
-	ttl            time.Duration
-	now            func() time.Time
+	mu       sync.Mutex
+	records  []SentRecord
+	failNext map[string]*failNextEntry
+	known    map[string]knownDocument
+	ttl      time.Duration
+	now      func() time.Time
 }
 
 type knownDocument struct {
@@ -86,10 +88,13 @@ func NewSpyStore() *SpyStore {
 	}
 }
 
-// RegisterFailNext очерёдывает синтетический сбой следующих `count` SendToSign'ов
-// с указанным additionalInfo. Empty additionalInfo → wildcard (Phase 0
-// recovery e2e: contract_id неизвестен заранее). count<=0 → 1.
-func (s *SpyStore) RegisterFailNext(additionalInfo, reason string, count int) {
+// RegisterFailNext очерёдывает синтетический сбой следующих `count`
+// SendToSign'ов на указанный IIN. Empty iin — no-op (handler validates,
+// but defensive). count<=0 → 1.
+func (s *SpyStore) RegisterFailNext(iin, reason string, count int) {
+	if iin == "" {
+		return
+	}
 	if count <= 0 {
 		count = 1
 	}
@@ -98,12 +103,7 @@ func (s *SpyStore) RegisterFailNext(additionalInfo, reason string, count int) {
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if additionalInfo == "" {
-		s.failNextAnyN = count
-		s.failNextAnyMsg = reason
-		return
-	}
-	s.failNext[additionalInfo] = &failNextEntry{reason: reason, count: count}
+	s.failNext[iin] = &failNextEntry{reason: reason, count: count}
 }
 
 // RegisterDocument — «TrustMe уже принял этот документ». Используется в e2e
@@ -124,8 +124,6 @@ func (s *SpyStore) Clear() {
 	defer s.mu.Unlock()
 	s.records = s.records[:0]
 	s.failNext = make(map[string]*failNextEntry)
-	s.failNextAnyN = 0
-	s.failNextAnyMsg = ""
 	s.known = make(map[string]knownDocument)
 }
 
@@ -167,28 +165,24 @@ func (s *SpyStore) evictExpiredLocked() {
 	}
 }
 
-// consumeFailNext возвращает (reason, true), если для additionalInfo есть
-// fail-запрос (включая wildcard). Specific match имеет приоритет над wildcard.
-func (s *SpyStore) consumeFailNext(additionalInfo string) (string, bool) {
+// consumeFailNext возвращает (reason, true), если для iin есть зарегистрированный
+// fail-запрос. Каждый вызов decrement'ит count; когда count==0, запись удаляется.
+func (s *SpyStore) consumeFailNext(iin string) (string, bool) {
+	if iin == "" {
+		return "", false
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if entry, ok := s.failNext[additionalInfo]; ok {
-		reason := entry.reason
-		entry.count--
-		if entry.count <= 0 {
-			delete(s.failNext, additionalInfo)
-		}
-		return reason, true
+	entry, ok := s.failNext[iin]
+	if !ok {
+		return "", false
 	}
-	if s.failNextAnyN > 0 {
-		reason := s.failNextAnyMsg
-		s.failNextAnyN--
-		if s.failNextAnyN == 0 {
-			s.failNextAnyMsg = ""
-		}
-		return reason, true
+	reason := entry.reason
+	entry.count--
+	if entry.count <= 0 {
+		delete(s.failNext, iin)
 	}
-	return "", false
+	return reason, true
 }
 
 func (s *SpyStore) lookupKnown(additionalInfo string) (knownDocument, bool) {

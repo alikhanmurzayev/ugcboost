@@ -263,14 +263,15 @@ type TrustMeSentRecord struct {
 
 // TrustMeSpyFailNextRequest defines model for TrustMeSpyFailNextRequest.
 type TrustMeSpyFailNextRequest struct {
-	// AdditionalInfo contracts.id whose next SendToSign should fail. Empty string —
-	// wildcard, fails next `count` SendToSign'ов независимо от
-	// additionalInfo (нужно e2e Phase 0 recovery, где contract_id
-	// ещё не существует на момент регистрации failure).
-	AdditionalInfo string `json:"additionalInfo"`
-
-	// Count How many subsequent calls to fail. Defaults to 1.
+	// Count How many subsequent calls on this IIN to fail. Defaults to 1.
 	Count *int `json:"count,omitempty"`
+
+	// Iin IIN of the creator whose next SendToSign should fail. Tests
+	// register BEFORE the creator agrees, so the outbox tick consumes
+	// the registered failure on its first attempt at this IIN. Mirrors
+	// telegramSpyFailNext (chatId-keyed) — no wildcard, otherwise a
+	// parallel test in another package would consume our failure.
+	Iin string `json:"iin"`
 
 	// Reason Optional override for the error string the spy returns.
 	Reason *string `json:"reason,omitempty"`

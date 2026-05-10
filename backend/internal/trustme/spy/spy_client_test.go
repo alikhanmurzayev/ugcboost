@@ -72,27 +72,41 @@ func TestSpyClient_SendToSign_FailNext(t *testing.T) {
 	t.Parallel()
 
 	c, store := newClient(t)
-	store.RegisterFailNext("ct-1", "synthetic 502", 1)
+	store.RegisterFailNext("880101300123", "synthetic 502", 1)
 
-	_, err := c.SendToSign(context.Background(), trustme.SendToSignInput{
+	// SendToSign with a different IIN must NOT consume the registered failure.
+	otherIIN, err := c.SendToSign(context.Background(), trustme.SendToSignInput{
+		AdditionalInfo: "ct-other",
+		Requisites: []trustme.Requisite{{
+			FIO: "Y", IINBIN: "999999999999", PhoneNumber: "+77",
+		}},
+	})
+	require.NoError(t, err)
+	require.NotEmpty(t, otherIIN.DocumentID)
+
+	// SendToSign with the registered IIN consumes it: error returned, error
+	// recorded in spy.
+	_, err = c.SendToSign(context.Background(), trustme.SendToSignInput{
 		AdditionalInfo: "ct-1",
 		Requisites: []trustme.Requisite{{
-			FIO: "X", IINBIN: "1", PhoneNumber: "+77",
+			FIO: "X", IINBIN: "880101300123", PhoneNumber: "+77",
 		}},
 	})
 	require.Error(t, err)
 	require.Equal(t, "synthetic 502", err.Error())
 
 	records := store.List()
-	require.Len(t, records, 1)
-	require.Equal(t, "synthetic 502", records[0].Err)
-	require.Empty(t, records[0].DocumentID)
+	require.Len(t, records, 2)
+	require.Empty(t, records[0].Err, "first call (other IIN) succeeded")
+	require.NotEmpty(t, records[0].DocumentID)
+	require.Equal(t, "synthetic 502", records[1].Err, "second call (matching IIN) failed")
+	require.Empty(t, records[1].DocumentID)
 
-	// after the fail-next budget is exhausted, the next call succeeds
+	// After the count budget is exhausted, the next call on the same IIN succeeds.
 	got, err := c.SendToSign(context.Background(), trustme.SendToSignInput{
 		AdditionalInfo: "ct-1",
 		Requisites: []trustme.Requisite{{
-			FIO: "X", IINBIN: "1", PhoneNumber: "+77",
+			FIO: "X", IINBIN: "880101300123", PhoneNumber: "+77",
 		}},
 	})
 	require.NoError(t, err)

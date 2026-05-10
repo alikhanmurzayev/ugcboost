@@ -167,13 +167,13 @@ func TestTestAPIHandler_TrustMeSpyClear(t *testing.T) {
 func TestTestAPIHandler_TrustMeSpyFailNext(t *testing.T) {
 	t.Parallel()
 	rig := newTrustMeRig(t, true, true)
-	rig.spy.EXPECT().RegisterFailNext("ct-1", "boom", 2).Once()
+	rig.spy.EXPECT().RegisterFailNext("880101300123", "boom", 2).Once()
 
 	w, _ := doJSON[any](t, rig.router, http.MethodPost, "/test/trustme/spy-fail-next",
 		testapi.TrustMeSpyFailNextRequest{
-			AdditionalInfo: "ct-1",
-			Reason:         pointerStr("boom"),
-			Count:          pointerInt(2),
+			Iin:    "880101300123",
+			Reason: pointerStr("boom"),
+			Count:  pointerInt(2),
 		})
 
 	require.Equal(t, http.StatusNoContent, w.Code)

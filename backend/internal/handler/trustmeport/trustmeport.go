@@ -34,6 +34,6 @@ type OutboxRunner interface {
 type SpyStore interface {
 	List() []SentRecord
 	Clear()
-	RegisterFailNext(additionalInfo, reason string, count int)
+	RegisterFailNext(iin, reason string, count int)
 	RegisterDocument(additionalInfo, documentID, shortURL string, contractStatus int)
 }
