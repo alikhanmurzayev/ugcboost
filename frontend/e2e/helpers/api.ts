@@ -48,6 +48,14 @@ type CreatorApplicationDetailData =
 type CreatorApprovalResult = components["schemas"]["CreatorApprovalResult"];
 type SendPulseInstagramWebhookRequest =
   components["schemas"]["SendPulseInstagramWebhookRequest"];
+type TmaDecisionResult = components["schemas"]["TmaDecisionResult"];
+type TrustMeWebhookRequest = components["schemas"]["TrustMeWebhookRequest"];
+type TrustMeSpyListResult =
+  testComponents["schemas"]["TrustMeSpyListResult"];
+type TrustMeSentRecord = testComponents["schemas"]["TrustMeSentRecord"];
+type ListCampaignCreatorsResult =
+  components["schemas"]["ListCampaignCreatorsResult"];
+type CampaignCreatorStatus = components["schemas"]["CampaignCreatorStatus"];
 
 export type SocialAccountInput = components["schemas"]["SocialAccountInput"];
 
@@ -926,4 +934,171 @@ export async function triggerSendPulseInstagramWebhook(
       `triggerSendPulseInstagramWebhook: ${resp.status()} ${await resp.text()}`,
     );
   }
+}
+
+// secretTokenFromTmaUrl extracts the campaign secret_token from its tma_url —
+// last non-empty path segment. Mirrors the backend handler-side regex
+// expectation `^[A-Za-z0-9_-]{16,}$`. Used by e2e helpers that drive
+// /tma/campaigns/{secretToken}/* directly without going through campaign
+// detail GET (which would require admin auth).
+function secretTokenFromTmaUrl(tmaUrl: string): string {
+  const url = new URL(tmaUrl);
+  const segments = url.pathname.split("/").filter((s) => s.length > 0);
+  const last = segments[segments.length - 1];
+  if (!last) {
+    throw new Error(`secretTokenFromTmaUrl: cannot extract token from "${tmaUrl}"`);
+  }
+  return last;
+}
+
+// tmaAgreeCampaign drives the creator-side TMA agree flow via
+// POST /tma/campaigns/{secretToken}/agree using a signed initData header.
+// Mirrors the production wire format: TMA frontend sends
+// `Authorization: tma <init-data>`. Caller is responsible for ensuring the
+// creator was previously notified (cc.status='invited') — agree from
+// `planned` returns 422 by state machine.
+export async function tmaAgreeCampaign(
+  request: APIRequestContext,
+  apiUrl: string,
+  tmaUrl: string,
+  signedInitData: string,
+): Promise<TmaDecisionResult> {
+  const secretToken = secretTokenFromTmaUrl(tmaUrl);
+  const resp = await request.post(
+    `${apiUrl}/tma/campaigns/${secretToken}/agree`,
+    { headers: { Authorization: `tma ${signedInitData}` } },
+  );
+  if (resp.status() !== 200) {
+    throw new Error(
+      `tmaAgreeCampaign ${secretToken}: ${resp.status()} ${await resp.text()}`,
+    );
+  }
+  return (await resp.json()) as TmaDecisionResult;
+}
+
+// runTrustMeOutboxOnce kicks the contract-outbox worker synchronously via
+// POST /test/trustme/run-outbox-once so e2e specs do not wait for the
+// @every 10s cron tick. The endpoint returns 204 once the tick finishes.
+// Available only when EnableTestEndpoints=true (404 в проде).
+export async function runTrustMeOutboxOnce(
+  request: APIRequestContext,
+  apiUrl: string,
+): Promise<void> {
+  const resp = await request.post(`${apiUrl}/test/trustme/run-outbox-once`);
+  if (resp.status() !== 204) {
+    throw new Error(
+      `runTrustMeOutboxOnce: ${resp.status()} ${await resp.text()}`,
+    );
+  }
+}
+
+// findTrustMeSpyByIIN reads the in-process TrustMe spy store via
+// GET /test/trustme/spy-list and returns the first record whose iin matches.
+// The spy stores raw Requisite.IIN_BIN per SendToSign — useful for tests
+// that need the trustme-side documentId (returned in webhooks as
+// `contract_id`) without parsing the audit log.
+export async function findTrustMeSpyByIIN(
+  request: APIRequestContext,
+  apiUrl: string,
+  iin: string,
+): Promise<TrustMeSentRecord> {
+  const resp = await request.get(`${apiUrl}/test/trustme/spy-list`);
+  if (resp.status() !== 200) {
+    throw new Error(
+      `findTrustMeSpyByIIN: ${resp.status()} ${await resp.text()}`,
+    );
+  }
+  const result = (await resp.json()) as TrustMeSpyListResult;
+  const match = result.data.items.find((r) => r.iin === iin);
+  if (!match) {
+    throw new Error(
+      `findTrustMeSpyByIIN: no spy record for iin=${iin} (${result.data.items.length} records total)`,
+    );
+  }
+  return match;
+}
+
+// TrustMeWebhookStatus enumerates the two terminal codes the chunk-18 spec
+// drives end-to-end. 3 = creator signed; 9 = creator declined. Backend's
+// WebhookService accepts the full 0..9 range; the e2e suite only needs
+// the terminals.
+export const TRUSTME_WEBHOOK_SIGNED = 3;
+export const TRUSTME_WEBHOOK_DECLINED = 9;
+
+const DEFAULT_TRUSTME_WEBHOOK_TOKEN = "local-dev-trustme-webhook-token";
+
+function trustMeWebhookToken(): string {
+  return process.env.TRUSTME_WEBHOOK_TOKEN || DEFAULT_TRUSTME_WEBHOOK_TOKEN;
+}
+
+// triggerTrustMeWebhook posts a synthetic state-change webhook to
+// POST /trustme/webhook impersonating TrustMe. Auth is `Authorization:
+// Bearer <token>` per the real TrustMe cabinet wire-format (see
+// middleware.TrustMeWebhookAuth + openapi description). client and
+// contract_url are sent as empty strings — backend ignores both (PII), they
+// stay in the payload only because TrustMe always sends them.
+export async function triggerTrustMeWebhook(
+  request: APIRequestContext,
+  apiUrl: string,
+  contractId: string,
+  status: number,
+  token: string = trustMeWebhookToken(),
+): Promise<void> {
+  const body: TrustMeWebhookRequest = {
+    contract_id: contractId,
+    status,
+    client: "",
+    contract_url: "",
+  };
+  const resp = await request.post(`${apiUrl}/trustme/webhook`, {
+    headers: { Authorization: `Bearer ${token}` },
+    data: body,
+  });
+  if (resp.status() !== 200) {
+    throw new Error(
+      `triggerTrustMeWebhook ${contractId} status=${status}: ${resp.status()} ${await resp.text()}`,
+    );
+  }
+}
+
+// waitForCcStatus polls GET /campaigns/{id}/creators every 200ms until the
+// row for `creatorId` reaches `expectedStatus` or `timeoutMs` elapses.
+// Failure mode is informative: throws with the last observed status so the
+// reader can tell apart "still in signing" (worker race) from "missing row"
+// (cleanup leaked) without re-running the suite under a debugger.
+export async function waitForCcStatus(
+  request: APIRequestContext,
+  apiUrl: string,
+  campaignId: string,
+  creatorId: string,
+  expectedStatus: CampaignCreatorStatus,
+  adminToken: string,
+  timeoutMs = 5_000,
+): Promise<void> {
+  const intervalMs = 200;
+  const deadline = Date.now() + timeoutMs;
+  let lastStatus: string = "<not-fetched>";
+  while (Date.now() < deadline) {
+    const resp = await request.get(
+      `${apiUrl}/campaigns/${campaignId}/creators`,
+      { headers: { Authorization: `Bearer ${adminToken}` } },
+    );
+    if (resp.status() !== 200) {
+      throw new Error(
+        `waitForCcStatus ${campaignId}/${creatorId}: GET ${resp.status()} ${await resp.text()}`,
+      );
+    }
+    const result = (await resp.json()) as ListCampaignCreatorsResult;
+    const row = result.data.items.find((r) => r.creatorId === creatorId);
+    if (!row) {
+      lastStatus = "<row-missing>";
+    } else {
+      lastStatus = row.status;
+      if (row.status === expectedStatus) return;
+    }
+    await sleep(intervalMs);
+  }
+  throw new Error(
+    `waitForCcStatus ${campaignId}/${creatorId}: timed out after ${timeoutMs}ms (expected=${expectedStatus}, last=${lastStatus})`,
+  );
 }

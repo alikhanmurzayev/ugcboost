@@ -1822,10 +1822,13 @@ export interface components {
          *     - `planned` — admin added the creator to the campaign (default on create).
          *     - `invited` — admin sent an invitation; awaiting creator response.
          *     - `declined` — creator declined via TMA.
-         *     - `agreed` — creator accepted via TMA. Terminal for the current scope.
+         *     - `agreed` — creator accepted via TMA; awaiting contract send.
+         *     - `signing` — contract sent to TrustMe and awaiting creator signature.
+         *     - `signed` — creator signed the contract via TrustMe. Terminal.
+         *     - `signing_declined` — creator declined the contract via TrustMe. Terminal.
          * @enum {string}
          */
-        CampaignCreatorStatus: "planned" | "invited" | "declined" | "agreed";
+        CampaignCreatorStatus: "planned" | "invited" | "declined" | "agreed" | "signing" | "signed" | "signing_declined";
         /**
          * @description One creator's attachment to a campaign — the `campaign_creators` row
          *     as seen by the admin UI. `invited*`, `reminded*` and `decidedAt`

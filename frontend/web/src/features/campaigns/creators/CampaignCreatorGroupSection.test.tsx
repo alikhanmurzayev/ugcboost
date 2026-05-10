@@ -625,6 +625,55 @@ describe("CampaignCreatorGroupSection — result rendering", () => {
     expect(detailItem).toHaveTextContent(/Приглашён/);
   });
 
+  it("422 batch-invalid (chunk 18): currentStatus signing/signed/signing_declined render the new locale strings", () => {
+    const CREATOR_X = "12345678-1234-1234-1234-123456789abc";
+    const CREATOR_Y = "fedcba98-7654-3210-fedc-ba9876543210";
+    const rows: CampaignCreatorRow[] = [
+      { campaignCreator: makeCC(CREATOR_A), creator: makeCreator(CREATOR_A, "Иванова") },
+      { campaignCreator: makeCC(CREATOR_X), creator: makeCreator(CREATOR_X, "Петрова") },
+      { campaignCreator: makeCC(CREATOR_Y), creator: makeCreator(CREATOR_Y, "Соколова") },
+    ];
+    const result: SectionResult = {
+      kind: "validation_error",
+      validationDetails: [
+        { creatorId: CREATOR_A, currentStatus: "signing" },
+        { creatorId: CREATOR_X, currentStatus: "signed" },
+        { creatorId: CREATOR_Y, currentStatus: "signing_declined" },
+      ],
+      detailNames: {
+        [CREATOR_A]: "Иванова Анна",
+        [CREATOR_X]: "Петрова Анна",
+        [CREATOR_Y]: "Соколова Анна",
+      },
+    };
+
+    renderGroup({
+      status: "planned",
+      rows,
+      actionLabel: "Разослать приглашение",
+      onSubmit: () => {},
+      result,
+    });
+
+    const detailA = screen.getByTestId(
+      `campaign-creators-group-validation-details-planned-${CREATOR_A}`,
+    );
+    expect(detailA).toHaveTextContent("Иванова Анна");
+    expect(detailA).toHaveTextContent(/Подписывает договор/);
+
+    const detailX = screen.getByTestId(
+      `campaign-creators-group-validation-details-planned-${CREATOR_X}`,
+    );
+    expect(detailX).toHaveTextContent("Петрова Анна");
+    expect(detailX).toHaveTextContent(/Подписал\(а\) договор/);
+
+    const detailY = screen.getByTestId(
+      `campaign-creators-group-validation-details-planned-${CREATOR_Y}`,
+    );
+    expect(detailY).toHaveTextContent("Соколова Анна");
+    expect(detailY).toHaveTextContent(/Отказал\(ась\) от договора/);
+  });
+
   it("422 unknown-code result renders distinct validation message", () => {
     const rows: CampaignCreatorRow[] = [
       { campaignCreator: makeCC(CREATOR_A), creator: makeCreator(CREATOR_A, "Иванова") },

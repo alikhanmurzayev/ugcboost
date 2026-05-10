@@ -34,10 +34,13 @@ func (e CampaignCreatorBatchInvalidReason) Valid() bool {
 
 // Defines values for CampaignCreatorStatus.
 const (
-	Agreed   CampaignCreatorStatus = "agreed"
-	Declined CampaignCreatorStatus = "declined"
-	Invited  CampaignCreatorStatus = "invited"
-	Planned  CampaignCreatorStatus = "planned"
+	Agreed          CampaignCreatorStatus = "agreed"
+	Declined        CampaignCreatorStatus = "declined"
+	Invited         CampaignCreatorStatus = "invited"
+	Planned         CampaignCreatorStatus = "planned"
+	Signed          CampaignCreatorStatus = "signed"
+	Signing         CampaignCreatorStatus = "signing"
+	SigningDeclined CampaignCreatorStatus = "signing_declined"
 )
 
 // Valid indicates whether the value is a known member of the CampaignCreatorStatus enum.
@@ -50,6 +53,12 @@ func (e CampaignCreatorStatus) Valid() bool {
 	case Invited:
 		return true
 	case Planned:
+		return true
+	case Signed:
+		return true
+	case Signing:
+		return true
+	case SigningDeclined:
 		return true
 	default:
 		return false
@@ -463,7 +472,10 @@ type CampaignCreator struct {
 	// - `planned` — admin added the creator to the campaign (default on create).
 	// - `invited` — admin sent an invitation; awaiting creator response.
 	// - `declined` — creator declined via TMA.
-	// - `agreed` — creator accepted via TMA. Terminal for the current scope.
+	// - `agreed` — creator accepted via TMA; awaiting contract send.
+	// - `signing` — contract sent to TrustMe and awaiting creator signature.
+	// - `signed` — creator signed the contract via TrustMe. Terminal.
+	// - `signing_declined` — creator declined the contract via TrustMe. Terminal.
 	Status    CampaignCreatorStatus `json:"status"`
 	UpdatedAt time.Time             `json:"updatedAt"`
 }
@@ -485,7 +497,10 @@ type CampaignCreatorBatchInvalidDetail struct {
 	// - `planned` — admin added the creator to the campaign (default on create).
 	// - `invited` — admin sent an invitation; awaiting creator response.
 	// - `declined` — creator declined via TMA.
-	// - `agreed` — creator accepted via TMA. Terminal for the current scope.
+	// - `agreed` — creator accepted via TMA; awaiting contract send.
+	// - `signing` — contract sent to TrustMe and awaiting creator signature.
+	// - `signed` — creator signed the contract via TrustMe. Terminal.
+	// - `signing_declined` — creator declined the contract via TrustMe. Terminal.
 	CurrentStatus *CampaignCreatorStatus `json:"currentStatus,omitempty"`
 
 	// Reason - `not_in_campaign` — the creatorId is not attached to this campaign
@@ -533,7 +548,10 @@ type CampaignCreatorBatchInvalidReason string
 // - `planned` — admin added the creator to the campaign (default on create).
 // - `invited` — admin sent an invitation; awaiting creator response.
 // - `declined` — creator declined via TMA.
-// - `agreed` — creator accepted via TMA. Terminal for the current scope.
+// - `agreed` — creator accepted via TMA; awaiting contract send.
+// - `signing` — contract sent to TrustMe and awaiting creator signature.
+// - `signed` — creator signed the contract via TrustMe. Terminal.
+// - `signing_declined` — creator declined the contract via TrustMe. Terminal.
 type CampaignCreatorStatus string
 
 // CampaignInput Mutable subset of a campaign — used for create.
@@ -1370,7 +1388,10 @@ type TmaDecisionResult struct {
 	// - `planned` — admin added the creator to the campaign (default on create).
 	// - `invited` — admin sent an invitation; awaiting creator response.
 	// - `declined` — creator declined via TMA.
-	// - `agreed` — creator accepted via TMA. Terminal for the current scope.
+	// - `agreed` — creator accepted via TMA; awaiting contract send.
+	// - `signing` — contract sent to TrustMe and awaiting creator signature.
+	// - `signed` — creator signed the contract via TrustMe. Terminal.
+	// - `signing_declined` — creator declined the contract via TrustMe. Terminal.
 	Status CampaignCreatorStatus `json:"status"`
 }
 

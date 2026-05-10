@@ -713,6 +713,112 @@ describe("CampaignCreatorsTable — counter columns by status", () => {
     ).toHaveTextContent("—");
   });
 
+  it("signing (chunk 18): only decided cell render; invited-pair absent", () => {
+    const rows: CampaignCreatorRow[] = [
+      {
+        campaignCreator: makeCC(CREATOR_A, {
+          status: "signing",
+          invitedCount: 1,
+          invitedAt: "2026-05-06T14:30:00Z",
+          decidedAt: "2026-05-09T11:00:00Z",
+        }),
+        creator: makeCreator(CREATOR_A, "Иванова"),
+      },
+    ];
+
+    render(
+      <CampaignCreatorsTable
+        rows={rows}
+        status="signing"
+        onRowClick={() => {}}
+        emptyMessage=""
+      />,
+    );
+
+    expect(
+      screen.getByRole("columnheader", { name: "Решение" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("columnheader", { name: "Приглашение" }),
+    ).not.toBeInTheDocument();
+
+    expect(
+      screen.getByTestId(`campaign-creator-decided-at-${CREATOR_A}`),
+    ).toHaveTextContent(/9 мая/);
+    expect(
+      screen.queryByTestId(`campaign-creator-invited-count-${CREATOR_A}`),
+    ).not.toBeInTheDocument();
+  });
+
+  it("signed (chunk 18): invited-pair + decided cells render (same layout as agreed)", () => {
+    const rows: CampaignCreatorRow[] = [
+      {
+        campaignCreator: makeCC(CREATOR_A, {
+          status: "signed",
+          invitedCount: 1,
+          invitedAt: "2026-05-06T14:30:00Z",
+          decidedAt: "2026-05-09T11:00:00Z",
+        }),
+        creator: makeCreator(CREATOR_A, "Иванова"),
+      },
+    ];
+
+    render(
+      <CampaignCreatorsTable
+        rows={rows}
+        status="signed"
+        onRowClick={() => {}}
+        emptyMessage=""
+      />,
+    );
+
+    expect(
+      screen.getByTestId(`campaign-creator-invited-count-${CREATOR_A}`),
+    ).toHaveTextContent("1");
+    expect(
+      screen.getByTestId(`campaign-creator-invited-at-${CREATOR_A}`),
+    ).toHaveTextContent(/6 мая/);
+    expect(
+      screen.getByTestId(`campaign-creator-decided-at-${CREATOR_A}`),
+    ).toHaveTextContent(/9 мая/);
+    expect(
+      screen.queryByTestId(`campaign-creator-reminded-count-${CREATOR_A}`),
+    ).not.toBeInTheDocument();
+  });
+
+  it("signing_declined (chunk 18): same layout as signed — invited-pair + decided", () => {
+    const rows: CampaignCreatorRow[] = [
+      {
+        campaignCreator: makeCC(CREATOR_A, {
+          status: "signing_declined",
+          invitedCount: 1,
+          invitedAt: "2026-05-06T14:30:00Z",
+          decidedAt: "2026-05-09T11:00:00Z",
+        }),
+        creator: makeCreator(CREATOR_A, "Иванова"),
+      },
+    ];
+
+    render(
+      <CampaignCreatorsTable
+        rows={rows}
+        status="signing_declined"
+        onRowClick={() => {}}
+        emptyMessage=""
+      />,
+    );
+
+    expect(
+      screen.getByTestId(`campaign-creator-invited-count-${CREATOR_A}`),
+    ).toHaveTextContent("1");
+    expect(
+      screen.getByTestId(`campaign-creator-decided-at-${CREATOR_A}`),
+    ).toHaveTextContent(/9 мая/);
+    expect(
+      screen.queryByTestId(`campaign-creator-reminded-count-${CREATOR_A}`),
+    ).not.toBeInTheDocument();
+  });
+
   it("invited: deleted creator (no profile) still gets counter/timestamp from campaignCreator data", () => {
     // Counter и timestamp ячейки берут данные из row.campaignCreator, который
     // существует даже когда профиль креатора soft-deleted. data-testid

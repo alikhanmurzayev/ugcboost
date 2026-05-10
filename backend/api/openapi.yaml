@@ -3357,8 +3357,11 @@ components:
         - `planned` — admin added the creator to the campaign (default on create).
         - `invited` — admin sent an invitation; awaiting creator response.
         - `declined` — creator declined via TMA.
-        - `agreed` — creator accepted via TMA. Terminal for the current scope.
-      enum: [planned, invited, declined, agreed]
+        - `agreed` — creator accepted via TMA; awaiting contract send.
+        - `signing` — contract sent to TrustMe and awaiting creator signature.
+        - `signed` — creator signed the contract via TrustMe. Terminal.
+        - `signing_declined` — creator declined the contract via TrustMe. Terminal.
+      enum: [planned, invited, declined, agreed, signing, signed, signing_declined]
 
     CampaignCreator:
       type: object
