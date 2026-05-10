@@ -1025,6 +1025,21 @@ export async function findTrustMeSpyByIIN(
 export const TRUSTME_WEBHOOK_SIGNED = 3;
 export const TRUSTME_WEBHOOK_DECLINED = 9;
 
+// CAMPAIGN_CREATOR_STATUS — runtime-доступ к OpenAPI enum в e2e-уровне.
+// Дублирует web/tma константы намеренно: frontend/e2e — изолированный
+// модуль, не импортирует из web src. `as const satisfies` гарантирует,
+// что добавление нового статуса в OpenAPI вызовет TS-ошибку здесь, а не
+// тихо разойдётся со spec'ами.
+export const CAMPAIGN_CREATOR_STATUS = {
+  PLANNED: "planned",
+  INVITED: "invited",
+  DECLINED: "declined",
+  AGREED: "agreed",
+  SIGNING: "signing",
+  SIGNED: "signed",
+  SIGNING_DECLINED: "signing_declined",
+} as const satisfies Record<string, CampaignCreatorStatus>;
+
 const DEFAULT_TRUSTME_WEBHOOK_TOKEN = "local-dev-trustme-webhook-token";
 
 function trustMeWebhookToken(): string {

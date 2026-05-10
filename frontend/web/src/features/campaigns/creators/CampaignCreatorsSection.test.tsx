@@ -957,6 +957,5 @@ describe("CampaignCreatorsSection — pass-through to drawer", () => {
     expect(
       screen.getByTestId(`drawer-row-checkbox-${CREATOR_B}`),
     ).not.toBeDisabled();
-    expect(addCampaignCreators).toBeDefined();
   });
 });

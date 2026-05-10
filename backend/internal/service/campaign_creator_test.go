@@ -409,31 +409,38 @@ func TestCampaignCreatorService_Remove(t *testing.T) {
 		require.ErrorContains(t, err, "db unavailable")
 	})
 
-	t.Run("agreed status refused with ErrCampaignCreatorRemoveAfterAgreed", func(t *testing.T) {
-		t.Parallel()
-		pool := dbmocks.NewMockPool(t)
-		factory := svcmocks.NewMockCampaignCreatorRepoFactory(t)
-		campaigns := repomocks.NewMockCampaignRepo(t)
-		ccRepo := repomocks.NewMockCampaignCreatorRepo(t)
-		audit := repomocks.NewMockAuditRepo(t)
-		created := time.Date(2026, 5, 7, 12, 0, 0, 0, time.UTC)
+	for _, status := range []string{
+		domain.CampaignCreatorStatusAgreed,
+		domain.CampaignCreatorStatusSigning,
+		domain.CampaignCreatorStatusSigned,
+		domain.CampaignCreatorStatusSigningDeclined,
+	} {
+		t.Run("status="+status+" refused with ErrCampaignCreatorRemoveAfterAgreed", func(t *testing.T) {
+			t.Parallel()
+			pool := dbmocks.NewMockPool(t)
+			factory := svcmocks.NewMockCampaignCreatorRepoFactory(t)
+			campaigns := repomocks.NewMockCampaignRepo(t)
+			ccRepo := repomocks.NewMockCampaignCreatorRepo(t)
+			audit := repomocks.NewMockAuditRepo(t)
+			created := time.Date(2026, 5, 7, 12, 0, 0, 0, time.UTC)
 
-		factory.EXPECT().NewCampaignRepo(pool).Return(campaigns)
-		campaigns.EXPECT().GetByID(mock.Anything, "camp-1").
-			Return(liveCampaignRow("camp-1", created), nil)
-		pool.EXPECT().Begin(mock.Anything).Return(testTx{}, nil)
-		factory.EXPECT().NewCampaignCreatorRepo(mock.Anything).Return(ccRepo)
-		factory.EXPECT().NewAuditRepo(mock.Anything).Return(audit)
-		ccRepo.EXPECT().GetByCampaignAndCreator(mock.Anything, "camp-1", "cr-1").
-			Return(&repository.CampaignCreatorRow{
-				ID: "cc-1", CampaignID: "camp-1", CreatorID: "cr-1",
-				Status: domain.CampaignCreatorStatusAgreed, CreatedAt: created, UpdatedAt: created,
-			}, nil)
+			factory.EXPECT().NewCampaignRepo(pool).Return(campaigns)
+			campaigns.EXPECT().GetByID(mock.Anything, "camp-1").
+				Return(liveCampaignRow("camp-1", created), nil)
+			pool.EXPECT().Begin(mock.Anything).Return(testTx{}, nil)
+			factory.EXPECT().NewCampaignCreatorRepo(mock.Anything).Return(ccRepo)
+			factory.EXPECT().NewAuditRepo(mock.Anything).Return(audit)
+			ccRepo.EXPECT().GetByCampaignAndCreator(mock.Anything, "camp-1", "cr-1").
+				Return(&repository.CampaignCreatorRow{
+					ID: "cc-1", CampaignID: "camp-1", CreatorID: "cr-1",
+					Status: status, CreatedAt: created, UpdatedAt: created,
+				}, nil)
 
-		svc := NewCampaignCreatorService(pool, factory, svcmocks.NewMockCampaignInviteNotifier(t), logmocks.NewMockLogger(t))
-		err := svc.Remove(context.Background(), "camp-1", "cr-1")
-		require.ErrorIs(t, err, domain.ErrCampaignCreatorRemoveAfterAgreed)
-	})
+			svc := NewCampaignCreatorService(pool, factory, svcmocks.NewMockCampaignInviteNotifier(t), logmocks.NewMockLogger(t))
+			err := svc.Remove(context.Background(), "camp-1", "cr-1")
+			require.ErrorIs(t, err, domain.ErrCampaignCreatorRemoveAfterAgreed)
+		})
+	}
 
 	t.Run("delete race surfaces ErrCampaignCreatorNotFound", func(t *testing.T) {
 		t.Parallel()

@@ -40,6 +40,7 @@ import {
 } from "@playwright/test";
 import {
   addCampaignCreators,
+  CAMPAIGN_CREATOR_STATUS,
   findTrustMeSpyByIIN,
   loginAsAdmin,
   notifyAsAdmin,
@@ -111,7 +112,7 @@ test.describe("Admin campaign creators TrustMe states — chunk 18", () => {
       API_URL,
       creator.application.iin,
     );
-    expect(spyRecord.documentId).not.toBe("");
+    expect(spyRecord.documentId).toMatch(/^spy-[0-9a-f]{10}$/);
 
     await loginAs(page, admin.email, admin.password);
     await page.goto(`/campaigns/${campaign.campaignId}`);
@@ -140,7 +141,7 @@ test.describe("Admin campaign creators TrustMe states — chunk 18", () => {
       API_URL,
       campaign.campaignId,
       creator.creatorId,
-      "signed",
+      CAMPAIGN_CREATOR_STATUS.SIGNED,
       adminToken,
     );
 
@@ -166,7 +167,7 @@ test.describe("Admin campaign creators TrustMe states — chunk 18", () => {
     ).toHaveText("1");
     await expect(
       page.getByTestId(`campaign-creator-decided-at-${creator.creatorId}`),
-    ).not.toHaveText("—");
+    ).toHaveText(/\d{1,2}\s+\S+\s+\d{4}/);
   });
 
   test("signing → signing_declined: webhook со status=9 переводит в «Отказались от договора»", async ({
@@ -185,7 +186,7 @@ test.describe("Admin campaign creators TrustMe states — chunk 18", () => {
       API_URL,
       creator.application.iin,
     );
-    expect(spyRecord.documentId).not.toBe("");
+    expect(spyRecord.documentId).toMatch(/^spy-[0-9a-f]{10}$/);
 
     // Симметрично первому тесту: сначала проверяем UI на промежуточной
     // signing-секции, потом дёргаем webhook. Иначе регресс «фронт не
@@ -211,7 +212,7 @@ test.describe("Admin campaign creators TrustMe states — chunk 18", () => {
       API_URL,
       campaign.campaignId,
       creator.creatorId,
-      "signing_declined",
+      CAMPAIGN_CREATOR_STATUS.SIGNING_DECLINED,
       adminToken,
     );
 
@@ -310,7 +311,7 @@ async function driveToSigning(
     API_URL,
     campaign.campaignId,
     creator.creatorId,
-    "signing",
+    CAMPAIGN_CREATOR_STATUS.SIGNING,
     adminToken,
   );
 }

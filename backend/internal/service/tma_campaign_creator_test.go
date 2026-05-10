@@ -292,7 +292,19 @@ func TestTmaCampaignCreatorService_ApplyDecision(t *testing.T) {
 			Return(&repository.CampaignCreatorRow{ID: tmaTestCCID, Status: domain.CampaignCreatorStatusInvited}, nil).Once()
 		ccRepo.EXPECT().ApplyDecision(mock.Anything, tmaTestCCID, domain.CampaignCreatorStatusAgreed).
 			Return(&repository.CampaignCreatorRow{ID: tmaTestCCID, Status: domain.CampaignCreatorStatusAgreed}, nil).Once()
-		auditRepo.EXPECT().Create(mock.Anything, mock.Anything).Return(errors.New("audit down")).Once()
+		expectedPayload, marshalErr := json.Marshal(map[string]string{
+			"campaign_id": tmaTestCampaignID,
+			"creator_id":  tmaTestCreatorID,
+		})
+		require.NoError(t, marshalErr)
+		auditRepo.EXPECT().Create(mock.Anything, mock.AnythingOfType("repository.AuditLogRow")).
+			Run(captureAuditEntry(t,
+				AuditActionCampaignCreatorAgree,
+				AuditEntityTypeCampaignCreator,
+				tmaTestCCID,
+				string(expectedPayload),
+			)).
+			Return(errors.New("audit down")).Once()
 
 		_, err := svc.ApplyDecision(context.Background(), tmaTestAuth(), domain.CampaignCreatorDecisionAgree)
 		require.ErrorContains(t, err, "audit decision")
