@@ -80,17 +80,18 @@ const applicationApprovedText = "Здравствуйте!\n\n" +
 	"После Недели моды мы планируем запустить приложение в App Store и добавить новые возможности для UGC-сотрудничества с брендами и партнерами EURASIAN FASHION WEEK.\n\n" +
 	"Оставайтесь с нами — впереди много масштабных проектов!"
 
-// campaignInviteText / campaignRemindInvitationText carry the universal copy
-// for outbound invite / remind messages. Generic by design — the message
-// body must not leak campaign details (name, brand, deadlines) because
-// notify covers re-invites after declines as well, and stale text from a
-// previous round would mislead. The accompanying inline web_app button
-// drops the creator straight into the TMA where the creator reviews the
-// brief and presses "Согласиться" inside the mini-app.
+// campaignInviteText / campaignRemindInvitationText / campaignRemindSigningText
+// carry the universal copy for outbound invite / remind messages. Generic by
+// design — the message body must not leak campaign details (name, brand,
+// deadlines) because notify covers re-invites after declines as well, and
+// stale text from a previous round would mislead. The accompanying inline
+// web_app button drops the creator straight into the TMA where the creator
+// reviews the brief and presses "Согласиться" inside the mini-app.
 //
 // These literals are mirrored in `backend/e2e/campaign_creator/
 // campaign_notify_test.go` (the e2e module cannot import internal/telegram
-// by design — see backend-testing-e2e.md). When changing the copy here,
+// by design — see backend-testing-e2e.md) as chunk12InviteText /
+// chunk12RemindText / chunk12RemindSigningText. When changing the copy here,
 // update the e2e mirror too or `waitInviteSent` will time out.
 const (
 	campaignInviteText = "Добрый день! EURASIAN FASHION WEEK уже скоро ✨\n\n" +
@@ -98,6 +99,9 @@ const (
 		"Если вы согласны, нажмите кнопку \"Согласиться\" и мы отправим вам онлайн соглашение о сотрудничестве на подписание 💫"
 	campaignRemindInvitationText = "Откройте ссылку, чтобы ознакомиться с датами, условиями, форматом участия и техническим заданием для контента.\n\n" +
 		"Если вы согласны, нажмите кнопку \"Согласиться\" и мы отправим вам онлайн соглашение о сотрудничестве на подписание 💫"
+	campaignRemindSigningText = "Напоминаем, что мы отправили вам соглашение на подпись по СМС на номер телефона, указанный при регистрации.\n\n" +
+		"Перейдите по ссылке из СМС и подпишите соглашение.\n\n" +
+		"Если есть вопросы, можете обратиться к @aizerealzair"
 	campaignInviteWebAppButtonText = "Посмотреть"
 )
 
@@ -438,6 +442,11 @@ func CampaignInviteText() string { return campaignInviteText }
 
 // CampaignRemindInvitationText returns the universal A5 reminder copy.
 func CampaignRemindInvitationText() string { return campaignRemindInvitationText }
+
+// CampaignRemindSigningText returns the reminder copy for creators stuck
+// in status `signing` — TrustMe has dispatched the SMS sign link but the
+// creator has not clicked through yet.
+func CampaignRemindSigningText() string { return campaignRemindSigningText }
 
 // MapTelegramErrorToReason classifies a SendMessage error into a
 // domain.NotifyFailureReason* enum value. The sentinel branch

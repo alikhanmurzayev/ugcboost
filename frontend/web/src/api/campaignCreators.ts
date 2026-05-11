@@ -142,3 +142,26 @@ export async function remindCampaignCreatorsInvitation(
   }
   return data;
 }
+
+export async function remindCampaignCreatorsSigning(
+  campaignId: string,
+  creatorIds: string[],
+): Promise<CampaignNotifyResult> {
+  const { data, error, response } = await client.POST(
+    "/campaigns/{id}/remind-signing",
+    {
+      params: { path: { id: campaignId } },
+      body: { creatorIds },
+    },
+  );
+  if (error || !data) {
+    const parts = extractErrorParts(error);
+    throw new ApiError(
+      response?.status ?? 0,
+      parts.code,
+      parts.message,
+      parts.details,
+    );
+  }
+  return data;
+}

@@ -187,6 +187,11 @@ type ClientInterface interface {
 
 	RemindCampaignCreatorsInvitation(ctx context.Context, id openapi_types.UUID, body RemindCampaignCreatorsInvitationJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// RemindCampaignCreatorsSigningWithBody request with any body
+	RemindCampaignCreatorsSigningWithBody(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	RemindCampaignCreatorsSigning(ctx context.Context, id openapi_types.UUID, body RemindCampaignCreatorsSigningJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// SubmitCreatorApplicationWithBody request with any body
 	SubmitCreatorApplicationWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -669,6 +674,30 @@ func (c *Client) RemindCampaignCreatorsInvitationWithBody(ctx context.Context, i
 
 func (c *Client) RemindCampaignCreatorsInvitation(ctx context.Context, id openapi_types.UUID, body RemindCampaignCreatorsInvitationJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewRemindCampaignCreatorsInvitationRequest(c.Server, id, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) RemindCampaignCreatorsSigningWithBody(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRemindCampaignCreatorsSigningRequestWithBody(c.Server, id, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) RemindCampaignCreatorsSigning(ctx context.Context, id openapi_types.UUID, body RemindCampaignCreatorsSigningJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewRemindCampaignCreatorsSigningRequest(c.Server, id, body)
 	if err != nil {
 		return nil, err
 	}
@@ -2095,6 +2124,53 @@ func NewRemindCampaignCreatorsInvitationRequestWithBody(server string, id openap
 	return req, nil
 }
 
+// NewRemindCampaignCreatorsSigningRequest calls the generic RemindCampaignCreatorsSigning builder with application/json body
+func NewRemindCampaignCreatorsSigningRequest(server string, id openapi_types.UUID, body RemindCampaignCreatorsSigningJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewRemindCampaignCreatorsSigningRequestWithBody(server, id, "application/json", bodyReader)
+}
+
+// NewRemindCampaignCreatorsSigningRequestWithBody generates requests for RemindCampaignCreatorsSigning with any type of body
+func NewRemindCampaignCreatorsSigningRequestWithBody(server string, id openapi_types.UUID, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/campaigns/%s/remind-signing", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 // NewSubmitCreatorApplicationRequest calls the generic SubmitCreatorApplication builder with application/json body
 func NewSubmitCreatorApplicationRequest(server string, body SubmitCreatorApplicationJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
@@ -2794,6 +2870,11 @@ type ClientWithResponsesInterface interface {
 
 	RemindCampaignCreatorsInvitationWithResponse(ctx context.Context, id openapi_types.UUID, body RemindCampaignCreatorsInvitationJSONRequestBody, reqEditors ...RequestEditorFn) (*RemindCampaignCreatorsInvitationResponse, error)
 
+	// RemindCampaignCreatorsSigningWithBodyWithResponse request with any body
+	RemindCampaignCreatorsSigningWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*RemindCampaignCreatorsSigningResponse, error)
+
+	RemindCampaignCreatorsSigningWithResponse(ctx context.Context, id openapi_types.UUID, body RemindCampaignCreatorsSigningJSONRequestBody, reqEditors ...RequestEditorFn) (*RemindCampaignCreatorsSigningResponse, error)
+
 	// SubmitCreatorApplicationWithBodyWithResponse request with any body
 	SubmitCreatorApplicationWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SubmitCreatorApplicationResponse, error)
 
@@ -3482,6 +3563,35 @@ func (r RemindCampaignCreatorsInvitationResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r RemindCampaignCreatorsInvitationResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type RemindCampaignCreatorsSigningResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *CampaignNotifyResult
+	JSON401      *ErrorResponse
+	JSON403      *Forbidden
+	JSON404      *ErrorResponse
+	JSON422      *struct {
+		union json.RawMessage
+	}
+	JSONDefault *UnexpectedError
+}
+
+// Status returns HTTPResponse.Status
+func (r RemindCampaignCreatorsSigningResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r RemindCampaignCreatorsSigningResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -4186,6 +4296,23 @@ func (c *ClientWithResponses) RemindCampaignCreatorsInvitationWithResponse(ctx c
 		return nil, err
 	}
 	return ParseRemindCampaignCreatorsInvitationResponse(rsp)
+}
+
+// RemindCampaignCreatorsSigningWithBodyWithResponse request with arbitrary body returning *RemindCampaignCreatorsSigningResponse
+func (c *ClientWithResponses) RemindCampaignCreatorsSigningWithBodyWithResponse(ctx context.Context, id openapi_types.UUID, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*RemindCampaignCreatorsSigningResponse, error) {
+	rsp, err := c.RemindCampaignCreatorsSigningWithBody(ctx, id, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRemindCampaignCreatorsSigningResponse(rsp)
+}
+
+func (c *ClientWithResponses) RemindCampaignCreatorsSigningWithResponse(ctx context.Context, id openapi_types.UUID, body RemindCampaignCreatorsSigningJSONRequestBody, reqEditors ...RequestEditorFn) (*RemindCampaignCreatorsSigningResponse, error) {
+	rsp, err := c.RemindCampaignCreatorsSigning(ctx, id, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseRemindCampaignCreatorsSigningResponse(rsp)
 }
 
 // SubmitCreatorApplicationWithBodyWithResponse request with arbitrary body returning *SubmitCreatorApplicationResponse
@@ -5539,6 +5666,69 @@ func ParseRemindCampaignCreatorsInvitationResponse(rsp *http.Response) (*RemindC
 	}
 
 	response := &RemindCampaignCreatorsInvitationResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest CampaignNotifyResult
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest struct {
+			union json.RawMessage
+		}
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON422 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest UnexpectedError
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseRemindCampaignCreatorsSigningResponse parses an HTTP response from a RemindCampaignCreatorsSigningWithResponse call
+func ParseRemindCampaignCreatorsSigningResponse(rsp *http.Response) (*RemindCampaignCreatorsSigningResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &RemindCampaignCreatorsSigningResponse{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}

@@ -128,10 +128,32 @@ func (s *Server) RemindCampaignCreatorsInvitation(ctx context.Context, request a
 	return resp, nil
 }
 
+// RemindCampaignCreatorsSigning handles POST /campaigns/{id}/remind-signing
+// (admin-only). Symmetric to RemindCampaignCreatorsInvitation; the only
+// difference is the service method (RemindSigning) and the implied
+// source-status guard (`signing`).
+func (s *Server) RemindCampaignCreatorsSigning(ctx context.Context, request api.RemindCampaignCreatorsSigningRequestObject) (api.RemindCampaignCreatorsSigningResponseObject, error) {
+	if err := s.authzService.CanRemindCampaignCreatorsSigning(ctx); err != nil {
+		return nil, err
+	}
+	creatorIDs, err := validateCampaignCreatorBatch(request.Body.CreatorIds)
+	if err != nil {
+		return nil, err
+	}
+	undelivered, err := s.campaignCreatorService.RemindSigning(ctx, request.Id.String(), creatorIDs)
+	if err != nil {
+		return nil, err
+	}
+	resp := api.RemindCampaignCreatorsSigning200JSONResponse{}
+	resp.Data.Undelivered = s.domainNotifyFailuresToAPI(ctx, undelivered)
+	return resp, nil
+}
+
 // validateCampaignCreatorBatch enforces the empty / ≤200 / no-duplicates
-// guard shared by AddCampaignCreators, NotifyCampaignCreators and
-// RemindCampaignCreatorsInvitation. Returns the deduplicated list of
-// stringified UUIDs ready for the service layer.
+// guard shared by AddCampaignCreators, NotifyCampaignCreators,
+// RemindCampaignCreatorsInvitation and RemindCampaignCreatorsSigning.
+// Returns the deduplicated list of stringified UUIDs ready for the service
+// layer.
 func validateCampaignCreatorBatch(in []openapi_types.UUID) ([]string, error) {
 	if len(in) == 0 {
 		return nil, domain.NewValidationError(

@@ -1607,6 +1607,9 @@ type NotifyCampaignCreatorsJSONRequestBody = CampaignCreatorBatchInput
 // RemindCampaignCreatorsInvitationJSONRequestBody defines body for RemindCampaignCreatorsInvitation for application/json ContentType.
 type RemindCampaignCreatorsInvitationJSONRequestBody = CampaignCreatorBatchInput
 
+// RemindCampaignCreatorsSigningJSONRequestBody defines body for RemindCampaignCreatorsSigning for application/json ContentType.
+type RemindCampaignCreatorsSigningJSONRequestBody = CampaignCreatorBatchInput
+
 // SubmitCreatorApplicationJSONRequestBody defines body for SubmitCreatorApplication for application/json ContentType.
 type SubmitCreatorApplicationJSONRequestBody = CreatorApplicationSubmitRequest
 

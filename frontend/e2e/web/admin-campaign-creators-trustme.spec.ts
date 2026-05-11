@@ -12,6 +12,13 @@
  * `status=3` (подписал) либо `status=9` (отказал) — фронт после reload
  * показывает соответствующую группу без mass-action и без trash.
  *
+ * Третий тест закрывает remind-signing flow: после доведения креатора до
+ * signing админ кликает «Разослать ремайндер» в группе и убеждается, что
+ * inline-success рендерится, `reminded_count` инкрементируется (read-after-
+ * write через React Query invalidate), а статус остаётся `signing` — то
+ * есть mass-action wiring завернут на новую `remindSigning` мутацию, а не
+ * на старую `remind`/`notify` ветку.
+ *
  * Таймлайн событий и почему именно polling: `RunTrustMeOutboxOnce`
  * синхронно завершает Phase 1..3 для одного ряда, но read-after-write через
  * отдельный HTTP-чтение `GET /campaigns/{id}/creators` имеет миллисекундный
@@ -122,10 +129,12 @@ test.describe("Admin campaign creators TrustMe states — chunk 18", () => {
     await expect(
       signingGroup.getByTestId(`row-${creator.creatorId}`),
     ).toBeVisible();
-    // Read-only: no mass-action button, no trash icon.
+    // Signing group keeps a remind-signing button (creators are stuck waiting
+    // for the SMS sign link) — but the row stays trash-free because remove
+    // is forbidden once the contract flow started.
     await expect(
       page.getByTestId("campaign-creators-group-action-signing"),
-    ).toHaveCount(0);
+    ).toBeVisible();
     await expect(
       page.getByTestId(`campaign-creator-remove-${creator.creatorId}`),
     ).toHaveCount(0);
@@ -176,6 +185,88 @@ test.describe("Admin campaign creators TrustMe states — chunk 18", () => {
     await expect(
       page.getByTestId(`campaign-creator-decided-at-${creator.creatorId}`),
     ).toHaveText(/\d{1,2}\s+\S+/);
+  });
+
+  test("signing group remind: клик «Разослать ремайндер» инкрементит reminded_count и оставляет креатора в signing", async ({
+    page,
+    request,
+  }) => {
+    const { admin, adminToken, creator, campaign } = await setupTrustMeFlow(
+      request,
+      cleanupStack,
+    );
+
+    await driveToSigning(page, request, adminToken, creator, campaign);
+
+    await loginAs(page, admin.email, admin.password);
+    await page.goto(`/campaigns/${campaign.campaignId}`);
+
+    const signingGroup = page.getByTestId("campaign-creators-group-signing");
+    await expect(signingGroup).toBeVisible();
+    await expect(
+      signingGroup.getByTestId(`row-${creator.creatorId}`),
+    ).toBeVisible();
+
+    await page
+      .getByTestId(`campaign-creator-checkbox-${creator.creatorId}`)
+      .click();
+    const remindButton = page.getByTestId(
+      "campaign-creators-group-action-signing",
+    );
+    await expect(remindButton).toHaveText(/Разослать ремайндер/);
+    await remindButton.click();
+
+    // Inline success block surfaces «Доставлен 1» — guards the mass-action
+    // wiring went through the new remindSigning mutation, not the old remind
+    // or notify branch.
+    await expect(
+      page.getByTestId("campaign-creators-group-result-signing-success"),
+    ).toContainText("Доставлен 1");
+
+    // After invalidate-refetch the row must stay in the signing group (status
+    // didn't change) — proves remindSigning hit the right backend path and
+    // didn't accidentally trigger a status transition.
+    await expect(
+      signingGroup.getByTestId(`row-${creator.creatorId}`),
+    ).toBeVisible();
+    // Same row must NOT appear under any other status group.
+    for (const otherStatus of [
+      "planned",
+      "invited",
+      "declined",
+      "agreed",
+      "signed",
+      "signing_declined",
+    ]) {
+      await expect(
+        page
+          .getByTestId(`campaign-creators-group-${otherStatus}`)
+          .getByTestId(`row-${creator.creatorId}`),
+      ).toHaveCount(0);
+    }
+
+    // Backend cross-check: reminded_count must be 1 after the mutation. This
+    // exercises the read-after-write path that the row-state assertion above
+    // cannot cover (the UI does not surface reminded_count for the signing
+    // group).
+    const list = await request.get(
+      `${API_URL}/campaigns/${campaign.campaignId}/creators`,
+      { headers: { Authorization: `Bearer ${adminToken}` } },
+    );
+    expect(list.status()).toBe(200);
+    const body = (await list.json()) as {
+      data: {
+        items: Array<{
+          creatorId: string;
+          status: string;
+          remindedCount: number;
+        }>;
+      };
+    };
+    const row = body.data.items.find((r) => r.creatorId === creator.creatorId);
+    expect(row).toBeDefined();
+    expect(row?.status).toBe("signing");
+    expect(row?.remindedCount).toBe(1);
   });
 
   test("signing → signing_declined: webhook со status=9 переводит в «Отказались от договора»", async ({

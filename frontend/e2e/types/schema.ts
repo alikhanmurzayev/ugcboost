@@ -768,6 +768,34 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/campaigns/{id}/remind-signing": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Send signing reminders to campaign creators (admin-only)
+         * @description Symmetric to `POST /campaigns/{id}/remind-invitation` but for creators
+         *     already in status `signing` (contract has been dispatched to TrustMe
+         *     and the SMS sign link has been sent, but the creator has not signed
+         *     yet). The status does not change — only `reminded_count` and
+         *     `reminded_at` advance on delivery. Validation, partial-success and
+         *     error semantics match the remind-invitation endpoint exactly; the
+         *     only difference is the allowed source status (`signing`).
+         */
+        post: operations["remindCampaignCreatorsSigning"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/campaigns/{id}/contract-template": {
         parameters: {
             query?: never;
@@ -3407,6 +3435,66 @@ export interface operations {
         };
     };
     remindCampaignCreatorsInvitation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CampaignCreatorBatchInput"];
+            };
+        };
+        responses: {
+            /** @description Reminder batch processed (with possible partial undelivered). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CampaignNotifyResult"];
+                };
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            /** @description Campaign not found (missing or soft-deleted). */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /**
+             * @description Either a shape/format violation (empty array, > 200 ids, duplicate
+             *     ids) returned as the standard ErrorResponse, or
+             *     CAMPAIGN_CREATOR_BATCH_INVALID with `details` listing every
+             *     unattached / wrong-status creator from the batch.
+             */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CampaignCreatorBatchInvalidErrorResponse"] | components["schemas"]["ErrorResponse"];
+                };
+            };
+            default: components["responses"]["UnexpectedError"];
+        };
+    };
+    remindCampaignCreatorsSigning: {
         parameters: {
             query?: never;
             header?: never;

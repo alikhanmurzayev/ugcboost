@@ -1508,6 +1508,70 @@ paths:
         default:
           $ref: "#/components/responses/UnexpectedError"
 
+  /campaigns/{id}/remind-signing:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+    post:
+      operationId: remindCampaignCreatorsSigning
+      summary: Send signing reminders to campaign creators (admin-only)
+      description: |
+        Symmetric to `POST /campaigns/{id}/remind-invitation` but for creators
+        already in status `signing` (contract has been dispatched to TrustMe
+        and the SMS sign link has been sent, but the creator has not signed
+        yet). The status does not change — only `reminded_count` and
+        `reminded_at` advance on delivery. Validation, partial-success and
+        error semantics match the remind-invitation endpoint exactly; the
+        only difference is the allowed source status (`signing`).
+      tags: [campaigns]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CampaignCreatorBatchInput"
+      responses:
+        "200":
+          description: Reminder batch processed (with possible partial undelivered).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CampaignNotifyResult"
+        "401":
+          description: Unauthenticated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          description: Campaign not found (missing or soft-deleted).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "422":
+          description: |
+            Either a shape/format violation (empty array, > 200 ids, duplicate
+            ids) returned as the standard ErrorResponse, or
+            CAMPAIGN_CREATOR_BATCH_INVALID with `details` listing every
+            unattached / wrong-status creator from the batch.
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/CampaignCreatorBatchInvalidErrorResponse"
+                  - $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: "#/components/responses/UnexpectedError"
+
   /campaigns/{id}/contract-template:
     parameters:
       - name: id

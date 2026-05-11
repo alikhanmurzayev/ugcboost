@@ -194,6 +194,7 @@ type batchOp string
 const (
 	batchOpNotify           batchOp = "notify"
 	batchOpRemindInvitation batchOp = "remind_invitation"
+	batchOpRemindSigning    batchOp = "remind_signing"
 )
 
 // batchOpSpec captures every branch-specific difference between Notify and
@@ -230,6 +231,16 @@ var batchOpSpecs = map[batchOp]batchOpSpec{
 			return r.ApplyRemind(ctx, id)
 		},
 	},
+	batchOpRemindSigning: {
+		allowedStatuses: map[string]bool{
+			domain.CampaignCreatorStatusSigning: true,
+		},
+		auditAction: AuditActionCampaignCreatorRemindSigning,
+		text:        telegram.CampaignRemindSigningText(),
+		apply: func(r repository.CampaignCreatorRepo, ctx context.Context, id string) (*repository.CampaignCreatorRow, error) {
+			return r.ApplyRemind(ctx, id)
+		},
+	},
 }
 
 // Notify advances every creatorId in the batch to status=invited via a
@@ -254,6 +265,16 @@ func (s *CampaignCreatorService) Notify(ctx context.Context, campaignID string, 
 // (`campaign_creator_remind`).
 func (s *CampaignCreatorService) RemindInvitation(ctx context.Context, campaignID string, creatorIDs []string) ([]domain.NotifyFailure, error) {
 	return s.dispatchBatch(ctx, campaignID, creatorIDs, batchOpRemindInvitation)
+}
+
+// RemindSigning bumps reminded_count / reminded_at for every creator in the
+// batch without changing the status. Symmetrical to RemindInvitation; the
+// only differences are the allowed source status (`signing` only — the
+// contract has been dispatched to TrustMe but the creator has not yet
+// clicked the SMS sign link) and the audit action
+// (`campaign_creator_remind_signing`).
+func (s *CampaignCreatorService) RemindSigning(ctx context.Context, campaignID string, creatorIDs []string) ([]domain.NotifyFailure, error) {
+	return s.dispatchBatch(ctx, campaignID, creatorIDs, batchOpRemindSigning)
 }
 
 // dispatchBatch is the shared body of Notify / RemindInvitation: campaign

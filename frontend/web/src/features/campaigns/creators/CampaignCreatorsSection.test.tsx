@@ -16,6 +16,7 @@ vi.mock("@/api/campaignCreators", async () => {
     removeCampaignCreator: vi.fn(),
     notifyCampaignCreators: vi.fn(),
     remindCampaignCreatorsInvitation: vi.fn(),
+    remindCampaignCreatorsSigning: vi.fn(),
   };
 });
 
@@ -35,6 +36,7 @@ import {
   removeCampaignCreator,
   notifyCampaignCreators,
   remindCampaignCreatorsInvitation,
+  remindCampaignCreatorsSigning,
 } from "@/api/campaignCreators";
 import type {
   CampaignCreator,
@@ -326,12 +328,17 @@ describe("CampaignCreatorsSection — grouped rendering", () => {
       "campaign-creators-group-signing_declined",
     ]);
 
-    // Three new groups are read-only — no action button and no trash icon.
-    for (const status of ["signing", "signed", "signing_declined"] as const) {
+    // signed / signing_declined remain read-only — terminal contract states
+    // never get a remind button. signing keeps the reminder action so admins
+    // can nudge creators that received the SMS sign link but haven't clicked.
+    for (const status of ["signed", "signing_declined"] as const) {
       expect(
         screen.queryByTestId(`campaign-creators-group-action-${status}`),
       ).not.toBeInTheDocument();
     }
+    expect(
+      screen.getByTestId("campaign-creators-group-action-signing"),
+    ).toHaveTextContent("Разослать ремайндер");
     for (const id of [CREATOR_E, CREATOR_F, CREATOR_G]) {
       expect(
         screen.queryByTestId(`campaign-creator-remove-${id}`),
@@ -952,6 +959,90 @@ describe("CampaignCreatorsSection — notify flow integration", () => {
       );
     });
     expect(notifyCampaignCreators).toHaveBeenCalledTimes(1);
+  });
+
+  it("signing group fires remindCampaignCreatorsSigning and surfaces inline-success", async () => {
+    const CREATOR_E = "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee";
+    vi.mocked(listCampaignCreators).mockResolvedValue([
+      makeCC(CREATOR_E, "signing"),
+    ]);
+    vi.mocked(listCreators).mockResolvedValue({
+      data: {
+        items: [makeCreator(CREATOR_E, "Соколова")],
+        total: 1,
+        page: 1,
+        perPage: 200,
+      },
+    });
+    vi.mocked(remindCampaignCreatorsSigning).mockResolvedValueOnce({
+      data: { undelivered: [] },
+    });
+
+    renderSection(FIXTURE_CAMPAIGN_LIVE);
+
+    await userEvent.click(
+      await screen.findByTestId(`campaign-creator-checkbox-${CREATOR_E}`),
+    );
+    const button = screen.getByTestId("campaign-creators-group-action-signing");
+    expect(button).toHaveTextContent("Разослать ремайндер");
+    await userEvent.click(button);
+
+    await waitFor(() => {
+      expect(remindCampaignCreatorsSigning).toHaveBeenCalledWith(CAMPAIGN_ID, [
+        CREATOR_E,
+      ]);
+    });
+    await waitFor(() => {
+      expect(
+        screen.getByTestId("campaign-creators-group-result-signing-success"),
+      ).toHaveTextContent("Доставлен 1");
+    });
+    expect(notifyCampaignCreators).not.toHaveBeenCalled();
+    expect(remindCampaignCreatorsInvitation).not.toHaveBeenCalled();
+  });
+
+  it("signing group double-submit guard blocks second click while first request is in-flight", async () => {
+    const CREATOR_E = "eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee";
+    vi.mocked(listCampaignCreators).mockResolvedValue([
+      makeCC(CREATOR_E, "signing"),
+    ]);
+    vi.mocked(listCreators).mockResolvedValue({
+      data: {
+        items: [makeCreator(CREATOR_E, "Соколова")],
+        total: 1,
+        page: 1,
+        perPage: 200,
+      },
+    });
+    // Block resolution so we can verify the second click is a no-op while the
+    // first request is in-flight. Resolve only once we've issued both clicks.
+    let resolveCall!: (value: { data: { undelivered: [] } }) => void;
+    vi.mocked(remindCampaignCreatorsSigning).mockReturnValueOnce(
+      new Promise((res) => {
+        resolveCall = res;
+      }),
+    );
+
+    renderSection(FIXTURE_CAMPAIGN_LIVE);
+
+    await userEvent.click(
+      await screen.findByTestId(`campaign-creator-checkbox-${CREATOR_E}`),
+    );
+    const button = screen.getByTestId("campaign-creators-group-action-signing");
+    await userEvent.click(button);
+    // Button must flip to disabled with the loading copy.
+    await waitFor(() => {
+      expect(button).toBeDisabled();
+    });
+    expect(button).toHaveTextContent("Отправка…");
+    // userEvent.click ignores `pointer-events: none` only when the element is
+    // genuinely disabled — the guard works through the native `disabled` attr.
+    await userEvent.click(button);
+    resolveCall({ data: { undelivered: [] } });
+
+    await waitFor(() => {
+      expect(remindCampaignCreatorsSigning).toHaveBeenCalledTimes(1);
+    });
   });
 });
 

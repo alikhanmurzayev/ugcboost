@@ -23,6 +23,7 @@ const (
 	AuditActionCampaignCreatorRemove                   = "campaign_creator_remove"
 	AuditActionCampaignCreatorInvite                   = "campaign_creator_invite"
 	AuditActionCampaignCreatorRemind                   = "campaign_creator_remind"
+	AuditActionCampaignCreatorRemindSigning            = "campaign_creator_remind_signing"
 	AuditActionCampaignCreatorAgree                    = "campaign_creator_agree"
 	AuditActionCampaignCreatorDecline                  = "campaign_creator_decline"
 	AuditActionCampaignContractTemplateUploaded        = "campaign.contract_template_uploaded"
