@@ -328,6 +328,80 @@ func (_c *MockCampaignCreatorService_RemindInvitation_Call) RunAndReturn(run fun
 	return _c
 }
 
+// RemindSigning provides a mock function for the type MockCampaignCreatorService
+func (_mock *MockCampaignCreatorService) RemindSigning(ctx context.Context, campaignID string, creatorIDs []string) ([]domain.NotifyFailure, error) {
+	ret := _mock.Called(ctx, campaignID, creatorIDs)
+
+	if len(ret) == 0 {
+		panic("no return value specified for RemindSigning")
+	}
+
+	var r0 []domain.NotifyFailure
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, []string) ([]domain.NotifyFailure, error)); ok {
+		return returnFunc(ctx, campaignID, creatorIDs)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, []string) []domain.NotifyFailure); ok {
+		r0 = returnFunc(ctx, campaignID, creatorIDs)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]domain.NotifyFailure)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, []string) error); ok {
+		r1 = returnFunc(ctx, campaignID, creatorIDs)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockCampaignCreatorService_RemindSigning_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'RemindSigning'
+type MockCampaignCreatorService_RemindSigning_Call struct {
+	*mock.Call
+}
+
+// RemindSigning is a helper method to define mock.On call
+//   - ctx context.Context
+//   - campaignID string
+//   - creatorIDs []string
+func (_e *MockCampaignCreatorService_Expecter) RemindSigning(ctx interface{}, campaignID interface{}, creatorIDs interface{}) *MockCampaignCreatorService_RemindSigning_Call {
+	return &MockCampaignCreatorService_RemindSigning_Call{Call: _e.mock.On("RemindSigning", ctx, campaignID, creatorIDs)}
+}
+
+func (_c *MockCampaignCreatorService_RemindSigning_Call) Run(run func(ctx context.Context, campaignID string, creatorIDs []string)) *MockCampaignCreatorService_RemindSigning_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 []string
+		if args[2] != nil {
+			arg2 = args[2].([]string)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockCampaignCreatorService_RemindSigning_Call) Return(notifyFailures []domain.NotifyFailure, err error) *MockCampaignCreatorService_RemindSigning_Call {
+	_c.Call.Return(notifyFailures, err)
+	return _c
+}
+
+func (_c *MockCampaignCreatorService_RemindSigning_Call) RunAndReturn(run func(ctx context.Context, campaignID string, creatorIDs []string) ([]domain.NotifyFailure, error)) *MockCampaignCreatorService_RemindSigning_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Remove provides a mock function for the type MockCampaignCreatorService
 func (_mock *MockCampaignCreatorService) Remove(ctx context.Context, campaignID string, creatorID string) error {
 	ret := _mock.Called(ctx, campaignID, creatorID)

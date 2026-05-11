@@ -21,6 +21,21 @@
 // remind-invitation и зеркалит forbidden / 422 wrong_status / happy-сценарии
 // с инкрементом reminded_count и audit-action campaign_creator_remind.
 //
+// TestRemindCampaignCreatorsSigning зеркалит то же самое для POST
+// /campaigns/{id}/remind-signing, но допустимый source-status — `signing`.
+// Setup идёт через testutil.SetupCampaignWithSigningCreator (TMA agree →
+// один тик outbox-worker'а Phase 3), который доводит creator'а до signing.
+// Хедж-кейсы (handler-level 422 — пустой батч / >200 ids / дубликаты, authz
+// 403, validation 422 wrong_status и not_in_campaign, 404 missing campaign)
+// зеркалят инварианты remind-invitation. Happy single + повтор: статус
+// остаётся signing, reminded_count инкрементируется, в каждом цикле пишется
+// audit campaign_creator_remind_signing и спай ловит сообщение с
+// chunk12RemindSigningText БЕЗ WebApp-кнопки (креатор уже согласился, ТЗ-
+// кнопка лишняя — он подписывает по SMS-ссылке TrustMe). Partial-success
+// разводится на две кампании (одна с FailNext на креаторе, вторая happy):
+// undelivered содержит ровно failing с reason=bot_blocked, БД failing
+// creator'а не меняется и audit не пишется.
+//
 // TestNotifyPartialSuccess вешает на одного из creator'ов синтетический
 // сбой через /test/telegram/spy/fail-next. После A4 батча из двух
 // undelivered содержит ровно одну запись с reason=bot_blocked; для
@@ -55,16 +70,19 @@ import (
 	"github.com/alikhanmurzayev/ugcboost/backend/e2e/testutil"
 )
 
-// chunk12InviteText / chunk12RemindText mirror the package-level constants
-// in internal/telegram/notifier.go so e2e can filter spy_store records by
-// outgoing text without importing the internal package (e2e is its own
-// module by design).
+// chunk12InviteText / chunk12RemindText / chunk12RemindSigningText mirror
+// the package-level constants in internal/telegram/notifier.go so e2e can
+// filter spy_store records by outgoing text without importing the internal
+// package (e2e is its own module by design).
 const (
 	chunk12InviteText = "Добрый день! EURASIAN FASHION WEEK уже скоро ✨\n\n" +
 		"У нас есть для вас предложение по сотрудничеству в качестве UGC-креатора. Откройте ссылку, чтобы ознакомиться с датами, условиями, форматом участия и техническим заданием для контента.\n\n" +
 		"Если вы согласны, нажмите кнопку \"Согласиться\" и мы отправим вам онлайн соглашение о сотрудничестве на подписание 💫"
 	chunk12RemindText = "Откройте ссылку, чтобы ознакомиться с датами, условиями, форматом участия и техническим заданием для контента.\n\n" +
 		"Если вы согласны, нажмите кнопку \"Согласиться\" и мы отправим вам онлайн соглашение о сотрудничестве на подписание 💫"
+	chunk12RemindSigningText = "Напоминаем, что мы отправили вам соглашение на подпись по СМС на номер телефона, указанный при регистрации.\n\n" +
+		"Перейдите по ссылке из СМС и подпишите соглашение.\n\n" +
+		"Если есть вопросы, можете обратиться к @aizerealzair"
 )
 
 // waitInviteSent blocks until the spy records exactly one invite/remind
@@ -125,6 +143,22 @@ func expectBatchInvalid(t *testing.T, body []byte) apiclient.CampaignCreatorBatc
 	require.NoError(t, json.Unmarshal(body, &out))
 	require.Equal(t, "CAMPAIGN_CREATOR_BATCH_INVALID", out.Error.Code)
 	return out
+}
+
+// spyMessagesSince returns every telegram-spy record for chatID at-or-after
+// `since`. Differs from waitInviteSent (which expects exactly one matching
+// record) in that it returns all records — caller filters by text. Used by
+// negative assertions where late retries of unrelated welcome/approve
+// messages can race the validation-rejection check window.
+func spyMessagesSince(t *testing.T, chatID int64, since time.Time) []testclient.TelegramSentMessage {
+	t.Helper()
+	tc := testutil.NewTestClient(t)
+	params := &testclient.GetTelegramSentParams{ChatId: chatID, Since: &since}
+	resp, err := tc.GetTelegramSentWithResponse(context.Background(), params)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, resp.StatusCode())
+	require.NotNil(t, resp.JSON200)
+	return resp.JSON200.Data.Messages
 }
 
 // findStatus retrieves the campaign_creator status for (campaignID, creatorID)
@@ -401,6 +435,329 @@ func TestRemindCampaignCreatorsInvitation(t *testing.T) {
 		require.Nil(t, remindMsg.Error, "happy remind delivery must not record a spy error")
 		require.NotNil(t, remindMsg.WebAppUrl)
 		require.Equal(t, tmaURL, *remindMsg.WebAppUrl)
+	})
+}
+
+func TestRemindCampaignCreatorsSigning(t *testing.T) {
+	t.Parallel()
+
+	t.Run("brand_manager forbidden", func(t *testing.T) {
+		t.Parallel()
+		adminClient, adminToken, _ := testutil.SetupAdminClient(t)
+		brandID := testutil.SetupBrand(t, adminClient, adminToken, "ccA6-403-brand-"+testutil.UniqueEmail("brand"))
+		mgrClient, mgrToken, _ := testutil.SetupManagerWithLogin(t, adminClient, adminToken, brandID)
+		campaignID := setupCampaign(t, adminClient, adminToken, "ccA6-403-camp-"+testutil.UniqueEmail("camp"))
+		creator := testutil.SetupApprovedCreator(t, defaultCreatorOpts(testutil.UniqueIIN()[6:]))
+
+		resp, err := mgrClient.RemindCampaignCreatorsSigningWithResponse(context.Background(), campaignID,
+			apiclient.RemindCampaignCreatorsSigningJSONRequestBody{
+				CreatorIds: []uuid.UUID{uuid.MustParse(creator.CreatorID)},
+			}, testutil.WithAuth(mgrToken))
+		require.NoError(t, err)
+		require.Equal(t, http.StatusForbidden, resp.StatusCode())
+	})
+
+	t.Run("unauthenticated returns 401", func(t *testing.T) {
+		t.Parallel()
+		adminClient, adminToken, _ := testutil.SetupAdminClient(t)
+		campaignID := setupCampaign(t, adminClient, adminToken, "ccA6-401-"+testutil.UniqueEmail("camp"))
+		creator := testutil.SetupApprovedCreator(t, defaultCreatorOpts(testutil.UniqueIIN()[6:]))
+
+		resp := testutil.PostRaw(t, "/campaigns/"+campaignID.String()+"/remind-signing",
+			apiclient.RemindCampaignCreatorsSigningJSONRequestBody{
+				CreatorIds: []uuid.UUID{uuid.MustParse(creator.CreatorID)},
+			})
+		defer resp.Body.Close()
+		require.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+	})
+
+	t.Run("empty creatorIds rejected as 422 CAMPAIGN_CREATOR_IDS_REQUIRED", func(t *testing.T) {
+		t.Parallel()
+		adminClient, adminToken, _ := testutil.SetupAdminClient(t)
+		campaignID := setupCampaign(t, adminClient, adminToken, "ccA6-empty-"+testutil.UniqueEmail("camp"))
+
+		resp, err := adminClient.RemindCampaignCreatorsSigningWithResponse(context.Background(), campaignID,
+			apiclient.RemindCampaignCreatorsSigningJSONRequestBody{
+				CreatorIds: []uuid.UUID{},
+			}, testutil.WithAuth(adminToken))
+		require.NoError(t, err)
+		require.Equal(t, http.StatusUnprocessableEntity, resp.StatusCode())
+		var body apiclient.ErrorResponse
+		require.NoError(t, json.Unmarshal(resp.Body, &body))
+		require.Equal(t, "CAMPAIGN_CREATOR_IDS_REQUIRED", body.Error.Code)
+	})
+
+	t.Run("over 200 creatorIds rejected as 422 CAMPAIGN_CREATOR_IDS_TOO_MANY", func(t *testing.T) {
+		t.Parallel()
+		adminClient, adminToken, _ := testutil.SetupAdminClient(t)
+		campaignID := setupCampaign(t, adminClient, adminToken, "ccA6-toomany-"+testutil.UniqueEmail("camp"))
+
+		ids := make([]uuid.UUID, 201)
+		for i := range ids {
+			ids[i] = uuid.New()
+		}
+		resp, err := adminClient.RemindCampaignCreatorsSigningWithResponse(context.Background(), campaignID,
+			apiclient.RemindCampaignCreatorsSigningJSONRequestBody{CreatorIds: ids},
+			testutil.WithAuth(adminToken))
+		require.NoError(t, err)
+		require.Equal(t, http.StatusUnprocessableEntity, resp.StatusCode())
+		var body apiclient.ErrorResponse
+		require.NoError(t, json.Unmarshal(resp.Body, &body))
+		require.Equal(t, "CAMPAIGN_CREATOR_IDS_TOO_MANY", body.Error.Code)
+	})
+
+	t.Run("soft-deleted campaign returns 404", func(t *testing.T) {
+		t.Parallel()
+		adminClient, adminToken, _ := testutil.SetupAdminClient(t)
+		campaignID := setupCampaign(t, adminClient, adminToken, "ccA6-soft-"+testutil.UniqueEmail("camp"))
+		creator := testutil.SetupApprovedCreator(t, defaultCreatorOpts(testutil.UniqueIIN()[6:]))
+		testutil.SoftDeleteCampaign(t, campaignID.String())
+
+		resp, err := adminClient.RemindCampaignCreatorsSigningWithResponse(context.Background(), campaignID,
+			apiclient.RemindCampaignCreatorsSigningJSONRequestBody{
+				CreatorIds: []uuid.UUID{uuid.MustParse(creator.CreatorID)},
+			}, testutil.WithAuth(adminToken))
+		require.NoError(t, err)
+		require.Equal(t, http.StatusNotFound, resp.StatusCode())
+		require.NotNil(t, resp.JSON404)
+		require.Equal(t, "CAMPAIGN_NOT_FOUND", resp.JSON404.Error.Code)
+	})
+
+	t.Run("duplicate creatorIds rejected as 422 CAMPAIGN_CREATOR_IDS_DUPLICATES", func(t *testing.T) {
+		t.Parallel()
+		adminClient, adminToken, _ := testutil.SetupAdminClient(t)
+		campaignID := setupCampaign(t, adminClient, adminToken, "ccA6-dup-"+testutil.UniqueEmail("camp"))
+		creator := testutil.SetupApprovedCreator(t, defaultCreatorOpts(testutil.UniqueIIN()[6:]))
+
+		dup := uuid.MustParse(creator.CreatorID)
+		resp, err := adminClient.RemindCampaignCreatorsSigningWithResponse(context.Background(), campaignID,
+			apiclient.RemindCampaignCreatorsSigningJSONRequestBody{
+				CreatorIds: []uuid.UUID{dup, dup},
+			}, testutil.WithAuth(adminToken))
+		require.NoError(t, err)
+		require.Equal(t, http.StatusUnprocessableEntity, resp.StatusCode())
+		var body apiclient.ErrorResponse
+		require.NoError(t, json.Unmarshal(resp.Body, &body))
+		require.Equal(t, "CAMPAIGN_CREATOR_IDS_DUPLICATES", body.Error.Code)
+	})
+
+	t.Run("missing campaign returns 404", func(t *testing.T) {
+		t.Parallel()
+		adminClient, adminToken, _ := testutil.SetupAdminClient(t)
+		creator := testutil.SetupApprovedCreator(t, defaultCreatorOpts(testutil.UniqueIIN()[6:]))
+
+		resp, err := adminClient.RemindCampaignCreatorsSigningWithResponse(context.Background(), uuid.New(),
+			apiclient.RemindCampaignCreatorsSigningJSONRequestBody{
+				CreatorIds: []uuid.UUID{uuid.MustParse(creator.CreatorID)},
+			}, testutil.WithAuth(adminToken))
+		require.NoError(t, err)
+		require.Equal(t, http.StatusNotFound, resp.StatusCode())
+		require.NotNil(t, resp.JSON404)
+		require.Equal(t, "CAMPAIGN_NOT_FOUND", resp.JSON404.Error.Code)
+	})
+
+	t.Run("not_in_campaign creator rejected", func(t *testing.T) {
+		t.Parallel()
+		adminClient, adminToken, _ := testutil.SetupAdminClient(t)
+		campaignID := setupCampaign(t, adminClient, adminToken, "ccA6-orphan-"+testutil.UniqueEmail("camp"))
+		stranger := testutil.SetupApprovedCreator(t, defaultCreatorOpts(testutil.UniqueIIN()[6:]))
+
+		resp, err := adminClient.RemindCampaignCreatorsSigningWithResponse(context.Background(), campaignID,
+			apiclient.RemindCampaignCreatorsSigningJSONRequestBody{
+				CreatorIds: []uuid.UUID{uuid.MustParse(stranger.CreatorID)},
+			}, testutil.WithAuth(adminToken))
+		require.NoError(t, err)
+		require.Equal(t, http.StatusUnprocessableEntity, resp.StatusCode())
+		body := expectBatchInvalid(t, resp.Body)
+		require.Len(t, body.Error.Details, 1)
+		require.Equal(t, apiclient.NotInCampaign, body.Error.Details[0].Reason)
+		require.Nil(t, body.Error.Details[0].CurrentStatus)
+	})
+
+	t.Run("wrong_status: invited creator rejected with current_status=invited", func(t *testing.T) {
+		t.Parallel()
+		adminClient, adminToken, _ := testutil.SetupAdminClient(t)
+		tmaURL := testutil.FreshValidTmaURL()
+		campaignID := setupCampaignWithTmaURL(t, adminClient, adminToken,
+			"ccA6-wrong-"+testutil.UniqueEmail("camp"), tmaURL)
+		creator := testutil.SetupApprovedCreator(t, defaultCreatorOpts(testutil.UniqueIIN()[6:]))
+		addCreatorToCampaign(t, adminClient, adminToken, campaignID, creator.CreatorID)
+
+		// Flip planned → invited so the creator is firmly in a status that
+		// remind-signing must reject.
+		notifyResp, err := adminClient.NotifyCampaignCreatorsWithResponse(context.Background(), campaignID,
+			apiclient.NotifyCampaignCreatorsJSONRequestBody{
+				CreatorIds: []uuid.UUID{uuid.MustParse(creator.CreatorID)},
+			}, testutil.WithAuth(adminToken))
+		require.NoError(t, err)
+		require.Equal(t, http.StatusOK, notifyResp.StatusCode())
+		// Wait for the invite spy record to settle before the strict-422 check
+		// so EnsureNoNewTelegramSent below has a stable baseline.
+		_ = waitInviteSent(t, creator.TelegramUserID, time.Now().UTC().Add(-2*time.Second), chunk12InviteText)
+
+		negativeBaseline := time.Now().UTC()
+		resp, err := adminClient.RemindCampaignCreatorsSigningWithResponse(context.Background(), campaignID,
+			apiclient.RemindCampaignCreatorsSigningJSONRequestBody{
+				CreatorIds: []uuid.UUID{uuid.MustParse(creator.CreatorID)},
+			}, testutil.WithAuth(adminToken))
+		require.NoError(t, err)
+		require.Equal(t, http.StatusUnprocessableEntity, resp.StatusCode())
+		body := expectBatchInvalid(t, resp.Body)
+		require.Len(t, body.Error.Details, 1)
+		require.Equal(t, apiclient.WrongStatus, body.Error.Details[0].Reason)
+		require.NotNil(t, body.Error.Details[0].CurrentStatus)
+		require.Equal(t, apiclient.Invited, *body.Error.Details[0].CurrentStatus)
+
+		// БД не тронута — invited_count остался 1, reminded_count = 0.
+		cc := findStatus(t, adminClient, adminToken, campaignID, creator.CreatorID)
+		require.Equal(t, apiclient.Invited, cc.Status)
+		require.Equal(t, 1, cc.InvitedCount)
+		require.Equal(t, 0, cc.RemindedCount)
+		require.Nil(t, cc.RemindedAt)
+
+		// Telegram-spy must NOT receive a remind-signing message — strict-422
+		// short-circuits before delivery. Filter by text rather than total
+		// count because late retries of unrelated async messages (welcome,
+		// approved, retry-after-fake-chat) can land in the same window.
+		require.Eventually(t,
+			func() bool {
+				for _, m := range spyMessagesSince(t, creator.TelegramUserID, negativeBaseline) {
+					if m.Text == chunk12RemindSigningText {
+						return false
+					}
+				}
+				return true
+			},
+			500*time.Millisecond, 100*time.Millisecond,
+			"strict-422 must not emit a remind-signing Telegram message",
+		)
+	})
+
+	t.Run("happy single + repeat: reminded_count bumps, status stays signing", func(t *testing.T) {
+		t.Parallel()
+		fx := testutil.SetupCampaignWithSigningCreator(t)
+		adminClient := fx.AdminClient
+		adminToken := fx.AdminToken
+		campaignID := uuid.MustParse(fx.CampaignID)
+		creatorID := uuid.MustParse(fx.CreatorID)
+
+		// First remind.
+		firstStartedAt := time.Now().UTC().Add(-time.Second)
+		firstResp, err := adminClient.RemindCampaignCreatorsSigningWithResponse(context.Background(), campaignID,
+			apiclient.RemindCampaignCreatorsSigningJSONRequestBody{
+				CreatorIds: []uuid.UUID{creatorID},
+			}, testutil.WithAuth(adminToken))
+		require.NoError(t, err)
+		require.Equal(t, http.StatusOK, firstResp.StatusCode())
+		require.NotNil(t, firstResp.JSON200)
+		require.Empty(t, firstResp.JSON200.Data.Undelivered)
+
+		cc := findStatus(t, adminClient, adminToken, campaignID, fx.CreatorID)
+		require.Equal(t, apiclient.Signing, cc.Status, "remind-signing must NOT change status")
+		require.Equal(t, 1, cc.RemindedCount)
+		require.NotNil(t, cc.RemindedAt)
+		require.WithinDuration(t, time.Now().UTC(), *cc.RemindedAt, time.Minute)
+		testutil.AssertAuditEntry(t, adminClient, adminToken,
+			"campaign_creator", cc.Id.String(), "campaign_creator_remind_signing")
+
+		firstMsg := waitInviteSent(t, fx.TelegramUserID, firstStartedAt, chunk12RemindSigningText)
+		require.Nil(t, firstMsg.Error, "happy remind-signing must not record a spy error")
+		require.Nil(t, firstMsg.WebAppUrl, "remind-signing must NOT carry a WebApp button — creator already agreed")
+
+		// Repeat — second call bumps reminded_count to 2 with a fresh audit row.
+		// `since` for the second waitInviteSent must be strictly after the first
+		// message's sentAt — otherwise the spy filter (inclusive) returns both
+		// messages and waitInviteSent panics on len>1.
+		secondSince := firstMsg.SentAt.Add(time.Millisecond)
+		secondResp, err := adminClient.RemindCampaignCreatorsSigningWithResponse(context.Background(), campaignID,
+			apiclient.RemindCampaignCreatorsSigningJSONRequestBody{
+				CreatorIds: []uuid.UUID{creatorID},
+			}, testutil.WithAuth(adminToken))
+		require.NoError(t, err)
+		require.Equal(t, http.StatusOK, secondResp.StatusCode())
+		require.NotNil(t, secondResp.JSON200)
+		require.Empty(t, secondResp.JSON200.Data.Undelivered)
+
+		cc2 := findStatus(t, adminClient, adminToken, campaignID, fx.CreatorID)
+		require.Equal(t, apiclient.Signing, cc2.Status)
+		require.Equal(t, 2, cc2.RemindedCount)
+		require.NotNil(t, cc2.RemindedAt)
+		require.True(t, cc.RemindedAt.Before(*cc2.RemindedAt) || cc.RemindedAt.Equal(*cc2.RemindedAt),
+			"second reminded_at must not regress")
+
+		// AssertAuditEntry only checks ≥1 — to prove the second remind wrote
+		// a *fresh* row (and didn't silently swallow), assert the count went
+		// from 1 → 2.
+		auditRows := testutil.ListAuditEntriesByAction(t, adminClient, adminToken,
+			"campaign_creator", cc2.Id.String(), "campaign_creator_remind_signing")
+		require.Len(t, auditRows, 2, "second remind must write a second audit row, not overwrite the first")
+
+		// Second spy message — separate record with the same plain text, still no button.
+		secondMsg := waitInviteSent(t, fx.TelegramUserID, secondSince, chunk12RemindSigningText)
+		require.Nil(t, secondMsg.Error)
+		require.Nil(t, secondMsg.WebAppUrl, "remind-signing repeat must also stay plain-text")
+	})
+
+	t.Run("partial-success: bot_blocked entry, others succeed (two campaigns)", func(t *testing.T) {
+		t.Parallel()
+		// SetupCampaignWithSigningCreator gives one campaign with exactly one
+		// `signing` creator. To exercise partial-success without bloating
+		// testutil with a multi-creator setup, run it twice — two independent
+		// campaigns, one per creator. The remind-signing batch still hits both
+		// because they share the admin client + token; we drive two separate
+		// POSTs and assert the failing one stays at reminded_count=0 while the
+		// happy one bumps to 1.
+		fxFailing := testutil.SetupCampaignWithSigningCreator(t)
+		fxDelivered := testutil.SetupCampaignWithSigningCreator(t)
+		adminClient := fxFailing.AdminClient
+		adminToken := fxFailing.AdminToken
+
+		// Force the next outbound send to `fxFailing.TelegramUserID` to come
+		// back with Forbidden → bot_blocked.
+		testutil.RegisterTelegramSpyFailNext(t, fxFailing.TelegramUserID, "")
+
+		failingResp, err := adminClient.RemindCampaignCreatorsSigningWithResponse(context.Background(),
+			uuid.MustParse(fxFailing.CampaignID),
+			apiclient.RemindCampaignCreatorsSigningJSONRequestBody{
+				CreatorIds: []uuid.UUID{uuid.MustParse(fxFailing.CreatorID)},
+			}, testutil.WithAuth(adminToken))
+		require.NoError(t, err)
+		require.Equal(t, http.StatusOK, failingResp.StatusCode())
+		require.NotNil(t, failingResp.JSON200)
+		require.Len(t, failingResp.JSON200.Data.Undelivered, 1)
+		require.Equal(t, fxFailing.CreatorID, failingResp.JSON200.Data.Undelivered[0].CreatorId.String())
+		require.Equal(t, apiclient.BotBlocked, failingResp.JSON200.Data.Undelivered[0].Reason)
+
+		// Failing creator: row state untouched, no remind audit.
+		failingCC := findStatus(t, adminClient, adminToken,
+			uuid.MustParse(fxFailing.CampaignID), fxFailing.CreatorID)
+		require.Equal(t, apiclient.Signing, failingCC.Status, "failing creator stays in signing")
+		require.Equal(t, 0, failingCC.RemindedCount, "failing creator reminded_count stays at 0")
+		require.Nil(t, failingCC.RemindedAt)
+
+		// Delivered creator: real send goes through, reminded_count → 1, audit fires.
+		deliveredStartedAt := time.Now().UTC().Add(-time.Second)
+		deliveredResp, err := adminClient.RemindCampaignCreatorsSigningWithResponse(context.Background(),
+			uuid.MustParse(fxDelivered.CampaignID),
+			apiclient.RemindCampaignCreatorsSigningJSONRequestBody{
+				CreatorIds: []uuid.UUID{uuid.MustParse(fxDelivered.CreatorID)},
+			}, testutil.WithAuth(adminToken))
+		require.NoError(t, err)
+		require.Equal(t, http.StatusOK, deliveredResp.StatusCode())
+		require.NotNil(t, deliveredResp.JSON200)
+		require.Empty(t, deliveredResp.JSON200.Data.Undelivered)
+
+		deliveredCC := findStatus(t, adminClient, adminToken,
+			uuid.MustParse(fxDelivered.CampaignID), fxDelivered.CreatorID)
+		require.Equal(t, apiclient.Signing, deliveredCC.Status)
+		require.Equal(t, 1, deliveredCC.RemindedCount)
+		require.NotNil(t, deliveredCC.RemindedAt)
+		testutil.AssertAuditEntry(t, adminClient, adminToken,
+			"campaign_creator", deliveredCC.Id.String(), "campaign_creator_remind_signing")
+
+		deliveredMsg := waitInviteSent(t, fxDelivered.TelegramUserID, deliveredStartedAt, chunk12RemindSigningText)
+		require.Nil(t, deliveredMsg.Error)
+		require.Nil(t, deliveredMsg.WebAppUrl, "remind-signing partial-success delivered branch must also stay plain-text")
 	})
 }
 

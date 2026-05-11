@@ -1616,6 +1616,9 @@ type NotifyCampaignCreatorsJSONRequestBody = CampaignCreatorBatchInput
 // RemindCampaignCreatorsInvitationJSONRequestBody defines body for RemindCampaignCreatorsInvitation for application/json ContentType.
 type RemindCampaignCreatorsInvitationJSONRequestBody = CampaignCreatorBatchInput
 
+// RemindCampaignCreatorsSigningJSONRequestBody defines body for RemindCampaignCreatorsSigning for application/json ContentType.
+type RemindCampaignCreatorsSigningJSONRequestBody = CampaignCreatorBatchInput
+
 // SubmitCreatorApplicationJSONRequestBody defines body for SubmitCreatorApplication for application/json ContentType.
 type SubmitCreatorApplicationJSONRequestBody = CreatorApplicationSubmitRequest
 
@@ -1714,6 +1717,9 @@ type ServerInterface interface {
 	// Send invitation reminders to campaign creators (admin-only)
 	// (POST /campaigns/{id}/remind-invitation)
 	RemindCampaignCreatorsInvitation(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
+	// Send signing reminders to campaign creators (admin-only)
+	// (POST /campaigns/{id}/remind-signing)
+	RemindCampaignCreatorsSigning(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
 	// Submit a creator application from the public landing page
 	// (POST /creators/applications)
 	SubmitCreatorApplication(w http.ResponseWriter, r *http.Request)
@@ -1912,6 +1918,12 @@ func (_ Unimplemented) NotifyCampaignCreators(w http.ResponseWriter, r *http.Req
 // Send invitation reminders to campaign creators (admin-only)
 // (POST /campaigns/{id}/remind-invitation)
 func (_ Unimplemented) RemindCampaignCreatorsInvitation(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Send signing reminders to campaign creators (admin-only)
+// (POST /campaigns/{id}/remind-signing)
+func (_ Unimplemented) RemindCampaignCreatorsSigning(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -2806,6 +2818,37 @@ func (siw *ServerInterfaceWrapper) RemindCampaignCreatorsInvitation(w http.Respo
 	handler.ServeHTTP(w, r)
 }
 
+// RemindCampaignCreatorsSigning operation middleware
+func (siw *ServerInterfaceWrapper) RemindCampaignCreatorsSigning(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RemindCampaignCreatorsSigning(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // SubmitCreatorApplication operation middleware
 func (siw *ServerInterfaceWrapper) SubmitCreatorApplication(w http.ResponseWriter, r *http.Request) {
 
@@ -3360,6 +3403,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/campaigns/{id}/remind-invitation", wrapper.RemindCampaignCreatorsInvitation)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/campaigns/{id}/remind-signing", wrapper.RemindCampaignCreatorsSigning)
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/creators/applications", wrapper.SubmitCreatorApplication)
@@ -4702,6 +4748,74 @@ func (response RemindCampaignCreatorsInvitationdefaultJSONResponse) VisitRemindC
 	return json.NewEncoder(w).Encode(response.Body)
 }
 
+type RemindCampaignCreatorsSigningRequestObject struct {
+	Id   openapi_types.UUID `json:"id"`
+	Body *RemindCampaignCreatorsSigningJSONRequestBody
+}
+
+type RemindCampaignCreatorsSigningResponseObject interface {
+	VisitRemindCampaignCreatorsSigningResponse(w http.ResponseWriter) error
+}
+
+type RemindCampaignCreatorsSigning200JSONResponse CampaignNotifyResult
+
+func (response RemindCampaignCreatorsSigning200JSONResponse) VisitRemindCampaignCreatorsSigningResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type RemindCampaignCreatorsSigning401JSONResponse ErrorResponse
+
+func (response RemindCampaignCreatorsSigning401JSONResponse) VisitRemindCampaignCreatorsSigningResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type RemindCampaignCreatorsSigning403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response RemindCampaignCreatorsSigning403JSONResponse) VisitRemindCampaignCreatorsSigningResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type RemindCampaignCreatorsSigning404JSONResponse ErrorResponse
+
+func (response RemindCampaignCreatorsSigning404JSONResponse) VisitRemindCampaignCreatorsSigningResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type RemindCampaignCreatorsSigning422JSONResponse struct {
+	union json.RawMessage
+}
+
+func (response RemindCampaignCreatorsSigning422JSONResponse) VisitRemindCampaignCreatorsSigningResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(422)
+
+	return json.NewEncoder(w).Encode(response.union)
+}
+
+type RemindCampaignCreatorsSigningdefaultJSONResponse struct {
+	Body       ErrorResponse
+	StatusCode int
+}
+
+func (response RemindCampaignCreatorsSigningdefaultJSONResponse) VisitRemindCampaignCreatorsSigningResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+
+	return json.NewEncoder(w).Encode(response.Body)
+}
+
 type SubmitCreatorApplicationRequestObject struct {
 	Body *SubmitCreatorApplicationJSONRequestBody
 }
@@ -5593,6 +5707,9 @@ type StrictServerInterface interface {
 	// Send invitation reminders to campaign creators (admin-only)
 	// (POST /campaigns/{id}/remind-invitation)
 	RemindCampaignCreatorsInvitation(ctx context.Context, request RemindCampaignCreatorsInvitationRequestObject) (RemindCampaignCreatorsInvitationResponseObject, error)
+	// Send signing reminders to campaign creators (admin-only)
+	// (POST /campaigns/{id}/remind-signing)
+	RemindCampaignCreatorsSigning(ctx context.Context, request RemindCampaignCreatorsSigningRequestObject) (RemindCampaignCreatorsSigningResponseObject, error)
 	// Submit a creator application from the public landing page
 	// (POST /creators/applications)
 	SubmitCreatorApplication(ctx context.Context, request SubmitCreatorApplicationRequestObject) (SubmitCreatorApplicationResponseObject, error)
@@ -6375,6 +6492,39 @@ func (sh *strictHandler) RemindCampaignCreatorsInvitation(w http.ResponseWriter,
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(RemindCampaignCreatorsInvitationResponseObject); ok {
 		if err := validResponse.VisitRemindCampaignCreatorsInvitationResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// RemindCampaignCreatorsSigning operation middleware
+func (sh *strictHandler) RemindCampaignCreatorsSigning(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request RemindCampaignCreatorsSigningRequestObject
+
+	request.Id = id
+
+	var body RemindCampaignCreatorsSigningJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.RemindCampaignCreatorsSigning(ctx, request.(RemindCampaignCreatorsSigningRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "RemindCampaignCreatorsSigning")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(RemindCampaignCreatorsSigningResponseObject); ok {
+		if err := validResponse.VisitRemindCampaignCreatorsSigningResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

@@ -6,11 +6,13 @@ import type { ReactNode } from "react";
 vi.mock("@/api/campaignCreators", () => ({
   notifyCampaignCreators: vi.fn(),
   remindCampaignCreatorsInvitation: vi.fn(),
+  remindCampaignCreatorsSigning: vi.fn(),
 }));
 
 import {
   notifyCampaignCreators,
   remindCampaignCreatorsInvitation,
+  remindCampaignCreatorsSigning,
 } from "@/api/campaignCreators";
 import { ApiError } from "@/api/client";
 import { useCampaignNotifyMutations } from "./useCampaignNotifyMutations";
@@ -142,6 +144,77 @@ describe("useCampaignNotifyMutations", () => {
       expect(result.current.notify.isSuccess).toBe(true);
     });
     expect(result.current.remind.isIdle).toBe(true);
+    expect(remindCampaignCreatorsInvitation).not.toHaveBeenCalled();
+  });
+
+  it("remindSigning.mutate calls remindCampaignCreatorsSigning with the same shape", async () => {
+    vi.mocked(remindCampaignCreatorsSigning).mockResolvedValueOnce({
+      data: { undelivered: [] },
+    });
+
+    const { result } = renderHook(
+      () => useCampaignNotifyMutations(CAMPAIGN_ID),
+      { wrapper: makeWrapper() },
+    );
+
+    result.current.remindSigning.mutate([CREATOR_A, CREATOR_B]);
+
+    await waitFor(() => {
+      expect(result.current.remindSigning.isSuccess).toBe(true);
+    });
+    expect(remindCampaignCreatorsSigning).toHaveBeenCalledTimes(1);
+    expect(remindCampaignCreatorsSigning).toHaveBeenCalledWith(CAMPAIGN_ID, [
+      CREATOR_A,
+      CREATOR_B,
+    ]);
+    expect(result.current.remindSigning.data?.data.undelivered).toEqual([]);
+  });
+
+  it("remindSigning.mutate surfaces ApiError on 422 batch-invalid via mutation.error", async () => {
+    const apiErr = new ApiError(
+      422,
+      "CAMPAIGN_CREATOR_BATCH_INVALID",
+      "batch invalid",
+      [
+        { creatorId: CREATOR_A, reason: "wrong_status", currentStatus: "agreed" },
+      ],
+    );
+    vi.mocked(remindCampaignCreatorsSigning).mockRejectedValueOnce(apiErr);
+
+    const { result } = renderHook(
+      () => useCampaignNotifyMutations(CAMPAIGN_ID),
+      { wrapper: makeWrapper() },
+    );
+
+    result.current.remindSigning.mutate([CREATOR_A]);
+
+    await waitFor(() => {
+      expect(result.current.remindSigning.isError).toBe(true);
+    });
+    expect(result.current.remindSigning.error).toBe(apiErr);
+    expect(result.current.remindSigning.error?.code).toBe(
+      "CAMPAIGN_CREATOR_BATCH_INVALID",
+    );
+  });
+
+  it("remindSigning stays independent from notify and remind", async () => {
+    vi.mocked(remindCampaignCreatorsSigning).mockResolvedValueOnce({
+      data: { undelivered: [] },
+    });
+
+    const { result } = renderHook(
+      () => useCampaignNotifyMutations(CAMPAIGN_ID),
+      { wrapper: makeWrapper() },
+    );
+
+    result.current.remindSigning.mutate([CREATOR_A]);
+
+    await waitFor(() => {
+      expect(result.current.remindSigning.isSuccess).toBe(true);
+    });
+    expect(result.current.notify.isIdle).toBe(true);
+    expect(result.current.remind.isIdle).toBe(true);
+    expect(notifyCampaignCreators).not.toHaveBeenCalled();
     expect(remindCampaignCreatorsInvitation).not.toHaveBeenCalled();
   });
 });

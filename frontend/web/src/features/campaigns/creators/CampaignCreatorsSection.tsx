@@ -307,7 +307,8 @@ function actionForStatus(
   actionSubmittingLabel?: string;
   mutation?:
     | CampaignNotifyMutations["notify"]
-    | CampaignNotifyMutations["remind"];
+    | CampaignNotifyMutations["remind"]
+    | CampaignNotifyMutations["remindSigning"];
 } {
   switch (status) {
     case CAMPAIGN_CREATOR_STATUS.PLANNED:
@@ -323,8 +324,13 @@ function actionForStatus(
         actionSubmittingLabel: t("campaignCreators.remindSubmitting"),
         mutation: mutations.remind,
       };
-    case CAMPAIGN_CREATOR_STATUS.AGREED:
     case CAMPAIGN_CREATOR_STATUS.SIGNING:
+      return {
+        actionLabel: t("campaignCreators.remindSigningButton"),
+        actionSubmittingLabel: t("campaignCreators.remindSigningSubmitting"),
+        mutation: mutations.remindSigning,
+      };
+    case CAMPAIGN_CREATOR_STATUS.AGREED:
     case CAMPAIGN_CREATOR_STATUS.SIGNED:
     case CAMPAIGN_CREATOR_STATUS.SIGNING_DECLINED:
       return {};

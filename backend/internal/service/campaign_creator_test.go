@@ -1196,3 +1196,364 @@ func TestCampaignCreatorService_RemindInvitation(t *testing.T) {
 		}}, bie.Details)
 	})
 }
+
+func TestCampaignCreatorService_RemindSigning(t *testing.T) {
+	t.Parallel()
+
+	t.Run("missing campaign returns 404", func(t *testing.T) {
+		t.Parallel()
+		k := setupNotifyKit(t, notifyKitOpts{})
+
+		k.factory.EXPECT().NewCampaignRepo(k.pool).Return(k.campaigns)
+		k.campaigns.EXPECT().GetByID(mock.Anything, "missing").Return((*repository.CampaignRow)(nil), sql.ErrNoRows)
+
+		_, err := k.svc.RemindSigning(adminCtx(), "missing", []string{"cr-1"})
+		require.ErrorIs(t, err, domain.ErrCampaignNotFound)
+	})
+
+	t.Run("soft-deleted campaign returns 404", func(t *testing.T) {
+		t.Parallel()
+		k := setupNotifyKit(t, notifyKitOpts{})
+		now := time.Date(2026, 5, 8, 10, 0, 0, 0, time.UTC)
+
+		k.factory.EXPECT().NewCampaignRepo(k.pool).Return(k.campaigns)
+		k.campaigns.EXPECT().GetByID(mock.Anything, "camp-1").
+			Return(&repository.CampaignRow{
+				ID: "camp-1", IsDeleted: true, CreatedAt: now, UpdatedAt: now,
+			}, nil)
+
+		_, err := k.svc.RemindSigning(adminCtx(), "camp-1", []string{"cr-1"})
+		require.ErrorIs(t, err, domain.ErrCampaignNotFound)
+	})
+
+	t.Run("not_in_campaign creator rejected", func(t *testing.T) {
+		t.Parallel()
+		k := setupNotifyKit(t, notifyKitOpts{})
+
+		k.factory.EXPECT().NewCampaignRepo(k.pool).Return(k.campaigns)
+		k.campaigns.EXPECT().GetByID(mock.Anything, "camp-1").Return(k.liveCampaign("camp-1"), nil)
+
+		k.factory.EXPECT().NewCampaignCreatorRepo(mock.Anything).Return(k.ccRepo)
+		k.ccRepo.EXPECT().ListByCampaignAndCreators(mock.Anything, "camp-1", []string{"cr-orphan"}).
+			Return([]*repository.CampaignCreatorRow{}, nil)
+
+		_, err := k.svc.RemindSigning(adminCtx(), "camp-1", []string{"cr-orphan"})
+
+		var bie *domain.CampaignCreatorBatchInvalidError
+		require.ErrorAs(t, err, &bie)
+		require.Equal(t, []domain.BatchValidationDetail{{
+			CreatorID: "cr-orphan", Reason: domain.BatchInvalidReasonNotInCampaign,
+		}}, bie.Details)
+		k.notifier.AssertNotCalled(t, "SendCampaignInvite", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+		k.ccRepo.AssertNotCalled(t, "ApplyRemind", mock.Anything, mock.Anything)
+	})
+
+	t.Run("wrong_status table-driven for every non-signing status", func(t *testing.T) {
+		t.Parallel()
+
+		// Every status except `signing` must be rejected with wrong_status —
+		// table-driven keeps the matrix exhaustive and a future enum addition
+		// gets caught the moment a new status is forgotten here.
+		cases := []string{
+			domain.CampaignCreatorStatusPlanned,
+			domain.CampaignCreatorStatusInvited,
+			domain.CampaignCreatorStatusAgreed,
+			domain.CampaignCreatorStatusSigned,
+			domain.CampaignCreatorStatusSigningDeclined,
+			domain.CampaignCreatorStatusDeclined,
+		}
+		for _, current := range cases {
+			t.Run(current, func(t *testing.T) {
+				t.Parallel()
+				k := setupNotifyKit(t, notifyKitOpts{})
+				now := time.Date(2026, 5, 8, 10, 0, 0, 0, time.UTC)
+
+				k.factory.EXPECT().NewCampaignRepo(k.pool).Return(k.campaigns)
+				k.campaigns.EXPECT().GetByID(mock.Anything, "camp-1").Return(k.liveCampaign("camp-1"), nil)
+
+				row := &repository.CampaignCreatorRow{
+					ID: "cc-1", CampaignID: "camp-1", CreatorID: "cr-1",
+					Status: current, CreatedAt: now, UpdatedAt: now,
+				}
+				k.factory.EXPECT().NewCampaignCreatorRepo(mock.Anything).Return(k.ccRepo)
+				k.ccRepo.EXPECT().ListByCampaignAndCreators(mock.Anything, "camp-1", []string{"cr-1"}).
+					Return([]*repository.CampaignCreatorRow{row}, nil)
+
+				_, err := k.svc.RemindSigning(adminCtx(), "camp-1", []string{"cr-1"})
+
+				var bie *domain.CampaignCreatorBatchInvalidError
+				require.ErrorAs(t, err, &bie)
+				require.Equal(t, []domain.BatchValidationDetail{{
+					CreatorID: "cr-1", Reason: domain.BatchInvalidReasonWrongStatus,
+					CurrentStatus: current,
+				}}, bie.Details)
+				k.notifier.AssertNotCalled(t, "SendCampaignInvite", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+			})
+		}
+	})
+
+	t.Run("bot_blocked entry recorded, ApplyRemind not called, batch continues", func(t *testing.T) {
+		t.Parallel()
+		k := setupNotifyKit(t, notifyKitOpts{})
+		now := time.Date(2026, 5, 8, 10, 0, 0, 0, time.UTC)
+
+		k.factory.EXPECT().NewCampaignRepo(k.pool).Return(k.campaigns)
+		k.campaigns.EXPECT().GetByID(mock.Anything, "camp-1").Return(k.liveCampaign("camp-1"), nil)
+
+		row1 := &repository.CampaignCreatorRow{
+			ID: "cc-1", CampaignID: "camp-1", CreatorID: "cr-1",
+			Status: domain.CampaignCreatorStatusSigning, CreatedAt: now, UpdatedAt: now,
+		}
+		row2 := &repository.CampaignCreatorRow{
+			ID: "cc-2", CampaignID: "camp-1", CreatorID: "cr-2",
+			Status: domain.CampaignCreatorStatusSigning, CreatedAt: now, UpdatedAt: now,
+		}
+		k.factory.EXPECT().NewCampaignCreatorRepo(mock.Anything).Return(k.ccRepo)
+		k.ccRepo.EXPECT().ListByCampaignAndCreators(mock.Anything, "camp-1", []string{"cr-1", "cr-2"}).
+			Return([]*repository.CampaignCreatorRow{row1, row2}, nil)
+
+		k.factory.EXPECT().NewCreatorRepo(k.pool).Return(k.creator)
+		k.creator.EXPECT().GetTelegramUserIDsByIDs(mock.Anything, []string{"cr-1", "cr-2"}).
+			Return(map[string]int64{"cr-1": 1001, "cr-2": 1002}, nil)
+
+		k.notifier.EXPECT().SendCampaignReminder(mock.Anything, int64(1001), telegram.CampaignRemindSigningText()).
+			Return(errors.New("Forbidden: bot was blocked by the user")).Once()
+		k.notifier.EXPECT().SendCampaignReminder(mock.Anything, int64(1002), telegram.CampaignRemindSigningText()).
+			Return(nil).Once()
+
+		newRow2 := &repository.CampaignCreatorRow{
+			ID: "cc-2", CampaignID: "camp-1", CreatorID: "cr-2",
+			Status:        domain.CampaignCreatorStatusSigning,
+			RemindedCount: 1, RemindedAt: &now,
+			CreatedAt: now, UpdatedAt: now,
+		}
+		k.pool.EXPECT().Begin(mock.Anything).Return(testTx{}, nil).Once()
+		k.factory.EXPECT().NewAuditRepo(mock.Anything).Return(k.audit)
+		k.ccRepo.EXPECT().ApplyRemind(mock.Anything, "cc-2").Return(newRow2, nil).Once()
+
+		auditSeen := map[string]bool{}
+		k.audit.EXPECT().Create(mock.Anything, mock.Anything).
+			Run(func(_ context.Context, row repository.AuditLogRow) {
+				require.Equal(t, AuditActionCampaignCreatorRemindSigning, row.Action)
+				require.NotNil(t, row.EntityID)
+				auditSeen[*row.EntityID] = true
+			}).Return(nil).Once()
+
+		k.log.EXPECT().Warn(mock.Anything, "campaign batch: telegram delivery failed", mock.Anything).Once()
+		k.log.EXPECT().Info(mock.Anything, "campaign batch dispatched", mock.Anything).Once()
+
+		undelivered, err := k.svc.RemindSigning(adminCtx(), "camp-1", []string{"cr-1", "cr-2"})
+		require.NoError(t, err)
+		require.Equal(t, []domain.NotifyFailure{
+			{CreatorID: "cr-1", Reason: domain.NotifyFailureReasonBotBlocked},
+		}, undelivered)
+		require.Equal(t, map[string]bool{"cc-2": true}, auditSeen)
+		k.ccRepo.AssertNotCalled(t, "ApplyRemind", mock.Anything, "cc-1")
+	})
+
+	t.Run("unknown telegram error recorded without ApplyRemind", func(t *testing.T) {
+		t.Parallel()
+		k := setupNotifyKit(t, notifyKitOpts{})
+		now := time.Date(2026, 5, 8, 10, 0, 0, 0, time.UTC)
+
+		k.factory.EXPECT().NewCampaignRepo(k.pool).Return(k.campaigns)
+		k.campaigns.EXPECT().GetByID(mock.Anything, "camp-1").Return(k.liveCampaign("camp-1"), nil)
+
+		row1 := &repository.CampaignCreatorRow{
+			ID: "cc-1", CampaignID: "camp-1", CreatorID: "cr-1",
+			Status: domain.CampaignCreatorStatusSigning, CreatedAt: now, UpdatedAt: now,
+		}
+		k.factory.EXPECT().NewCampaignCreatorRepo(mock.Anything).Return(k.ccRepo)
+		k.ccRepo.EXPECT().ListByCampaignAndCreators(mock.Anything, "camp-1", []string{"cr-1"}).
+			Return([]*repository.CampaignCreatorRow{row1}, nil)
+
+		k.factory.EXPECT().NewCreatorRepo(k.pool).Return(k.creator)
+		k.creator.EXPECT().GetTelegramUserIDsByIDs(mock.Anything, []string{"cr-1"}).
+			Return(map[string]int64{"cr-1": 1001}, nil)
+
+		k.notifier.EXPECT().SendCampaignReminder(mock.Anything, int64(1001), telegram.CampaignRemindSigningText()).
+			Return(errors.New("network timeout")).Once()
+
+		k.log.EXPECT().Warn(mock.Anything, "campaign batch: telegram delivery failed", mock.Anything).Once()
+		k.log.EXPECT().Info(mock.Anything, "campaign batch dispatched", mock.Anything).Once()
+
+		undelivered, err := k.svc.RemindSigning(adminCtx(), "camp-1", []string{"cr-1"})
+		require.NoError(t, err)
+		require.Equal(t, []domain.NotifyFailure{
+			{CreatorID: "cr-1", Reason: domain.NotifyFailureReasonUnknown},
+		}, undelivered)
+		k.ccRepo.AssertNotCalled(t, "ApplyRemind", mock.Anything, mock.Anything)
+	})
+
+	t.Run("missing telegram_user_id reported as unknown without delivery", func(t *testing.T) {
+		t.Parallel()
+		k := setupNotifyKit(t, notifyKitOpts{})
+		now := time.Date(2026, 5, 8, 10, 0, 0, 0, time.UTC)
+
+		k.factory.EXPECT().NewCampaignRepo(k.pool).Return(k.campaigns)
+		k.campaigns.EXPECT().GetByID(mock.Anything, "camp-1").Return(k.liveCampaign("camp-1"), nil)
+
+		row1 := &repository.CampaignCreatorRow{
+			ID: "cc-1", CampaignID: "camp-1", CreatorID: "cr-1",
+			Status: domain.CampaignCreatorStatusSigning, CreatedAt: now, UpdatedAt: now,
+		}
+		k.factory.EXPECT().NewCampaignCreatorRepo(mock.Anything).Return(k.ccRepo)
+		k.ccRepo.EXPECT().ListByCampaignAndCreators(mock.Anything, "camp-1", []string{"cr-1"}).
+			Return([]*repository.CampaignCreatorRow{row1}, nil)
+
+		k.factory.EXPECT().NewCreatorRepo(k.pool).Return(k.creator)
+		k.creator.EXPECT().GetTelegramUserIDsByIDs(mock.Anything, []string{"cr-1"}).
+			Return(map[string]int64{}, nil)
+
+		k.log.EXPECT().Error(mock.Anything, "campaign batch: missing telegram_user_id", mock.Anything).Once()
+		k.log.EXPECT().Info(mock.Anything, "campaign batch dispatched", mock.Anything).Once()
+
+		undelivered, err := k.svc.RemindSigning(adminCtx(), "camp-1", []string{"cr-1"})
+		require.NoError(t, err)
+		require.Equal(t, []domain.NotifyFailure{
+			{CreatorID: "cr-1", Reason: domain.NotifyFailureReasonUnknown},
+		}, undelivered)
+		k.notifier.AssertNotCalled(t, "SendCampaignReminder", mock.Anything, mock.Anything, mock.Anything)
+	})
+
+	t.Run("send succeeds but ApplyRemind fails — reported as unknown, batch continues", func(t *testing.T) {
+		t.Parallel()
+		k := setupNotifyKit(t, notifyKitOpts{})
+		now := time.Date(2026, 5, 8, 10, 0, 0, 0, time.UTC)
+
+		k.factory.EXPECT().NewCampaignRepo(k.pool).Return(k.campaigns)
+		k.campaigns.EXPECT().GetByID(mock.Anything, "camp-1").Return(k.liveCampaign("camp-1"), nil)
+
+		row1 := &repository.CampaignCreatorRow{
+			ID: "cc-1", CampaignID: "camp-1", CreatorID: "cr-1",
+			Status: domain.CampaignCreatorStatusSigning, CreatedAt: now, UpdatedAt: now,
+		}
+		row2 := &repository.CampaignCreatorRow{
+			ID: "cc-2", CampaignID: "camp-1", CreatorID: "cr-2",
+			Status: domain.CampaignCreatorStatusSigning, CreatedAt: now, UpdatedAt: now,
+		}
+		k.factory.EXPECT().NewCampaignCreatorRepo(mock.Anything).Return(k.ccRepo)
+		k.ccRepo.EXPECT().ListByCampaignAndCreators(mock.Anything, "camp-1", []string{"cr-1", "cr-2"}).
+			Return([]*repository.CampaignCreatorRow{row1, row2}, nil)
+
+		k.factory.EXPECT().NewCreatorRepo(k.pool).Return(k.creator)
+		k.creator.EXPECT().GetTelegramUserIDsByIDs(mock.Anything, []string{"cr-1", "cr-2"}).
+			Return(map[string]int64{"cr-1": 1001, "cr-2": 1002}, nil)
+
+		k.notifier.EXPECT().SendCampaignReminder(mock.Anything, int64(1001), telegram.CampaignRemindSigningText()).Return(nil).Once()
+		k.notifier.EXPECT().SendCampaignReminder(mock.Anything, int64(1002), telegram.CampaignRemindSigningText()).Return(nil).Once()
+
+		k.pool.EXPECT().Begin(mock.Anything).Return(testTx{}, nil).Times(2)
+		k.factory.EXPECT().NewAuditRepo(mock.Anything).Return(k.audit)
+		k.ccRepo.EXPECT().ApplyRemind(mock.Anything, "cc-1").Return(nil, sql.ErrNoRows).Once()
+		newRow2 := &repository.CampaignCreatorRow{
+			ID: "cc-2", CampaignID: "camp-1", CreatorID: "cr-2",
+			Status:        domain.CampaignCreatorStatusSigning,
+			RemindedCount: 1, RemindedAt: &now,
+			CreatedAt: now, UpdatedAt: now,
+		}
+		k.ccRepo.EXPECT().ApplyRemind(mock.Anything, "cc-2").Return(newRow2, nil).Once()
+
+		auditSeen := map[string]bool{}
+		k.audit.EXPECT().Create(mock.Anything, mock.Anything).
+			Run(func(_ context.Context, row repository.AuditLogRow) {
+				require.Equal(t, AuditActionCampaignCreatorRemindSigning, row.Action)
+				require.NotNil(t, row.EntityID)
+				auditSeen[*row.EntityID] = true
+			}).Return(nil).Once()
+
+		k.log.EXPECT().Error(mock.Anything, "campaign batch: telegram sent but persist failed", mock.Anything).Once()
+		k.log.EXPECT().Info(mock.Anything, "campaign batch dispatched", mock.Anything).Once()
+
+		undelivered, err := k.svc.RemindSigning(adminCtx(), "camp-1", []string{"cr-1", "cr-2"})
+		require.NoError(t, err)
+		require.Equal(t, []domain.NotifyFailure{
+			{CreatorID: "cr-1", Reason: domain.NotifyFailureReasonUnknown},
+		}, undelivered)
+		require.Equal(t, map[string]bool{"cc-2": true}, auditSeen)
+	})
+
+	t.Run("happy path bumps reminded counter, status stays signing, audit shape", func(t *testing.T) {
+		t.Parallel()
+		k := setupNotifyKit(t, notifyKitOpts{})
+		now := time.Date(2026, 5, 8, 10, 0, 0, 0, time.UTC)
+		earlier := now.Add(-time.Hour)
+
+		k.factory.EXPECT().NewCampaignRepo(k.pool).Return(k.campaigns)
+		k.campaigns.EXPECT().GetByID(mock.Anything, "camp-1").Return(k.liveCampaign("camp-1"), nil)
+
+		signingRow := &repository.CampaignCreatorRow{
+			ID: "cc-1", CampaignID: "camp-1", CreatorID: "cr-1",
+			Status:       domain.CampaignCreatorStatusSigning,
+			InvitedCount: 1, InvitedAt: &earlier,
+			RemindedCount: 0, DecidedAt: &earlier,
+			CreatedAt: earlier, UpdatedAt: earlier,
+		}
+		k.factory.EXPECT().NewCampaignCreatorRepo(mock.Anything).Return(k.ccRepo)
+		k.ccRepo.EXPECT().ListByCampaignAndCreators(mock.Anything, "camp-1", []string{"cr-1"}).
+			Return([]*repository.CampaignCreatorRow{signingRow}, nil)
+
+		k.factory.EXPECT().NewCreatorRepo(k.pool).Return(k.creator)
+		k.creator.EXPECT().GetTelegramUserIDsByIDs(mock.Anything, []string{"cr-1"}).
+			Return(map[string]int64{"cr-1": 1001}, nil)
+
+		// Captured-input: pin the exact text passed to the notifier. Catches
+		// a future copy-paste where the batchOpSpec accidentally references
+		// CampaignRemindInvitationText (or any other constant) instead of
+		// CampaignRemindSigningText. mock.Anything on text would silently
+		// pass the regression. The 3-arg signature also enforces that
+		// remind-signing uses SendCampaignReminder (no WebApp button) and
+		// not SendCampaignInvite.
+		var capturedText string
+		k.notifier.EXPECT().SendCampaignReminder(mock.Anything, int64(1001), mock.Anything).
+			Run(func(_ context.Context, _ int64, text string) {
+				capturedText = text
+			}).
+			Return(nil).Once()
+
+		newRow := &repository.CampaignCreatorRow{
+			ID: "cc-1", CampaignID: "camp-1", CreatorID: "cr-1",
+			Status:       domain.CampaignCreatorStatusSigning,
+			InvitedCount: 1, InvitedAt: &earlier,
+			RemindedCount: 1, RemindedAt: &now,
+			DecidedAt: &earlier,
+			CreatedAt: earlier, UpdatedAt: now,
+		}
+		k.pool.EXPECT().Begin(mock.Anything).Return(testTx{}, nil).Once()
+		k.factory.EXPECT().NewAuditRepo(mock.Anything).Return(k.audit)
+		k.ccRepo.EXPECT().ApplyRemind(mock.Anything, "cc-1").Return(newRow, nil).Once()
+
+		var auditRow repository.AuditLogRow
+		k.audit.EXPECT().Create(mock.Anything, mock.Anything).
+			Run(func(_ context.Context, row repository.AuditLogRow) {
+				auditRow = row
+			}).Return(nil).Once()
+
+		k.log.EXPECT().Info(mock.Anything, "campaign batch dispatched", mock.Anything).Once()
+
+		undelivered, err := k.svc.RemindSigning(adminCtx(), "camp-1", []string{"cr-1"})
+		require.NoError(t, err)
+		require.Empty(t, undelivered)
+
+		require.Equal(t, telegram.CampaignRemindSigningText(), capturedText)
+
+		require.Equal(t, AuditActionCampaignCreatorRemindSigning, auditRow.Action)
+		require.Equal(t, AuditEntityTypeCampaignCreator, auditRow.EntityType)
+		require.NotNil(t, auditRow.EntityID)
+		require.Equal(t, "cc-1", *auditRow.EntityID)
+		require.NotNil(t, auditRow.ActorID)
+		require.Equal(t, adminCtxUserID, *auditRow.ActorID)
+		require.Equal(t, string(api.Admin), auditRow.ActorRole)
+		oldSnap := domain.CampaignCreator{}
+		require.NoError(t, json.Unmarshal(auditRow.OldValue, &oldSnap))
+		require.Equal(t, domain.CampaignCreatorStatusSigning, oldSnap.Status)
+		require.Equal(t, 0, oldSnap.RemindedCount)
+		require.Nil(t, oldSnap.RemindedAt)
+		newSnap := domain.CampaignCreator{}
+		require.NoError(t, json.Unmarshal(auditRow.NewValue, &newSnap))
+		require.Equal(t, domain.CampaignCreatorStatusSigning, newSnap.Status)
+		require.Equal(t, 1, newSnap.RemindedCount)
+		require.NotNil(t, newSnap.RemindedAt)
+		require.WithinDuration(t, now, *newSnap.RemindedAt, time.Minute)
+	})
+}

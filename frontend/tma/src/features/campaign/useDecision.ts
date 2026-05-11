@@ -13,12 +13,16 @@ export type DecisionResult = TmaDecisionResult;
 const NETWORK_ERROR_CODE = "NETWORK_ERROR";
 const INTERNAL_ERROR_CODE = "INTERNAL_ERROR";
 
+const VALID_STATUSES: ReadonlySet<string> = new Set(
+  Object.values(CAMPAIGN_CREATOR_STATUS),
+);
+
 function isDecisionResult(payload: unknown): payload is DecisionResult {
   if (typeof payload !== "object" || payload === null) return false;
   const obj = payload as Record<string, unknown>;
   return (
-    (obj.status === CAMPAIGN_CREATOR_STATUS.AGREED ||
-      obj.status === CAMPAIGN_CREATOR_STATUS.DECLINED) &&
+    typeof obj.status === "string" &&
+    VALID_STATUSES.has(obj.status) &&
     typeof obj.alreadyDecided === "boolean"
   );
 }

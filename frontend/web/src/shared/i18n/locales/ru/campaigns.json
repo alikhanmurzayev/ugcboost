@@ -95,6 +95,8 @@
     "notifySubmitting": "Отправка…",
     "remindButton": "Разослать ремайндер",
     "remindSubmitting": "Отправка…",
+    "remindSigningButton": "Разослать ремайндер",
+    "remindSigningSubmitting": "Отправка…",
     "groups": {
       "planned": "Запланированы",
       "invited": "Приглашены",

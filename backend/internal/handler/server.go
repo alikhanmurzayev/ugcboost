@@ -64,6 +64,7 @@ type AuthzService interface {
 	CanListCampaignCreators(ctx context.Context) error
 	CanNotifyCampaignCreators(ctx context.Context) error
 	CanRemindCampaignCreators(ctx context.Context) error
+	CanRemindCampaignCreatorsSigning(ctx context.Context) error
 	AuthorizeTMACampaignDecision(ctx context.Context, secretToken string) (authz.TMACampaignDecisionAuth, error)
 }
 
@@ -117,14 +118,15 @@ type CampaignService interface {
 
 // CampaignCreatorService is the interface Server needs from the campaign-
 // creator service — admin-only batch add (POST), single remove (DELETE),
-// no-pagination list (GET) and the batch notify / remind-invitation flows
-// on /campaigns/{id}/{notify,remind-invitation}.
+// no-pagination list (GET) and the three batch dispatch flows on
+// /campaigns/{id}/{notify,remind-invitation,remind-signing}.
 type CampaignCreatorService interface {
 	Add(ctx context.Context, campaignID string, creatorIDs []string) ([]*domain.CampaignCreator, error)
 	Remove(ctx context.Context, campaignID, creatorID string) error
 	List(ctx context.Context, campaignID string) ([]*domain.CampaignCreator, error)
 	Notify(ctx context.Context, campaignID string, creatorIDs []string) ([]domain.NotifyFailure, error)
 	RemindInvitation(ctx context.Context, campaignID string, creatorIDs []string) ([]domain.NotifyFailure, error)
+	RemindSigning(ctx context.Context, campaignID string, creatorIDs []string) ([]domain.NotifyFailure, error)
 }
 
 // TmaCampaignCreatorService is the interface Server needs from the

@@ -53,3 +53,14 @@ func (a *AuthzService) CanRemindCampaignCreators(ctx context.Context) error {
 	}
 	return nil
 }
+
+// CanRemindCampaignCreatorsSigning gates POST /campaigns/{id}/remind-signing
+// to admins only. Symmetric to CanRemindCampaignCreators; kept as a separate
+// method so per-endpoint policy can diverge in the future without touching
+// the invitation-side gate.
+func (a *AuthzService) CanRemindCampaignCreatorsSigning(ctx context.Context) error {
+	if middleware.RoleFromContext(ctx) != api.Admin {
+		return domain.ErrForbidden
+	}
+	return nil
+}

@@ -765,6 +765,46 @@ func TestNotifier_SendCampaignInvite(t *testing.T) {
 	})
 }
 
+func TestNotifier_SendCampaignReminder(t *testing.T) {
+	t.Parallel()
+
+	t.Run("success carries plain text without inline keyboard", func(t *testing.T) {
+		t.Parallel()
+		sender := tgmocks.NewMockSender(t)
+		log := logmocks.NewMockLogger(t)
+		var captured *bot.SendMessageParams
+		sender.EXPECT().SendMessage(mock.Anything, mock.AnythingOfType("*bot.SendMessageParams")).
+			Run(func(_ context.Context, p *bot.SendMessageParams) { captured = p }).
+			Return(&models.Message{ID: 42}, nil).Once()
+
+		n := newSingleShotNotifier(sender, log)
+		require.NoError(t, n.SendCampaignReminder(context.Background(), 555,
+			telegram.CampaignRemindSigningText(),
+		))
+
+		require.NotNil(t, captured)
+		require.Equal(t, int64(555), captured.ChatID)
+		require.Equal(t, telegram.CampaignRemindSigningText(), captured.Text)
+		require.Nil(t, captured.ReplyMarkup,
+			"remind-signing message must not carry an inline keyboard")
+	})
+
+	t.Run("propagates sender error untouched", func(t *testing.T) {
+		t.Parallel()
+		sender := tgmocks.NewMockSender(t)
+		log := logmocks.NewMockLogger(t)
+		boom := errors.New("network down")
+		sender.EXPECT().SendMessage(mock.Anything, mock.Anything).
+			Return(nil, boom).Once()
+
+		n := newSingleShotNotifier(sender, log)
+		err := n.SendCampaignReminder(context.Background(), 1,
+			telegram.CampaignRemindSigningText(),
+		)
+		require.ErrorIs(t, err, boom)
+	})
+}
+
 func TestMapTelegramErrorToReason(t *testing.T) {
 	t.Parallel()
 
