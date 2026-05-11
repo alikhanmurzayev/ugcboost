@@ -310,6 +310,20 @@ test.describe("Admin creators list", () => {
     });
     cleanupStack.push(creator.cleanup);
 
+    // Second creator without any campaign attaches to cover the dimmed-0 state
+    // in the same listing.
+    const zeroCreator = await seedApprovedCreator(request, API_URL, adminToken, {
+      lastName: `e2e-${uuid}-zero`,
+      firstName: "Айдана",
+      socials: [
+        {
+          platform: "tiktok",
+          handle: `aidana_${uuid.slice(0, 8)}_zero`,
+        },
+      ],
+    });
+    cleanupStack.push(zeroCreator.cleanup);
+
     const camp1 = await seedCampaign(request, API_URL, adminToken, {
       name: `e2e-cc-${uuid.slice(0, 6)}-1`,
     });
@@ -367,6 +381,14 @@ test.describe("Admin creators list", () => {
       `creators-row-active-campaigns-${creator.creatorId}`,
     );
     await expect(countCell).toHaveText("2");
+    await expect(countCell).toHaveAttribute("data-dimmed", "false");
+
+    // Zero-count creator renders the cell as dimmed.
+    const zeroCountCell = page.getByTestId(
+      `creators-row-active-campaigns-${zeroCreator.creatorId}`,
+    );
+    await expect(zeroCountCell).toHaveText("0");
+    await expect(zeroCountCell).toHaveAttribute("data-dimmed", "true");
 
     // Open drawer for the creator.
     const row = page.getByTestId(`row-${creator.creatorId}`);
@@ -395,7 +417,7 @@ test.describe("Admin creators list", () => {
     await drawer
       .getByTestId(`drawer-campaign-${camp1.campaignId}`)
       .click();
-    await expect(page).toHaveURL(new RegExp(`/campaigns/${camp1.campaignId}$`));
+    await expect(page).toHaveURL(new RegExp(`^.+/campaigns/${camp1.campaignId}$`));
   });
 
   test("RoleGuard — brand_manager has no nav link, redirected from /creators", async ({

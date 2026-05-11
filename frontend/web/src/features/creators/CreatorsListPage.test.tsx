@@ -155,16 +155,12 @@ describe("CreatorsListPage — list rendering", () => {
     renderPage("/creators");
 
     await screen.findByTestId(`row-${FIXTURE_ITEM.id}`);
-    expect(screen.getByTestId("th-fullName")).toBeInTheDocument();
-    expect(screen.getByTestId("th-age")).toBeInTheDocument();
-    expect(screen.getByTestId("th-city")).toBeInTheDocument();
-    expect(screen.getByTestId("th-createdAt")).toBeInTheDocument();
-
-    const headers = screen.getAllByRole("columnheader");
-    const texts = headers.map((h) => h.textContent ?? "");
-    const indexFullName = texts.findIndex((t) => t.startsWith("ФИО"));
-    expect(indexFullName).toBeGreaterThanOrEqual(0);
-    expect(texts[indexFullName + 1]).toContain("В кампаниях");
+    const orderedKeys = screen
+      .getAllByTestId(/^column-/)
+      .map((el) => el.getAttribute("data-testid")?.replace(/^column-/, "") ?? "");
+    const fullNameIdx = orderedKeys.indexOf("fullName");
+    expect(fullNameIdx).toBeGreaterThanOrEqual(0);
+    expect(orderedKeys[fullNameIdx + 1]).toBe("activeCampaignsCount");
   });
 
   it("renders activeCampaignsCount=3 cell un-dimmed", async () => {

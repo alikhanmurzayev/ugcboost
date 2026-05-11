@@ -324,15 +324,18 @@ func (r *campaignRepository) GetContractTemplate(ctx context.Context, id string)
 
 // MarkDeletedForTests flips campaigns.is_deleted = true and stamps updated_at
 // so e2e scenarios can simulate the soft-delete state without an admin business
-// endpoint. Returns sql.ErrNoRows on missing row so the testapi handler can map
-// it to 404. Test-only — production callers must go through the (future)
-// admin delete flow. Always paired with the standard
-// RegisterCampaignCleanup helper so the row is hard-deleted at teardown.
+// endpoint. Returns sql.ErrNoRows when the campaign does not exist OR is
+// already soft-deleted — that way a misbehaving test calling it twice surfaces
+// as 404 instead of silently re-stamping updated_at on a soft-deleted row.
+// Test-only — production callers must go through the (future) admin delete
+// flow. Always paired with the standard RegisterCampaignCleanup helper so the
+// row is hard-deleted at teardown.
 func (r *campaignRepository) MarkDeletedForTests(ctx context.Context, id string) error {
 	q := sq.Update(TableCampaigns).
 		Set(CampaignColumnIsDeleted, true).
 		Set(CampaignColumnUpdatedAt, sq.Expr("now()")).
-		Where(sq.Eq{CampaignColumnID: id})
+		Where(sq.Eq{CampaignColumnID: id}).
+		Where(sq.Eq{CampaignColumnIsDeleted: false})
 	n, err := dbutil.Exec(ctx, r.db, q)
 	if err != nil {
 		return err

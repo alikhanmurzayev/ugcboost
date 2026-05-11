@@ -388,6 +388,38 @@ func TestTestAPIHandler_ForceCleanupCampaignCreator(t *testing.T) {
 		w, _ := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/test/campaign-creators/force-cleanup", body)
 		require.Equal(t, http.StatusInternalServerError, w.Code)
 	})
+
+	t.Run("zero campaign id returns 422", func(t *testing.T) {
+		t.Parallel()
+		auth := mocks.NewMockTestAPIAuthService(t)
+		repos := mocks.NewMockTestAPICleanupRepoFactory(t)
+		pool := dbutilmocks.NewMockPool(t)
+		store := mocks.NewMockTokenStore(t)
+		log := logmocks.NewMockLogger(t)
+
+		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, log), telegram.NewSentSpyStore(), "", nil, nil, log))
+
+		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/test/campaign-creators/force-cleanup",
+			testapi.ForceCleanupCampaignCreatorRequest{CampaignId: uuid.Nil, CreatorId: creatorID})
+		require.Equal(t, http.StatusUnprocessableEntity, w.Code)
+		require.Equal(t, string(domain.CodeValidation), resp.Error.Code)
+	})
+
+	t.Run("zero creator id returns 422", func(t *testing.T) {
+		t.Parallel()
+		auth := mocks.NewMockTestAPIAuthService(t)
+		repos := mocks.NewMockTestAPICleanupRepoFactory(t)
+		pool := dbutilmocks.NewMockPool(t)
+		store := mocks.NewMockTokenStore(t)
+		log := logmocks.NewMockLogger(t)
+
+		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, log), telegram.NewSentSpyStore(), "", nil, nil, log))
+
+		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/test/campaign-creators/force-cleanup",
+			testapi.ForceCleanupCampaignCreatorRequest{CampaignId: campaignID, CreatorId: uuid.Nil})
+		require.Equal(t, http.StatusUnprocessableEntity, w.Code)
+		require.Equal(t, string(domain.CodeValidation), resp.Error.Code)
+	})
 }
 
 func TestTestAPIHandler_MarkCampaignDeleted(t *testing.T) {

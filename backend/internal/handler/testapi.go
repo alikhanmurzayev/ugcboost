@@ -9,6 +9,7 @@ import (
 
 	tgbot "github.com/go-telegram/bot"
 	tgmodels "github.com/go-telegram/bot/models"
+	"github.com/google/uuid"
 	openapi_types "github.com/oapi-codegen/runtime/types"
 
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/dbutil"
@@ -228,6 +229,9 @@ func (h *TestAPIHandler) CleanupEntity(ctx context.Context, request testapi.Clea
 // gap.
 func (h *TestAPIHandler) ForceCleanupCampaignCreator(ctx context.Context, request testapi.ForceCleanupCampaignCreatorRequestObject) (testapi.ForceCleanupCampaignCreatorResponseObject, error) {
 	body := request.Body
+	if body.CampaignId == uuid.Nil || body.CreatorId == uuid.Nil {
+		return nil, domain.NewValidationError(domain.CodeValidation, "campaignId and creatorId are required")
+	}
 	if err := h.repos.NewCampaignCreatorRepo(h.pool).
 		DeleteByCampaignAndCreatorForTests(ctx, body.CampaignId.String(), body.CreatorId.String()); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {

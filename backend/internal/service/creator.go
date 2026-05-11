@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"sort"
 
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/dbutil"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/domain"
@@ -322,6 +323,11 @@ func (s *CreatorService) loadCreatorParticipations(
 	for id := range campaignIDSet {
 		campaignIDs = append(campaignIDs, id)
 	}
+	// Sort the ids so ListByIDs receives a deterministic argument order. Map
+	// iteration is randomized in Go and the unrelated test scaffolding would
+	// otherwise need mock.MatchedBy for what is logically an exact-args
+	// expectation.
+	sort.Strings(campaignIDs)
 
 	campaignRows, err := s.repoFactory.NewCampaignRepo(s.pool).ListByIDs(ctx, campaignIDs)
 	if err != nil {
@@ -333,6 +339,28 @@ func (s *CreatorService) loadCreatorParticipations(
 			continue
 		}
 		campaignByID[c.ID] = c
+	}
+
+	// Surface data-integrity drift: a campaign_creators row that points to a
+	// campaign id absent from the campaigns table (neither soft-deleted nor
+	// active) means the FK invariant is broken. Log without failing — the read
+	// path keeps degrading gracefully (the orphan is hidden from the user) but
+	// ops sees a signal before silent corruption spreads.
+	for id := range campaignIDSet {
+		if _, present := campaignByID[id]; present {
+			continue
+		}
+		stillDeleted := false
+		for _, c := range campaignRows {
+			if c.ID == id && c.IsDeleted {
+				stillDeleted = true
+				break
+			}
+		}
+		if stillDeleted {
+			continue
+		}
+		s.logger.Warn(ctx, "campaign_creators references missing campaign", "campaign_id", id)
 	}
 
 	participationsByCreator := make(map[string][]*repository.CampaignCreatorRow, len(creatorIDs))

@@ -66,6 +66,7 @@ export default function Table<T>({
                 <th
                   key={col.key}
                   scope="col"
+                  data-testid={`column-${col.key}`}
                   className={`whitespace-nowrap px-4 pb-2 first:pl-0 font-medium ${col.width ?? ""} ${
                     col.align === "right" ? "text-right" : "text-left"
                   }`}

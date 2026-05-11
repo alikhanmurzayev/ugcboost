@@ -302,22 +302,12 @@ func TestCreatorService_GetByID(t *testing.T) {
 				{ID: "cc-2", CampaignID: "camp-deleted", CreatorID: getCreatorID, Status: domain.CampaignCreatorStatusInvited, CreatedAt: participationCreated2},
 				{ID: "cc-3", CampaignID: "camp-active-2", CreatorID: getCreatorID, Status: domain.CampaignCreatorStatusPlanned, CreatedAt: participationCreated3},
 			}, nil)
-		rig.campaignRepo.EXPECT().ListByIDs(mock.Anything, mock.MatchedBy(func(ids []string) bool {
-			want := map[string]struct{}{"camp-active-1": {}, "camp-deleted": {}, "camp-active-2": {}}
-			if len(ids) != len(want) {
-				return false
-			}
-			for _, id := range ids {
-				if _, ok := want[id]; !ok {
-					return false
-				}
-			}
-			return true
-		})).Return([]*repository.CampaignRow{
-			{ID: "camp-active-1", Name: "Spring Drop", IsDeleted: false},
-			{ID: "camp-deleted", Name: "Retired", IsDeleted: true},
-			{ID: "camp-active-2", Name: "Holiday Push", IsDeleted: false},
-		}, nil)
+		rig.campaignRepo.EXPECT().ListByIDs(mock.Anything, []string{"camp-active-1", "camp-active-2", "camp-deleted"}).
+			Return([]*repository.CampaignRow{
+				{ID: "camp-active-1", Name: "Spring Drop", IsDeleted: false},
+				{ID: "camp-deleted", Name: "Retired", IsDeleted: true},
+				{ID: "camp-active-2", Name: "Holiday Push", IsDeleted: false},
+			}, nil)
 		rig.dictRepo.EXPECT().GetActiveByCodes(mock.Anything, repository.TableCities, []string{"almaty"}).
 			Return([]*repository.DictionaryEntryRow{{Code: "almaty", Name: "Алматы", Active: true}}, nil)
 		rig.dictRepo.EXPECT().GetActiveByCodes(mock.Anything, repository.TableCategories, []string{"beauty", "fashion", "lifestyle"}).
@@ -484,6 +474,44 @@ func TestCreatorService_GetByID(t *testing.T) {
 			Return([]*repository.DictionaryEntryRow{{Code: "almaty", Name: "Алматы", Active: true}}, nil)
 		rig.dictRepo.EXPECT().GetActiveByCodes(mock.Anything, repository.TableCategories, []string{"beauty"}).
 			Return([]*repository.DictionaryEntryRow{{Code: "beauty", Name: "Красота", Active: true}}, nil)
+
+		svc := NewCreatorService(rig.pool, rig.factory, rig.logger)
+		got, err := svc.GetByID(context.Background(), getCreatorID)
+		require.NoError(t, err)
+		require.Equal(t, []domain.CreatorCampaignBrief{}, got.Campaigns)
+	})
+
+	t.Run("orphan participation (campaign row missing) logs warn", func(t *testing.T) {
+		t.Parallel()
+		rig := newCreatorReadRig(t)
+		expectCreatorReadFactoryWiring(rig, true, true, true, true)
+		rig.factory.EXPECT().NewCampaignRepo(rig.pool).Return(rig.campaignRepo)
+
+		creatorRow := fullCreatorRow()
+		participationCreated := time.Date(2026, 5, 7, 12, 0, 0, 0, time.UTC)
+		rig.creatorRepo.EXPECT().GetByID(mock.Anything, getCreatorID).Return(creatorRow, nil)
+		rig.creatorSocialRepo.EXPECT().ListByCreatorIDs(mock.Anything, []string{getCreatorID}).
+			Return(map[string][]*repository.CreatorSocialRow{}, nil)
+		rig.creatorCategoryRepo.EXPECT().ListByCreatorIDs(mock.Anything, []string{getCreatorID}).
+			Return(map[string][]string{getCreatorID: {"beauty"}}, nil)
+		// camp-orphan is referenced by a participation row but the campaign
+		// table returns nothing for it — must trigger the data-integrity
+		// warn, not panic and not silently treat it as deleted.
+		rig.campaignCreatorRepo.EXPECT().ListByCreatorIDs(mock.Anything, []string{getCreatorID}).
+			Return([]*repository.CampaignCreatorRow{
+				{ID: "cc-orphan", CampaignID: "camp-orphan", CreatorID: getCreatorID, Status: domain.CampaignCreatorStatusInvited, CreatedAt: participationCreated},
+			}, nil)
+		rig.campaignRepo.EXPECT().ListByIDs(mock.Anything, []string{"camp-orphan"}).
+			Return([]*repository.CampaignRow{}, nil)
+		rig.dictRepo.EXPECT().GetActiveByCodes(mock.Anything, repository.TableCities, []string{"almaty"}).
+			Return([]*repository.DictionaryEntryRow{{Code: "almaty", Name: "Алматы", Active: true}}, nil)
+		rig.dictRepo.EXPECT().GetActiveByCodes(mock.Anything, repository.TableCategories, []string{"beauty"}).
+			Return([]*repository.DictionaryEntryRow{{Code: "beauty", Name: "Красота", Active: true}}, nil)
+		rig.logger.EXPECT().Warn(mock.Anything,
+			"campaign_creators references missing campaign",
+			mock.MatchedBy(func(args []any) bool {
+				return len(args) == 2 && args[0] == "campaign_id" && args[1] == "camp-orphan"
+			})).Once()
 
 		svc := NewCreatorService(rig.pool, rig.factory, rig.logger)
 		got, err := svc.GetByID(context.Background(), getCreatorID)
@@ -719,23 +747,13 @@ func TestCreatorService_List(t *testing.T) {
 				{ID: "cc-3", CampaignID: "camp-del", CreatorID: creatorA, Status: domain.CampaignCreatorStatusSigned, CreatedAt: participationCreated},
 				{ID: "cc-4", CampaignID: "camp-b1", CreatorID: creatorB, Status: domain.CampaignCreatorStatusInvited, CreatedAt: participationCreated},
 			}, nil)
-		rig.campaignRepo.EXPECT().ListByIDs(mock.Anything, mock.MatchedBy(func(ids []string) bool {
-			want := map[string]struct{}{"camp-a1": {}, "camp-a2": {}, "camp-del": {}, "camp-b1": {}}
-			if len(ids) != len(want) {
-				return false
-			}
-			for _, id := range ids {
-				if _, ok := want[id]; !ok {
-					return false
-				}
-			}
-			return true
-		})).Return([]*repository.CampaignRow{
-			{ID: "camp-a1", Name: "A1", IsDeleted: false},
-			{ID: "camp-a2", Name: "A2", IsDeleted: false},
-			{ID: "camp-del", Name: "Retired", IsDeleted: true},
-			{ID: "camp-b1", Name: "B1", IsDeleted: false},
-		}, nil)
+		rig.campaignRepo.EXPECT().ListByIDs(mock.Anything, []string{"camp-a1", "camp-a2", "camp-b1", "camp-del"}).
+			Return([]*repository.CampaignRow{
+				{ID: "camp-a1", Name: "A1", IsDeleted: false},
+				{ID: "camp-a2", Name: "A2", IsDeleted: false},
+				{ID: "camp-del", Name: "Retired", IsDeleted: true},
+				{ID: "camp-b1", Name: "B1", IsDeleted: false},
+			}, nil)
 
 		svc := NewCreatorService(rig.pool, rig.factory, rig.logger)
 		got, err := svc.List(context.Background(), domain.CreatorListInput{Sort: domain.CreatorSortCreatedAt, Order: domain.SortOrderAsc, Page: 1, PerPage: 20})

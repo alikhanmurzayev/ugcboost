@@ -283,6 +283,42 @@ func TestServer_GetCreator(t *testing.T) {
 		}
 		require.Equal(t, expected, resp)
 	})
+
+	t.Run("malformed campaign id returns 500", func(t *testing.T) {
+		t.Parallel()
+		birth := time.Date(1995, 5, 15, 0, 0, 0, 0, time.UTC)
+		created := time.Date(2026, 5, 5, 12, 0, 0, 0, time.UTC)
+		updated := created.Add(time.Minute)
+
+		aggregate := &domain.CreatorAggregate{
+			ID:                  creatorID.String(),
+			IIN:                 "950515312348",
+			SourceApplicationID: sourceAppID.String(),
+			LastName:            "Муратова",
+			FirstName:           "Айдана",
+			BirthDate:           birth,
+			Phone:               "+77001234567",
+			CityCode:            "almaty",
+			CityName:            "Алматы",
+			TelegramUserID:      424242,
+			Campaigns: []domain.CreatorCampaignBrief{
+				{ID: "not-a-uuid", Name: "Broken", Status: domain.CampaignCreatorStatusSigned},
+			},
+			CreatedAt: created,
+			UpdatedAt: updated,
+		}
+
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanViewCreator(mock.Anything).Return(nil)
+		creator := mocks.NewMockCreatorService(t)
+		creator.EXPECT().GetByID(mock.Anything, creatorID.String()).Return(aggregate, nil)
+
+		log := logmocks.NewMockLogger(t)
+		expectHandlerUnexpectedErrorLog(log, creatorPath)
+		router := newTestRouter(t, serverWithAuthzAndCreatorRead(t, authz, creator, log))
+		w, _ := doJSON[api.ErrorResponse](t, router, http.MethodGet, creatorPath, nil)
+		require.Equal(t, http.StatusInternalServerError, w.Code)
+	})
 }
 
 func TestServer_ListCreators(t *testing.T) {

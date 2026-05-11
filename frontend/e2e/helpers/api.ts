@@ -755,9 +755,13 @@ export async function forceCleanupCampaignCreator(
   creatorId: string,
 ): Promise<void> {
   if (process.env.E2E_CLEANUP === "false") return;
+  const body: testComponents["schemas"]["ForceCleanupCampaignCreatorRequest"] = {
+    campaignId,
+    creatorId,
+  };
   const resp = await request.post(
     `${apiUrl}/test/campaign-creators/force-cleanup`,
-    { data: { campaignId, creatorId } },
+    { data: body },
   );
   if (resp.status() !== 204 && resp.status() !== 404) {
     throw new Error(
@@ -770,11 +774,14 @@ export async function forceCleanupCampaignCreator(
 // POST /test/campaigns/{id}/mark-deleted endpoint. The browser e2e flow for
 // the creator-aggregate participation block relies on it to exercise the
 // is_deleted filter without standing up a soft-delete admin endpoint.
+// Skipped under E2E_CLEANUP=false so soft-deleted rows do not leak across
+// runs when teardown is intentionally disabled for debugging.
 export async function markCampaignDeleted(
   request: APIRequestContext,
   apiUrl: string,
   campaignId: string,
 ): Promise<void> {
+  if (process.env.E2E_CLEANUP === "false") return;
   const resp = await request.post(
     `${apiUrl}/test/campaigns/${campaignId}/mark-deleted`,
   );

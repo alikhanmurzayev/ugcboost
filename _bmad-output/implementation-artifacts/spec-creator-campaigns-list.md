@@ -119,6 +119,9 @@ context:
 - **2026-05-11 — добавление test-эндпоинтов и testutil-хелперов.**
   Триггер: Acceptance Auditor flagged scope drift (новые `POST /test/campaigns/{id}/mark-deleted` и `POST /test/campaign-creators/force-cleanup` не были перечислены в Code Map). Известное «плохое» состояние, которого хотели избежать: e2e сценарий «creator с soft-deleted кампанией» нельзя покрыть только бизнес-API — admin DELETE гейтит soft-deleted, FK на `campaign_creators` без `ON DELETE CASCADE` валит LIFO cleanup. KEEP: тест-эндпоинты остаются gated by `ENVIRONMENT != production`, репо-методы помечены `*ForTests`-суффиксом и недоступны production-сервисам; soft-delete делается только тестовой ручкой, бизнес-API остаётся read-only до отдельной фичи admin delete.
 
+- **2026-05-11 — раунд 2 ревью (extra-bmad-review).**
+  Триггер: 7 субагентов (3 стандартных + test-auditor, frontend-codegen-auditor, security-auditor, manual-qa). Выявленные `[major]`-патчи применены: `MarkDeletedForTests` теперь идемпотентен через `WHERE is_deleted = false` (повторный вызов → 404); `loadCreatorParticipations` сортирует `campaignIDs` для детерминистичного порядка args в `ListByIDs` (убрали `mock.MatchedBy` в тестах); `ForceCleanupCampaignCreator` валидирует `uuid.Nil`; orphan-participation triggerит `logger.Warn` вместо тихого drop; добавлен handler unit-тест на parse-error branch (`campaign id`); `Table.tsx` получил `data-testid="column-{key}"` на каждый `<th>` чтобы тесты position-by-testid не зависели от копирайта; drawer-тест покрывает все 7 статусов в одном сценарии (group order + intra-group order + i18n labels); e2e admin-creators-list получил второго creator'а без campaigns + assert `data-dimmed="true"`; `markCampaignDeleted` e2e-helper уважает `E2E_CLEANUP=false`. KEEP: 8 finding'ов записаны в `deferred-work.md` (Loading vs Empty state, SoftDeleteCampaign regression, и др.); 10+ nitpicks rejected silently.
+
 ## Verification
 
 **Commands:**
@@ -197,3 +200,60 @@ context:
 
 - Frontend e2e: счётчик + drawer-блок + клик-навигация на `/campaigns/{id}`.
   [`admin-creators-list.spec.ts:295`](../../frontend/e2e/web/admin-creators-list.spec.ts#L295)
+
+## Suggested Review Order — Round 2 (extra-bmad-review)
+
+**Backend — корректность и defensive logging**
+
+- Идемпотентность soft-delete: повторный вызов даёт 404, а не silent re-stamp `updated_at`.
+  [`campaign.go:325`](../../backend/internal/repository/campaign.go#L325)
+
+- Детерминистичный порядок аргументов в `ListByIDs` — убрал `mock.MatchedBy` из тестов.
+  [`creator.go:330`](../../backend/internal/service/creator.go#L330)
+
+- Defensive `logger.Warn` на orphan participation: FK-нарушение видно ops'ам, не теряется silent'но.
+  [`creator.go:344`](../../backend/internal/service/creator.go#L344)
+
+- `uuid.Nil` validation в force-cleanup — misuse даёт 422 вместо misleading 404.
+  [`testapi.go:229`](../../backend/internal/handler/testapi.go#L229)
+
+**Unit-тесты (closes coverage gap + новый сценарий)**
+
+- Handler unit-тест на parse-error branch для campaign id (закрывает coverage gap).
+  [`creator_test.go:287`](../../backend/internal/handler/creator_test.go#L287)
+
+- Service unit-тест на orphan-participation warn.
+  [`creator_test.go:484`](../../backend/internal/service/creator_test.go#L484)
+
+- Repo unit-тесты: повторный soft-delete + idempotence гарантированы.
+  [`campaign_test.go:802`](../../backend/internal/repository/campaign_test.go#L802)
+
+- Handler unit-тесты на `uuid.Nil` validation force-cleanup (zero campaign / zero creator).
+  [`testapi_test.go:392`](../../backend/internal/handler/testapi_test.go#L392)
+
+**Frontend — стабильность тестов и стилевая проверка**
+
+- Универсальный `data-testid="column-{key}"` на каждом `<th>` — тесты position-by-testid вместо текста.
+  [`Table.tsx:66`](../../frontend/web/src/shared/components/Table.tsx#L66)
+
+- Один drawer-тест покрывает все 7 статусов: groups + intra-group + i18n labels.
+  [`CreatorDrawer.test.tsx:359`](../../frontend/web/src/features/creators/CreatorDrawer.test.tsx#L359)
+
+- Position-by-testid вместо «ФИО / В кампаниях» — не ломается на копирайт-изменениях.
+  [`CreatorsListPage.test.tsx:150`](../../frontend/web/src/features/creators/CreatorsListPage.test.tsx#L150)
+
+**E2E — расширенное покрытие AC#4 + надёжность**
+
+- Второй creator с 0 кампаниями → проверка `data-dimmed="true"` (AC#4).
+  [`admin-creators-list.spec.ts:315`](../../frontend/e2e/web/admin-creators-list.spec.ts#L315)
+
+- Anchored regex `^.+/campaigns/{id}$` против ложных positives.
+  [`admin-creators-list.spec.ts:412`](../../frontend/e2e/web/admin-creators-list.spec.ts#L412)
+
+- E2E helper: типизированный body + `E2E_CLEANUP=false` skip для `markCampaignDeleted`.
+  [`api.ts:751`](../../frontend/e2e/helpers/api.ts#L751)
+
+**Backlog**
+
+- Восемь findings (Loading vs Empty state, SoftDeleteCampaign regression, IN-list cap, и др.) — `deferred-work.md`.
+  [`deferred-work.md`](./deferred-work.md)

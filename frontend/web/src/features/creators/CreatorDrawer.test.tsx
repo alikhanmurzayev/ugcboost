@@ -356,6 +356,92 @@ describe("CreatorDrawer — campaigns block", () => {
     ]);
   });
 
+  it("maps all 7 statuses into the three group buckets with correct intra-group order", () => {
+    // Verifies I/O matrix row 5: a creator with all 7 statuses must surface in
+    // 3 groups in the prescribed order and preserve the backend's array order
+    // inside every group. Backend ships campaigns sorted by created_at DESC;
+    // each bucket below has two entries to also lock down intra-group order.
+    const detail: CreatorAggregate = {
+      ...DETAIL,
+      campaigns: [
+        { id: "camp-signed", name: "Signed", status: "signed" },
+        { id: "camp-signing", name: "Signing", status: "signing" },
+        { id: "camp-agreed", name: "Agreed", status: "agreed" },
+        { id: "camp-invited", name: "Invited", status: "invited" },
+        { id: "camp-planned", name: "Planned", status: "planned" },
+        { id: "camp-declined", name: "Declined", status: "declined" },
+        { id: "camp-signing-declined", name: "Signing Declined", status: "signing_declined" },
+      ],
+    };
+    renderDrawer({ detail });
+
+    expect(
+      screen
+        .getAllByTestId(/^drawer-campaigns-group-/)
+        .map((el) => el.getAttribute("data-testid")),
+    ).toEqual([
+      "drawer-campaigns-group-active",
+      "drawer-campaigns-group-inProgress",
+      "drawer-campaigns-group-rejected",
+    ]);
+
+    const active = screen.getByTestId("drawer-campaigns-group-active");
+    expect(
+      within(active)
+        .getAllByTestId(/^drawer-campaign-/)
+        .map((el) => el.getAttribute("data-testid")),
+    ).toEqual([
+      "drawer-campaign-camp-signed",
+      "drawer-campaign-camp-signing",
+      "drawer-campaign-camp-agreed",
+    ]);
+
+    const inProgress = screen.getByTestId("drawer-campaigns-group-inProgress");
+    expect(
+      within(inProgress)
+        .getAllByTestId(/^drawer-campaign-/)
+        .map((el) => el.getAttribute("data-testid")),
+    ).toEqual([
+      "drawer-campaign-camp-invited",
+      "drawer-campaign-camp-planned",
+    ]);
+
+    const rejected = screen.getByTestId("drawer-campaigns-group-rejected");
+    expect(
+      within(rejected)
+        .getAllByTestId(/^drawer-campaign-/)
+        .map((el) => el.getAttribute("data-testid")),
+    ).toEqual([
+      "drawer-campaign-camp-declined",
+      "drawer-campaign-camp-signing-declined",
+    ]);
+
+    // Lock in localized labels for every status so a missing key in
+    // campaigns.json surfaces as a test failure instead of a raw t() key
+    // shipping to admins.
+    expect(within(active).getByTestId("drawer-campaign-camp-signed")).toHaveTextContent(
+      "Подписал(а) договор",
+    );
+    expect(within(active).getByTestId("drawer-campaign-camp-signing")).toHaveTextContent(
+      "Подписывает договор",
+    );
+    expect(within(active).getByTestId("drawer-campaign-camp-agreed")).toHaveTextContent(
+      "Согласился(лась)",
+    );
+    expect(within(inProgress).getByTestId("drawer-campaign-camp-invited")).toHaveTextContent(
+      "Приглашён(а)",
+    );
+    expect(within(inProgress).getByTestId("drawer-campaign-camp-planned")).toHaveTextContent(
+      "Запланирован(а)",
+    );
+    expect(within(rejected).getByTestId("drawer-campaign-camp-declined")).toHaveTextContent(
+      "Отказался(лась)",
+    );
+    expect(
+      within(rejected).getByTestId("drawer-campaign-camp-signing-declined"),
+    ).toHaveTextContent("Отказал(ась) от договора");
+  });
+
   it("renders a Link to /campaigns/{id} per row", () => {
     const detail: CreatorAggregate = {
       ...DETAIL,
