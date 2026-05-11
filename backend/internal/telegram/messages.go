@@ -7,7 +7,7 @@ package telegram
 const (
 	// MessageFallback covers no-payload, malformed payload and any unknown
 	// command — the actionable next step is the same: submit at the website.
-	MessageFallback = "Здравствуйте! Чтобы продолжить, подайте заявку на ugcboost.kz"
+	MessageFallback = "Если есть вопросы, можете обратиться к @aizerealzair"
 
 	// MessageApplicationNotFound is sent when /start carries a syntactically
 	// valid UUID but no application exists with that id.
