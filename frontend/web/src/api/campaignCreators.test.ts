@@ -36,6 +36,7 @@ import {
   removeCampaignCreator,
   notifyCampaignCreators,
   remindCampaignCreatorsInvitation,
+  remindCampaignCreatorsSigning,
 } from "./campaignCreators";
 
 const mockedGet = vi.mocked(client.GET);
@@ -422,6 +423,65 @@ describe("remindCampaignCreatorsInvitation", () => {
 
     await expect(
       remindCampaignCreatorsInvitation(CAMPAIGN_ID, [CREATOR_A]),
+    ).rejects.toMatchObject({
+      status: 500,
+      code: "INTERNAL_ERROR",
+    });
+  });
+});
+
+describe("remindCampaignCreatorsSigning", () => {
+  it("calls POST /campaigns/{id}/remind-signing with creatorIds and returns the envelope", async () => {
+    mockedPost.mockResolvedValueOnce({
+      data: { data: { undelivered: [] } },
+      response: { status: 200 } as Response,
+    });
+
+    const result = await remindCampaignCreatorsSigning(CAMPAIGN_ID, [CREATOR_A]);
+
+    expect(mockedPost).toHaveBeenCalledTimes(1);
+    expect(mockedPost).toHaveBeenCalledWith(
+      "/campaigns/{id}/remind-signing",
+      {
+        params: { path: { id: CAMPAIGN_ID } },
+        body: { creatorIds: [CREATOR_A] },
+      },
+    );
+    expect(result).toEqual({ data: { undelivered: [] } });
+  });
+
+  it("throws ApiError with code+details on 422 CAMPAIGN_CREATOR_BATCH_INVALID", async () => {
+    const details = [
+      { creatorId: CREATOR_A, reason: "wrong_status", currentStatus: "agreed" },
+    ];
+    mockedPost.mockResolvedValueOnce({
+      error: {
+        error: {
+          code: "CAMPAIGN_CREATOR_BATCH_INVALID",
+          message: "batch invalid",
+          details,
+        },
+      },
+      response: { status: 422 } as Response,
+    });
+
+    await expect(
+      remindCampaignCreatorsSigning(CAMPAIGN_ID, [CREATOR_A]),
+    ).rejects.toMatchObject({
+      status: 422,
+      code: "CAMPAIGN_CREATOR_BATCH_INVALID",
+      details,
+    });
+  });
+
+  it("falls back to INTERNAL_ERROR on malformed 5xx body", async () => {
+    mockedPost.mockResolvedValueOnce({
+      error: {},
+      response: { status: 500 } as Response,
+    });
+
+    await expect(
+      remindCampaignCreatorsSigning(CAMPAIGN_ID, [CREATOR_A]),
     ).rejects.toMatchObject({
       status: 500,
       code: "INTERNAL_ERROR",

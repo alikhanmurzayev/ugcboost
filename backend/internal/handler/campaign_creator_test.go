@@ -824,9 +824,9 @@ func TestServer_RemindCampaignCreatorsSigning(t *testing.T) {
 				uuid.MustParse(creatorAUUID), uuid.MustParse(creatorBUUID),
 			}})
 		require.Equal(t, http.StatusOK, w.Code)
-		require.Len(t, resp.Data.Undelivered, 1)
-		require.Equal(t, uuid.MustParse(creatorAUUID), uuid.UUID(resp.Data.Undelivered[0].CreatorId))
-		require.Equal(t, api.BotBlocked, resp.Data.Undelivered[0].Reason)
+		require.Equal(t, []api.CampaignNotifyUndelivered{
+			{CreatorId: uuid.MustParse(creatorAUUID), Reason: api.BotBlocked},
+		}, resp.Data.Undelivered)
 	})
 
 	t.Run("service generic error → 500", func(t *testing.T) {

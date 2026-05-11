@@ -481,11 +481,7 @@ func TestRemindCampaignCreatorsSigning(t *testing.T) {
 			}, testutil.WithAuth(adminToken))
 		require.NoError(t, err)
 		require.Equal(t, http.StatusUnprocessableEntity, resp.StatusCode())
-		var body struct {
-			Error struct {
-				Code string `json:"code"`
-			} `json:"error"`
-		}
+		var body apiclient.ErrorResponse
 		require.NoError(t, json.Unmarshal(resp.Body, &body))
 		require.Equal(t, "CAMPAIGN_CREATOR_IDS_REQUIRED", body.Error.Code)
 	})
@@ -504,11 +500,7 @@ func TestRemindCampaignCreatorsSigning(t *testing.T) {
 			testutil.WithAuth(adminToken))
 		require.NoError(t, err)
 		require.Equal(t, http.StatusUnprocessableEntity, resp.StatusCode())
-		var body struct {
-			Error struct {
-				Code string `json:"code"`
-			} `json:"error"`
-		}
+		var body apiclient.ErrorResponse
 		require.NoError(t, json.Unmarshal(resp.Body, &body))
 		require.Equal(t, "CAMPAIGN_CREATOR_IDS_TOO_MANY", body.Error.Code)
 	})
@@ -543,11 +535,7 @@ func TestRemindCampaignCreatorsSigning(t *testing.T) {
 			}, testutil.WithAuth(adminToken))
 		require.NoError(t, err)
 		require.Equal(t, http.StatusUnprocessableEntity, resp.StatusCode())
-		var body struct {
-			Error struct {
-				Code string `json:"code"`
-			} `json:"error"`
-		}
+		var body apiclient.ErrorResponse
 		require.NoError(t, json.Unmarshal(resp.Body, &body))
 		require.Equal(t, "CAMPAIGN_CREATOR_IDS_DUPLICATES", body.Error.Code)
 	})
