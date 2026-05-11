@@ -68,7 +68,7 @@ func newRandomUUID(t *testing.T) string {
 }
 
 const (
-	replyFallback              = "Здравствуйте! Чтобы продолжить, подайте заявку на ugcboost.kz"
+	replyFallback              = "Если есть вопросы, можете обратиться к @aizerealzair"
 	replyApplicationNotFound   = "Заявка не найдена. Подайте новую на ugcboost.kz"
 	replyApplicationAlreadyLnk = "Эта заявка уже связана с другим Telegram. Если это ошибка — обратитесь в поддержку"
 
