@@ -714,7 +714,14 @@ func TestPatchCampaignCreator(t *testing.T) {
 		require.Equalf(t, http.StatusOK, setResp.StatusCode(), "set: %s", string(setResp.Body))
 		require.NotNil(t, setResp.JSON200)
 		require.NotNil(t, setResp.JSON200.Data.TicketSentAt, "ticketSentAt must be populated after set")
+		// DB-side `now()` unification (F4 from round-1 review): the repo writes
+		// `ticket_sent_at = now()` and `updated_at = now()` in the same SET,
+		// so the API response must surface them byte-equal. Asserting equality
+		// rather than just `WithinDuration` is what actually verifies the
+		// app/DB-clock-skew fix landed.
 		require.WithinDuration(t, time.Now().UTC(), *setResp.JSON200.Data.TicketSentAt, time.Minute)
+		require.Equal(t, setResp.JSON200.Data.UpdatedAt, *setResp.JSON200.Data.TicketSentAt,
+			"ticket_sent_at and updated_at must be byte-equal — both stamped by the same DB-side now()")
 		firstStamp := *setResp.JSON200.Data.TicketSentAt
 
 		entrySet := testutil.FindAuditEntry(t, fx.AdminClient, fx.AdminToken,
@@ -731,14 +738,22 @@ func TestPatchCampaignCreator(t *testing.T) {
 
 		// Audit payload — parse as map so we can assert exact field shapes
 		// without importing internal/domain (e2e is a separate module).
-		// `ticket_sent_at` MUST be present in both snapshots (no omitempty in
-		// the domain struct) and MUST be null in OldValue / non-null in NewValue.
-		oldMap := auditValueMap(t, entrySet.OldValue)
-		newMap := auditValueMap(t, entrySet.NewValue)
+		// Beyond the toggle field, we pin the identity columns (id / status /
+		// campaign_id / creator_id) so a regression in audit-snapshot mapping
+		// (wrong field copied, omitempty resurrected, etc.) fails loudly here
+		// rather than slipping through a partial-field check.
+		oldMap := testutil.AuditValueMap(t, entrySet.OldValue)
+		newMap := testutil.AuditValueMap(t, entrySet.NewValue)
 		require.Contains(t, oldMap, "ticket_sent_at", "OldValue must carry the field explicitly")
 		require.Nil(t, oldMap["ticket_sent_at"], "OldValue.ticket_sent_at must be null pre-set")
 		require.Contains(t, newMap, "ticket_sent_at")
 		require.NotNil(t, newMap["ticket_sent_at"], "NewValue.ticket_sent_at must be a timestamp string")
+		for _, m := range []map[string]any{oldMap, newMap} {
+			require.Equal(t, fx.CampaignCreatorID, m["id"], "audit snapshot id must match the cc row")
+			require.Equal(t, "signed", m["status"], "audit snapshot status must reflect signed at toggle time")
+			require.Equal(t, fx.CampaignID, m["campaign_id"])
+			require.Equal(t, fx.CreatorID, m["creator_id"])
+		}
 
 		// NO-OP REPEAT — same value, server returns row unchanged and skips audit.
 		noopResp, err := fx.AdminClient.PatchCampaignCreatorWithResponse(context.Background(),
@@ -751,7 +766,7 @@ func TestPatchCampaignCreator(t *testing.T) {
 		require.Equal(t, firstStamp, *noopResp.JSON200.Data.TicketSentAt,
 			"no-op must return the same ticketSentAt — no re-stamp on idempotent click")
 
-		auditCount := countAuditEntries(t, fx.AdminClient, fx.AdminToken,
+		auditCount := testutil.CountAuditEntries(t, fx.AdminClient, fx.AdminToken,
 			"campaign_creator", fx.CampaignCreatorID, "campaign_creator.ticket_sent")
 		require.Equal(t, 1, auditCount, "no-op must not write a second audit row")
 
@@ -764,64 +779,27 @@ func TestPatchCampaignCreator(t *testing.T) {
 		require.Equal(t, http.StatusOK, unsetResp.StatusCode())
 		require.Nil(t, unsetResp.JSON200.Data.TicketSentAt, "ticketSentAt must be cleared after unset")
 
-		auditCount = countAuditEntries(t, fx.AdminClient, fx.AdminToken,
+		auditCount = testutil.CountAuditEntries(t, fx.AdminClient, fx.AdminToken,
 			"campaign_creator", fx.CampaignCreatorID, "campaign_creator.ticket_sent")
 		require.Equal(t, 2, auditCount, "unset must write a second audit row")
 
 		// ListAuditLogs sorts created_at DESC, so the freshest entry is the
-		// just-written unset row — assert its actor + payload directly.
+		// just-written unset row — assert its identity + payload explicitly so
+		// the test fails loudly if the service stops emitting the action or
+		// wires a wrong entity_type/entity_id for the unset branch.
 		entryUnset := testutil.FindAuditEntry(t, fx.AdminClient, fx.AdminToken,
 			"campaign_creator", fx.CampaignCreatorID, "campaign_creator.ticket_sent")
 		require.NotNil(t, entryUnset, "unset must write audit row")
+		require.Equal(t, "campaign_creator.ticket_sent", entryUnset.Action)
+		require.Equal(t, "campaign_creator", entryUnset.EntityType)
+		require.NotNil(t, entryUnset.EntityId)
+		require.Equal(t, fx.CampaignCreatorID, *entryUnset.EntityId)
 		require.NotNil(t, entryUnset.ActorId)
 		require.Equal(t, adminUserID, *entryUnset.ActorId, "unset audit actor_id must match admin")
-		unsetOldMap := auditValueMap(t, entryUnset.OldValue)
-		unsetNewMap := auditValueMap(t, entryUnset.NewValue)
+		unsetOldMap := testutil.AuditValueMap(t, entryUnset.OldValue)
+		unsetNewMap := testutil.AuditValueMap(t, entryUnset.NewValue)
 		require.NotNil(t, unsetOldMap["ticket_sent_at"], "OldValue.ticket_sent_at must be the previously-set timestamp")
 		require.Contains(t, unsetNewMap, "ticket_sent_at")
 		require.Nil(t, unsetNewMap["ticket_sent_at"], "NewValue.ticket_sent_at must be null after unset")
 	})
-}
-
-// auditValueMap decodes an audit_logs JSON snapshot into a generic map so
-// individual fields can be asserted without importing internal/domain
-// (e2e is a separate module). Accepts the openapi-generated interface{} from
-// AuditLogEntry.OldValue / NewValue.
-func auditValueMap(t *testing.T, raw interface{}) map[string]any {
-	t.Helper()
-	require.NotNil(t, raw)
-	payload, err := json.Marshal(raw)
-	require.NoError(t, err)
-	var m map[string]any
-	require.NoError(t, json.Unmarshal(payload, &m))
-	return m
-}
-
-// countAuditEntries returns the number of audit rows matching
-// (entityType, entityID, action). Caller pins entityID to a fresh fixture
-// row, so the per-row count never realistically nears the per_page cap —
-// but we still assert `len < per_page` to fail loudly if a future test
-// floods the same fixture id with audit rows and silently truncates.
-func countAuditEntries(t *testing.T, c *apiclient.ClientWithResponses,
-	adminToken, entityType, entityID, action string,
-) int {
-	t.Helper()
-	const perPage = 100
-	resp, err := c.ListAuditLogsWithResponse(context.Background(),
-		&apiclient.ListAuditLogsParams{
-			Page:       pointer.ToInt(1),
-			PerPage:    pointer.ToInt(perPage),
-			EntityType: pointer.ToString(entityType),
-			EntityId:   pointer.ToString(entityID),
-			Action:     pointer.ToString(action),
-		},
-		testutil.WithAuth(adminToken))
-	require.NoError(t, err)
-	require.Equal(t, http.StatusOK, resp.StatusCode())
-	require.NotNil(t, resp.JSON200)
-	got := len(resp.JSON200.Data.Logs)
-	require.Lessf(t, got, perPage,
-		"audit count reached per_page=%d cap — assertion would silently truncate; paginate or narrow filters",
-		perPage)
-	return got
 }

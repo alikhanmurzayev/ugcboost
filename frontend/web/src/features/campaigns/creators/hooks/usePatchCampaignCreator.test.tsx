@@ -128,6 +128,35 @@ describe("usePatchCampaignCreator", () => {
     expect(onError).toHaveBeenCalledWith(err);
   });
 
+  it("cold cache + error — onError invoked, no rollback writes phantom empty list", async () => {
+    const err = new ApiError(500, "INTERNAL");
+    vi.mocked(patchCampaignCreator).mockRejectedValueOnce(err);
+
+    const { qc, Wrapper } = makeWrapper();
+    // Cold cache — list never loaded. Mutation fails. onError sees
+    // ctx.previous === undefined and must NOT call setQueryData(key, undefined)
+    // (which React Query treats as "remove"); the entry just stays absent.
+    const onError = vi.fn();
+    const { result } = renderHook(
+      () => usePatchCampaignCreator(CAMPAIGN_ID, { onError }),
+      { wrapper: Wrapper },
+    );
+
+    result.current.mutate({
+      creatorId: CREATOR_A,
+      patch: { ticketSent: true },
+    });
+
+    await waitFor(() => {
+      expect(result.current.isError).toBe(true);
+    });
+
+    expect(onError).toHaveBeenCalledWith(err);
+    expect(
+      qc.getQueryData(campaignCreatorKeys.list(CAMPAIGN_ID)),
+    ).toBeUndefined();
+  });
+
   it("cold cache (no prior setQueryData) — mutate succeeds and still invalidates", async () => {
     const updated = makeCC({ ticketSentAt: "2026-05-11T14:00:00Z" });
     vi.mocked(patchCampaignCreator).mockResolvedValueOnce(updated);

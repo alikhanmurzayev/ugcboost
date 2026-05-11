@@ -986,6 +986,10 @@ func TestServer_PatchCampaignCreator(t *testing.T) {
 		// response mapping (swapped fields, dropped counter, wrong status) —
 		// per-field asserts would silently miss e.g. CreatedAt swap with
 		// UpdatedAt. See backend-testing-unit.md § Handler / Assertions.
+		//
+		// `now` is intentionally hand-built deterministic UTC so this block can
+		// do a single full-struct Equal without the WithinDuration + substitute
+		// dance — do NOT swap for time.Now() or the equality below breaks.
 		expected := api.PatchCampaignCreatorResult{
 			Data: api.CampaignCreator{
 				Id:            openapi_types.UUID(uuid.MustParse("44444444-4444-4444-4444-444444444444")),

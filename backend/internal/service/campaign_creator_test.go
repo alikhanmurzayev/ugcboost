@@ -1827,6 +1827,13 @@ func TestCampaignCreatorService_PatchParticipation(t *testing.T) {
 		require.Nil(t, got.TicketSentAt)
 
 		require.Equal(t, AuditActionCampaignCreatorTicketSent, auditRow.Action)
+		require.Equal(t, AuditEntityTypeCampaignCreator, auditRow.EntityType)
+		require.NotNil(t, auditRow.EntityID)
+		require.Equal(t, "cc-1", *auditRow.EntityID)
+		require.NotNil(t, auditRow.ActorID)
+		require.Equal(t, adminCtxUserID, *auditRow.ActorID)
+		require.Equal(t, string(api.Admin), auditRow.ActorRole)
+
 		var oldSnap domain.CampaignCreator
 		require.NoError(t, json.Unmarshal(auditRow.OldValue, &oldSnap))
 		require.NotNil(t, oldSnap.TicketSentAt)
