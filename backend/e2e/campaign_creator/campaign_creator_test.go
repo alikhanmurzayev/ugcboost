@@ -25,6 +25,25 @@
 // в audit_logs появляется campaign_creator_remove с полным snapshot'ом
 // в old_value (NewValue=nil — запись удалена).
 //
+// TestPatchCampaignCreator проходит PATCH /campaigns/{id}/creators/{creatorId}
+// — admin-only universal partial-update участия креатора в кампании. Без
+// токена middleware отдаёт 401 ещё до handler'а; brand_manager-токен ловит
+// 403 FORBIDDEN от authz-сервиса. Сетка валидаций для admin-токена: пустой
+// body (объект без полей) → 422 CAMPAIGN_CREATOR_PATCH_EMPTY (handler-уровень
+// защита от случайного no-op вызова); несуществующая кампания → 404
+// CAMPAIGN_NOT_FOUND; существующая кампания + не привязанный креатор → 404
+// CAMPAIGN_CREATOR_NOT_FOUND; participation в статусе ≠ `signed` (наш кейс —
+// свежий `planned` creator) и попытка ticketSent=true → 422
+// CAMPAIGN_CREATOR_TICKET_SENT_BAD_STATUS. Happy-path: signed creator
+// (через SetupCampaignWithSigningCreator + TrustMe webhook signed →
+// cc.status='signed') получает PATCH ticketSent=true → 200, ticketSentAt
+// близко к now(), audit-row `campaign_creator.ticket_sent` появляется в
+// той же транзакции с old.ticket_sent_at=null и new.ticket_sent_at=<ts>;
+// повторный PATCH ticketSent=true без изменений — 200 no-op, повторно
+// audit-row не пишется (idempotent admin clicks не засоряют журнал);
+// PATCH ticketSent=false — 200, ticketSentAt=null, новая audit-row с
+// обратным diff'ом (old=<ts>, new=null).
+//
 // TestListCampaignCreators проходит GET /campaigns/{id}/creators (без
 // пагинации — admin UI показывает весь roster одной выдачей). Без токена →
 // 401, brand_manager → 403, несуществующая кампания → 404; пустой список
@@ -50,6 +69,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/AlekSi/pointer"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
@@ -555,4 +575,214 @@ func TestListCampaignCreators(t *testing.T) {
 		require.True(t, ok1, "creator1 must appear in the listed roster")
 		require.True(t, ok2, "creator2 must appear in the listed roster")
 	})
+}
+
+func TestPatchCampaignCreator(t *testing.T) {
+	t.Parallel()
+
+	patchURL := func(campaignID, creatorID string) string {
+		return testutil.BaseURL + "/campaigns/" + campaignID + "/creators/" + creatorID
+	}
+
+	t.Run("unauthenticated returns 401", func(t *testing.T) {
+		t.Parallel()
+		adminClient, adminToken, _ := testutil.SetupAdminClient(t)
+		campaignID := setupCampaign(t, adminClient, adminToken, "ccPatch-unauth-"+testutil.UniqueEmail("camp"))
+		creator := testutil.SetupApprovedCreator(t, defaultCreatorOpts(testutil.UniqueIIN()[6:]))
+
+		req, err := http.NewRequestWithContext(context.Background(), http.MethodPatch,
+			patchURL(campaignID.String(), creator.CreatorID),
+			strings.NewReader(`{"ticketSent":true}`))
+		require.NoError(t, err)
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := testutil.HTTPClient(nil).Do(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		require.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+	})
+
+	t.Run("brand_manager forbidden", func(t *testing.T) {
+		t.Parallel()
+		adminClient, adminToken, _ := testutil.SetupAdminClient(t)
+		brandID := testutil.SetupBrand(t, adminClient, adminToken, "ccPatch-403-brand-"+testutil.UniqueEmail("brand"))
+		mgrClient, mgrToken, _ := testutil.SetupManagerWithLogin(t, adminClient, adminToken, brandID)
+		campaignID := setupCampaign(t, adminClient, adminToken, "ccPatch-403-camp-"+testutil.UniqueEmail("camp"))
+		creator := testutil.SetupApprovedCreator(t, defaultCreatorOpts(testutil.UniqueIIN()[6:]))
+
+		resp, err := mgrClient.PatchCampaignCreatorWithResponse(context.Background(),
+			campaignID, uuid.MustParse(creator.CreatorID),
+			apiclient.PatchCampaignCreatorJSONRequestBody{TicketSent: pointer.ToBool(true)},
+			testutil.WithAuth(mgrToken))
+		require.NoError(t, err)
+		require.Equal(t, http.StatusForbidden, resp.StatusCode())
+		require.NotNil(t, resp.JSON403)
+		require.Equal(t, "FORBIDDEN", resp.JSON403.Error.Code)
+	})
+
+	t.Run("empty body returns 422 CAMPAIGN_CREATOR_PATCH_EMPTY", func(t *testing.T) {
+		t.Parallel()
+		adminClient, adminToken, _ := testutil.SetupAdminClient(t)
+		campaignID := setupCampaign(t, adminClient, adminToken, "ccPatch-empty-"+testutil.UniqueEmail("camp"))
+		creator := testutil.SetupApprovedCreator(t, defaultCreatorOpts(testutil.UniqueIIN()[6:]))
+
+		resp, err := adminClient.PatchCampaignCreatorWithResponse(context.Background(),
+			campaignID, uuid.MustParse(creator.CreatorID),
+			apiclient.PatchCampaignCreatorJSONRequestBody{}, testutil.WithAuth(adminToken))
+		require.NoError(t, err)
+		require.Equal(t, http.StatusUnprocessableEntity, resp.StatusCode())
+		require.NotNil(t, resp.JSON422)
+		require.Equal(t, "CAMPAIGN_CREATOR_PATCH_EMPTY", resp.JSON422.Error.Code)
+	})
+
+	t.Run("non-existent campaign returns 404 CAMPAIGN_NOT_FOUND", func(t *testing.T) {
+		t.Parallel()
+		adminClient, adminToken, _ := testutil.SetupAdminClient(t)
+		creator := testutil.SetupApprovedCreator(t, defaultCreatorOpts(testutil.UniqueIIN()[6:]))
+
+		resp, err := adminClient.PatchCampaignCreatorWithResponse(context.Background(),
+			uuid.New(), uuid.MustParse(creator.CreatorID),
+			apiclient.PatchCampaignCreatorJSONRequestBody{TicketSent: pointer.ToBool(true)},
+			testutil.WithAuth(adminToken))
+		require.NoError(t, err)
+		require.Equal(t, http.StatusNotFound, resp.StatusCode())
+		require.NotNil(t, resp.JSON404)
+		require.Equal(t, "CAMPAIGN_NOT_FOUND", resp.JSON404.Error.Code)
+	})
+
+	t.Run("non-attached creator returns 404 CAMPAIGN_CREATOR_NOT_FOUND", func(t *testing.T) {
+		t.Parallel()
+		adminClient, adminToken, _ := testutil.SetupAdminClient(t)
+		campaignID := setupCampaign(t, adminClient, adminToken, "ccPatch-detached-"+testutil.UniqueEmail("camp"))
+		creator := testutil.SetupApprovedCreator(t, defaultCreatorOpts(testutil.UniqueIIN()[6:]))
+
+		resp, err := adminClient.PatchCampaignCreatorWithResponse(context.Background(),
+			campaignID, uuid.MustParse(creator.CreatorID),
+			apiclient.PatchCampaignCreatorJSONRequestBody{TicketSent: pointer.ToBool(true)},
+			testutil.WithAuth(adminToken))
+		require.NoError(t, err)
+		require.Equal(t, http.StatusNotFound, resp.StatusCode())
+		require.NotNil(t, resp.JSON404)
+		require.Equal(t, "CAMPAIGN_CREATOR_NOT_FOUND", resp.JSON404.Error.Code)
+	})
+
+	t.Run("non-signed status returns 422 TICKET_SENT_BAD_STATUS", func(t *testing.T) {
+		t.Parallel()
+		adminClient, adminToken, _ := testutil.SetupAdminClient(t)
+		campaignID := setupCampaign(t, adminClient, adminToken, "ccPatch-badstatus-"+testutil.UniqueEmail("camp"))
+		creator := testutil.SetupApprovedCreator(t, defaultCreatorOpts(testutil.UniqueIIN()[6:]))
+		creatorUUID := uuid.MustParse(creator.CreatorID)
+		testutil.RegisterCampaignCreatorCleanup(t, adminClient, adminToken,
+			campaignID.String(), creator.CreatorID)
+
+		// Add as `planned` (default initial state — not `signed`).
+		addResp, err := adminClient.AddCampaignCreatorsWithResponse(context.Background(),
+			campaignID, apiclient.AddCampaignCreatorsJSONRequestBody{CreatorIds: []uuid.UUID{creatorUUID}},
+			testutil.WithAuth(adminToken))
+		require.NoError(t, err)
+		require.Equal(t, http.StatusCreated, addResp.StatusCode())
+
+		resp, err := adminClient.PatchCampaignCreatorWithResponse(context.Background(),
+			campaignID, creatorUUID,
+			apiclient.PatchCampaignCreatorJSONRequestBody{TicketSent: pointer.ToBool(true)},
+			testutil.WithAuth(adminToken))
+		require.NoError(t, err)
+		require.Equal(t, http.StatusUnprocessableEntity, resp.StatusCode())
+		require.NotNil(t, resp.JSON422)
+		require.Equal(t, "CAMPAIGN_CREATOR_TICKET_SENT_BAD_STATUS", resp.JSON422.Error.Code)
+	})
+
+	t.Run("happy: signed → set, no-op repeat, unset, audit diff", func(t *testing.T) {
+		t.Parallel()
+		fx := testutil.SetupCampaignWithSigningCreator(t)
+
+		// Flip to signed via TrustMe webhook (status=3 happy-signed payload).
+		token := testutil.TrustMeWebhookToken(t)
+		status, body := testutil.PostTrustMeWebhook(t,
+			testutil.TrustMeWebhookSignedPayload(fx.TrustMeDocumentID), token)
+		require.Equalf(t, 200, status, "webhook signed: %s", string(body))
+
+		campaignUUID := uuid.MustParse(fx.CampaignID)
+		creatorUUID := uuid.MustParse(fx.CreatorID)
+
+		// SET — ticketSentAt populated near now(); audit row appears.
+		setResp, err := fx.AdminClient.PatchCampaignCreatorWithResponse(context.Background(),
+			campaignUUID, creatorUUID,
+			apiclient.PatchCampaignCreatorJSONRequestBody{TicketSent: pointer.ToBool(true)},
+			testutil.WithAuth(fx.AdminToken))
+		require.NoError(t, err)
+		require.Equalf(t, http.StatusOK, setResp.StatusCode(), "set: %s", string(setResp.Body))
+		require.NotNil(t, setResp.JSON200)
+		require.NotNil(t, setResp.JSON200.Data.TicketSentAt, "ticketSentAt must be populated after set")
+		require.WithinDuration(t, time.Now().UTC(), *setResp.JSON200.Data.TicketSentAt, time.Minute)
+		firstStamp := *setResp.JSON200.Data.TicketSentAt
+
+		entrySet := testutil.FindAuditEntry(t, fx.AdminClient, fx.AdminToken,
+			"campaign_creator", fx.CampaignCreatorID, "campaign_creator.ticket_sent")
+		require.NotNil(t, entrySet, "set must write audit row")
+		require.NotNil(t, entrySet.OldValue, "audit set must carry old snapshot")
+		require.NotNil(t, entrySet.NewValue, "audit set must carry new snapshot")
+		oldPayload, err := json.Marshal(entrySet.OldValue)
+		require.NoError(t, err)
+		require.NotContains(t, string(oldPayload), `"ticket_sent_at":"`, "audit old must not carry ticket_sent_at when previously null")
+		newPayload, err := json.Marshal(entrySet.NewValue)
+		require.NoError(t, err)
+		require.Contains(t, string(newPayload), `"ticket_sent_at":`, "audit new must carry ticket_sent_at after set")
+
+		// NO-OP REPEAT — same value, server returns row unchanged and skips audit.
+		noopResp, err := fx.AdminClient.PatchCampaignCreatorWithResponse(context.Background(),
+			campaignUUID, creatorUUID,
+			apiclient.PatchCampaignCreatorJSONRequestBody{TicketSent: pointer.ToBool(true)},
+			testutil.WithAuth(fx.AdminToken))
+		require.NoError(t, err)
+		require.Equal(t, http.StatusOK, noopResp.StatusCode())
+		require.NotNil(t, noopResp.JSON200.Data.TicketSentAt)
+		require.Equal(t, firstStamp, *noopResp.JSON200.Data.TicketSentAt,
+			"no-op must return the same ticketSentAt — no re-stamp on idempotent click")
+
+		auditCount := countAuditEntries(t, fx.AdminClient, fx.AdminToken,
+			"campaign_creator", fx.CampaignCreatorID, "campaign_creator.ticket_sent")
+		require.Equal(t, 1, auditCount, "no-op must not write a second audit row")
+
+		// UNSET — back to null; second audit row appears with reverse diff.
+		unsetResp, err := fx.AdminClient.PatchCampaignCreatorWithResponse(context.Background(),
+			campaignUUID, creatorUUID,
+			apiclient.PatchCampaignCreatorJSONRequestBody{TicketSent: pointer.ToBool(false)},
+			testutil.WithAuth(fx.AdminToken))
+		require.NoError(t, err)
+		require.Equal(t, http.StatusOK, unsetResp.StatusCode())
+		require.Nil(t, unsetResp.JSON200.Data.TicketSentAt, "ticketSentAt must be cleared after unset")
+
+		auditCount = countAuditEntries(t, fx.AdminClient, fx.AdminToken,
+			"campaign_creator", fx.CampaignCreatorID, "campaign_creator.ticket_sent")
+		require.Equal(t, 2, auditCount, "unset must write a second audit row")
+	})
+}
+
+// countAuditEntries returns the number of audit rows matching
+// (entityType, entityID, action). Caller pins entityID to a fresh fixture
+// row, so the per-row count never realistically nears the per_page cap —
+// but we still assert `len < per_page` to fail loudly if a future test
+// floods the same fixture id with audit rows and silently truncates.
+func countAuditEntries(t *testing.T, c *apiclient.ClientWithResponses,
+	adminToken, entityType, entityID, action string,
+) int {
+	t.Helper()
+	const perPage = 100
+	resp, err := c.ListAuditLogsWithResponse(context.Background(),
+		&apiclient.ListAuditLogsParams{
+			Page:       pointer.ToInt(1),
+			PerPage:    pointer.ToInt(perPage),
+			EntityType: pointer.ToString(entityType),
+			EntityId:   pointer.ToString(entityID),
+			Action:     pointer.ToString(action),
+		},
+		testutil.WithAuth(adminToken))
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, resp.StatusCode())
+	require.NotNil(t, resp.JSON200)
+	got := len(resp.JSON200.Data.Logs)
+	require.Lessf(t, got, perPage,
+		"audit count reached per_page=%d cap — assertion would silently truncate; paginate or narrow filters",
+		perPage)
+	return got
 }

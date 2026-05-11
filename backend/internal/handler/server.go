@@ -65,6 +65,7 @@ type AuthzService interface {
 	CanNotifyCampaignCreators(ctx context.Context) error
 	CanRemindCampaignCreators(ctx context.Context) error
 	CanRemindCampaignCreatorsSigning(ctx context.Context) error
+	CanPatchCampaignCreator(ctx context.Context) error
 	AuthorizeTMACampaignDecision(ctx context.Context, secretToken string) (authz.TMACampaignDecisionAuth, error)
 }
 
@@ -127,6 +128,7 @@ type CampaignCreatorService interface {
 	Notify(ctx context.Context, campaignID string, creatorIDs []string) ([]domain.NotifyFailure, error)
 	RemindInvitation(ctx context.Context, campaignID string, creatorIDs []string) ([]domain.NotifyFailure, error)
 	RemindSigning(ctx context.Context, campaignID string, creatorIDs []string) ([]domain.NotifyFailure, error)
+	PatchParticipation(ctx context.Context, campaignID, creatorID string, patch domain.PatchCampaignCreatorInput) (*domain.CampaignCreator, error)
 }
 
 // TmaCampaignCreatorService is the interface Server needs from the

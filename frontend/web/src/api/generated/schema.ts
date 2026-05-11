@@ -702,7 +702,21 @@ export interface paths {
         delete: operations["removeCampaignCreator"];
         options?: never;
         head?: never;
-        patch?: never;
+        /**
+         * Patch a creator's participation flags (admin-only)
+         * @description Universal partial-update for the `campaign_creators` row of a
+         *     single (campaignId, creatorId) pair. Currently the only supported
+         *     field is `ticketSent` — an admin-side toggle that records whether
+         *     the travel ticket has been dispatched to the creator. The endpoint
+         *     is shaped as a generic PATCH so future per-row admin flags can be
+         *     added without spawning new routes.
+         *
+         *     Toggling `ticketSent` is allowed only when the participation is
+         *     already in status `signed`; other statuses surface as 422. A repeat
+         *     call with the same value as the current state is a no-op — the row
+         *     is returned unchanged and no audit-row is written.
+         */
+        patch: operations["patchCampaignCreator"];
         trace?: never;
     };
     "/campaigns/{id}/notify": {
@@ -1935,10 +1949,34 @@ export interface components {
              * @description Timestamp of the latest creator decision (agree / decline).
              */
             decidedAt?: string | null;
+            /**
+             * Format: date-time
+             * @description Timestamp of when the admin marked the travel ticket as sent to
+             *     the creator. NULL means "not yet sent". Toggleable via PATCH on
+             *     the creator participation; only meaningful for `signed` rows.
+             */
+            ticketSentAt?: string | null;
             /** Format: date-time */
             createdAt: string;
             /** Format: date-time */
             updatedAt: string;
+        };
+        /**
+         * @description Partial-update input for PATCH /campaigns/{id}/creators/{creatorId}.
+         *     All fields are optional but at least one must be present — an empty
+         *     body is rejected with 422 to avoid accidental no-op calls. Currently
+         *     the only toggleable flag is `ticketSent` (travel ticket dispatched).
+         */
+        CampaignCreatorPatchInput: {
+            /**
+             * @description When `true`, server records `ticket_sent_at = NOW()`. When
+             *     `false`, server clears it back to NULL. Allowed only for
+             *     participations in status `signed`.
+             */
+            ticketSent?: boolean;
+        };
+        PatchCampaignCreatorResult: {
+            data: components["schemas"]["CampaignCreator"];
         };
         /**
          * @description Batch-add input for POST /campaigns/{id}/creators. Each creatorId
@@ -3363,6 +3401,65 @@ export interface operations {
                 };
             };
             /** @description The creator already agreed and cannot be removed. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            default: components["responses"]["UnexpectedError"];
+        };
+    };
+    patchCampaignCreator: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+                creatorId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CampaignCreatorPatchInput"];
+            };
+        };
+        responses: {
+            /** @description Participation updated; returns the fresh row. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PatchCampaignCreatorResult"];
+                };
+            };
+            /** @description Unauthenticated */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            /** @description Campaign not found, or creator not attached to this campaign. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /**
+             * @description Empty patch body (no fields set) or the participation is not in
+             *     status `signed` for a `ticketSent` toggle.
+             */
             422: {
                 headers: {
                     [name: string]: unknown;

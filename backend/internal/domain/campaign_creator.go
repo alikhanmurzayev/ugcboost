@@ -19,6 +19,7 @@ type CampaignCreator struct {
 	RemindedAt    *time.Time `json:"reminded_at,omitempty"`
 	RemindedCount int        `json:"reminded_count"`
 	DecidedAt     *time.Time `json:"decided_at,omitempty"`
+	TicketSentAt  *time.Time `json:"ticket_sent_at,omitempty"`
 	CreatedAt     time.Time  `json:"created_at"`
 	UpdatedAt     time.Time  `json:"updated_at"`
 }
@@ -157,3 +158,29 @@ var ErrCampaignCreatorDeclinedNeedReinvite = NewValidationError(
 // branches by design — anti-fingerprint between "not registered" and
 // "not in campaign". Mapped to 403 TMA_FORBIDDEN by respondError.
 var ErrTMAForbidden = errors.New("tma forbidden")
+
+// ErrCampaignCreatorTicketSentBadStatus is raised by PatchParticipation when
+// `ticketSent` is supplied for a row whose status is not `signed`. The flag
+// is operational metadata for creators who already committed to the contract
+// — toggling it earlier in the lifecycle is a UI bug, not a valid action.
+var ErrCampaignCreatorTicketSentBadStatus = NewValidationError(
+	CodeCampaignCreatorTicketSentBadStatus,
+	"Билет можно отметить только подписавшему договор креатору.",
+)
+
+// ErrCampaignCreatorPatchEmpty is raised when PATCH
+// /campaigns/{id}/creators/{creatorId} arrives without any toggleable field
+// in the body. Defensive guard so empty PATCHes do not silently no-op.
+var ErrCampaignCreatorPatchEmpty = NewValidationError(
+	CodeCampaignCreatorPatchEmpty,
+	"Передайте хотя бы одно поле для обновления.",
+)
+
+// PatchCampaignCreatorInput is the domain-layer input for
+// CampaignCreatorService.PatchParticipation. All fields are optional —
+// at least one must be set (the handler enforces non-empty before calling).
+// Currently only TicketSent is supported; future per-row admin toggles can
+// extend this struct without breaking callers.
+type PatchCampaignCreatorInput struct {
+	TicketSent *bool
+}

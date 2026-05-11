@@ -1557,3 +1557,347 @@ func TestCampaignCreatorService_RemindSigning(t *testing.T) {
 		require.WithinDuration(t, now, *newSnap.RemindedAt, time.Minute)
 	})
 }
+
+func TestCampaignCreatorService_PatchParticipation(t *testing.T) {
+	t.Parallel()
+
+	signedRow := func(id string, ticketSentAt *time.Time, created time.Time) *repository.CampaignCreatorRow {
+		return &repository.CampaignCreatorRow{
+			ID:           id,
+			CampaignID:   "camp-1",
+			CreatorID:    "cr-1",
+			Status:       domain.CampaignCreatorStatusSigned,
+			TicketSentAt: ticketSentAt,
+			CreatedAt:    created,
+			UpdatedAt:    created,
+		}
+	}
+
+	t.Run("campaign not found surfaces ErrCampaignNotFound", func(t *testing.T) {
+		t.Parallel()
+		pool := dbmocks.NewMockPool(t)
+		factory := svcmocks.NewMockCampaignCreatorRepoFactory(t)
+		campaigns := repomocks.NewMockCampaignRepo(t)
+
+		factory.EXPECT().NewCampaignRepo(pool).Return(campaigns)
+		campaigns.EXPECT().GetByID(mock.Anything, "missing").
+			Return((*repository.CampaignRow)(nil), sql.ErrNoRows)
+
+		svc := NewCampaignCreatorService(pool, factory, svcmocks.NewMockCampaignInviteNotifier(t), logmocks.NewMockLogger(t))
+		_, err := svc.PatchParticipation(adminCtx(), "missing", "cr-1", domain.PatchCampaignCreatorInput{TicketSent: pointer.ToBool(true)})
+		require.ErrorIs(t, err, domain.ErrCampaignNotFound)
+	})
+
+	t.Run("soft-deleted campaign surfaces ErrCampaignNotFound", func(t *testing.T) {
+		t.Parallel()
+		pool := dbmocks.NewMockPool(t)
+		factory := svcmocks.NewMockCampaignCreatorRepoFactory(t)
+		campaigns := repomocks.NewMockCampaignRepo(t)
+		created := time.Date(2026, 5, 11, 12, 0, 0, 0, time.UTC)
+
+		factory.EXPECT().NewCampaignRepo(pool).Return(campaigns)
+		campaigns.EXPECT().GetByID(mock.Anything, "camp-1").
+			Return(&repository.CampaignRow{
+				ID: "camp-1", IsDeleted: true, CreatedAt: created, UpdatedAt: created,
+			}, nil)
+
+		svc := NewCampaignCreatorService(pool, factory, svcmocks.NewMockCampaignInviteNotifier(t), logmocks.NewMockLogger(t))
+		_, err := svc.PatchParticipation(adminCtx(), "camp-1", "cr-1", domain.PatchCampaignCreatorInput{TicketSent: pointer.ToBool(true)})
+		require.ErrorIs(t, err, domain.ErrCampaignNotFound)
+	})
+
+	t.Run("missing campaign_creator pair surfaces ErrCampaignCreatorNotFound", func(t *testing.T) {
+		t.Parallel()
+		pool := dbmocks.NewMockPool(t)
+		factory := svcmocks.NewMockCampaignCreatorRepoFactory(t)
+		campaigns := repomocks.NewMockCampaignRepo(t)
+		ccRepo := repomocks.NewMockCampaignCreatorRepo(t)
+		created := time.Date(2026, 5, 11, 12, 0, 0, 0, time.UTC)
+
+		factory.EXPECT().NewCampaignRepo(pool).Return(campaigns)
+		campaigns.EXPECT().GetByID(mock.Anything, "camp-1").
+			Return(liveCampaignRow("camp-1", created), nil)
+		factory.EXPECT().NewCampaignCreatorRepo(pool).Return(ccRepo)
+		ccRepo.EXPECT().GetByCampaignAndCreator(mock.Anything, "camp-1", "cr-missing").
+			Return((*repository.CampaignCreatorRow)(nil), sql.ErrNoRows)
+
+		svc := NewCampaignCreatorService(pool, factory, svcmocks.NewMockCampaignInviteNotifier(t), logmocks.NewMockLogger(t))
+		_, err := svc.PatchParticipation(adminCtx(), "camp-1", "cr-missing", domain.PatchCampaignCreatorInput{TicketSent: pointer.ToBool(true)})
+		require.ErrorIs(t, err, domain.ErrCampaignCreatorNotFound)
+	})
+
+	t.Run("status != signed surfaces ErrCampaignCreatorTicketSentBadStatus", func(t *testing.T) {
+		t.Parallel()
+		pool := dbmocks.NewMockPool(t)
+		factory := svcmocks.NewMockCampaignCreatorRepoFactory(t)
+		campaigns := repomocks.NewMockCampaignRepo(t)
+		ccRepo := repomocks.NewMockCampaignCreatorRepo(t)
+		created := time.Date(2026, 5, 11, 12, 0, 0, 0, time.UTC)
+
+		factory.EXPECT().NewCampaignRepo(pool).Return(campaigns)
+		campaigns.EXPECT().GetByID(mock.Anything, "camp-1").
+			Return(liveCampaignRow("camp-1", created), nil)
+		factory.EXPECT().NewCampaignCreatorRepo(pool).Return(ccRepo)
+		ccRepo.EXPECT().GetByCampaignAndCreator(mock.Anything, "camp-1", "cr-1").
+			Return(&repository.CampaignCreatorRow{
+				ID:         "cc-1",
+				CampaignID: "camp-1",
+				CreatorID:  "cr-1",
+				Status:     domain.CampaignCreatorStatusSigning,
+				CreatedAt:  created,
+				UpdatedAt:  created,
+			}, nil)
+
+		svc := NewCampaignCreatorService(pool, factory, svcmocks.NewMockCampaignInviteNotifier(t), logmocks.NewMockLogger(t))
+		_, err := svc.PatchParticipation(adminCtx(), "camp-1", "cr-1", domain.PatchCampaignCreatorInput{TicketSent: pointer.ToBool(true)})
+		require.ErrorIs(t, err, domain.ErrCampaignCreatorTicketSentBadStatus)
+	})
+
+	t.Run("no-op returns row unchanged without UPDATE or audit", func(t *testing.T) {
+		t.Parallel()
+		pool := dbmocks.NewMockPool(t)
+		factory := svcmocks.NewMockCampaignCreatorRepoFactory(t)
+		campaigns := repomocks.NewMockCampaignRepo(t)
+		ccRepo := repomocks.NewMockCampaignCreatorRepo(t)
+		created := time.Date(2026, 5, 11, 12, 0, 0, 0, time.UTC)
+		ticketSentAt := created.Add(-time.Hour)
+
+		factory.EXPECT().NewCampaignRepo(pool).Return(campaigns)
+		campaigns.EXPECT().GetByID(mock.Anything, "camp-1").
+			Return(liveCampaignRow("camp-1", created), nil)
+		factory.EXPECT().NewCampaignCreatorRepo(pool).Return(ccRepo)
+		ccRepo.EXPECT().GetByCampaignAndCreator(mock.Anything, "camp-1", "cr-1").
+			Return(signedRow("cc-1", &ticketSentAt, created), nil)
+		// No Begin, no UpdateTicketSentAt, no audit — strict mocks would fail
+		// if anything inside the WithTx scope fired.
+
+		svc := NewCampaignCreatorService(pool, factory, svcmocks.NewMockCampaignInviteNotifier(t), logmocks.NewMockLogger(t))
+		got, err := svc.PatchParticipation(adminCtx(), "camp-1", "cr-1", domain.PatchCampaignCreatorInput{TicketSent: pointer.ToBool(true)})
+		require.NoError(t, err)
+		require.NotNil(t, got)
+		require.NotNil(t, got.TicketSentAt)
+		require.Equal(t, ticketSentAt, *got.TicketSentAt)
+	})
+
+	t.Run("set flips nil → timestamp with audit + success log", func(t *testing.T) {
+		t.Parallel()
+		pool := dbmocks.NewMockPool(t)
+		factory := svcmocks.NewMockCampaignCreatorRepoFactory(t)
+		campaigns := repomocks.NewMockCampaignRepo(t)
+		ccRepoPool := repomocks.NewMockCampaignCreatorRepo(t)
+		ccRepoTx := repomocks.NewMockCampaignCreatorRepo(t)
+		audit := repomocks.NewMockAuditRepo(t)
+		log := logmocks.NewMockLogger(t)
+		created := time.Date(2026, 5, 11, 12, 0, 0, 0, time.UTC)
+		now := time.Date(2026, 5, 11, 13, 0, 0, 0, time.UTC)
+
+		factory.EXPECT().NewCampaignRepo(pool).Return(campaigns)
+		campaigns.EXPECT().GetByID(mock.Anything, "camp-1").
+			Return(liveCampaignRow("camp-1", created), nil)
+		factory.EXPECT().NewCampaignCreatorRepo(pool).Return(ccRepoPool)
+		ccRepoPool.EXPECT().GetByCampaignAndCreator(mock.Anything, "camp-1", "cr-1").
+			Return(signedRow("cc-1", nil, created), nil)
+
+		pool.EXPECT().Begin(mock.Anything).Return(testTx{}, nil)
+		factory.EXPECT().NewCampaignCreatorRepo(mock.Anything).Return(ccRepoTx)
+		factory.EXPECT().NewAuditRepo(mock.Anything).Return(audit)
+
+		var capturedSentAt *time.Time
+		ccRepoTx.EXPECT().UpdateTicketSentAt(mock.Anything, "cc-1", mock.AnythingOfType("*time.Time")).
+			Run(func(_ context.Context, _ string, sentAt *time.Time) {
+				capturedSentAt = sentAt
+			}).
+			Return(signedRow("cc-1", &now, now), nil)
+
+		var auditRow repository.AuditLogRow
+		audit.EXPECT().Create(mock.Anything, mock.AnythingOfType("repository.AuditLogRow")).
+			Run(func(_ context.Context, row repository.AuditLogRow) {
+				auditRow = row
+			}).
+			Return(nil)
+
+		log.EXPECT().Info(mock.Anything, "campaign creator ticket_sent toggled",
+			[]any{"campaign_id", "camp-1", "creator_id", "cr-1", "ticket_sent", true}).Once()
+
+		svc := NewCampaignCreatorService(pool, factory, svcmocks.NewMockCampaignInviteNotifier(t), log)
+		got, err := svc.PatchParticipation(adminCtx(), "camp-1", "cr-1", domain.PatchCampaignCreatorInput{TicketSent: pointer.ToBool(true)})
+		require.NoError(t, err)
+		require.NotNil(t, got.TicketSentAt)
+		require.Equal(t, now, *got.TicketSentAt)
+
+		// UPDATE received a non-nil timestamp roughly equal to now (allow ±1m
+		// because the service uses time.Now() internally).
+		require.NotNil(t, capturedSentAt)
+		require.WithinDuration(t, time.Now().UTC(), *capturedSentAt, time.Minute)
+
+		// Audit row encodes the diff with actor + entity matches.
+		require.Equal(t, AuditActionCampaignCreatorTicketSent, auditRow.Action)
+		require.Equal(t, AuditEntityTypeCampaignCreator, auditRow.EntityType)
+		require.NotNil(t, auditRow.EntityID)
+		require.Equal(t, "cc-1", *auditRow.EntityID)
+		require.NotNil(t, auditRow.ActorID)
+		require.Equal(t, adminCtxUserID, *auditRow.ActorID)
+		require.Equal(t, string(api.Admin), auditRow.ActorRole)
+
+		// Full-struct diff so a regression in mapping (e.g. swapping fields,
+		// forgetting to copy CampaignID into newCC) is caught here. Dynamic
+		// timestamps (UpdatedAt) get a WithinDuration tolerance — see
+		// backend-testing-unit.md § Assertions.
+		var oldSnap domain.CampaignCreator
+		require.NoError(t, json.Unmarshal(auditRow.OldValue, &oldSnap))
+		require.WithinDuration(t, created, oldSnap.UpdatedAt, time.Minute)
+		oldSnap.UpdatedAt = created
+		require.Equal(t, domain.CampaignCreator{
+			ID:           "cc-1",
+			CampaignID:   "camp-1",
+			CreatorID:    "cr-1",
+			Status:       domain.CampaignCreatorStatusSigned,
+			TicketSentAt: nil,
+			CreatedAt:    created,
+			UpdatedAt:    created,
+		}, oldSnap)
+
+		var newSnap domain.CampaignCreator
+		require.NoError(t, json.Unmarshal(auditRow.NewValue, &newSnap))
+		require.WithinDuration(t, now, newSnap.UpdatedAt, time.Minute)
+		newSnap.UpdatedAt = now
+		require.NotNil(t, newSnap.TicketSentAt)
+		require.Equal(t, now, *newSnap.TicketSentAt)
+		require.Equal(t, domain.CampaignCreator{
+			ID:           "cc-1",
+			CampaignID:   "camp-1",
+			CreatorID:    "cr-1",
+			Status:       domain.CampaignCreatorStatusSigned,
+			TicketSentAt: &now,
+			CreatedAt:    now,
+			UpdatedAt:    now,
+		}, newSnap)
+	})
+
+	t.Run("unset flips timestamp → nil with audit", func(t *testing.T) {
+		t.Parallel()
+		pool := dbmocks.NewMockPool(t)
+		factory := svcmocks.NewMockCampaignCreatorRepoFactory(t)
+		campaigns := repomocks.NewMockCampaignRepo(t)
+		ccRepoPool := repomocks.NewMockCampaignCreatorRepo(t)
+		ccRepoTx := repomocks.NewMockCampaignCreatorRepo(t)
+		audit := repomocks.NewMockAuditRepo(t)
+		log := logmocks.NewMockLogger(t)
+		created := time.Date(2026, 5, 11, 12, 0, 0, 0, time.UTC)
+		ticketSentAt := created.Add(-time.Hour)
+
+		factory.EXPECT().NewCampaignRepo(pool).Return(campaigns)
+		campaigns.EXPECT().GetByID(mock.Anything, "camp-1").
+			Return(liveCampaignRow("camp-1", created), nil)
+		factory.EXPECT().NewCampaignCreatorRepo(pool).Return(ccRepoPool)
+		ccRepoPool.EXPECT().GetByCampaignAndCreator(mock.Anything, "camp-1", "cr-1").
+			Return(signedRow("cc-1", &ticketSentAt, created), nil)
+
+		pool.EXPECT().Begin(mock.Anything).Return(testTx{}, nil)
+		factory.EXPECT().NewCampaignCreatorRepo(mock.Anything).Return(ccRepoTx)
+		factory.EXPECT().NewAuditRepo(mock.Anything).Return(audit)
+
+		ccRepoTx.EXPECT().UpdateTicketSentAt(mock.Anything, "cc-1", (*time.Time)(nil)).
+			Return(signedRow("cc-1", nil, created), nil)
+
+		var auditRow repository.AuditLogRow
+		audit.EXPECT().Create(mock.Anything, mock.AnythingOfType("repository.AuditLogRow")).
+			Run(func(_ context.Context, row repository.AuditLogRow) {
+				auditRow = row
+			}).
+			Return(nil)
+
+		log.EXPECT().Info(mock.Anything, "campaign creator ticket_sent toggled",
+			[]any{"campaign_id", "camp-1", "creator_id", "cr-1", "ticket_sent", false}).Once()
+
+		svc := NewCampaignCreatorService(pool, factory, svcmocks.NewMockCampaignInviteNotifier(t), log)
+		got, err := svc.PatchParticipation(adminCtx(), "camp-1", "cr-1", domain.PatchCampaignCreatorInput{TicketSent: pointer.ToBool(false)})
+		require.NoError(t, err)
+		require.Nil(t, got.TicketSentAt)
+
+		require.Equal(t, AuditActionCampaignCreatorTicketSent, auditRow.Action)
+		var oldSnap domain.CampaignCreator
+		require.NoError(t, json.Unmarshal(auditRow.OldValue, &oldSnap))
+		require.NotNil(t, oldSnap.TicketSentAt)
+		require.Equal(t, ticketSentAt, *oldSnap.TicketSentAt)
+		oldSnap.TicketSentAt = &ticketSentAt
+		require.Equal(t, domain.CampaignCreator{
+			ID:           "cc-1",
+			CampaignID:   "camp-1",
+			CreatorID:    "cr-1",
+			Status:       domain.CampaignCreatorStatusSigned,
+			TicketSentAt: &ticketSentAt,
+			CreatedAt:    created,
+			UpdatedAt:    created,
+		}, oldSnap)
+
+		var newSnap domain.CampaignCreator
+		require.NoError(t, json.Unmarshal(auditRow.NewValue, &newSnap))
+		require.Nil(t, newSnap.TicketSentAt)
+		require.Equal(t, domain.CampaignCreator{
+			ID:           "cc-1",
+			CampaignID:   "camp-1",
+			CreatorID:    "cr-1",
+			Status:       domain.CampaignCreatorStatusSigned,
+			TicketSentAt: nil,
+			CreatedAt:    created,
+			UpdatedAt:    created,
+		}, newSnap)
+	})
+
+	t.Run("repo UpdateTicketSentAt error propagates wrapped", func(t *testing.T) {
+		t.Parallel()
+		pool := dbmocks.NewMockPool(t)
+		factory := svcmocks.NewMockCampaignCreatorRepoFactory(t)
+		campaigns := repomocks.NewMockCampaignRepo(t)
+		ccRepoPool := repomocks.NewMockCampaignCreatorRepo(t)
+		ccRepoTx := repomocks.NewMockCampaignCreatorRepo(t)
+		audit := repomocks.NewMockAuditRepo(t)
+		created := time.Date(2026, 5, 11, 12, 0, 0, 0, time.UTC)
+
+		factory.EXPECT().NewCampaignRepo(pool).Return(campaigns)
+		campaigns.EXPECT().GetByID(mock.Anything, "camp-1").
+			Return(liveCampaignRow("camp-1", created), nil)
+		factory.EXPECT().NewCampaignCreatorRepo(pool).Return(ccRepoPool)
+		ccRepoPool.EXPECT().GetByCampaignAndCreator(mock.Anything, "camp-1", "cr-1").
+			Return(signedRow("cc-1", nil, created), nil)
+		pool.EXPECT().Begin(mock.Anything).Return(testTx{}, nil)
+		factory.EXPECT().NewCampaignCreatorRepo(mock.Anything).Return(ccRepoTx)
+		factory.EXPECT().NewAuditRepo(mock.Anything).Return(audit)
+		ccRepoTx.EXPECT().UpdateTicketSentAt(mock.Anything, "cc-1", mock.Anything).
+			Return((*repository.CampaignCreatorRow)(nil), errors.New("db down"))
+
+		svc := NewCampaignCreatorService(pool, factory, svcmocks.NewMockCampaignInviteNotifier(t), logmocks.NewMockLogger(t))
+		_, err := svc.PatchParticipation(adminCtx(), "camp-1", "cr-1", domain.PatchCampaignCreatorInput{TicketSent: pointer.ToBool(true)})
+		require.ErrorContains(t, err, "db down")
+	})
+
+	t.Run("audit Create error rolls back the tx", func(t *testing.T) {
+		t.Parallel()
+		pool := dbmocks.NewMockPool(t)
+		factory := svcmocks.NewMockCampaignCreatorRepoFactory(t)
+		campaigns := repomocks.NewMockCampaignRepo(t)
+		ccRepoPool := repomocks.NewMockCampaignCreatorRepo(t)
+		ccRepoTx := repomocks.NewMockCampaignCreatorRepo(t)
+		audit := repomocks.NewMockAuditRepo(t)
+		created := time.Date(2026, 5, 11, 12, 0, 0, 0, time.UTC)
+		now := time.Date(2026, 5, 11, 13, 0, 0, 0, time.UTC)
+
+		factory.EXPECT().NewCampaignRepo(pool).Return(campaigns)
+		campaigns.EXPECT().GetByID(mock.Anything, "camp-1").
+			Return(liveCampaignRow("camp-1", created), nil)
+		factory.EXPECT().NewCampaignCreatorRepo(pool).Return(ccRepoPool)
+		ccRepoPool.EXPECT().GetByCampaignAndCreator(mock.Anything, "camp-1", "cr-1").
+			Return(signedRow("cc-1", nil, created), nil)
+		pool.EXPECT().Begin(mock.Anything).Return(testTx{}, nil)
+		factory.EXPECT().NewCampaignCreatorRepo(mock.Anything).Return(ccRepoTx)
+		factory.EXPECT().NewAuditRepo(mock.Anything).Return(audit)
+		ccRepoTx.EXPECT().UpdateTicketSentAt(mock.Anything, "cc-1", mock.Anything).
+			Return(signedRow("cc-1", &now, now), nil)
+		audit.EXPECT().Create(mock.Anything, mock.Anything).Return(errors.New("audit failed"))
+
+		svc := NewCampaignCreatorService(pool, factory, svcmocks.NewMockCampaignInviteNotifier(t), logmocks.NewMockLogger(t))
+		_, err := svc.PatchParticipation(adminCtx(), "camp-1", "cr-1", domain.PatchCampaignCreatorInput{TicketSent: pointer.ToBool(true)})
+		require.ErrorContains(t, err, "audit failed")
+	})
+}

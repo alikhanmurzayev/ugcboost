@@ -127,6 +127,12 @@ const (
 	// Same code + message for both branches: anti-fingerprint between
 	// "not registered" and "not in campaign".
 	CodeTMAForbidden = "TMA_FORBIDDEN"
+	// 422 — PATCH /campaigns/{id}/creators/{creatorId} on a row that is not in
+	// status=signed when a ticketSent toggle is requested.
+	CodeCampaignCreatorTicketSentBadStatus = "CAMPAIGN_CREATOR_TICKET_SENT_BAD_STATUS"
+	// 422 — PATCH /campaigns/{id}/creators/{creatorId} with no toggleable
+	// fields supplied — defensive guard against accidental no-op calls.
+	CodeCampaignCreatorPatchEmpty = "CAMPAIGN_CREATOR_PATCH_EMPTY"
 )
 
 // Sentinel domain errors — handlers map these to HTTP status codes.

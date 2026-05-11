@@ -32,6 +32,7 @@ const (
 	AuditActionCampaignCreatorContractSigned           = "campaign_creator.contract_signed"
 	AuditActionCampaignCreatorContractSigningDeclined  = "campaign_creator.contract_signing_declined"
 	AuditActionCampaignCreatorContractUnexpectedStatus = "campaign_creator.contract_unexpected_status"
+	AuditActionCampaignCreatorTicketSent               = "campaign_creator.ticket_sent"
 )
 
 // Audit entity types used alongside AuditAction* values.

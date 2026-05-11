@@ -27,6 +27,7 @@ import {
   useCampaignNotifyMutations,
   type CampaignNotifyMutations,
 } from "./hooks/useCampaignNotifyMutations";
+import { usePatchCampaignCreator } from "./hooks/usePatchCampaignCreator";
 import CampaignCreatorGroupSection from "./CampaignCreatorGroupSection";
 import AddCreatorsDrawer from "./AddCreatorsDrawer";
 import RemoveCreatorConfirm from "./RemoveCreatorConfirm";
@@ -71,6 +72,38 @@ export default function CampaignCreatorsSection({
   const [submittingByStatus, setSubmittingByStatus] = useState<
     Partial<Record<CampaignCreatorStatus, boolean>>
   >({});
+  const [ticketSentPending, setTicketSentPending] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const [ticketSentError, setTicketSentError] = useState<string | null>(null);
+
+  const patchMutation = usePatchCampaignCreator(campaign.id, {
+    onError: () => {
+      setTicketSentError(t("campaignCreators.ticketSentSaveError"));
+    },
+  });
+
+  function handleToggleTicketSent(creatorId: string, next: boolean) {
+    if (ticketSentPending.has(creatorId)) return;
+    setTicketSentPending((prev) => {
+      const np = new Set(prev);
+      np.add(creatorId);
+      return np;
+    });
+    setTicketSentError(null);
+    patchMutation.mutate(
+      { creatorId, patch: { ticketSent: next } },
+      {
+        onSettled: () => {
+          setTicketSentPending((prev) => {
+            const np = new Set(prev);
+            np.delete(creatorId);
+            return np;
+          });
+        },
+      },
+    );
+  }
 
   const removeMutation = useMutation({
     mutationFn: ({
@@ -233,6 +266,16 @@ export default function CampaignCreatorsSection({
         </button>
       </div>
 
+      {ticketSentError && (
+        <p
+          role="alert"
+          className="mt-3 rounded-button border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+          data-testid="campaign-creators-ticket-sent-error"
+        >
+          {ticketSentError}
+        </p>
+      )}
+
       {isLoading ? (
         <div data-testid="campaign-creators-loading">
           <Spinner className="mt-6" />
@@ -249,6 +292,7 @@ export default function CampaignCreatorsSection({
           const action = actionForStatus(status, notifyMutations, t);
           const isPending = action.mutation?.isPending ?? false;
           const isSubmitting = submittingByStatus[status] ?? false;
+          const isSignedGroup = status === CAMPAIGN_CREATOR_STATUS.SIGNED;
           return (
             <CampaignCreatorGroupSection
               key={status}
@@ -272,6 +316,12 @@ export default function CampaignCreatorsSection({
               }
               drawerSelectedCreatorId={selectedCreatorId ?? undefined}
               onRowClick={handleRowClick}
+              onToggleTicketSent={
+                isSignedGroup ? handleToggleTicketSent : undefined
+              }
+              ticketSentPendingFor={
+                isSignedGroup ? ticketSentPending : undefined
+              }
             />
           );
         })

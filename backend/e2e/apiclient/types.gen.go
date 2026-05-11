@@ -476,8 +476,13 @@ type CampaignCreator struct {
 	// - `signing` — contract sent to TrustMe and awaiting creator signature.
 	// - `signed` — creator signed the contract via TrustMe. Terminal.
 	// - `signing_declined` — creator declined the contract via TrustMe. Terminal.
-	Status    CampaignCreatorStatus `json:"status"`
-	UpdatedAt time.Time             `json:"updatedAt"`
+	Status CampaignCreatorStatus `json:"status"`
+
+	// TicketSentAt Timestamp of when the admin marked the travel ticket as sent to
+	// the creator. NULL means "not yet sent". Toggleable via PATCH on
+	// the creator participation; only meaningful for `signed` rows.
+	TicketSentAt *time.Time `json:"ticketSentAt,omitempty"`
+	UpdatedAt    time.Time  `json:"updatedAt"`
 }
 
 // CampaignCreatorBatchInput Batch input shared by `POST /campaigns/{id}/notify` and
@@ -542,6 +547,17 @@ type CampaignCreatorBatchInvalidErrorResponse struct {
 //	    remind-invitation needs `invited`). `currentStatus` carries the
 //	    actual status for richer UX copy.
 type CampaignCreatorBatchInvalidReason string
+
+// CampaignCreatorPatchInput Partial-update input for PATCH /campaigns/{id}/creators/{creatorId}.
+// All fields are optional but at least one must be present — an empty
+// body is rejected with 422 to avoid accidental no-op calls. Currently
+// the only toggleable flag is `ticketSent` (travel ticket dispatched).
+type CampaignCreatorPatchInput struct {
+	// TicketSent When `true`, server records `ticket_sent_at = NOW()`. When
+	// `false`, server clears it back to NULL. Allowed only for
+	// participations in status `signed`.
+	TicketSent *bool `json:"ticketSent,omitempty"`
+}
 
 // CampaignCreatorStatus Lifecycle state of a creator within a campaign.
 //
@@ -1369,6 +1385,16 @@ type PasswordResetRequestBody struct {
 	Email openapi_types.Email `json:"email"`
 }
 
+// PatchCampaignCreatorResult defines model for PatchCampaignCreatorResult.
+type PatchCampaignCreatorResult struct {
+	// Data One creator's attachment to a campaign — the `campaign_creators` row
+	// as seen by the admin UI. `invited*`, `reminded*` and `decidedAt`
+	// fields are populated by chunks 12+ (notify / remind / TMA flow); on
+	// chunk 10 every row is `planned` with NULL timestamps and zero
+	// counters.
+	Data CampaignCreator `json:"data"`
+}
+
 // SendPulseInstagramWebhookRequest Custom JSON payload SendPulse delivers from the Instagram chatbot.
 // `username` and `lastMessage` come from the configured "send custom
 // data" action; `contactId` is SendPulse's opaque contact identifier
@@ -1600,6 +1626,9 @@ type UpdateCampaignJSONRequestBody = CampaignInput
 
 // AddCampaignCreatorsJSONRequestBody defines body for AddCampaignCreators for application/json ContentType.
 type AddCampaignCreatorsJSONRequestBody = AddCampaignCreatorsInput
+
+// PatchCampaignCreatorJSONRequestBody defines body for PatchCampaignCreator for application/json ContentType.
+type PatchCampaignCreatorJSONRequestBody = CampaignCreatorPatchInput
 
 // NotifyCampaignCreatorsJSONRequestBody defines body for NotifyCampaignCreators for application/json ContentType.
 type NotifyCampaignCreatorsJSONRequestBody = CampaignCreatorBatchInput

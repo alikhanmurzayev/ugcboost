@@ -35,6 +35,7 @@ const (
 	CampaignCreatorColumnRemindedAt    = "reminded_at"
 	CampaignCreatorColumnRemindedCount = "reminded_count"
 	CampaignCreatorColumnDecidedAt     = "decided_at"
+	CampaignCreatorColumnTicketSentAt  = "ticket_sent_at"
 	CampaignCreatorColumnContractID    = "contract_id"
 	CampaignCreatorColumnCreatedAt     = "created_at"
 	CampaignCreatorColumnUpdatedAt     = "updated_at"
@@ -55,6 +56,7 @@ type CampaignCreatorRow struct {
 	RemindedAt    *time.Time `db:"reminded_at"`
 	RemindedCount int        `db:"reminded_count"`
 	DecidedAt     *time.Time `db:"decided_at"`
+	TicketSentAt  *time.Time `db:"ticket_sent_at"`
 	ContractID    *string    `db:"contract_id"`
 	CreatedAt     time.Time  `db:"created_at"`
 	UpdatedAt     time.Time  `db:"updated_at"`
@@ -91,6 +93,7 @@ type CampaignCreatorRepo interface {
 	ApplyInvite(ctx context.Context, id string) (*CampaignCreatorRow, error)
 	ApplyRemind(ctx context.Context, id string) (*CampaignCreatorRow, error)
 	ApplyDecision(ctx context.Context, id, status string) (*CampaignCreatorRow, error)
+	UpdateTicketSentAt(ctx context.Context, id string, sentAt *time.Time) (*CampaignCreatorRow, error)
 	UpdateContractIDAndStatus(ctx context.Context, id, contractID, status string) error
 	UpdateStatus(ctx context.Context, id, status string) error
 	ExistsInvitedInCampaign(ctx context.Context, campaignID string) (bool, error)
@@ -317,6 +320,21 @@ func (r *campaignCreatorRepository) ApplyDecision(ctx context.Context, id, statu
 	q := sq.Update(TableCampaignCreators).
 		Set(CampaignCreatorColumnStatus, status).
 		Set(CampaignCreatorColumnDecidedAt, sq.Expr("now()")).
+		Set(CampaignCreatorColumnUpdatedAt, sq.Expr("now()")).
+		Where(sq.Eq{CampaignCreatorColumnID: id}).
+		Suffix(returningClause(campaignCreatorSelectColumns))
+	return dbutil.One[CampaignCreatorRow](ctx, r.db, q)
+}
+
+// UpdateTicketSentAt stamps ticket_sent_at to the supplied value (nil to
+// clear) and bumps updated_at. The admin-side ticket toggle is the sole
+// caller (chunk-ticket-sent); callers verify the source status outside.
+// Returns the freshly updated row for audit and response. dbutil.One wraps
+// sql.ErrNoRows when no row matches the id — the service maps it to
+// ErrCampaignCreatorNotFound at the boundary.
+func (r *campaignCreatorRepository) UpdateTicketSentAt(ctx context.Context, id string, sentAt *time.Time) (*CampaignCreatorRow, error) {
+	q := sq.Update(TableCampaignCreators).
+		Set(CampaignCreatorColumnTicketSentAt, sentAt).
 		Set(CampaignCreatorColumnUpdatedAt, sq.Expr("now()")).
 		Where(sq.Eq{CampaignCreatorColumnID: id}).
 		Suffix(returningClause(campaignCreatorSelectColumns))

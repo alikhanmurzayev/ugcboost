@@ -64,3 +64,13 @@ func (a *AuthzService) CanRemindCampaignCreatorsSigning(ctx context.Context) err
 	}
 	return nil
 }
+
+// CanPatchCampaignCreator gates PATCH /campaigns/{id}/creators/{creatorId}
+// to admins only. Per-row admin toggles (currently `ticketSent`) are
+// operational metadata maintained exclusively by the admin team.
+func (a *AuthzService) CanPatchCampaignCreator(ctx context.Context) error {
+	if middleware.RoleFromContext(ctx) != api.Admin {
+		return domain.ErrForbidden
+	}
+	return nil
+}

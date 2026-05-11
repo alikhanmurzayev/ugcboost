@@ -485,8 +485,13 @@ type CampaignCreator struct {
 	// - `signing` — contract sent to TrustMe and awaiting creator signature.
 	// - `signed` — creator signed the contract via TrustMe. Terminal.
 	// - `signing_declined` — creator declined the contract via TrustMe. Terminal.
-	Status    CampaignCreatorStatus `json:"status"`
-	UpdatedAt time.Time             `json:"updatedAt"`
+	Status CampaignCreatorStatus `json:"status"`
+
+	// TicketSentAt Timestamp of when the admin marked the travel ticket as sent to
+	// the creator. NULL means "not yet sent". Toggleable via PATCH on
+	// the creator participation; only meaningful for `signed` rows.
+	TicketSentAt *time.Time `json:"ticketSentAt,omitempty"`
+	UpdatedAt    time.Time  `json:"updatedAt"`
 }
 
 // CampaignCreatorBatchInput Batch input shared by `POST /campaigns/{id}/notify` and
@@ -551,6 +556,17 @@ type CampaignCreatorBatchInvalidErrorResponse struct {
 //	    remind-invitation needs `invited`). `currentStatus` carries the
 //	    actual status for richer UX copy.
 type CampaignCreatorBatchInvalidReason string
+
+// CampaignCreatorPatchInput Partial-update input for PATCH /campaigns/{id}/creators/{creatorId}.
+// All fields are optional but at least one must be present — an empty
+// body is rejected with 422 to avoid accidental no-op calls. Currently
+// the only toggleable flag is `ticketSent` (travel ticket dispatched).
+type CampaignCreatorPatchInput struct {
+	// TicketSent When `true`, server records `ticket_sent_at = NOW()`. When
+	// `false`, server clears it back to NULL. Allowed only for
+	// participations in status `signed`.
+	TicketSent *bool `json:"ticketSent,omitempty"`
+}
 
 // CampaignCreatorStatus Lifecycle state of a creator within a campaign.
 //
@@ -1378,6 +1394,16 @@ type PasswordResetRequestBody struct {
 	Email openapi_types.Email `json:"email"`
 }
 
+// PatchCampaignCreatorResult defines model for PatchCampaignCreatorResult.
+type PatchCampaignCreatorResult struct {
+	// Data One creator's attachment to a campaign — the `campaign_creators` row
+	// as seen by the admin UI. `invited*`, `reminded*` and `decidedAt`
+	// fields are populated by chunks 12+ (notify / remind / TMA flow); on
+	// chunk 10 every row is `planned` with NULL timestamps and zero
+	// counters.
+	Data CampaignCreator `json:"data"`
+}
+
 // SendPulseInstagramWebhookRequest Custom JSON payload SendPulse delivers from the Instagram chatbot.
 // `username` and `lastMessage` come from the configured "send custom
 // data" action; `contactId` is SendPulse's opaque contact identifier
@@ -1610,6 +1636,9 @@ type UpdateCampaignJSONRequestBody = CampaignInput
 // AddCampaignCreatorsJSONRequestBody defines body for AddCampaignCreators for application/json ContentType.
 type AddCampaignCreatorsJSONRequestBody = AddCampaignCreatorsInput
 
+// PatchCampaignCreatorJSONRequestBody defines body for PatchCampaignCreator for application/json ContentType.
+type PatchCampaignCreatorJSONRequestBody = CampaignCreatorPatchInput
+
 // NotifyCampaignCreatorsJSONRequestBody defines body for NotifyCampaignCreators for application/json ContentType.
 type NotifyCampaignCreatorsJSONRequestBody = CampaignCreatorBatchInput
 
@@ -1711,6 +1740,9 @@ type ServerInterface interface {
 	// Remove a creator from a campaign (admin-only)
 	// (DELETE /campaigns/{id}/creators/{creatorId})
 	RemoveCampaignCreator(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, creatorId openapi_types.UUID)
+	// Patch a creator's participation flags (admin-only)
+	// (PATCH /campaigns/{id}/creators/{creatorId})
+	PatchCampaignCreator(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, creatorId openapi_types.UUID)
 	// Send invitation messages to campaign creators (admin-only)
 	// (POST /campaigns/{id}/notify)
 	NotifyCampaignCreators(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
@@ -1906,6 +1938,12 @@ func (_ Unimplemented) AddCampaignCreators(w http.ResponseWriter, r *http.Reques
 // Remove a creator from a campaign (admin-only)
 // (DELETE /campaigns/{id}/creators/{creatorId})
 func (_ Unimplemented) RemoveCampaignCreator(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, creatorId openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Patch a creator's participation flags (admin-only)
+// (PATCH /campaigns/{id}/creators/{creatorId})
+func (_ Unimplemented) PatchCampaignCreator(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, creatorId openapi_types.UUID) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -2756,6 +2794,46 @@ func (siw *ServerInterfaceWrapper) RemoveCampaignCreator(w http.ResponseWriter, 
 	handler.ServeHTTP(w, r)
 }
 
+// PatchCampaignCreator operation middleware
+func (siw *ServerInterfaceWrapper) PatchCampaignCreator(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "creatorId" -------------
+	var creatorId openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "creatorId", chi.URLParam(r, "creatorId"), &creatorId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "creatorId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.PatchCampaignCreator(w, r, id, creatorId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // NotifyCampaignCreators operation middleware
 func (siw *ServerInterfaceWrapper) NotifyCampaignCreators(w http.ResponseWriter, r *http.Request) {
 
@@ -3397,6 +3475,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Delete(options.BaseURL+"/campaigns/{id}/creators/{creatorId}", wrapper.RemoveCampaignCreator)
+	})
+	r.Group(func(r chi.Router) {
+		r.Patch(options.BaseURL+"/campaigns/{id}/creators/{creatorId}", wrapper.PatchCampaignCreator)
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/campaigns/{id}/notify", wrapper.NotifyCampaignCreators)
@@ -4612,6 +4693,73 @@ func (response RemoveCampaignCreatordefaultJSONResponse) VisitRemoveCampaignCrea
 	return json.NewEncoder(w).Encode(response.Body)
 }
 
+type PatchCampaignCreatorRequestObject struct {
+	Id        openapi_types.UUID `json:"id"`
+	CreatorId openapi_types.UUID `json:"creatorId"`
+	Body      *PatchCampaignCreatorJSONRequestBody
+}
+
+type PatchCampaignCreatorResponseObject interface {
+	VisitPatchCampaignCreatorResponse(w http.ResponseWriter) error
+}
+
+type PatchCampaignCreator200JSONResponse PatchCampaignCreatorResult
+
+func (response PatchCampaignCreator200JSONResponse) VisitPatchCampaignCreatorResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type PatchCampaignCreator401JSONResponse ErrorResponse
+
+func (response PatchCampaignCreator401JSONResponse) VisitPatchCampaignCreatorResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type PatchCampaignCreator403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response PatchCampaignCreator403JSONResponse) VisitPatchCampaignCreatorResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type PatchCampaignCreator404JSONResponse ErrorResponse
+
+func (response PatchCampaignCreator404JSONResponse) VisitPatchCampaignCreatorResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type PatchCampaignCreator422JSONResponse ErrorResponse
+
+func (response PatchCampaignCreator422JSONResponse) VisitPatchCampaignCreatorResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(422)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type PatchCampaignCreatordefaultJSONResponse struct {
+	Body       ErrorResponse
+	StatusCode int
+}
+
+func (response PatchCampaignCreatordefaultJSONResponse) VisitPatchCampaignCreatorResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+
+	return json.NewEncoder(w).Encode(response.Body)
+}
+
 type NotifyCampaignCreatorsRequestObject struct {
 	Id   openapi_types.UUID `json:"id"`
 	Body *NotifyCampaignCreatorsJSONRequestBody
@@ -5701,6 +5849,9 @@ type StrictServerInterface interface {
 	// Remove a creator from a campaign (admin-only)
 	// (DELETE /campaigns/{id}/creators/{creatorId})
 	RemoveCampaignCreator(ctx context.Context, request RemoveCampaignCreatorRequestObject) (RemoveCampaignCreatorResponseObject, error)
+	// Patch a creator's participation flags (admin-only)
+	// (PATCH /campaigns/{id}/creators/{creatorId})
+	PatchCampaignCreator(ctx context.Context, request PatchCampaignCreatorRequestObject) (PatchCampaignCreatorResponseObject, error)
 	// Send invitation messages to campaign creators (admin-only)
 	// (POST /campaigns/{id}/notify)
 	NotifyCampaignCreators(ctx context.Context, request NotifyCampaignCreatorsRequestObject) (NotifyCampaignCreatorsResponseObject, error)
@@ -6426,6 +6577,40 @@ func (sh *strictHandler) RemoveCampaignCreator(w http.ResponseWriter, r *http.Re
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(RemoveCampaignCreatorResponseObject); ok {
 		if err := validResponse.VisitRemoveCampaignCreatorResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// PatchCampaignCreator operation middleware
+func (sh *strictHandler) PatchCampaignCreator(w http.ResponseWriter, r *http.Request, id openapi_types.UUID, creatorId openapi_types.UUID) {
+	var request PatchCampaignCreatorRequestObject
+
+	request.Id = id
+	request.CreatorId = creatorId
+
+	var body PatchCampaignCreatorJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.PatchCampaignCreator(ctx, request.(PatchCampaignCreatorRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "PatchCampaignCreator")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(PatchCampaignCreatorResponseObject); ok {
+		if err := validResponse.VisitPatchCampaignCreatorResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

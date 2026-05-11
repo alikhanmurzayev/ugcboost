@@ -6,6 +6,7 @@ package mocks
 
 import (
 	"context"
+	"time"
 
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/repository"
 	mock "github.com/stretchr/testify/mock"
@@ -1130,6 +1131,80 @@ func (_c *MockCampaignCreatorRepo_UpdateStatus_Call) Return(err error) *MockCamp
 }
 
 func (_c *MockCampaignCreatorRepo_UpdateStatus_Call) RunAndReturn(run func(ctx context.Context, id string, status string) error) *MockCampaignCreatorRepo_UpdateStatus_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// UpdateTicketSentAt provides a mock function for the type MockCampaignCreatorRepo
+func (_mock *MockCampaignCreatorRepo) UpdateTicketSentAt(ctx context.Context, id string, sentAt *time.Time) (*repository.CampaignCreatorRow, error) {
+	ret := _mock.Called(ctx, id, sentAt)
+
+	if len(ret) == 0 {
+		panic("no return value specified for UpdateTicketSentAt")
+	}
+
+	var r0 *repository.CampaignCreatorRow
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, *time.Time) (*repository.CampaignCreatorRow, error)); ok {
+		return returnFunc(ctx, id, sentAt)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, *time.Time) *repository.CampaignCreatorRow); ok {
+		r0 = returnFunc(ctx, id, sentAt)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*repository.CampaignCreatorRow)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, *time.Time) error); ok {
+		r1 = returnFunc(ctx, id, sentAt)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockCampaignCreatorRepo_UpdateTicketSentAt_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'UpdateTicketSentAt'
+type MockCampaignCreatorRepo_UpdateTicketSentAt_Call struct {
+	*mock.Call
+}
+
+// UpdateTicketSentAt is a helper method to define mock.On call
+//   - ctx context.Context
+//   - id string
+//   - sentAt *time.Time
+func (_e *MockCampaignCreatorRepo_Expecter) UpdateTicketSentAt(ctx interface{}, id interface{}, sentAt interface{}) *MockCampaignCreatorRepo_UpdateTicketSentAt_Call {
+	return &MockCampaignCreatorRepo_UpdateTicketSentAt_Call{Call: _e.mock.On("UpdateTicketSentAt", ctx, id, sentAt)}
+}
+
+func (_c *MockCampaignCreatorRepo_UpdateTicketSentAt_Call) Run(run func(ctx context.Context, id string, sentAt *time.Time)) *MockCampaignCreatorRepo_UpdateTicketSentAt_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 *time.Time
+		if args[2] != nil {
+			arg2 = args[2].(*time.Time)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockCampaignCreatorRepo_UpdateTicketSentAt_Call) Return(campaignCreatorRow *repository.CampaignCreatorRow, err error) *MockCampaignCreatorRepo_UpdateTicketSentAt_Call {
+	_c.Call.Return(campaignCreatorRow, err)
+	return _c
+}
+
+func (_c *MockCampaignCreatorRepo_UpdateTicketSentAt_Call) RunAndReturn(run func(ctx context.Context, id string, sentAt *time.Time) (*repository.CampaignCreatorRow, error)) *MockCampaignCreatorRepo_UpdateTicketSentAt_Call {
 	_c.Call.Return(run)
 	return _c
 }
