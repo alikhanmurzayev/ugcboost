@@ -158,6 +158,16 @@ type CreatorAggregateCategory struct {
 	Name string
 }
 
+// CreatorCampaignBrief is one campaign-participation row attached to a creator
+// aggregate. The service filters out soft-deleted campaigns before assembling
+// the slice; the row carries only what the drawer needs (id for the link
+// target, name for the row label, status for grouping/labelling).
+type CreatorCampaignBrief struct {
+	ID     string
+	Name   string
+	Status string
+}
+
 // CreatorAggregate is the full creator profile served by GET /creators/{id}.
 // It collapses the relational creators / creator_socials / creator_categories
 // trio into one flat document because every consumer (admin UI, future read
@@ -183,6 +193,7 @@ type CreatorAggregate struct {
 	TelegramLastName    *string
 	Socials             []CreatorAggregateSocial
 	Categories          []CreatorAggregateCategory
+	Campaigns           []CreatorCampaignBrief
 	CreatedAt           time.Time
 	UpdatedAt           time.Time
 }
@@ -264,19 +275,20 @@ type CreatorListSocial struct {
 // the handler resolves dictionary names at presentation time so service/repo
 // stay presentation-free.
 type CreatorListItem struct {
-	ID               string
-	LastName         string
-	FirstName        string
-	MiddleName       *string
-	IIN              string
-	BirthDate        time.Time
-	Phone            string
-	CityCode         string
-	Categories       []string
-	Socials          []CreatorListSocial
-	TelegramUsername *string
-	CreatedAt        time.Time
-	UpdatedAt        time.Time
+	ID                   string
+	LastName             string
+	FirstName            string
+	MiddleName           *string
+	IIN                  string
+	BirthDate            time.Time
+	Phone                string
+	CityCode             string
+	Categories           []string
+	Socials              []CreatorListSocial
+	ActiveCampaignsCount int
+	TelegramUsername     *string
+	CreatedAt            time.Time
+	UpdatedAt            time.Time
 }
 
 // CreatorListPage is what the service returns: the page slice plus pagination

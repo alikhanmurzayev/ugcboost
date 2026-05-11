@@ -9,6 +9,7 @@ import (
 
 	tgbot "github.com/go-telegram/bot"
 	tgmodels "github.com/go-telegram/bot/models"
+	"github.com/google/uuid"
 	openapi_types "github.com/oapi-codegen/runtime/types"
 
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/dbutil"
@@ -41,6 +42,7 @@ type TestAPICleanupRepoFactory interface {
 	NewCreatorApplicationRepo(db dbutil.DB) repository.CreatorApplicationRepo
 	NewCreatorRepo(db dbutil.DB) repository.CreatorRepo
 	NewCampaignRepo(db dbutil.DB) repository.CampaignRepo
+	NewCampaignCreatorRepo(db dbutil.DB) repository.CampaignCreatorRepo
 }
 
 // TestAPIHandler provides test-only endpoints that back openapi-test.yaml.
@@ -215,6 +217,46 @@ func (h *TestAPIHandler) CleanupEntity(ctx context.Context, request testapi.Clea
 	}
 
 	return testapi.CleanupEntity204Response{}, nil
+}
+
+// ForceCleanupCampaignCreator handles POST /test/campaign-creators/force-cleanup.
+//
+// Hard-deletes the (campaign_id, creator_id) row irrespective of campaign
+// soft-delete state. Production admin DELETE /campaigns/{id}/creators/{creator}
+// refuses to operate on a soft-deleted campaign (gate lives in service); that
+// is correct for prod but blocks e2e cleanup stacks that intentionally flip a
+// campaign to `is_deleted = true` before teardown. This endpoint plugs the
+// gap.
+func (h *TestAPIHandler) ForceCleanupCampaignCreator(ctx context.Context, request testapi.ForceCleanupCampaignCreatorRequestObject) (testapi.ForceCleanupCampaignCreatorResponseObject, error) {
+	body := request.Body
+	if body.CampaignId == uuid.Nil || body.CreatorId == uuid.Nil {
+		return nil, domain.NewValidationError(domain.CodeValidation, "campaignId and creatorId are required")
+	}
+	if err := h.repos.NewCampaignCreatorRepo(h.pool).
+		DeleteByCampaignAndCreatorForTests(ctx, body.CampaignId.String(), body.CreatorId.String()); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, domain.ErrNotFound
+		}
+		return nil, err
+	}
+	return testapi.ForceCleanupCampaignCreator204Response{}, nil
+}
+
+// MarkCampaignDeleted handles POST /test/campaigns/{id}/mark-deleted.
+//
+// Test-only soft-delete: flips campaigns.is_deleted = true so e2e scenarios
+// can exercise read paths that filter out soft-deleted rows (e.g. the new
+// CreatorAggregate.campaigns / activeCampaignsCount projection). There is no
+// production endpoint exposing soft-delete — this plug lives here, gated
+// behind ENVIRONMENT != production, exactly like the rest of TestAPIHandler.
+func (h *TestAPIHandler) MarkCampaignDeleted(ctx context.Context, request testapi.MarkCampaignDeletedRequestObject) (testapi.MarkCampaignDeletedResponseObject, error) {
+	if err := h.repos.NewCampaignRepo(h.pool).MarkDeletedForTests(ctx, request.Id.String()); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, domain.ErrNotFound
+		}
+		return nil, err
+	}
+	return testapi.MarkCampaignDeleted204Response{}, nil
 }
 
 // GetResetToken handles GET /test/reset-tokens?email=...

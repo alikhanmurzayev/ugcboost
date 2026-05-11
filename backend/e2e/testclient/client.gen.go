@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/oapi-codegen/runtime"
+	openapi_types "github.com/oapi-codegen/runtime/types"
 )
 
 // RequestEditorFn  is the function signature for the RequestEditor callback function
@@ -89,6 +90,14 @@ func WithRequestEditorFn(fn RequestEditorFn) ClientOption {
 
 // The interface specification for the client above.
 type ClientInterface interface {
+	// ForceCleanupCampaignCreatorWithBody request with any body
+	ForceCleanupCampaignCreatorWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	ForceCleanupCampaignCreator(ctx context.Context, body ForceCleanupCampaignCreatorJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// MarkCampaignDeleted request
+	MarkCampaignDeleted(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// CleanupEntityWithBody request with any body
 	CleanupEntityWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -143,6 +152,42 @@ type ClientInterface interface {
 	TrustMeSpyRegisterDocumentWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	TrustMeSpyRegisterDocument(ctx context.Context, body TrustMeSpyRegisterDocumentJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+}
+
+func (c *Client) ForceCleanupCampaignCreatorWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewForceCleanupCampaignCreatorRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ForceCleanupCampaignCreator(ctx context.Context, body ForceCleanupCampaignCreatorJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewForceCleanupCampaignCreatorRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) MarkCampaignDeleted(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewMarkCampaignDeletedRequest(c.Server, id)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
 }
 
 func (c *Client) CleanupEntityWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
@@ -395,6 +440,80 @@ func (c *Client) TrustMeSpyRegisterDocument(ctx context.Context, body TrustMeSpy
 		return nil, err
 	}
 	return c.Client.Do(req)
+}
+
+// NewForceCleanupCampaignCreatorRequest calls the generic ForceCleanupCampaignCreator builder with application/json body
+func NewForceCleanupCampaignCreatorRequest(server string, body ForceCleanupCampaignCreatorJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewForceCleanupCampaignCreatorRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewForceCleanupCampaignCreatorRequestWithBody generates requests for ForceCleanupCampaignCreator with any type of body
+func NewForceCleanupCampaignCreatorRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/test/campaign-creators/force-cleanup")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewMarkCampaignDeletedRequest generates requests for MarkCampaignDeleted
+func NewMarkCampaignDeletedRequest(server string, id openapi_types.UUID) (*http.Request, error) {
+	var err error
+
+	var pathParam0 string
+
+	pathParam0, err = runtime.StyleParamWithOptions("simple", false, "id", id, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationPath, Type: "string", Format: "uuid"})
+	if err != nil {
+		return nil, err
+	}
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/test/campaigns/%s/mark-deleted", pathParam0)
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
 }
 
 // NewCleanupEntityRequest calls the generic CleanupEntity builder with application/json body
@@ -947,6 +1066,14 @@ func WithBaseURL(baseURL string) ClientOption {
 
 // ClientWithResponsesInterface is the interface specification for the client with responses above.
 type ClientWithResponsesInterface interface {
+	// ForceCleanupCampaignCreatorWithBodyWithResponse request with any body
+	ForceCleanupCampaignCreatorWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ForceCleanupCampaignCreatorResponse, error)
+
+	ForceCleanupCampaignCreatorWithResponse(ctx context.Context, body ForceCleanupCampaignCreatorJSONRequestBody, reqEditors ...RequestEditorFn) (*ForceCleanupCampaignCreatorResponse, error)
+
+	// MarkCampaignDeletedWithResponse request
+	MarkCampaignDeletedWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*MarkCampaignDeletedResponse, error)
+
 	// CleanupEntityWithBodyWithResponse request with any body
 	CleanupEntityWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CleanupEntityResponse, error)
 
@@ -1001,6 +1128,50 @@ type ClientWithResponsesInterface interface {
 	TrustMeSpyRegisterDocumentWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*TrustMeSpyRegisterDocumentResponse, error)
 
 	TrustMeSpyRegisterDocumentWithResponse(ctx context.Context, body TrustMeSpyRegisterDocumentJSONRequestBody, reqEditors ...RequestEditorFn) (*TrustMeSpyRegisterDocumentResponse, error)
+}
+
+type ForceCleanupCampaignCreatorResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON404      *ErrorResponse
+}
+
+// Status returns HTTPResponse.Status
+func (r ForceCleanupCampaignCreatorResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ForceCleanupCampaignCreatorResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type MarkCampaignDeletedResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON404      *ErrorResponse
+}
+
+// Status returns HTTPResponse.Status
+func (r MarkCampaignDeletedResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r MarkCampaignDeletedResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
 }
 
 type CleanupEntityResponse struct {
@@ -1292,6 +1463,32 @@ func (r TrustMeSpyRegisterDocumentResponse) StatusCode() int {
 	return 0
 }
 
+// ForceCleanupCampaignCreatorWithBodyWithResponse request with arbitrary body returning *ForceCleanupCampaignCreatorResponse
+func (c *ClientWithResponses) ForceCleanupCampaignCreatorWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*ForceCleanupCampaignCreatorResponse, error) {
+	rsp, err := c.ForceCleanupCampaignCreatorWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseForceCleanupCampaignCreatorResponse(rsp)
+}
+
+func (c *ClientWithResponses) ForceCleanupCampaignCreatorWithResponse(ctx context.Context, body ForceCleanupCampaignCreatorJSONRequestBody, reqEditors ...RequestEditorFn) (*ForceCleanupCampaignCreatorResponse, error) {
+	rsp, err := c.ForceCleanupCampaignCreator(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseForceCleanupCampaignCreatorResponse(rsp)
+}
+
+// MarkCampaignDeletedWithResponse request returning *MarkCampaignDeletedResponse
+func (c *ClientWithResponses) MarkCampaignDeletedWithResponse(ctx context.Context, id openapi_types.UUID, reqEditors ...RequestEditorFn) (*MarkCampaignDeletedResponse, error) {
+	rsp, err := c.MarkCampaignDeleted(ctx, id, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseMarkCampaignDeletedResponse(rsp)
+}
+
 // CleanupEntityWithBodyWithResponse request with arbitrary body returning *CleanupEntityResponse
 func (c *ClientWithResponses) CleanupEntityWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*CleanupEntityResponse, error) {
 	rsp, err := c.CleanupEntityWithBody(ctx, contentType, body, reqEditors...)
@@ -1471,6 +1668,58 @@ func (c *ClientWithResponses) TrustMeSpyRegisterDocumentWithResponse(ctx context
 		return nil, err
 	}
 	return ParseTrustMeSpyRegisterDocumentResponse(rsp)
+}
+
+// ParseForceCleanupCampaignCreatorResponse parses an HTTP response from a ForceCleanupCampaignCreatorWithResponse call
+func ParseForceCleanupCampaignCreatorResponse(rsp *http.Response) (*ForceCleanupCampaignCreatorResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ForceCleanupCampaignCreatorResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseMarkCampaignDeletedResponse parses an HTTP response from a MarkCampaignDeletedWithResponse call
+func ParseMarkCampaignDeletedResponse(rsp *http.Response) (*MarkCampaignDeletedResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &MarkCampaignDeletedResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 404:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON404 = &dest
+
+	}
+
+	return response, nil
 }
 
 // ParseCleanupEntityResponse parses an HTTP response from a CleanupEntityWithResponse call

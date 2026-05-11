@@ -96,6 +96,12 @@ type ErrorResponse struct {
 	} `json:"error"`
 }
 
+// ForceCleanupCampaignCreatorRequest defines model for ForceCleanupCampaignCreatorRequest.
+type ForceCleanupCampaignCreatorRequest struct {
+	CampaignId openapi_types.UUID `json:"campaignId"`
+	CreatorId  openapi_types.UUID `json:"creatorId"`
+}
+
 // ResetTokenData defines model for ResetTokenData.
 type ResetTokenData struct {
 	Token string `json:"token"`
@@ -315,6 +321,9 @@ type GetTelegramSentParams struct {
 	Since *time.Time `form:"since,omitempty" json:"since,omitempty"`
 }
 
+// ForceCleanupCampaignCreatorJSONRequestBody defines body for ForceCleanupCampaignCreator for application/json ContentType.
+type ForceCleanupCampaignCreatorJSONRequestBody = ForceCleanupCampaignCreatorRequest
+
 // CleanupEntityJSONRequestBody defines body for CleanupEntity for application/json ContentType.
 type CleanupEntityJSONRequestBody = CleanupEntityRequest
 
@@ -341,6 +350,12 @@ type TrustMeSpyRegisterDocumentJSONRequestBody = TrustMeSpyRegisterDocumentReque
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
+	// Hard-delete a campaign_creators row regardless of soft-deleted state
+	// (POST /test/campaign-creators/force-cleanup)
+	ForceCleanupCampaignCreator(w http.ResponseWriter, r *http.Request)
+	// Flip campaigns.is_deleted = true without going through admin flows
+	// (POST /test/campaigns/{id}/mark-deleted)
+	MarkCampaignDeleted(w http.ResponseWriter, r *http.Request, id openapi_types.UUID)
 	// Hard-delete a test entity (user or brand) and its references
 	// (POST /test/cleanup-entity)
 	CleanupEntity(w http.ResponseWriter, r *http.Request)
@@ -385,6 +400,18 @@ type ServerInterface interface {
 // Unimplemented server implementation that returns http.StatusNotImplemented for each endpoint.
 
 type Unimplemented struct{}
+
+// Hard-delete a campaign_creators row regardless of soft-deleted state
+// (POST /test/campaign-creators/force-cleanup)
+func (_ Unimplemented) ForceCleanupCampaignCreator(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Flip campaigns.is_deleted = true without going through admin flows
+// (POST /test/campaigns/{id}/mark-deleted)
+func (_ Unimplemented) MarkCampaignDeleted(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
 
 // Hard-delete a test entity (user or brand) and its references
 // (POST /test/cleanup-entity)
@@ -472,6 +499,45 @@ type ServerInterfaceWrapper struct {
 }
 
 type MiddlewareFunc func(http.Handler) http.Handler
+
+// ForceCleanupCampaignCreator operation middleware
+func (siw *ServerInterfaceWrapper) ForceCleanupCampaignCreator(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ForceCleanupCampaignCreator(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// MarkCampaignDeleted operation middleware
+func (siw *ServerInterfaceWrapper) MarkCampaignDeleted(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "id" -------------
+	var id openapi_types.UUID
+
+	err = runtime.BindStyledParameterWithOptions("simple", "id", chi.URLParam(r, "id"), &id, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: "uuid"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.MarkCampaignDeleted(w, r, id)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
 
 // CleanupEntity operation middleware
 func (siw *ServerInterfaceWrapper) CleanupEntity(w http.ResponseWriter, r *http.Request) {
@@ -817,6 +883,12 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	}
 
 	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/test/campaign-creators/force-cleanup", wrapper.ForceCleanupCampaignCreator)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/test/campaigns/{id}/mark-deleted", wrapper.MarkCampaignDeleted)
+	})
+	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/test/cleanup-entity", wrapper.CleanupEntity)
 	})
 	r.Group(func(r chi.Router) {
@@ -857,6 +929,56 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 
 	return r
+}
+
+type ForceCleanupCampaignCreatorRequestObject struct {
+	Body *ForceCleanupCampaignCreatorJSONRequestBody
+}
+
+type ForceCleanupCampaignCreatorResponseObject interface {
+	VisitForceCleanupCampaignCreatorResponse(w http.ResponseWriter) error
+}
+
+type ForceCleanupCampaignCreator204Response struct {
+}
+
+func (response ForceCleanupCampaignCreator204Response) VisitForceCleanupCampaignCreatorResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type ForceCleanupCampaignCreator404JSONResponse ErrorResponse
+
+func (response ForceCleanupCampaignCreator404JSONResponse) VisitForceCleanupCampaignCreatorResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type MarkCampaignDeletedRequestObject struct {
+	Id openapi_types.UUID `json:"id"`
+}
+
+type MarkCampaignDeletedResponseObject interface {
+	VisitMarkCampaignDeletedResponse(w http.ResponseWriter) error
+}
+
+type MarkCampaignDeleted204Response struct {
+}
+
+func (response MarkCampaignDeleted204Response) VisitMarkCampaignDeletedResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type MarkCampaignDeleted404JSONResponse ErrorResponse
+
+func (response MarkCampaignDeleted404JSONResponse) VisitMarkCampaignDeletedResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+
+	return json.NewEncoder(w).Encode(response)
 }
 
 type CleanupEntityRequestObject struct {
@@ -1162,6 +1284,12 @@ func (response TrustMeSpyRegisterDocument422JSONResponse) VisitTrustMeSpyRegiste
 
 // StrictServerInterface represents all server handlers.
 type StrictServerInterface interface {
+	// Hard-delete a campaign_creators row regardless of soft-deleted state
+	// (POST /test/campaign-creators/force-cleanup)
+	ForceCleanupCampaignCreator(ctx context.Context, request ForceCleanupCampaignCreatorRequestObject) (ForceCleanupCampaignCreatorResponseObject, error)
+	// Flip campaigns.is_deleted = true without going through admin flows
+	// (POST /test/campaigns/{id}/mark-deleted)
+	MarkCampaignDeleted(ctx context.Context, request MarkCampaignDeletedRequestObject) (MarkCampaignDeletedResponseObject, error)
 	// Hard-delete a test entity (user or brand) and its references
 	// (POST /test/cleanup-entity)
 	CleanupEntity(ctx context.Context, request CleanupEntityRequestObject) (CleanupEntityResponseObject, error)
@@ -1230,6 +1358,63 @@ type strictHandler struct {
 	ssi         StrictServerInterface
 	middlewares []StrictMiddlewareFunc
 	options     StrictHTTPServerOptions
+}
+
+// ForceCleanupCampaignCreator operation middleware
+func (sh *strictHandler) ForceCleanupCampaignCreator(w http.ResponseWriter, r *http.Request) {
+	var request ForceCleanupCampaignCreatorRequestObject
+
+	var body ForceCleanupCampaignCreatorJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ForceCleanupCampaignCreator(ctx, request.(ForceCleanupCampaignCreatorRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ForceCleanupCampaignCreator")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ForceCleanupCampaignCreatorResponseObject); ok {
+		if err := validResponse.VisitForceCleanupCampaignCreatorResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// MarkCampaignDeleted operation middleware
+func (sh *strictHandler) MarkCampaignDeleted(w http.ResponseWriter, r *http.Request, id openapi_types.UUID) {
+	var request MarkCampaignDeletedRequestObject
+
+	request.Id = id
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.MarkCampaignDeleted(ctx, request.(MarkCampaignDeletedRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "MarkCampaignDeleted")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(MarkCampaignDeletedResponseObject); ok {
+		if err := validResponse.VisitMarkCampaignDeletedResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
 }
 
 // CleanupEntity operation middleware

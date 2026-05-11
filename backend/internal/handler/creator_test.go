@@ -166,6 +166,9 @@ func TestServer_GetCreator(t *testing.T) {
 		socialIGID := uuid.MustParse("aaaaaaaa-1111-1111-1111-111111111111")
 		socialTTID := uuid.MustParse("aaaaaaaa-2222-2222-2222-222222222222")
 
+		campaignActiveID := uuid.MustParse("cccc1111-1111-1111-1111-111111111111")
+		campaignSigningID := uuid.MustParse("cccc2222-2222-2222-2222-222222222222")
+
 		aggregate := &domain.CreatorAggregate{
 			ID:                  creatorID.String(),
 			IIN:                 "950515312348",
@@ -207,6 +210,10 @@ func TestServer_GetCreator(t *testing.T) {
 			Categories: []domain.CreatorAggregateCategory{
 				{Code: "beauty", Name: "Красота"},
 				{Code: "fashion", Name: "Мода"},
+			},
+			Campaigns: []domain.CreatorCampaignBrief{
+				{ID: campaignActiveID.String(), Name: "Spring Drop", Status: domain.CampaignCreatorStatusSigned},
+				{ID: campaignSigningID.String(), Name: "Holiday Push", Status: domain.CampaignCreatorStatusSigning},
 			},
 			CreatedAt: created,
 			UpdatedAt: updated,
@@ -266,11 +273,51 @@ func TestServer_GetCreator(t *testing.T) {
 					{Code: "beauty", Name: "Красота"},
 					{Code: "fashion", Name: "Мода"},
 				},
+				Campaigns: []api.CreatorCampaignBrief{
+					{Id: campaignActiveID, Name: "Spring Drop", Status: api.CampaignCreatorStatus(domain.CampaignCreatorStatusSigned)},
+					{Id: campaignSigningID, Name: "Holiday Push", Status: api.CampaignCreatorStatus(domain.CampaignCreatorStatusSigning)},
+				},
 				CreatedAt: created,
 				UpdatedAt: updated,
 			},
 		}
 		require.Equal(t, expected, resp)
+	})
+
+	t.Run("malformed campaign id returns 500", func(t *testing.T) {
+		t.Parallel()
+		birth := time.Date(1995, 5, 15, 0, 0, 0, 0, time.UTC)
+		created := time.Date(2026, 5, 5, 12, 0, 0, 0, time.UTC)
+		updated := created.Add(time.Minute)
+
+		aggregate := &domain.CreatorAggregate{
+			ID:                  creatorID.String(),
+			IIN:                 "950515312348",
+			SourceApplicationID: sourceAppID.String(),
+			LastName:            "Муратова",
+			FirstName:           "Айдана",
+			BirthDate:           birth,
+			Phone:               "+77001234567",
+			CityCode:            "almaty",
+			CityName:            "Алматы",
+			TelegramUserID:      424242,
+			Campaigns: []domain.CreatorCampaignBrief{
+				{ID: "not-a-uuid", Name: "Broken", Status: domain.CampaignCreatorStatusSigned},
+			},
+			CreatedAt: created,
+			UpdatedAt: updated,
+		}
+
+		authz := mocks.NewMockAuthzService(t)
+		authz.EXPECT().CanViewCreator(mock.Anything).Return(nil)
+		creator := mocks.NewMockCreatorService(t)
+		creator.EXPECT().GetByID(mock.Anything, creatorID.String()).Return(aggregate, nil)
+
+		log := logmocks.NewMockLogger(t)
+		expectHandlerUnexpectedErrorLog(log, creatorPath)
+		router := newTestRouter(t, serverWithAuthzAndCreatorRead(t, authz, creator, log))
+		w, _ := doJSON[api.ErrorResponse](t, router, http.MethodGet, creatorPath, nil)
+		require.Equal(t, http.StatusInternalServerError, w.Code)
 	})
 }
 
@@ -442,19 +489,20 @@ func TestServer_ListCreators(t *testing.T) {
 			}).
 			Return(&domain.CreatorListPage{
 				Items: []*domain.CreatorListItem{{
-					ID:               creatorID.String(),
-					LastName:         "Муратова",
-					FirstName:        "Айдана",
-					MiddleName:       pointer.ToString("Ивановна"),
-					IIN:              "950515312348",
-					BirthDate:        birth,
-					Phone:            "+77001234567",
-					CityCode:         "almaty",
-					Categories:       []string{"fashion", "beauty"},
-					Socials:          []domain.CreatorListSocial{{Platform: domain.SocialPlatformInstagram, Handle: "aidana"}},
-					TelegramUsername: pointer.ToString("aidana_tg"),
-					CreatedAt:        created,
-					UpdatedAt:        updated,
+					ID:                   creatorID.String(),
+					LastName:             "Муратова",
+					FirstName:            "Айдана",
+					MiddleName:           pointer.ToString("Ивановна"),
+					IIN:                  "950515312348",
+					BirthDate:            birth,
+					Phone:                "+77001234567",
+					CityCode:             "almaty",
+					Categories:           []string{"fashion", "beauty"},
+					Socials:              []domain.CreatorListSocial{{Platform: domain.SocialPlatformInstagram, Handle: "aidana"}},
+					ActiveCampaignsCount: 3,
+					TelegramUsername:     pointer.ToString("aidana_tg"),
+					CreatedAt:            created,
+					UpdatedAt:            updated,
 				}},
 				Total: 1, Page: 1, PerPage: 20,
 			}, nil)
@@ -513,10 +561,11 @@ func TestServer_ListCreators(t *testing.T) {
 						{Code: "beauty", Name: "Красота", SortOrder: 10},
 						{Code: "fashion", Name: "Мода", SortOrder: 20},
 					},
-					Socials:          []api.CreatorListSocial{{Platform: api.Instagram, Handle: "aidana"}},
-					TelegramUsername: pointer.ToString("aidana_tg"),
-					CreatedAt:        created,
-					UpdatedAt:        updated,
+					Socials:              []api.CreatorListSocial{{Platform: api.Instagram, Handle: "aidana"}},
+					ActiveCampaignsCount: 3,
+					TelegramUsername:     pointer.ToString("aidana_tg"),
+					CreatedAt:            created,
+					UpdatedAt:            updated,
 				}},
 				Total:   1,
 				Page:    1,

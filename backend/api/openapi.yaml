@@ -2974,6 +2974,7 @@ components:
         - telegramUserId
         - socials
         - categories
+        - campaigns
         - createdAt
         - updatedAt
       properties:
@@ -3035,12 +3036,40 @@ components:
           description: Categories sorted by code.
           items:
             $ref: "#/components/schemas/CreatorAggregateCategory"
+        campaigns:
+          type: array
+          description: |
+            Campaign participations linked to this creator, sorted by
+            `campaign_creators.created_at DESC` (newest first). Soft-deleted
+            campaigns are filtered out — the array reflects active participations
+            only. UI groups rows by status preserving this server order.
+          items:
+            $ref: "#/components/schemas/CreatorCampaignBrief"
         createdAt:
           type: string
           format: date-time
         updatedAt:
           type: string
           format: date-time
+
+    CreatorCampaignBrief:
+      type: object
+      description: |
+        Lean campaign participation row attached to a creator aggregate. Carries
+        the linked campaign's id and name plus the creator's current status in
+        that campaign — enough to render the drawer participation block with a
+        clickable link to `/campaigns/{id}`.
+      required: [id, name, status]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Campaign UUID; used to build the drawer link target.
+        name:
+          type: string
+          description: Campaign display name shown to the operator.
+        status:
+          $ref: "#/components/schemas/CampaignCreatorStatus"
 
     GetCreatorResult:
       type: object
@@ -3156,6 +3185,7 @@ components:
         - city
         - categories
         - socials
+        - activeCampaignsCount
         - createdAt
         - updatedAt
       properties:
@@ -3189,6 +3219,13 @@ components:
           description: Social accounts attached to the creator, sorted by platform then handle.
           items:
             $ref: "#/components/schemas/CreatorListSocial"
+        activeCampaignsCount:
+          type: integer
+          minimum: 0
+          description: |
+            Number of non-deleted campaigns the creator currently participates
+            in. Soft-deleted campaigns are excluded. The column is not
+            sortable — included purely for at-a-glance triage.
         telegramUsername:
           type: string
           nullable: true

@@ -31,6 +31,13 @@
  * filters-search, ассертим что URL теряет `page`. Закрывает AC «при смене
  * filter/sort page сбрасывается».
  *
+ * Campaign participation — один креатор прикрепляется к двум живым и одной
+ * soft-deleted кампании; в новой колонке `activeCampaignsCount` показывает
+ * `2`, а в drawer'е блок «Участие в кампаниях» рендерит только активные в
+ * группе «В процессе», soft-deleted скрыта. Клик по строке кампании ведёт
+ * на `/campaigns/{id}`. Закрывает AC «счётчик считает только активные»,
+ * «drawer группирует и линкует на кампанию», «пустая группа скрыта».
+ *
  * RoleGuard — brand_manager не видит nav-link на /creators и при прямом
  * goto'е редиректится на dashboard. Защищает фронт-гард как UX-слой
  * (серверная авторизация уже проверяется в backend e2e).
@@ -38,10 +45,14 @@
 import { randomUUID } from "node:crypto";
 import { test, expect, type Page } from "@playwright/test";
 import {
+  addCampaignCreators,
+  forceCleanupCampaignCreator,
   loginAsAdmin,
+  markCampaignDeleted,
   seedAdmin,
   seedApprovedCreator,
   seedBrandManager,
+  seedCampaign,
   type SeededApprovedCreator,
 } from "../helpers/api";
 import { loginAs } from "../helpers/ui-web";
@@ -116,9 +127,9 @@ test.describe("Admin creators list", () => {
     expect(url.searchParams.get("order")).toBeNull();
     expect(url.searchParams.get("page")).toBeNull();
 
-    // Seven thead columns including index, fullName, socials, categories,
-    // age, city, createdAt.
-    await expect(table.locator("thead th")).toHaveCount(7);
+    // Eight thead columns including index, fullName, activeCampaignsCount,
+    // socials, categories, age, city, createdAt.
+    await expect(table.locator("thead th")).toHaveCount(8);
     await expect(page.getByTestId("th-fullName")).toBeVisible();
     await expect(page.getByTestId("th-age")).toBeVisible();
     await expect(page.getByTestId("th-city")).toBeVisible();
@@ -271,6 +282,142 @@ test.describe("Admin creators list", () => {
     await page.waitForFunction(
       () => new URL(window.location.href).searchParams.get("page") === null,
     );
+  });
+
+  test("Campaign participation — count column, drawer block with link", async ({
+    page,
+    request,
+  }) => {
+    const admin = await seedAdmin(request, API_URL);
+    cleanupStack.push(admin.cleanup);
+    const adminToken = await loginAsAdmin(
+      request,
+      API_URL,
+      admin.email,
+      admin.password,
+    );
+
+    const uuid = randomUUID();
+    const creator = await seedApprovedCreator(request, API_URL, adminToken, {
+      lastName: `e2e-${uuid}-ccnt`,
+      firstName: "Айдана",
+      socials: [
+        {
+          platform: "tiktok",
+          handle: `aidana_${uuid.slice(0, 8)}_ccnt`,
+        },
+      ],
+    });
+    cleanupStack.push(creator.cleanup);
+
+    // Second creator without any campaign attaches to cover the dimmed-0 state
+    // in the same listing.
+    const zeroCreator = await seedApprovedCreator(request, API_URL, adminToken, {
+      lastName: `e2e-${uuid}-zero`,
+      firstName: "Айдана",
+      socials: [
+        {
+          platform: "tiktok",
+          handle: `aidana_${uuid.slice(0, 8)}_zero`,
+        },
+      ],
+    });
+    cleanupStack.push(zeroCreator.cleanup);
+
+    const camp1 = await seedCampaign(request, API_URL, adminToken, {
+      name: `e2e-cc-${uuid.slice(0, 6)}-1`,
+    });
+    cleanupStack.push(camp1.cleanup);
+    await addCampaignCreators(request, API_URL, camp1.campaignId, adminToken, [
+      creator.creatorId,
+    ]);
+    cleanupStack.push(() =>
+      forceCleanupCampaignCreator(
+        request,
+        API_URL,
+        camp1.campaignId,
+        creator.creatorId,
+      ),
+    );
+
+    const camp2 = await seedCampaign(request, API_URL, adminToken, {
+      name: `e2e-cc-${uuid.slice(0, 6)}-2`,
+    });
+    cleanupStack.push(camp2.cleanup);
+    await addCampaignCreators(request, API_URL, camp2.campaignId, adminToken, [
+      creator.creatorId,
+    ]);
+    cleanupStack.push(() =>
+      forceCleanupCampaignCreator(
+        request,
+        API_URL,
+        camp2.campaignId,
+        creator.creatorId,
+      ),
+    );
+
+    const camp3 = await seedCampaign(request, API_URL, adminToken, {
+      name: `e2e-cc-${uuid.slice(0, 6)}-soft`,
+    });
+    cleanupStack.push(camp3.cleanup);
+    await addCampaignCreators(request, API_URL, camp3.campaignId, adminToken, [
+      creator.creatorId,
+    ]);
+    cleanupStack.push(() =>
+      forceCleanupCampaignCreator(
+        request,
+        API_URL,
+        camp3.campaignId,
+        creator.creatorId,
+      ),
+    );
+    await markCampaignDeleted(request, API_URL, camp3.campaignId);
+
+    await loginAs(page, admin.email, admin.password);
+    await page.goto(`/creators?q=${uuid}`);
+
+    // Count cell shows 2 (camp3 is soft-deleted).
+    const countCell = page.getByTestId(
+      `creators-row-active-campaigns-${creator.creatorId}`,
+    );
+    await expect(countCell).toHaveText("2");
+    await expect(countCell).toHaveAttribute("data-dimmed", "false");
+
+    // Zero-count creator renders the cell as dimmed.
+    const zeroCountCell = page.getByTestId(
+      `creators-row-active-campaigns-${zeroCreator.creatorId}`,
+    );
+    await expect(zeroCountCell).toHaveText("0");
+    await expect(zeroCountCell).toHaveAttribute("data-dimmed", "true");
+
+    // Open drawer for the creator.
+    const row = page.getByTestId(`row-${creator.creatorId}`);
+    await row.locator("td").first().click();
+    const drawer = page.getByTestId("drawer");
+    await expect(drawer).toBeVisible();
+
+    // Two live campaigns visible in the "in progress" group; soft-deleted one
+    // is hidden. Status defaults to `planned` for a fresh attach.
+    const inProgress = drawer.getByTestId("drawer-campaigns-group-inProgress");
+    await expect(inProgress).toBeVisible();
+    await expect(
+      drawer.getByTestId(`drawer-campaign-${camp1.campaignId}`),
+    ).toBeVisible();
+    await expect(
+      drawer.getByTestId(`drawer-campaign-${camp2.campaignId}`),
+    ).toBeVisible();
+    await expect(
+      drawer.getByTestId(`drawer-campaign-${camp3.campaignId}`),
+    ).toHaveCount(0);
+    await expect(
+      drawer.getByTestId("drawer-campaigns-empty"),
+    ).toHaveCount(0);
+
+    // Clicking a row navigates to /campaigns/{id}.
+    await drawer
+      .getByTestId(`drawer-campaign-${camp1.campaignId}`)
+      .click();
+    await expect(page).toHaveURL(new RegExp(`^.+/campaigns/${camp1.campaignId}$`));
   });
 
   test("RoleGuard — brand_manager has no nav link, redirected from /creators", async ({

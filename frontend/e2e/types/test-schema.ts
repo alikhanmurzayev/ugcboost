@@ -62,6 +62,55 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/test/campaign-creators/force-cleanup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Hard-delete a campaign_creators row regardless of soft-deleted state
+         * @description Test-only force-cleanup for the (campaign_id, creator_id) pair. Bypasses
+         *     the production admin DELETE endpoint's soft-deleted gate so e2e tests
+         *     that intentionally flip a campaign to `is_deleted = true` can still
+         *     clear their campaign_creators rows in LIFO teardown. 204 on
+         *     success; 404 if no matching row exists (idempotent against parallel
+         *     cleanups). NEVER enabled in production.
+         */
+        post: operations["forceCleanupCampaignCreator"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/test/campaigns/{id}/mark-deleted": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Flip campaigns.is_deleted = true without going through admin flows
+         * @description Test-only soft-delete: sets `is_deleted = true` on the campaign row so
+         *     e2e scenarios can exercise read paths that filter soft-deleted rows
+         *     (e.g. CreatorAggregate.campaigns / activeCampaignsCount). No business
+         *     admin endpoint currently exposes soft-delete; this helper plugs the gap
+         *     without touching production code. NEVER enabled in production.
+         */
+        post: operations["markCampaignDeleted"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/test/telegram/sent": {
         parameters: {
             query?: never;
@@ -319,6 +368,12 @@ export interface components {
         };
         ResetTokenResult: {
             data: components["schemas"]["ResetTokenData"];
+        };
+        ForceCleanupCampaignCreatorRequest: {
+            /** Format: uuid */
+            campaignId: string;
+            /** Format: uuid */
+            creatorId: string;
         };
         CleanupEntityRequest: {
             /** @enum {string} */
@@ -589,6 +644,67 @@ export interface operations {
             };
             /** @description Validation error */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    forceCleanupCampaignCreator: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ForceCleanupCampaignCreatorRequest"];
+            };
+        };
+        responses: {
+            /** @description Pair removed. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Pair not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    markCampaignDeleted: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Campaign UUID. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Campaign marked deleted. */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Campaign not found. */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

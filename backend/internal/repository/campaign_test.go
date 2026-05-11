@@ -770,6 +770,63 @@ func TestCampaignRepository_DeleteForTests(t *testing.T) {
 	})
 }
 
+func TestCampaignRepository_MarkDeletedForTests(t *testing.T) {
+	t.Parallel()
+
+	const sqlStmt = "UPDATE campaigns SET is_deleted = $1, updated_at = now() WHERE id = $2 AND is_deleted = $3"
+
+	t.Run("success", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &campaignRepository{db: mock}
+
+		mock.ExpectExec(sqlStmt).
+			WithArgs(true, "c-1", false).
+			WillReturnResult(pgconn.NewCommandTag("UPDATE 1"))
+
+		require.NoError(t, repo.MarkDeletedForTests(context.Background(), "c-1"))
+	})
+
+	t.Run("no rows affected returns sql.ErrNoRows", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &campaignRepository{db: mock}
+
+		mock.ExpectExec(sqlStmt).
+			WithArgs(true, "missing", false).
+			WillReturnResult(pgconn.NewCommandTag("UPDATE 0"))
+
+		err := repo.MarkDeletedForTests(context.Background(), "missing")
+		require.ErrorIs(t, err, sql.ErrNoRows)
+	})
+
+	t.Run("already deleted returns sql.ErrNoRows", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &campaignRepository{db: mock}
+
+		mock.ExpectExec(sqlStmt).
+			WithArgs(true, "c-1", false).
+			WillReturnResult(pgconn.NewCommandTag("UPDATE 0"))
+
+		err := repo.MarkDeletedForTests(context.Background(), "c-1")
+		require.ErrorIs(t, err, sql.ErrNoRows)
+	})
+
+	t.Run("propagates other errors", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &campaignRepository{db: mock}
+
+		mock.ExpectExec(sqlStmt).
+			WithArgs(true, "c-1", false).
+			WillReturnError(errors.New("db error"))
+
+		err := repo.MarkDeletedForTests(context.Background(), "c-1")
+		require.ErrorContains(t, err, "db error")
+	})
+}
+
 func TestCampaignRepository_UpdateContractTemplate(t *testing.T) {
 	t.Parallel()
 

@@ -1,9 +1,19 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
+import { Link } from "react-router-dom";
 import CategoryChip from "@/shared/components/CategoryChip";
 import SocialLink from "@/shared/components/SocialLink";
 import { calcAge } from "@/shared/utils/age";
+import {
+  CAMPAIGN_CREATOR_DRAWER_GROUPS,
+  type CreatorDrawerGroupKey,
+} from "@/shared/constants/campaignCreatorStatus";
+import { ROUTES } from "@/shared/constants/routes";
+import type { components } from "@/api/generated/schema";
 import type { CreatorListItem, CreatorAggregate } from "./types";
+
+type CreatorCampaignBrief = components["schemas"]["CreatorCampaignBrief"];
+type CampaignCreatorStatus = components["schemas"]["CampaignCreatorStatus"];
 
 interface CreatorDrawerBodyProps {
   prefill: CreatorListItem | undefined;
@@ -170,8 +180,79 @@ export default function CreatorDrawerBody({
           />
         )}
       </dl>
+
+      <CampaignsBlock campaigns={detail?.campaigns ?? []} />
     </>
   );
+}
+
+function CampaignsBlock({
+  campaigns,
+}: {
+  campaigns: CreatorCampaignBrief[];
+}) {
+  const { t } = useTranslation("creators");
+  const { t: tCampaigns } = useTranslation("campaigns");
+
+  return (
+    <section className="mt-6" data-testid="drawer-campaigns">
+      <h3 className="text-xs font-medium uppercase tracking-wide text-gray-500">
+        {t("drawer.campaignsTitle")}
+      </h3>
+
+      {campaigns.length === 0 ? (
+        <p
+          className="mt-2 text-sm text-gray-500"
+          data-testid="drawer-campaigns-empty"
+        >
+          {t("drawer.campaignsEmpty")}
+        </p>
+      ) : (
+        <div className="mt-2 space-y-4">
+          {CAMPAIGN_CREATOR_DRAWER_GROUPS.map((group) => {
+            const rows = filterCampaignsForGroup(campaigns, group.statuses);
+            if (rows.length === 0) return null;
+            return (
+              <div
+                key={group.groupKey}
+                data-testid={`drawer-campaigns-group-${group.groupKey}`}
+              >
+                <h4 className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                  {t(`drawer.campaignsGroups.${group.groupKey}` satisfies `drawer.campaignsGroups.${CreatorDrawerGroupKey}`)}
+                </h4>
+                <ul className="mt-1 flex flex-col gap-1">
+                  {rows.map((c) => (
+                    <li key={c.id}>
+                      <Link
+                        to={`/${ROUTES.CAMPAIGN_DETAIL(c.id)}`}
+                        className="flex items-center justify-between rounded-button px-2 py-1.5 text-sm text-gray-900 transition hover:bg-surface-100"
+                        data-testid={`drawer-campaign-${c.id}`}
+                      >
+                        <span className="truncate font-medium">{c.name}</span>
+                        <span className="ml-3 shrink-0 text-xs text-gray-500">
+                          {tCampaigns(
+                            `campaignCreators.currentStatus.${c.status}` satisfies `campaignCreators.currentStatus.${CampaignCreatorStatus}`,
+                          )}
+                        </span>
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function filterCampaignsForGroup(
+  campaigns: CreatorCampaignBrief[],
+  statuses: readonly CampaignCreatorStatus[],
+): CreatorCampaignBrief[] {
+  const allowed = new Set<CampaignCreatorStatus>(statuses);
+  return campaigns.filter((c) => allowed.has(c.status));
 }
 
 function renderTelegram(

@@ -95,6 +95,63 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /test/campaign-creators/force-cleanup:
+    post:
+      operationId: forceCleanupCampaignCreator
+      summary: Hard-delete a campaign_creators row regardless of soft-deleted state
+      description: |
+        Test-only force-cleanup for the (campaign_id, creator_id) pair. Bypasses
+        the production admin DELETE endpoint's soft-deleted gate so e2e tests
+        that intentionally flip a campaign to `is_deleted = true` can still
+        clear their campaign_creators rows in LIFO teardown. 204 on
+        success; 404 if no matching row exists (idempotent against parallel
+        cleanups). NEVER enabled in production.
+      tags: [test]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ForceCleanupCampaignCreatorRequest"
+      responses:
+        "204":
+          description: Pair removed.
+        "404":
+          description: Pair not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /test/campaigns/{id}/mark-deleted:
+    post:
+      operationId: markCampaignDeleted
+      summary: Flip campaigns.is_deleted = true without going through admin flows
+      description: |
+        Test-only soft-delete: sets `is_deleted = true` on the campaign row so
+        e2e scenarios can exercise read paths that filter soft-deleted rows
+        (e.g. CreatorAggregate.campaigns / activeCampaignsCount). No business
+        admin endpoint currently exposes soft-delete; this helper plugs the gap
+        without touching production code. NEVER enabled in production.
+      tags: [test]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: Campaign UUID.
+      responses:
+        "204":
+          description: Campaign marked deleted.
+        "404":
+          description: Campaign not found.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /test/telegram/sent:
     get:
       operationId: getTelegramSent
@@ -388,6 +445,17 @@ components:
       properties:
         data:
           $ref: "#/components/schemas/ResetTokenData"
+
+    ForceCleanupCampaignCreatorRequest:
+      type: object
+      required: [campaignId, creatorId]
+      properties:
+        campaignId:
+          type: string
+          format: uuid
+        creatorId:
+          type: string
+          format: uuid
 
     CleanupEntityRequest:
       type: object

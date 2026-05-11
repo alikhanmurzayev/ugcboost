@@ -743,6 +743,55 @@ export async function seedCampaign(
   };
 }
 
+// forceCleanupCampaignCreator hard-deletes the (campaign, creator) pair via
+// the test-only POST /test/campaign-creators/force-cleanup, bypassing the
+// production gate that refuses to remove rows from a soft-deleted campaign.
+// Use this in scenarios where the parent campaign may be flipped to
+// `is_deleted = true` mid-test.
+export async function forceCleanupCampaignCreator(
+  request: APIRequestContext,
+  apiUrl: string,
+  campaignId: string,
+  creatorId: string,
+): Promise<void> {
+  if (process.env.E2E_CLEANUP === "false") return;
+  const body: testComponents["schemas"]["ForceCleanupCampaignCreatorRequest"] = {
+    campaignId,
+    creatorId,
+  };
+  const resp = await request.post(
+    `${apiUrl}/test/campaign-creators/force-cleanup`,
+    { data: body },
+  );
+  if (resp.status() !== 204 && resp.status() !== 404) {
+    throw new Error(
+      `forceCleanupCampaignCreator ${campaignId}/${creatorId}: ${resp.status()} ${await resp.text()}`,
+    );
+  }
+}
+
+// markCampaignDeleted flips campaigns.is_deleted = true through the test-only
+// POST /test/campaigns/{id}/mark-deleted endpoint. The browser e2e flow for
+// the creator-aggregate participation block relies on it to exercise the
+// is_deleted filter without standing up a soft-delete admin endpoint.
+// Skipped under E2E_CLEANUP=false so soft-deleted rows do not leak across
+// runs when teardown is intentionally disabled for debugging.
+export async function markCampaignDeleted(
+  request: APIRequestContext,
+  apiUrl: string,
+  campaignId: string,
+): Promise<void> {
+  if (process.env.E2E_CLEANUP === "false") return;
+  const resp = await request.post(
+    `${apiUrl}/test/campaigns/${campaignId}/mark-deleted`,
+  );
+  if (resp.status() !== 204) {
+    throw new Error(
+      `markCampaignDeleted ${campaignId}: ${resp.status()} ${await resp.text()}`,
+    );
+  }
+}
+
 // uploadDummyContractTemplate загружает мини-PDF c тремя плейсхолдерами через
 // PUT /campaigns/{id}/contract-template. Notify-guard (chunk 9a) требует
 // загруженный шаблон, поэтому notify-сценарии вызывают этот helper после

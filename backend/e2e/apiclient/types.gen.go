@@ -658,6 +658,12 @@ type CreatorAggregate struct {
 	Address   *string            `json:"address,omitempty"`
 	BirthDate openapi_types.Date `json:"birthDate"`
 
+	// Campaigns Campaign participations linked to this creator, sorted by
+	// `campaign_creators.created_at DESC` (newest first). Soft-deleted
+	// campaigns are filtered out — the array reflects active participations
+	// only. UI groups rows by status preserving this server order.
+	Campaigns []CreatorCampaignBrief `json:"campaigns"`
+
 	// Categories Categories sorted by code.
 	Categories []CreatorAggregateCategory `json:"categories"`
 
@@ -1072,12 +1078,39 @@ type CreatorApprovalResult struct {
 	Data CreatorApprovalData `json:"data"`
 }
 
+// CreatorCampaignBrief Lean campaign participation row attached to a creator aggregate. Carries
+// the linked campaign's id and name plus the creator's current status in
+// that campaign — enough to render the drawer participation block with a
+// clickable link to `/campaigns/{id}`.
+type CreatorCampaignBrief struct {
+	// Id Campaign UUID; used to build the drawer link target.
+	Id openapi_types.UUID `json:"id"`
+
+	// Name Campaign display name shown to the operator.
+	Name string `json:"name"`
+
+	// Status Lifecycle state of a creator within a campaign.
+	//
+	// - `planned` — admin added the creator to the campaign (default on create).
+	// - `invited` — admin sent an invitation; awaiting creator response.
+	// - `declined` — creator declined via TMA.
+	// - `agreed` — creator accepted via TMA; awaiting contract send.
+	// - `signing` — contract sent to TrustMe and awaiting creator signature.
+	// - `signed` — creator signed the contract via TrustMe. Terminal.
+	// - `signing_declined` — creator declined the contract via TrustMe. Terminal.
+	Status CampaignCreatorStatus `json:"status"`
+}
+
 // CreatorListItem One row in the admin creator list. Includes identity, contact details
 // searchable from the admin UI (phone, telegram_username) and the
 // dictionary-hydrated city/categories. Address, category_other_text and
 // the full Telegram metadata are reserved for `GET /creators/{id}`.
 type CreatorListItem struct {
-	BirthDate openapi_types.Date `json:"birthDate"`
+	// ActiveCampaignsCount Number of non-deleted campaigns the creator currently participates
+	// in. Soft-deleted campaigns are excluded. The column is not
+	// sortable — included purely for at-a-glance triage.
+	ActiveCampaignsCount int                `json:"activeCampaignsCount"`
+	BirthDate            openapi_types.Date `json:"birthDate"`
 
 	// Categories Categories selected by the creator, sorted by sort_order then code.
 	Categories []DictionaryItem `json:"categories"`

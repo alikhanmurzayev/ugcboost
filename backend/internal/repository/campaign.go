@@ -87,6 +87,7 @@ type CampaignRepo interface {
 	GetBySecretToken(ctx context.Context, secretToken string) (*CampaignRow, error)
 	ListByIDs(ctx context.Context, ids []string) ([]*CampaignRow, error)
 	Update(ctx context.Context, id, name, tmaURL, secretToken string) (*CampaignRow, error)
+	MarkDeletedForTests(ctx context.Context, id string) error
 	List(ctx context.Context, params CampaignListParams) ([]*CampaignRow, int64, error)
 	UpdateContractTemplate(ctx context.Context, id string, pdf []byte) error
 	GetContractTemplate(ctx context.Context, id string) ([]byte, error)
@@ -319,6 +320,30 @@ func (r *campaignRepository) GetContractTemplate(ctx context.Context, id string)
 		Where(sq.Eq{CampaignColumnID: id}).
 		Where(sq.Eq{CampaignColumnIsDeleted: false})
 	return dbutil.Val[[]byte](ctx, r.db, q)
+}
+
+// MarkDeletedForTests flips campaigns.is_deleted = true and stamps updated_at
+// so e2e scenarios can simulate the soft-delete state without an admin business
+// endpoint. Returns sql.ErrNoRows when the campaign does not exist OR is
+// already soft-deleted — that way a misbehaving test calling it twice surfaces
+// as 404 instead of silently re-stamping updated_at on a soft-deleted row.
+// Test-only — production callers must go through the (future) admin delete
+// flow. Always paired with the standard RegisterCampaignCleanup helper so the
+// row is hard-deleted at teardown.
+func (r *campaignRepository) MarkDeletedForTests(ctx context.Context, id string) error {
+	q := sq.Update(TableCampaigns).
+		Set(CampaignColumnIsDeleted, true).
+		Set(CampaignColumnUpdatedAt, sq.Expr("now()")).
+		Where(sq.Eq{CampaignColumnID: id}).
+		Where(sq.Eq{CampaignColumnIsDeleted: false})
+	n, err := dbutil.Exec(ctx, r.db, q)
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
 }
 
 // DeleteForTests hard-deletes a campaign by id. Returns sql.ErrNoRows when

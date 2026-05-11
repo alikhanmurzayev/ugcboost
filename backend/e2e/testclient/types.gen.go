@@ -89,6 +89,12 @@ type ErrorResponse struct {
 	} `json:"error"`
 }
 
+// ForceCleanupCampaignCreatorRequest defines model for ForceCleanupCampaignCreatorRequest.
+type ForceCleanupCampaignCreatorRequest struct {
+	CampaignId openapi_types.UUID `json:"campaignId"`
+	CreatorId  openapi_types.UUID `json:"creatorId"`
+}
+
 // ResetTokenData defines model for ResetTokenData.
 type ResetTokenData struct {
 	Token string `json:"token"`
@@ -307,6 +313,9 @@ type GetTelegramSentParams struct {
 	// Since Only records sent at or after this timestamp.
 	Since *time.Time `form:"since,omitempty" json:"since,omitempty"`
 }
+
+// ForceCleanupCampaignCreatorJSONRequestBody defines body for ForceCleanupCampaignCreator for application/json ContentType.
+type ForceCleanupCampaignCreatorJSONRequestBody = ForceCleanupCampaignCreatorRequest
 
 // CleanupEntityJSONRequestBody defines body for CleanupEntity for application/json ContentType.
 type CleanupEntityJSONRequestBody = CleanupEntityRequest
