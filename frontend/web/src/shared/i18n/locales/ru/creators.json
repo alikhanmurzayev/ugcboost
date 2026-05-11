@@ -7,6 +7,7 @@
   "columns": {
     "index": "№",
     "fullName": "ФИО",
+    "activeCampaignsCount": "В кампаниях",
     "socials": "Соцсети",
     "categories": "Категории",
     "age": "Возраст",
@@ -27,6 +28,13 @@
     "telegram": "Telegram",
     "telegramId": "Telegram id",
     "sourceApplicationId": "Заявка",
+    "campaignsTitle": "Участие в кампаниях",
+    "campaignsEmpty": "Не добавлен ни в одну кампанию",
+    "campaignsGroups": {
+      "active": "Активные",
+      "inProgress": "В процессе",
+      "rejected": "Отказы"
+    },
     "close": "Закрыть",
     "closeWindow": "Закрыть окно",
     "years_one": "{{count}} год",

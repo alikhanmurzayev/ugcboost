@@ -20,6 +20,8 @@ type CreatorRepoFactory interface {
 	NewCreatorRepo(db dbutil.DB) repository.CreatorRepo
 	NewCreatorSocialRepo(db dbutil.DB) repository.CreatorSocialRepo
 	NewCreatorCategoryRepo(db dbutil.DB) repository.CreatorCategoryRepo
+	NewCampaignCreatorRepo(db dbutil.DB) repository.CampaignCreatorRepo
+	NewCampaignRepo(db dbutil.DB) repository.CampaignRepo
 	NewDictionaryRepo(db dbutil.DB) repository.DictionaryRepo
 }
 
@@ -84,6 +86,11 @@ func (s *CreatorService) GetByID(ctx context.Context, creatorID string) (*domain
 	}
 	categoryCodes := categoriesByID[creatorID]
 
+	participationsByCreator, campaignByID, err := s.loadCreatorParticipations(ctx, []string{creatorID})
+	if err != nil {
+		return nil, err
+	}
+
 	dictRepo := s.repoFactory.NewDictionaryRepo(s.pool)
 
 	cityRows, err := dictRepo.GetActiveByCodes(ctx, repository.TableCities, []string{creatorRow.CityCode})
@@ -127,6 +134,20 @@ func (s *CreatorService) GetByID(ctx context.Context, creatorID string) (*domain
 		}
 	}
 
+	participationRows := participationsByCreator[creatorID]
+	campaigns := make([]domain.CreatorCampaignBrief, 0, len(participationRows))
+	for _, p := range participationRows {
+		c, ok := campaignByID[p.CampaignID]
+		if !ok {
+			continue
+		}
+		campaigns = append(campaigns, domain.CreatorCampaignBrief{
+			ID:     c.ID,
+			Name:   c.Name,
+			Status: p.Status,
+		})
+	}
+
 	return &domain.CreatorAggregate{
 		ID:                  creatorRow.ID,
 		IIN:                 creatorRow.IIN,
@@ -146,6 +167,7 @@ func (s *CreatorService) GetByID(ctx context.Context, creatorID string) (*domain
 		TelegramLastName:    creatorRow.TelegramLastName,
 		Socials:             socials,
 		Categories:          categories,
+		Campaigns:           campaigns,
 		CreatedAt:           creatorRow.CreatedAt,
 		UpdatedAt:           creatorRow.UpdatedAt,
 	}, nil
@@ -193,6 +215,20 @@ func (s *CreatorService) List(ctx context.Context, in domain.CreatorListInput) (
 	if err != nil {
 		return nil, fmt.Errorf("hydrate categories: %w", err)
 	}
+	participationsByCreator, campaignByID, err := s.loadCreatorParticipations(ctx, creatorIDs)
+	if err != nil {
+		return nil, err
+	}
+	activeCountByCreator := make(map[string]int, len(creatorIDs))
+	for creatorID, parts := range participationsByCreator {
+		n := 0
+		for _, p := range parts {
+			if _, ok := campaignByID[p.CampaignID]; ok {
+				n++
+			}
+		}
+		activeCountByCreator[creatorID] = n
+	}
 
 	items := make([]*domain.CreatorListItem, len(rows))
 	for i, row := range rows {
@@ -205,19 +241,20 @@ func (s *CreatorService) List(ctx context.Context, in domain.CreatorListInput) (
 			}
 		}
 		items[i] = &domain.CreatorListItem{
-			ID:               row.ID,
-			LastName:         row.LastName,
-			FirstName:        row.FirstName,
-			MiddleName:       row.MiddleName,
-			IIN:              row.IIN,
-			BirthDate:        row.BirthDate,
-			Phone:            row.Phone,
-			CityCode:         row.CityCode,
-			Categories:       append([]string(nil), categoriesByID[row.ID]...),
-			Socials:          socials,
-			TelegramUsername: row.TelegramUsername,
-			CreatedAt:        row.CreatedAt,
-			UpdatedAt:        row.UpdatedAt,
+			ID:                   row.ID,
+			LastName:             row.LastName,
+			FirstName:            row.FirstName,
+			MiddleName:           row.MiddleName,
+			IIN:                  row.IIN,
+			BirthDate:            row.BirthDate,
+			Phone:                row.Phone,
+			CityCode:             row.CityCode,
+			Categories:           append([]string(nil), categoriesByID[row.ID]...),
+			Socials:              socials,
+			ActiveCampaignsCount: activeCountByCreator[row.ID],
+			TelegramUsername:     row.TelegramUsername,
+			CreatedAt:            row.CreatedAt,
+			UpdatedAt:            row.UpdatedAt,
 		}
 	}
 
@@ -248,4 +285,59 @@ func creatorListInputToRepo(in domain.CreatorListInput) repository.CreatorListPa
 		Page:       in.Page,
 		PerPage:    in.PerPage,
 	}
+}
+
+// loadCreatorParticipations batch-loads campaign_creators rows for the given
+// creator ids and the non-deleted campaigns they reference. The
+// `is_deleted = false` filter lives here rather than in SQL so the repo layer
+// stays JOIN-free per spec. Returns:
+//   - participations grouped by creator id, preserving the repo's
+//     `created_at DESC, id DESC` ordering so the GET aggregate can stream
+//     rows straight into CreatorCampaignBrief without re-sorting.
+//   - lookup map of non-deleted campaign rows keyed by campaign id; consumers
+//     filter participations by presence in this map.
+//
+// Empty input returns empty maps without hitting the database.
+func (s *CreatorService) loadCreatorParticipations(
+	ctx context.Context,
+	creatorIDs []string,
+) (map[string][]*repository.CampaignCreatorRow, map[string]*repository.CampaignRow, error) {
+	if len(creatorIDs) == 0 {
+		return map[string][]*repository.CampaignCreatorRow{}, map[string]*repository.CampaignRow{}, nil
+	}
+
+	participations, err := s.repoFactory.NewCampaignCreatorRepo(s.pool).ListByCreatorIDs(ctx, creatorIDs)
+	if err != nil {
+		return nil, nil, fmt.Errorf("list campaign participations: %w", err)
+	}
+	if len(participations) == 0 {
+		return map[string][]*repository.CampaignCreatorRow{}, map[string]*repository.CampaignRow{}, nil
+	}
+
+	campaignIDSet := make(map[string]struct{}, len(participations))
+	for _, p := range participations {
+		campaignIDSet[p.CampaignID] = struct{}{}
+	}
+	campaignIDs := make([]string, 0, len(campaignIDSet))
+	for id := range campaignIDSet {
+		campaignIDs = append(campaignIDs, id)
+	}
+
+	campaignRows, err := s.repoFactory.NewCampaignRepo(s.pool).ListByIDs(ctx, campaignIDs)
+	if err != nil {
+		return nil, nil, fmt.Errorf("list campaigns by ids: %w", err)
+	}
+	campaignByID := make(map[string]*repository.CampaignRow, len(campaignRows))
+	for _, c := range campaignRows {
+		if c.IsDeleted {
+			continue
+		}
+		campaignByID[c.ID] = c
+	}
+
+	participationsByCreator := make(map[string][]*repository.CampaignCreatorRow, len(creatorIDs))
+	for _, p := range participations {
+		participationsByCreator[p.CreatorID] = append(participationsByCreator[p.CreatorID], p)
+	}
+	return participationsByCreator, campaignByID, nil
 }

@@ -65,6 +65,19 @@ func domainCreatorAggregateToAPI(id openapi_types.UUID, a *domain.CreatorAggrega
 		categories[i] = api.CreatorAggregateCategory{Code: c.Code, Name: c.Name}
 	}
 
+	campaigns := make([]api.CreatorCampaignBrief, len(a.Campaigns))
+	for i, c := range a.Campaigns {
+		campaignID, err := uuid.Parse(c.ID)
+		if err != nil {
+			return api.CreatorAggregate{}, fmt.Errorf("parse campaign id %q: %w", c.ID, err)
+		}
+		campaigns[i] = api.CreatorCampaignBrief{
+			Id:     campaignID,
+			Name:   c.Name,
+			Status: api.CampaignCreatorStatus(c.Status),
+		}
+	}
+
 	return api.CreatorAggregate{
 		Id:                  id,
 		Iin:                 a.IIN,
@@ -84,6 +97,7 @@ func domainCreatorAggregateToAPI(id openapi_types.UUID, a *domain.CreatorAggrega
 		TelegramLastName:    a.TelegramLastName,
 		Socials:             socials,
 		Categories:          categories,
+		Campaigns:           campaigns,
 		CreatedAt:           a.CreatedAt,
 		UpdatedAt:           a.UpdatedAt,
 	}, nil
@@ -359,19 +373,20 @@ func domainCreatorListPageToAPI(
 		}
 
 		items[i] = api.CreatorListItem{
-			Id:               creatorID,
-			LastName:         item.LastName,
-			FirstName:        item.FirstName,
-			MiddleName:       item.MiddleName,
-			Iin:              item.IIN,
-			BirthDate:        openapi_types.Date{Time: item.BirthDate},
-			Phone:            item.Phone,
-			City:             resolveDictionaryItem(item.CityCode, cityByCode),
-			Categories:       cats,
-			Socials:          socials,
-			TelegramUsername: item.TelegramUsername,
-			CreatedAt:        item.CreatedAt,
-			UpdatedAt:        item.UpdatedAt,
+			Id:                   creatorID,
+			LastName:             item.LastName,
+			FirstName:            item.FirstName,
+			MiddleName:           item.MiddleName,
+			Iin:                  item.IIN,
+			BirthDate:            openapi_types.Date{Time: item.BirthDate},
+			Phone:                item.Phone,
+			City:                 resolveDictionaryItem(item.CityCode, cityByCode),
+			Categories:           cats,
+			Socials:              socials,
+			ActiveCampaignsCount: item.ActiveCampaignsCount,
+			TelegramUsername:     item.TelegramUsername,
+			CreatedAt:            item.CreatedAt,
+			UpdatedAt:            item.UpdatedAt,
 		}
 	}
 	return api.CreatorsListData{

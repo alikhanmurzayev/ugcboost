@@ -12,7 +12,15 @@
 // валидируются через WithinDuration и подменяются на observed значения
 // перед structural equality. Один happy-сценарий покрывает identity, PII
 // (включая nullable middle_name/address/category_other_text), плоский
-// Telegram-блок и hydrated city/category names.
+// Telegram-блок и hydrated city/category names; helper заодно требует
+// пустой `campaigns` для свежеаппрувленных креаторов без participations.
+//
+// Отдельный сценарий описывает поле `campaigns`: креатора прикрепляют к
+// двум живым кампаниям и одной soft-deleted, после чего ответ агрегата
+// проверяется на (1) исключение soft-deleted, (2) DESC-порядок по
+// `campaign_creators.created_at` (бэкенд гарантирует его, фронт его
+// сохраняет внутри групп) и (3) корректный маппинг id/name/status в
+// CreatorCampaignBrief.
 //
 // Все t.Run параллельны. Cleanup-стек регистрирует creator перед
 // родительской заявкой (LIFO) — FK creators.source_application_id не
@@ -23,6 +31,7 @@ import (
 	"context"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/AlekSi/pointer"
 	"github.com/google/uuid"
@@ -102,5 +111,55 @@ func TestGetCreator(t *testing.T) {
 		require.Equal(t, http.StatusOK, getResp.StatusCode())
 		require.NotNil(t, getResp.JSON200)
 		testutil.AssertCreatorAggregateMatchesSetup(t, fx, creatorID.String(), getResp.JSON200.Data)
+	})
+
+	t.Run("happy — campaigns excludes soft-deleted and orders by created_at DESC", func(t *testing.T) {
+		t.Parallel()
+		seeded := testutil.SetupApprovedCreator(t, testutil.CreatorApplicationFixture{
+			Socials: []testutil.SocialFixture{
+				{Platform: string(apiclient.Instagram), Handle: "campget_" + testutil.UniqueIIN()[6:], Verification: testutil.VerificationAutoIG},
+				{Platform: string(apiclient.Tiktok), Handle: "campget_tt_" + testutil.UniqueIIN()[6:], Verification: testutil.VerificationNone},
+			},
+		})
+
+		c := testutil.NewAPIClient(t)
+		suffix := testutil.UniqueIIN()[6:]
+		camp1 := testutil.SetupCampaign(t, c, seeded.AdminToken, "ccget-1-"+suffix)
+		testutil.AttachCreatorToCampaign(t, c, seeded.AdminToken, camp1, seeded.CreatorID)
+
+		// Postgres now() is microsecond-precision, so back-to-back inserts on
+		// the same connection are virtually always distinct, but a 2-ms pause
+		// makes the (created_at DESC, id DESC) ordering assertion below robust
+		// against the corner case where two timestamps collide and id (random
+		// UUID) becomes the tiebreaker — which would be unrelated to attach
+		// order.
+		time.Sleep(2 * time.Millisecond)
+		camp2 := testutil.SetupCampaign(t, c, seeded.AdminToken, "ccget-2-"+suffix)
+		testutil.AttachCreatorToCampaign(t, c, seeded.AdminToken, camp2, seeded.CreatorID)
+
+		time.Sleep(2 * time.Millisecond)
+		camp3 := testutil.SetupCampaign(t, c, seeded.AdminToken, "ccget-3-"+suffix)
+		testutil.AttachCreatorToCampaign(t, c, seeded.AdminToken, camp3, seeded.CreatorID)
+		testutil.SoftDeleteCampaign(t, camp3)
+
+		creatorUUID := uuid.MustParse(seeded.CreatorID)
+		getResp, err := c.GetCreatorWithResponse(context.Background(), creatorUUID,
+			testutil.WithAuth(seeded.AdminToken))
+		require.NoError(t, err)
+		require.Equal(t, http.StatusOK, getResp.StatusCode())
+		require.NotNil(t, getResp.JSON200)
+
+		got := getResp.JSON200.Data.Campaigns
+		require.Len(t, got, 2, "soft-deleted campaign must be excluded")
+		ids := []string{got[0].Id.String(), got[1].Id.String()}
+		require.NotContains(t, ids, camp3, "soft-deleted campaign id must not appear")
+		// camp2 was attached AFTER camp1, so it should come first under DESC order.
+		require.Equal(t, camp2, got[0].Id.String(), "second attached campaign must come first under created_at DESC")
+		require.Equal(t, camp1, got[1].Id.String(), "first attached campaign must come second under created_at DESC")
+		// Status defaults to `planned` for a fresh attach without notify/decision.
+		require.Equal(t, apiclient.Planned, got[0].Status)
+		require.Equal(t, apiclient.Planned, got[1].Status)
+		require.Equal(t, "ccget-2-"+suffix, got[0].Name)
+		require.Equal(t, "ccget-1-"+suffix, got[1].Name)
 	})
 }

@@ -87,6 +87,7 @@ type CampaignCreatorRepo interface {
 	GetWithCampaignAndCreatorByContractID(ctx context.Context, contractID string) (*CampaignCreatorWebhookView, error)
 	ListByCampaign(ctx context.Context, campaignID string) ([]*CampaignCreatorRow, error)
 	ListByCampaignAndCreators(ctx context.Context, campaignID string, creatorIDs []string) ([]*CampaignCreatorRow, error)
+	ListByCreatorIDs(ctx context.Context, creatorIDs []string) ([]*CampaignCreatorRow, error)
 	ApplyInvite(ctx context.Context, id string) (*CampaignCreatorRow, error)
 	ApplyRemind(ctx context.Context, id string) (*CampaignCreatorRow, error)
 	ApplyDecision(ctx context.Context, id, status string) (*CampaignCreatorRow, error)
@@ -94,6 +95,7 @@ type CampaignCreatorRepo interface {
 	UpdateStatus(ctx context.Context, id, status string) error
 	ExistsInvitedInCampaign(ctx context.Context, campaignID string) (bool, error)
 	DeleteByID(ctx context.Context, id string) error
+	DeleteByCampaignAndCreatorForTests(ctx context.Context, campaignID, creatorID string) error
 }
 
 type campaignCreatorRepository struct {
@@ -179,6 +181,28 @@ func (r *campaignCreatorRepository) DeleteByID(ctx context.Context, id string) e
 	return nil
 }
 
+// DeleteByCampaignAndCreatorForTests hard-deletes the (campaign_id, creator_id)
+// row irrespective of campaign soft-delete state. Used by the test-only
+// force-cleanup endpoint to drain campaign_creators rows when the parent
+// campaign has been flipped to `is_deleted = true` and the production admin
+// DELETE endpoint refuses to operate on it. Returns sql.ErrNoRows when no
+// matching row exists so callers can map it to a 404.
+func (r *campaignCreatorRepository) DeleteByCampaignAndCreatorForTests(ctx context.Context, campaignID, creatorID string) error {
+	q := sq.Delete(TableCampaignCreators).
+		Where(sq.Eq{
+			CampaignCreatorColumnCampaignID: campaignID,
+			CampaignCreatorColumnCreatorID:  creatorID,
+		})
+	n, err := dbutil.Exec(ctx, r.db, q)
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
+}
+
 // ListByCampaignAndCreators returns every campaign_creators row that matches
 // the (campaign, creator IN ($creatorIds)) pair. Backs the read-only
 // validation pre-pass for the notify / remind-invitation flows: the
@@ -195,6 +219,27 @@ func (r *campaignCreatorRepository) ListByCampaignAndCreators(ctx context.Contex
 			CampaignCreatorColumnCampaignID: campaignID,
 			CampaignCreatorColumnCreatorID:  creatorIDs,
 		})
+	return dbutil.Many[CampaignCreatorRow](ctx, r.db, q)
+}
+
+// ListByCreatorIDs returns every campaign_creators row that points to any of
+// the supplied creator ids, ordered by (created_at DESC, id DESC). Backs the
+// creator-list / creator-aggregate enrichment in CreatorService: a single
+// batch fetch is composed with CampaignRepo.ListByIDs into the per-creator
+// participation projection. No JOINs — the service applies the
+// `campaigns.is_deleted = false` filter against the separately loaded
+// campaign rows. Empty input returns `nil, nil` without hitting the database.
+func (r *campaignCreatorRepository) ListByCreatorIDs(ctx context.Context, creatorIDs []string) ([]*CampaignCreatorRow, error) {
+	if len(creatorIDs) == 0 {
+		return nil, nil
+	}
+	q := sq.Select(campaignCreatorSelectColumns...).
+		From(TableCampaignCreators).
+		Where(sq.Eq{CampaignCreatorColumnCreatorID: creatorIDs}).
+		OrderBy(
+			CampaignCreatorColumnCreatedAt+" DESC",
+			CampaignCreatorColumnID+" DESC",
+		)
 	return dbutil.Many[CampaignCreatorRow](ctx, r.db, q)
 }
 

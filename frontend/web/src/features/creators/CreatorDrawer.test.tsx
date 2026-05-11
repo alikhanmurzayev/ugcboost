@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { fireEvent } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import "@/shared/i18n/config";
 import CreatorDrawer from "./CreatorDrawer";
 import type { CreatorAggregate, CreatorListItem } from "./types";
@@ -17,6 +18,7 @@ const PREFILL: CreatorListItem = {
   city: { code: "ALA", name: "Алматы", sortOrder: 10 },
   categories: [{ code: "fashion", name: "Мода", sortOrder: 1 }],
   socials: [{ platform: "instagram", handle: "anna" }],
+  activeCampaignsCount: 0,
   telegramUsername: "anna",
   createdAt: "2026-04-30T12:00:00Z",
   updatedAt: "2026-04-30T12:00:00Z",
@@ -49,6 +51,7 @@ const DETAIL: CreatorAggregate = {
     },
   ],
   categories: [{ code: "fashion", name: "Мода" }],
+  campaigns: [],
   createdAt: "2026-04-30T12:00:00Z",
   updatedAt: "2026-04-30T12:00:00Z",
 };
@@ -65,7 +68,14 @@ function renderDrawer(props: Partial<React.ComponentProps<typeof CreatorDrawer>>
     canNext: true,
   };
   const merged = { ...defaults, ...props };
-  return { ...render(<CreatorDrawer {...merged} />), props: merged };
+  return {
+    ...render(
+      <MemoryRouter>
+        <CreatorDrawer {...merged} />
+      </MemoryRouter>,
+    ),
+    props: merged,
+  };
 }
 
 beforeEach(() => {
@@ -270,5 +280,89 @@ describe("CreatorDrawer — copy buttons", () => {
     await userEvent.click(screen.getByTestId("drawer-iin-copy"));
 
     expect(writeText).toHaveBeenCalledWith(PREFILL.iin);
+  });
+});
+
+describe("CreatorDrawer — campaigns block", () => {
+  it("renders empty-state when detail has no campaigns", () => {
+    renderDrawer({ detail: DETAIL });
+    expect(screen.getByTestId("drawer-campaigns-empty")).toHaveTextContent(
+      "Не добавлен ни в одну кампанию",
+    );
+    expect(
+      screen.queryByTestId("drawer-campaigns-group-active"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("renders empty-state when detail not yet loaded (prefill has no campaigns)", () => {
+    renderDrawer();
+    expect(screen.getByTestId("drawer-campaigns-empty")).toBeInTheDocument();
+  });
+
+  it("groups campaigns by drawer-group order and hides empty groups", () => {
+    const detail: CreatorAggregate = {
+      ...DETAIL,
+      campaigns: [
+        { id: "camp-decl", name: "Old launch", status: "declined" },
+        { id: "camp-signed", name: "Spring Drop", status: "signed" },
+        { id: "camp-invited", name: "Holiday Push", status: "invited" },
+      ],
+    };
+    renderDrawer({ detail });
+
+    const groups = screen
+      .getAllByTestId(/^drawer-campaigns-group-/)
+      .map((el) => el.getAttribute("data-testid"));
+    expect(groups).toEqual([
+      "drawer-campaigns-group-active",
+      "drawer-campaigns-group-inProgress",
+      "drawer-campaigns-group-rejected",
+    ]);
+
+    const active = screen.getByTestId("drawer-campaigns-group-active");
+    expect(within(active).getByTestId("drawer-campaign-camp-signed")).toHaveTextContent(
+      "Spring Drop",
+    );
+    expect(within(active).getByTestId("drawer-campaign-camp-signed")).toHaveTextContent(
+      "Подписал(а) договор",
+    );
+
+    const inProgress = screen.getByTestId("drawer-campaigns-group-inProgress");
+    expect(within(inProgress).getByTestId("drawer-campaign-camp-invited")).toHaveTextContent(
+      "Holiday Push",
+    );
+
+    const rejected = screen.getByTestId("drawer-campaigns-group-rejected");
+    expect(within(rejected).getByTestId("drawer-campaign-camp-decl")).toHaveTextContent(
+      "Old launch",
+    );
+  });
+
+  it("preserves backend order within a single group", () => {
+    const detail: CreatorAggregate = {
+      ...DETAIL,
+      campaigns: [
+        { id: "camp-a", name: "Newer", status: "signed" },
+        { id: "camp-b", name: "Older", status: "signed" },
+      ],
+    };
+    renderDrawer({ detail });
+
+    const active = screen.getByTestId("drawer-campaigns-group-active");
+    const items = within(active).getAllByTestId(/^drawer-campaign-camp-/);
+    expect(items.map((el) => el.getAttribute("data-testid"))).toEqual([
+      "drawer-campaign-camp-a",
+      "drawer-campaign-camp-b",
+    ]);
+  });
+
+  it("renders a Link to /campaigns/{id} per row", () => {
+    const detail: CreatorAggregate = {
+      ...DETAIL,
+      campaigns: [{ id: "camp-1", name: "Spring Drop", status: "signed" }],
+    };
+    renderDrawer({ detail });
+    const link = screen.getByTestId("drawer-campaign-camp-1");
+    expect(link).toHaveAttribute("href", "/campaigns/camp-1");
   });
 });

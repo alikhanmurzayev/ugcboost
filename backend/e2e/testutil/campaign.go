@@ -51,6 +51,47 @@ func SetupCampaignWithContractTemplate(t *testing.T, c *apiclient.ClientWithResp
 	return id.String()
 }
 
+// SetupCampaign seeds a fresh campaign via POST /campaigns and registers the
+// hard-delete cleanup. Unlike SetupCampaignWithContractTemplate it skips the
+// contract-template upload — convenient for tests that only need a campaign
+// row (e.g. CreatorAggregate.campaigns / activeCampaignsCount projections).
+func SetupCampaign(t *testing.T, c *apiclient.ClientWithResponses, adminToken, name string) string {
+	t.Helper()
+	tma := FreshValidTmaURL()
+	create, err := c.CreateCampaignWithResponse(context.Background(),
+		apiclient.CreateCampaignJSONRequestBody{Name: name, TmaUrl: tma},
+		WithAuth(adminToken))
+	if err != nil {
+		t.Fatalf("SetupCampaign.CreateCampaign: %v", err)
+	}
+	if create.StatusCode() != http.StatusCreated || create.JSON201 == nil {
+		t.Fatalf("SetupCampaign.CreateCampaign: unexpected status %d", create.StatusCode())
+	}
+	id := create.JSON201.Data.Id.String()
+	RegisterCampaignCleanup(t, id)
+	return id
+}
+
+// SoftDeleteCampaign flips campaigns.is_deleted = true via the test-only
+// POST /test/campaigns/{id}/mark-deleted endpoint. The hard-delete cleanup
+// registered by SetupCampaign still fires at teardown — soft-deletion is just
+// a runtime mutation that does not change the row's existence.
+func SoftDeleteCampaign(t *testing.T, campaignID string) {
+	t.Helper()
+	campUUID, err := uuid.Parse(campaignID)
+	if err != nil {
+		t.Fatalf("SoftDeleteCampaign: invalid campaign id %q: %v", campaignID, err)
+	}
+	tc := NewTestClient(t)
+	resp, err := tc.MarkCampaignDeletedWithResponse(context.Background(), campUUID)
+	if err != nil {
+		t.Fatalf("SoftDeleteCampaign: request failed: %v", err)
+	}
+	if resp.StatusCode() != http.StatusNoContent {
+		t.Fatalf("SoftDeleteCampaign: unexpected status %d, body=%s", resp.StatusCode(), string(resp.Body))
+	}
+}
+
 // RegisterCampaignCleanup schedules a POST /test/cleanup-entity for a
 // campaign row after the test. 404 is treated as success — the row may have
 // been removed already by another step or by a sibling cleanup. Cleanups are

@@ -29,6 +29,7 @@ const FIXTURE_ITEM = {
   city: { code: "ALA", name: "Алматы", sortOrder: 10 },
   categories: [{ code: "fashion", name: "Мода", sortOrder: 1 }],
   socials: [{ platform: "instagram" as const, handle: "anna" }],
+  activeCampaignsCount: 3,
   telegramUsername: "anna",
   createdAt: "2026-04-30T12:00:00Z",
   updatedAt: "2026-04-30T12:00:00Z",
@@ -61,6 +62,7 @@ const FIXTURE_DETAIL = {
     },
   ],
   categories: [{ code: "fashion", name: "Мода" }],
+  campaigns: [],
   createdAt: FIXTURE_ITEM.createdAt,
   updatedAt: FIXTURE_ITEM.updatedAt,
 };
@@ -145,7 +147,7 @@ describe("CreatorsListPage — list rendering", () => {
     expect(screen.getByTestId("creators-total")).toHaveTextContent("1");
   });
 
-  it("renders 7 columns: index, fullName, socials, categories, age, city, createdAt", async () => {
+  it("renders activeCampaignsCount column second, right after fullName", async () => {
     vi.mocked(listCreators).mockResolvedValueOnce({
       data: { items: [FIXTURE_ITEM], total: 1, page: 1, perPage: 50 },
     });
@@ -157,6 +159,41 @@ describe("CreatorsListPage — list rendering", () => {
     expect(screen.getByTestId("th-age")).toBeInTheDocument();
     expect(screen.getByTestId("th-city")).toBeInTheDocument();
     expect(screen.getByTestId("th-createdAt")).toBeInTheDocument();
+
+    const headers = screen.getAllByRole("columnheader");
+    const texts = headers.map((h) => h.textContent ?? "");
+    const indexFullName = texts.findIndex((t) => t.startsWith("ФИО"));
+    expect(indexFullName).toBeGreaterThanOrEqual(0);
+    expect(texts[indexFullName + 1]).toContain("В кампаниях");
+  });
+
+  it("renders activeCampaignsCount=3 cell un-dimmed", async () => {
+    vi.mocked(listCreators).mockResolvedValueOnce({
+      data: { items: [FIXTURE_ITEM], total: 1, page: 1, perPage: 50 },
+    });
+
+    renderPage("/creators");
+
+    const cell = await screen.findByTestId(
+      `creators-row-active-campaigns-${FIXTURE_ITEM.id}`,
+    );
+    expect(cell).toHaveTextContent("3");
+    expect(cell).toHaveAttribute("data-dimmed", "false");
+  });
+
+  it("marks activeCampaignsCount=0 cell as dimmed", async () => {
+    const empty = { ...FIXTURE_ITEM, activeCampaignsCount: 0 };
+    vi.mocked(listCreators).mockResolvedValueOnce({
+      data: { items: [empty], total: 1, page: 1, perPage: 50 },
+    });
+
+    renderPage("/creators");
+
+    const cell = await screen.findByTestId(
+      `creators-row-active-campaigns-${empty.id}`,
+    );
+    expect(cell).toHaveTextContent("0");
+    expect(cell).toHaveAttribute("data-dimmed", "true");
   });
 });
 

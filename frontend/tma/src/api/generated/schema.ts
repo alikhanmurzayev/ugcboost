@@ -1616,10 +1616,33 @@ export interface components {
             socials: components["schemas"]["CreatorAggregateSocial"][];
             /** @description Categories sorted by code. */
             categories: components["schemas"]["CreatorAggregateCategory"][];
+            /**
+             * @description Campaign participations linked to this creator, sorted by
+             *     `campaign_creators.created_at DESC` (newest first). Soft-deleted
+             *     campaigns are filtered out — the array reflects active participations
+             *     only. UI groups rows by status preserving this server order.
+             */
+            campaigns: components["schemas"]["CreatorCampaignBrief"][];
             /** Format: date-time */
             createdAt: string;
             /** Format: date-time */
             updatedAt: string;
+        };
+        /**
+         * @description Lean campaign participation row attached to a creator aggregate. Carries
+         *     the linked campaign's id and name plus the creator's current status in
+         *     that campaign — enough to render the drawer participation block with a
+         *     clickable link to `/campaigns/{id}`.
+         */
+        CreatorCampaignBrief: {
+            /**
+             * Format: uuid
+             * @description Campaign UUID; used to build the drawer link target.
+             */
+            id: string;
+            /** @description Campaign display name shown to the operator. */
+            name: string;
+            status: components["schemas"]["CampaignCreatorStatus"];
         };
         GetCreatorResult: {
             data: components["schemas"]["CreatorAggregate"];
@@ -1706,6 +1729,12 @@ export interface components {
             categories: components["schemas"]["DictionaryItem"][];
             /** @description Social accounts attached to the creator, sorted by platform then handle. */
             socials: components["schemas"]["CreatorListSocial"][];
+            /**
+             * @description Number of non-deleted campaigns the creator currently participates
+             *     in. Soft-deleted campaigns are excluded. The column is not
+             *     sortable — included purely for at-a-glance triage.
+             */
+            activeCampaignsCount: number;
             telegramUsername?: string | null;
             /** Format: date-time */
             createdAt: string;

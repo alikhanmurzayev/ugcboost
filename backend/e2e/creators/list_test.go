@@ -11,6 +11,12 @@
 // item-shape (hydrated city/categories, lean PII set без address /
 // category_other_text / full Telegram block).
 //
+// Отдельный сценарий покрывает поле activeCampaignsCount: одного approved-
+// креатора прикрепляют к двум живым и одной soft-deleted кампании, второму
+// participation не выдают вовсе; ответ должен показать 2 и 0 соответственно
+// — soft-deleted campaigns не учитываются, пустое participations-множество
+// даёт честный ноль (приглушённая ячейка во фронте).
+//
 // Каждый t.Run заводит свой набор approved-креаторов через
 // testutil.SetupApprovedCreator, поэтому параллельные прогоны не делят
 // данные. Cleanup идёт через cleanup-stack с уважением FK
@@ -478,6 +484,41 @@ func TestCreatorsList(t *testing.T) {
 		require.NotNil(t, resp.JSON200)
 		require.NotContains(t, collectCreatorIDs(resp.JSON200.Data.Items), creator.CreatorID,
 			"escaped wildcard search must not match the creator without a literal '100%%' substring")
+	})
+
+	t.Run("happy: activeCampaignsCount excludes soft-deleted campaigns", func(t *testing.T) {
+		t.Parallel()
+		marker := newMarker()
+		withCamps := testutil.SetupApprovedCreator(t, defaultCreatorOptsScoped(marker, "wc"))
+		empty := testutil.SetupApprovedCreator(t, defaultCreatorOptsScoped(marker, "em"))
+
+		c := testutil.NewAPIClient(t)
+		camp1 := testutil.SetupCampaign(t, c, withCamps.AdminToken, "ccl-"+marker+"-1")
+		camp2 := testutil.SetupCampaign(t, c, withCamps.AdminToken, "ccl-"+marker+"-2")
+		soft := testutil.SetupCampaign(t, c, withCamps.AdminToken, "ccl-"+marker+"-soft")
+		testutil.AttachCreatorToCampaign(t, c, withCamps.AdminToken, camp1, withCamps.CreatorID)
+		testutil.AttachCreatorToCampaign(t, c, withCamps.AdminToken, camp2, withCamps.CreatorID)
+		testutil.AttachCreatorToCampaign(t, c, withCamps.AdminToken, soft, withCamps.CreatorID)
+		testutil.SoftDeleteCampaign(t, soft)
+
+		body := validCreatorListBody()
+		ids := []openapi_types.UUID{
+			uuid.MustParse(withCamps.CreatorID),
+			uuid.MustParse(empty.CreatorID),
+		}
+		body.Ids = &ids
+		body.PerPage = 200
+
+		resp, err := c.ListCreatorsWithResponse(context.Background(), body, testutil.WithAuth(withCamps.AdminToken))
+		require.NoError(t, err)
+		require.Equal(t, http.StatusOK, resp.StatusCode())
+		require.NotNil(t, resp.JSON200)
+		counts := make(map[string]int, len(resp.JSON200.Data.Items))
+		for _, item := range resp.JSON200.Data.Items {
+			counts[item.Id.String()] = item.ActiveCampaignsCount
+		}
+		require.Equal(t, 2, counts[withCamps.CreatorID], "two live campaigns, soft-deleted excluded")
+		require.Equal(t, 0, counts[empty.CreatorID], "creator without participations gets count 0")
 	})
 
 	t.Run("sort: created_at asc orders by approve time", func(t *testing.T) {

@@ -21,6 +21,8 @@ const (
 	campaignCreatorListSQL                      = "SELECT " + campaignCreatorAllCols + " FROM campaign_creators WHERE campaign_id = $1 ORDER BY created_at ASC, id ASC"
 	campaignCreatorDeleteSQL                    = "DELETE FROM campaign_creators WHERE id = $1"
 	campaignCreatorListByCampaignAndCreatorsSQL = "SELECT " + campaignCreatorAllCols + " FROM campaign_creators WHERE campaign_id = $1 AND creator_id IN ($2,$3)"
+	campaignCreatorListByCreatorIDsSQL          = "SELECT " + campaignCreatorAllCols + " FROM campaign_creators WHERE creator_id IN ($1,$2) ORDER BY created_at DESC, id DESC"
+	campaignCreatorForceCleanupSQL              = "DELETE FROM campaign_creators WHERE campaign_id = $1 AND creator_id = $2"
 	campaignCreatorApplyInviteSQL               = "UPDATE campaign_creators SET status = $1, invited_count = invited_count + 1, invited_at = now(), reminded_count = CASE WHEN status = $2 THEN $3 ELSE reminded_count END, reminded_at = CASE WHEN status = $4 THEN $5 ELSE reminded_at END, decided_at = CASE WHEN status = $6 THEN $7 ELSE decided_at END, updated_at = now() WHERE id = $8 RETURNING " + campaignCreatorAllCols
 	campaignCreatorApplyRemindSQL               = "UPDATE campaign_creators SET reminded_count = reminded_count + 1, reminded_at = now(), updated_at = now() WHERE id = $1 RETURNING " + campaignCreatorAllCols
 	campaignCreatorExistsInvitedSQL             = "SELECT EXISTS (SELECT 1 FROM campaign_creators WHERE campaign_id = $1 AND invited_count > $2)"
@@ -364,6 +366,107 @@ func TestCampaignCreatorRepository_ListByCampaignAndCreators(t *testing.T) {
 			WillReturnError(errors.New("db unavailable"))
 
 		_, err := repo.ListByCampaignAndCreators(context.Background(), "camp-1", []string{"cr-1", "cr-2"})
+		require.ErrorContains(t, err, "db unavailable")
+	})
+}
+
+func TestCampaignCreatorRepository_DeleteByCampaignAndCreatorForTests(t *testing.T) {
+	t.Parallel()
+
+	t.Run("success", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &campaignCreatorRepository{db: mock}
+
+		mock.ExpectExec(campaignCreatorForceCleanupSQL).
+			WithArgs("camp-1", "cr-1").
+			WillReturnResult(pgconn.NewCommandTag("DELETE 1"))
+
+		require.NoError(t, repo.DeleteByCampaignAndCreatorForTests(context.Background(), "camp-1", "cr-1"))
+	})
+
+	t.Run("zero rows returns sql.ErrNoRows", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &campaignCreatorRepository{db: mock}
+
+		mock.ExpectExec(campaignCreatorForceCleanupSQL).
+			WithArgs("camp-1", "cr-1").
+			WillReturnResult(pgconn.NewCommandTag("DELETE 0"))
+
+		require.ErrorIs(t, repo.DeleteByCampaignAndCreatorForTests(context.Background(), "camp-1", "cr-1"), sql.ErrNoRows)
+	})
+
+	t.Run("propagates errors", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &campaignCreatorRepository{db: mock}
+
+		mock.ExpectExec(campaignCreatorForceCleanupSQL).
+			WithArgs("camp-1", "cr-1").
+			WillReturnError(errors.New("db unavailable"))
+
+		err := repo.DeleteByCampaignAndCreatorForTests(context.Background(), "camp-1", "cr-1")
+		require.ErrorContains(t, err, "db unavailable")
+	})
+}
+
+func TestCampaignCreatorRepository_ListByCreatorIDs(t *testing.T) {
+	t.Parallel()
+
+	t.Run("empty creator list short-circuits without DB call", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &campaignCreatorRepository{db: mock}
+		got, err := repo.ListByCreatorIDs(context.Background(), nil)
+		require.NoError(t, err)
+		require.Nil(t, got)
+		require.NoError(t, mock.ExpectationsWereMet())
+	})
+
+	t.Run("returns rows ordered by created_at DESC, id DESC", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &campaignCreatorRepository{db: mock}
+		t1 := time.Date(2026, 5, 9, 10, 0, 0, 0, time.UTC)
+		t2 := time.Date(2026, 5, 7, 10, 0, 0, 0, time.UTC)
+
+		mock.ExpectQuery(campaignCreatorListByCreatorIDsSQL).
+			WithArgs("cr-1", "cr-2").
+			WillReturnRows(pgxmock.NewRows(campaignCreatorRowCols).
+				AddRow("camp-1", (*string)(nil), t1, "cr-1", (*time.Time)(nil), "cc-1",
+					(*time.Time)(nil), 0, (*time.Time)(nil), 0,
+					domain.CampaignCreatorStatusInvited, t1).
+				AddRow("camp-2", (*string)(nil), t2, "cr-2", (*time.Time)(nil), "cc-2",
+					(*time.Time)(nil), 0, (*time.Time)(nil), 0,
+					domain.CampaignCreatorStatusPlanned, t2))
+
+		got, err := repo.ListByCreatorIDs(context.Background(), []string{"cr-1", "cr-2"})
+		require.NoError(t, err)
+		require.Equal(t, []*CampaignCreatorRow{
+			{
+				ID: "cc-1", CampaignID: "camp-1", CreatorID: "cr-1",
+				Status:    domain.CampaignCreatorStatusInvited,
+				CreatedAt: t1, UpdatedAt: t1,
+			},
+			{
+				ID: "cc-2", CampaignID: "camp-2", CreatorID: "cr-2",
+				Status:    domain.CampaignCreatorStatusPlanned,
+				CreatedAt: t2, UpdatedAt: t2,
+			},
+		}, got)
+	})
+
+	t.Run("propagates errors", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &campaignCreatorRepository{db: mock}
+
+		mock.ExpectQuery(campaignCreatorListByCreatorIDsSQL).
+			WithArgs("cr-1", "cr-2").
+			WillReturnError(errors.New("db unavailable"))
+
+		_, err := repo.ListByCreatorIDs(context.Background(), []string{"cr-1", "cr-2"})
 		require.ErrorContains(t, err, "db unavailable")
 	})
 }

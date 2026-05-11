@@ -257,6 +257,9 @@ func AssertCreatorAggregateMatchesSetup(t *testing.T, fx CreatorApplicationFixtu
 		}
 	}
 
+	require.Emptyf(t, aggregate.Campaigns,
+		"AssertCreatorAggregateMatchesSetup: helper applies to freshly approved creators without campaign attachments; aggregate.Campaigns must be empty")
+
 	expected := apiclient.CreatorAggregate{
 		Id:                  aggregate.Id,
 		Iin:                 fx.IIN,
@@ -276,6 +279,7 @@ func AssertCreatorAggregateMatchesSetup(t *testing.T, fx CreatorApplicationFixtu
 		TelegramLastName:    fx.TelegramLastName,
 		Socials:             expectedSocials,
 		Categories:          expectedCategories,
+		Campaigns:           aggregate.Campaigns,
 		CreatedAt:           aggregate.CreatedAt,
 		UpdatedAt:           aggregate.UpdatedAt,
 	}

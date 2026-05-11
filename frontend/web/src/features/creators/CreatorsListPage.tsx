@@ -243,6 +243,25 @@ function buildColumns(t: (key: string) => string): Column<CreatorListItem>[] {
       sortable: true,
     },
     {
+      key: "activeCampaignsCount",
+      header: t("columns.activeCampaignsCount"),
+      render: (row) => (
+        <span
+          className={
+            row.activeCampaignsCount === 0
+              ? "text-gray-400"
+              : "text-gray-700"
+          }
+          data-dimmed={row.activeCampaignsCount === 0 ? "true" : "false"}
+          data-testid={`creators-row-active-campaigns-${row.id}`}
+        >
+          {row.activeCampaignsCount}
+        </span>
+      ),
+      align: "right",
+      width: "w-24",
+    },
+    {
       key: "socials",
       header: t("columns.socials"),
       render: (row) => (
