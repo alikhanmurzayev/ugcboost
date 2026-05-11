@@ -198,6 +198,9 @@ test.describe("Admin campaign creators — read-only section behavior", () => {
       ).toHaveText("Нет креаторов");
     }
 
+    await expect(
+      page.getByTestId("campaign-creators-empty-all"),
+    ).toHaveCount(0);
     await expect(page.getByTestId("campaign-creators-counter")).toHaveCount(0);
 
     const addBtn = page.getByTestId("campaign-creators-add-button");

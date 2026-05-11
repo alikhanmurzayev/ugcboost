@@ -148,9 +148,19 @@ describe("CampaignCreatorsSection — loading & error", () => {
     expect(
       screen.getByTestId("campaign-creators-loading"),
     ).toBeInTheDocument();
-    expect(
-      screen.queryByTestId("campaign-creators-group-planned"),
-    ).not.toBeInTheDocument();
+    for (const status of [
+      "planned",
+      "invited",
+      "declined",
+      "agreed",
+      "signing",
+      "signed",
+      "signing_declined",
+    ] as const) {
+      expect(
+        screen.queryByTestId(`campaign-creators-group-${status}`),
+      ).not.toBeInTheDocument();
+    }
   });
 
   it("renders ErrorState with retry on A3 ApiError; retry refires A3 and re-counts the call", async () => {
@@ -164,9 +174,19 @@ describe("CampaignCreatorsSection — loading & error", () => {
     expect(await screen.findByTestId("error-state")).toHaveTextContent(
       "Не удалось загрузить креаторов",
     );
-    expect(
-      screen.queryByTestId("campaign-creators-group-planned"),
-    ).not.toBeInTheDocument();
+    for (const status of [
+      "planned",
+      "invited",
+      "declined",
+      "agreed",
+      "signing",
+      "signed",
+      "signing_declined",
+    ] as const) {
+      expect(
+        screen.queryByTestId(`campaign-creators-group-${status}`),
+      ).not.toBeInTheDocument();
+    }
     await userEvent.click(screen.getByTestId("error-retry-button"));
 
     await screen.findByTestId("campaign-creators-group-planned");

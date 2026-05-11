@@ -739,6 +739,11 @@ describe("CampaignCreatorGroupSection — result rendering", () => {
     expect(
       screen.getByTestId("campaign-creators-group-empty-planned"),
     ).toBeInTheDocument();
+    // The select-all checkbox lives inside CampaignCreatorsTable; its absence
+    // proves the table is not mounted alongside the empty placeholder.
+    expect(
+      screen.queryByTestId("campaign-creators-select-all-planned"),
+    ).not.toBeInTheDocument();
   });
 });
 
@@ -761,7 +766,7 @@ describe("CampaignCreatorGroupSection — empty placeholder", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("hides empty placeholder once a row is present", () => {
+  it("hides empty placeholder once a row is present and mounts the table", () => {
     const rows: CampaignCreatorRow[] = [
       { campaignCreator: makeCC(CREATOR_A), creator: makeCreator(CREATOR_A, "Иванова") },
     ];
@@ -776,6 +781,10 @@ describe("CampaignCreatorGroupSection — empty placeholder", () => {
     expect(
       screen.queryByTestId("campaign-creators-group-empty-planned"),
     ).not.toBeInTheDocument();
+    expect(
+      screen.getByTestId("campaign-creators-select-all-planned"),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId(`row-${CREATOR_A}`)).toBeInTheDocument();
   });
 });
 
