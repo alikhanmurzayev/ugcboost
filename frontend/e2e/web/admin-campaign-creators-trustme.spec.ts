@@ -151,9 +151,17 @@ test.describe("Admin campaign creators TrustMe states — chunk 18", () => {
     await expect(
       signedGroup.getByTestId(`row-${creator.creatorId}`),
     ).toBeVisible();
+    // The signing group remains in the DOM (every status group is always
+    // rendered), but its row has moved to signed and the empty placeholder
+    // shows in its stead.
     await expect(
-      page.getByTestId("campaign-creators-group-signing"),
+      page
+        .getByTestId("campaign-creators-group-signing")
+        .getByTestId(`row-${creator.creatorId}`),
     ).toHaveCount(0);
+    await expect(
+      page.getByTestId("campaign-creators-group-empty-signing"),
+    ).toBeVisible();
     await expect(
       page.getByTestId("campaign-creators-group-action-signed"),
     ).toHaveCount(0);
@@ -225,8 +233,13 @@ test.describe("Admin campaign creators TrustMe states — chunk 18", () => {
       declinedGroup.getByTestId(`row-${creator.creatorId}`),
     ).toBeVisible();
     await expect(
-      page.getByTestId("campaign-creators-group-signing"),
+      page
+        .getByTestId("campaign-creators-group-signing")
+        .getByTestId(`row-${creator.creatorId}`),
     ).toHaveCount(0);
+    await expect(
+      page.getByTestId("campaign-creators-group-empty-signing"),
+    ).toBeVisible();
     await expect(
       page.getByTestId("campaign-creators-group-action-signing_declined"),
     ).toHaveCount(0);

@@ -109,8 +109,8 @@ test.describe("Admin campaign creators — mutations (slice 2/2)", () => {
 
     await expect(page.getByTestId("campaign-creators-section")).toBeVisible();
     await expect(
-      page.getByTestId("campaign-creators-empty-all"),
-    ).toHaveText("Креаторов в кампании пока нет");
+      page.getByTestId("campaign-creators-group-empty-planned"),
+    ).toHaveText("Нет креаторов");
 
     const addBtn = page.getByTestId("campaign-creators-add-button");
     await expect(addBtn).toBeEnabled();
@@ -225,16 +225,29 @@ test.describe("Admin campaign creators — mutations (slice 2/2)", () => {
       "1 в кампании",
     );
 
-    // Remove the last remaining creator and assert empty-state surfaces with
-    // the correct copy and the counter disappears.
+    // Remove the last remaining creator and assert each status group falls
+    // back to its empty placeholder; the counter disappears alongside.
     await page
       .getByTestId(`campaign-creator-remove-${creatorB.creatorId}`)
       .click();
     await page.getByTestId("remove-creator-confirm-submit").click();
     await expect(page.getByTestId(`row-${creatorB.creatorId}`)).toHaveCount(0);
-    await expect(
-      page.getByTestId("campaign-creators-empty-all"),
-    ).toHaveText("Креаторов в кампании пока нет");
+    for (const status of [
+      "planned",
+      "invited",
+      "declined",
+      "agreed",
+      "signing",
+      "signed",
+      "signing_declined",
+    ] as const) {
+      await expect(
+        page.getByTestId(`campaign-creators-group-${status}`),
+      ).toBeVisible();
+      await expect(
+        page.getByTestId(`campaign-creators-group-empty-${status}`),
+      ).toHaveText("Нет креаторов");
+    }
     await expect(
       page.getByTestId("campaign-creators-counter"),
     ).toHaveCount(0);

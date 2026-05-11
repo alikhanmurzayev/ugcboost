@@ -135,8 +135,8 @@ test.describe("Admin campaign creators — large-scale (cap-cycle, 200+ members)
 
     await expect(page.getByTestId("campaign-creators-section")).toBeVisible();
     await expect(
-      page.getByTestId("campaign-creators-empty-all"),
-    ).toHaveText("Креаторов в кампании пока нет");
+      page.getByTestId("campaign-creators-group-empty-planned"),
+    ).toHaveText("Нет креаторов");
 
     // ── First batch: cap-fill 200 across pages 1–4 ───────────────────
     await page.getByTestId("campaign-creators-add-button").click();

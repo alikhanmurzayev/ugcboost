@@ -148,9 +148,19 @@ describe("CampaignCreatorsSection — loading & error", () => {
     expect(
       screen.getByTestId("campaign-creators-loading"),
     ).toBeInTheDocument();
-    expect(
-      screen.queryByTestId("campaign-creators-empty-all"),
-    ).not.toBeInTheDocument();
+    for (const status of [
+      "planned",
+      "invited",
+      "declined",
+      "agreed",
+      "signing",
+      "signed",
+      "signing_declined",
+    ] as const) {
+      expect(
+        screen.queryByTestId(`campaign-creators-group-${status}`),
+      ).not.toBeInTheDocument();
+    }
   });
 
   it("renders ErrorState with retry on A3 ApiError; retry refires A3 and re-counts the call", async () => {
@@ -164,44 +174,60 @@ describe("CampaignCreatorsSection — loading & error", () => {
     expect(await screen.findByTestId("error-state")).toHaveTextContent(
       "Не удалось загрузить креаторов",
     );
+    for (const status of [
+      "planned",
+      "invited",
+      "declined",
+      "agreed",
+      "signing",
+      "signed",
+      "signing_declined",
+    ] as const) {
+      expect(
+        screen.queryByTestId(`campaign-creators-group-${status}`),
+      ).not.toBeInTheDocument();
+    }
     await userEvent.click(screen.getByTestId("error-retry-button"));
 
-    await waitFor(() => {
-      expect(
-        screen.getByTestId("campaign-creators-empty-all"),
-      ).toBeInTheDocument();
-    });
+    await screen.findByTestId("campaign-creators-group-planned");
     expect(listCampaignCreators).toHaveBeenCalledTimes(2);
   });
 });
 
 describe("CampaignCreatorsSection — empty state", () => {
-  it("renders empty-all message and an enabled Add button when total=0; no group sections rendered", async () => {
+  it("renders all 7 status groups with empty placeholders and an enabled Add button when total=0", async () => {
     vi.mocked(listCampaignCreators).mockResolvedValueOnce([]);
 
     renderSection(FIXTURE_CAMPAIGN_LIVE);
 
+    await screen.findByTestId("campaign-creators-group-planned");
+
+    for (const status of [
+      "planned",
+      "invited",
+      "declined",
+      "agreed",
+      "signing",
+      "signed",
+      "signing_declined",
+    ] as const) {
+      expect(
+        screen.getByTestId(`campaign-creators-group-${status}`),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByTestId(`campaign-creators-group-empty-${status}`),
+      ).toHaveTextContent("Нет креаторов");
+    }
+
     expect(
-      await screen.findByTestId("campaign-creators-empty-all"),
-    ).toHaveTextContent("Креаторов в кампании пока нет");
+      screen.queryByTestId("campaign-creators-empty-all"),
+    ).not.toBeInTheDocument();
 
     const addBtn = screen.getByTestId("campaign-creators-add-button");
     expect(addBtn).not.toBeDisabled();
     expect(listCreators).not.toHaveBeenCalled();
     expect(
       screen.queryByTestId("campaign-creators-counter"),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByTestId("campaign-creators-group-planned"),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByTestId("campaign-creators-group-invited"),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByTestId("campaign-creators-group-declined"),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByTestId("campaign-creators-group-agreed"),
     ).not.toBeInTheDocument();
   });
 });
@@ -313,7 +339,7 @@ describe("CampaignCreatorsSection — grouped rendering", () => {
     }
   });
 
-  it("skips groups with zero rows but rest stays visible", async () => {
+  it("renders empty placeholders inside zero-row groups while non-empty groups show their tables", async () => {
     vi.mocked(listCampaignCreators).mockResolvedValueOnce([
       makeCC(CREATOR_A, "planned"),
       makeCC(CREATOR_B, "agreed"),
@@ -332,16 +358,29 @@ describe("CampaignCreatorsSection — grouped rendering", () => {
 
     renderSection(FIXTURE_CAMPAIGN_LIVE);
 
-    await screen.findByTestId("campaign-creators-group-planned");
+    await screen.findByTestId(`row-${CREATOR_A}`);
+
     expect(
-      screen.queryByTestId("campaign-creators-group-invited"),
+      screen.queryByTestId("campaign-creators-group-empty-planned"),
     ).not.toBeInTheDocument();
     expect(
-      screen.queryByTestId("campaign-creators-group-declined"),
+      screen.queryByTestId("campaign-creators-group-empty-agreed"),
     ).not.toBeInTheDocument();
-    expect(
-      screen.getByTestId("campaign-creators-group-agreed"),
-    ).toBeInTheDocument();
+
+    for (const status of [
+      "invited",
+      "declined",
+      "signing",
+      "signed",
+      "signing_declined",
+    ] as const) {
+      expect(
+        screen.getByTestId(`campaign-creators-group-${status}`),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByTestId(`campaign-creators-group-empty-${status}`),
+      ).toBeInTheDocument();
+    }
   });
 
   it("renders counter with total > 0 across all groups", async () => {
@@ -444,7 +483,7 @@ describe("CampaignCreatorsSection — Add drawer integration", () => {
 
     renderSection(FIXTURE_CAMPAIGN_LIVE);
 
-    await screen.findByTestId("campaign-creators-empty-all");
+    await screen.findByTestId("campaign-creators-group-planned");
     await userEvent.click(screen.getByTestId("campaign-creators-add-button"));
 
     expect(
@@ -460,7 +499,7 @@ describe("CampaignCreatorsSection — Add drawer integration", () => {
 
     renderSection(FIXTURE_CAMPAIGN_LIVE);
 
-    await screen.findByTestId("campaign-creators-empty-all");
+    await screen.findByTestId("campaign-creators-group-planned");
     await userEvent.click(screen.getByTestId("campaign-creators-add-button"));
     await screen.findByTestId("add-creators-drawer-body");
     await userEvent.click(screen.getByTestId("add-creators-drawer-cancel"));
