@@ -27,6 +27,7 @@ import {
   useCampaignNotifyMutations,
   type CampaignNotifyMutations,
 } from "./hooks/useCampaignNotifyMutations";
+import { usePatchCampaignCreator } from "./hooks/usePatchCampaignCreator";
 import CampaignCreatorGroupSection from "./CampaignCreatorGroupSection";
 import AddCreatorsDrawer from "./AddCreatorsDrawer";
 import RemoveCreatorConfirm from "./RemoveCreatorConfirm";
@@ -71,6 +72,26 @@ export default function CampaignCreatorsSection({
   const [submittingByStatus, setSubmittingByStatus] = useState<
     Partial<Record<CampaignCreatorStatus, boolean>>
   >({});
+  const [ticketSentError, setTicketSentError] = useState<string | null>(null);
+
+  const patchMutation = usePatchCampaignCreator(campaign.id, {
+    onError: () => {
+      setTicketSentError(t("campaignCreators.ticketSentSaveError"));
+    },
+  });
+
+  // Single source of truth for the per-row pending state — React Query owns
+  // `isPending` + `variables`, so the checkbox `disabled` window matches the
+  // actual in-flight PATCH (manual QA caught a ~13 ms parallel-Set version).
+  const ticketSentPendingCreatorId = patchMutation.isPending
+    ? patchMutation.variables?.creatorId
+    : undefined;
+
+  function handleToggleTicketSent(creatorId: string, next: boolean) {
+    if (patchMutation.isPending) return;
+    setTicketSentError(null);
+    patchMutation.mutate({ creatorId, patch: { ticketSent: next } });
+  }
 
   const removeMutation = useMutation({
     mutationFn: ({
@@ -233,6 +254,16 @@ export default function CampaignCreatorsSection({
         </button>
       </div>
 
+      {ticketSentError && (
+        <p
+          role="alert"
+          className="mt-3 rounded-button border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+          data-testid="campaign-creators-ticket-sent-error"
+        >
+          {ticketSentError}
+        </p>
+      )}
+
       {isLoading ? (
         <div data-testid="campaign-creators-loading">
           <Spinner className="mt-6" />
@@ -249,6 +280,7 @@ export default function CampaignCreatorsSection({
           const action = actionForStatus(status, notifyMutations, t);
           const isPending = action.mutation?.isPending ?? false;
           const isSubmitting = submittingByStatus[status] ?? false;
+          const isSignedGroup = status === CAMPAIGN_CREATOR_STATUS.SIGNED;
           return (
             <CampaignCreatorGroupSection
               key={status}
@@ -272,6 +304,12 @@ export default function CampaignCreatorsSection({
               }
               drawerSelectedCreatorId={selectedCreatorId ?? undefined}
               onRowClick={handleRowClick}
+              onToggleTicketSent={
+                isSignedGroup ? handleToggleTicketSent : undefined
+              }
+              ticketSentPendingCreatorId={
+                isSignedGroup ? ticketSentPendingCreatorId : undefined
+              }
             />
           );
         })

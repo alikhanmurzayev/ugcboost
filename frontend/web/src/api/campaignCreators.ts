@@ -16,6 +16,8 @@ export type CampaignCreatorBatchInvalidError =
   components["schemas"]["CampaignCreatorBatchInvalidError"];
 export type CampaignCreatorBatchInvalidDetail =
   components["schemas"]["CampaignCreatorBatchInvalidDetail"];
+export type CampaignCreatorPatchInput =
+  components["schemas"]["CampaignCreatorPatchInput"];
 
 function extractErrorParts(error: unknown): {
   code: string;
@@ -164,4 +166,28 @@ export async function remindCampaignCreatorsSigning(
     );
   }
   return data;
+}
+
+export async function patchCampaignCreator(
+  campaignId: string,
+  creatorId: string,
+  patch: CampaignCreatorPatchInput,
+): Promise<CampaignCreator> {
+  const { data, error, response } = await client.PATCH(
+    "/campaigns/{id}/creators/{creatorId}",
+    {
+      params: { path: { id: campaignId, creatorId } },
+      body: patch,
+    },
+  );
+  if (error || !data) {
+    const parts = extractErrorParts(error);
+    throw new ApiError(
+      response?.status ?? 0,
+      parts.code,
+      parts.message,
+      parts.details,
+    );
+  }
+  return data.data;
 }

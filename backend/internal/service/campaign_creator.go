@@ -293,6 +293,78 @@ func (s *CampaignCreatorService) RemindSigning(ctx context.Context, campaignID s
 	return s.dispatchBatch(ctx, campaignID, creatorIDs, batchOpRemindSigning)
 }
 
+// PatchParticipation applies a partial update to a single campaign_creators
+// row. Currently the only supported toggle is `TicketSent` — an admin-side
+// flag recording whether the travel ticket has been dispatched. The endpoint
+// is shaped as a generic patch so future per-row admin flags reuse the same
+// route. Caller (handler) is responsible for rejecting an empty patch body
+// before delegating; the service trusts `patch.TicketSent` to be non-nil per
+// the `backend-architecture.md` slice contract (service does not duplicate
+// handler-level format validation).
+//
+//  1. Resolves the campaign via assertCampaignActive — soft-deleted = 404.
+//  2. Reads the row by (campaignId, creatorId); not-attached = 404.
+//  3. Requires status=signed for a ticketSent toggle; other statuses → 422.
+//  4. No-op early return when the requested state equals the current one —
+//     the row is returned unchanged and no audit entry is written.
+//  5. Otherwise updates `ticket_sent_at` (NOW() / NULL) and writes a single
+//     audit row inside the same transaction.
+func (s *CampaignCreatorService) PatchParticipation(
+	ctx context.Context,
+	campaignID, creatorID string,
+	patch domain.PatchCampaignCreatorInput,
+) (*domain.CampaignCreator, error) {
+	if err := s.assertCampaignActive(ctx, campaignID); err != nil {
+		return nil, err
+	}
+
+	row, err := s.repoFactory.NewCampaignCreatorRepo(s.pool).
+		GetByCampaignAndCreator(ctx, campaignID, creatorID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, domain.ErrCampaignCreatorNotFound
+		}
+		return nil, fmt.Errorf("get campaign creator: %w", err)
+	}
+
+	if row.Status != domain.CampaignCreatorStatusSigned {
+		return nil, domain.ErrCampaignCreatorTicketSentBadStatus
+	}
+
+	currentlySet := row.TicketSentAt != nil
+	if currentlySet == *patch.TicketSent {
+		return campaignCreatorRowToDomain(row), nil
+	}
+
+	oldCC := campaignCreatorRowToDomain(row)
+	var newCC *domain.CampaignCreator
+
+	err = dbutil.WithTx(ctx, s.pool, func(tx dbutil.DB) error {
+		ccTx := s.repoFactory.NewCampaignCreatorRepo(tx)
+		auditTx := s.repoFactory.NewAuditRepo(tx)
+
+		updated, err := ccTx.UpdateTicketSentAt(ctx, row.ID, *patch.TicketSent)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return domain.ErrCampaignCreatorNotFound
+			}
+			return fmt.Errorf("update ticket_sent_at: %w", err)
+		}
+		newCC = campaignCreatorRowToDomain(updated)
+		return writeAudit(ctx, auditTx,
+			AuditActionCampaignCreatorTicketSent, AuditEntityTypeCampaignCreator, newCC.ID,
+			oldCC, newCC)
+	})
+	if err != nil {
+		return nil, err
+	}
+	s.logger.Info(ctx, "campaign creator ticket_sent toggled",
+		"campaign_id", campaignID,
+		"creator_id", creatorID,
+		"ticket_sent", *patch.TicketSent)
+	return newCC, nil
+}
+
 // dispatchBatch is the shared body of Notify / RemindInvitation: campaign
 // gate → batch validation → chat-id resolve → per-creator delivery loop.
 // Returns the undelivered list (empty for full success, populated for
@@ -465,6 +537,7 @@ func campaignCreatorRowToDomain(row *repository.CampaignCreatorRow) *domain.Camp
 		RemindedAt:    row.RemindedAt,
 		RemindedCount: row.RemindedCount,
 		DecidedAt:     row.DecidedAt,
+		TicketSentAt:  row.TicketSentAt,
 		CreatedAt:     row.CreatedAt,
 		UpdatedAt:     row.UpdatedAt,
 	}

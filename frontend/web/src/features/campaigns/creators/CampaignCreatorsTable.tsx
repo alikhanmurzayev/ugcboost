@@ -31,6 +31,8 @@ interface CampaignCreatorsTableProps {
   selectAllState?: SelectAllState;
   selectAllTestId?: string;
   rowSelectionDisabled?: boolean;
+  onToggleTicketSent?: (creatorId: string, next: boolean) => void;
+  ticketSentPendingCreatorId?: string;
 }
 
 export default function CampaignCreatorsTable({
@@ -46,6 +48,8 @@ export default function CampaignCreatorsTable({
   selectAllState,
   selectAllTestId,
   rowSelectionDisabled,
+  onToggleTicketSent,
+  ticketSentPendingCreatorId,
 }: CampaignCreatorsTableProps) {
   const { t } = useTranslation("creators");
   const { t: tCampaigns } = useTranslation("campaigns");
@@ -61,6 +65,8 @@ export default function CampaignCreatorsTable({
         selectAllState: selectAllState ?? "unchecked",
         selectAllTestId,
         selectionDisabled: rowSelectionDisabled ?? false,
+        onToggleTicketSent,
+        ticketSentPendingCreatorId,
       }),
     [
       t,
@@ -73,6 +79,8 @@ export default function CampaignCreatorsTable({
       selectAllState,
       selectAllTestId,
       rowSelectionDisabled,
+      onToggleTicketSent,
+      ticketSentPendingCreatorId,
     ],
   );
 
@@ -98,6 +106,8 @@ interface BuildColumnsOpts {
   selectAllState: SelectAllState;
   selectAllTestId?: string;
   selectionDisabled: boolean;
+  onToggleTicketSent?: (creatorId: string, next: boolean) => void;
+  ticketSentPendingCreatorId?: string;
 }
 
 function buildColumns(
@@ -254,7 +264,7 @@ function buildColumns(
     },
   ];
 
-  const extra = buildStatusColumns(opts.status, tCampaigns);
+  const extra = buildStatusColumns(opts.status, tCampaigns, opts);
 
   const tail: Column<CampaignCreatorRow>[] = [
     {
@@ -304,7 +314,8 @@ function buildColumns(
 
 function buildStatusColumns(
   status: CampaignCreatorStatus,
-  tCampaigns: (key: string) => string,
+  tCampaigns: (key: string, opts?: Record<string, unknown>) => string,
+  opts: BuildColumnsOpts,
 ): Column<CampaignCreatorRow>[] {
   switch (status) {
     case CAMPAIGN_CREATOR_STATUS.PLANNED:
@@ -326,7 +337,6 @@ function buildStatusColumns(
       ];
     case CAMPAIGN_CREATOR_STATUS.DECLINED:
     case CAMPAIGN_CREATOR_STATUS.AGREED:
-    case CAMPAIGN_CREATOR_STATUS.SIGNED:
     case CAMPAIGN_CREATOR_STATUS.SIGNING_DECLINED:
       return [
         pairColumn(
@@ -340,6 +350,20 @@ function buildStatusColumns(
           (row) => row.campaignCreator.decidedAt ?? null,
         ),
       ];
+    case CAMPAIGN_CREATOR_STATUS.SIGNED:
+      return [
+        pairColumn(
+          "invited",
+          tCampaigns("campaignCreators.columns.invited"),
+          (row) => row.campaignCreator.invitedCount,
+          (row) => row.campaignCreator.invitedAt ?? null,
+        ),
+        decidedColumn(
+          tCampaigns("campaignCreators.columns.decided"),
+          (row) => row.campaignCreator.decidedAt ?? null,
+        ),
+        ticketSentColumn(tCampaigns, opts),
+      ];
     case CAMPAIGN_CREATOR_STATUS.SIGNING:
       return [
         decidedColumn(
@@ -352,6 +376,84 @@ function buildStatusColumns(
       return _exhaustive;
     }
   }
+}
+
+function ticketSentColumn(
+  tCampaigns: (key: string, opts?: Record<string, unknown>) => string,
+  opts: BuildColumnsOpts,
+): Column<CampaignCreatorRow> {
+  const deletedTitle = tCampaigns("campaignCreators.creatorDeleted");
+  return {
+    key: "ticket-sent",
+    header: tCampaigns("campaignCreators.columns.ticketSent"),
+    width: "w-32",
+    render: (row) => {
+      const creatorId = row.campaignCreator.creatorId;
+      const checked = row.campaignCreator.ticketSentAt != null;
+      const pending = opts.ticketSentPendingCreatorId === creatorId;
+      const name = row.creator
+        ? `${row.creator.lastName} ${row.creator.firstName}`
+        : deletedTitle;
+      return (
+        <TicketSentCheckbox
+          creatorId={creatorId}
+          checked={checked}
+          disabled={pending}
+          ariaLabel={tCampaigns("campaignCreators.ticketSentToggleAria", {
+            name,
+          })}
+          onToggle={opts.onToggleTicketSent}
+        />
+      );
+    },
+  };
+}
+
+interface TicketSentCheckboxProps {
+  creatorId: string;
+  checked: boolean;
+  disabled: boolean;
+  ariaLabel: string;
+  onToggle?: (creatorId: string, next: boolean) => void;
+}
+
+function TicketSentCheckbox({
+  creatorId,
+  checked,
+  disabled,
+  ariaLabel,
+  onToggle,
+}: TicketSentCheckboxProps) {
+  function handleChange(e: ChangeEvent<HTMLInputElement>) {
+    onToggle?.(creatorId, e.target.checked);
+  }
+
+  function stopMouse(e: MouseEvent<HTMLDivElement>) {
+    e.stopPropagation();
+  }
+
+  function stopKey(e: KeyboardEvent<HTMLDivElement>) {
+    e.stopPropagation();
+  }
+
+  return (
+    <div
+      className="flex items-center"
+      onClick={stopMouse}
+      onKeyDown={stopKey}
+      role="presentation"
+    >
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={handleChange}
+        aria-label={ariaLabel}
+        data-testid={`campaign-creator-ticket-sent-${creatorId}`}
+        disabled={disabled}
+        className="h-4 w-4 cursor-pointer rounded border-surface-300 disabled:cursor-not-allowed disabled:opacity-50"
+      />
+    </div>
+  );
 }
 
 function pairColumn(

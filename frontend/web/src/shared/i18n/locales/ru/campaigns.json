@@ -109,8 +109,11 @@
     "columns": {
       "invited": "Приглашение",
       "reminded": "Ремайндер",
-      "decided": "Решение"
+      "decided": "Решение",
+      "ticketSent": "Билет отправлен"
     },
+    "ticketSentToggleAria": "Отметить билет как отправленный для {{name}}",
+    "ticketSentSaveError": "Не удалось обновить отметку. Попробуйте ещё раз.",
     "currentStatus": {
       "planned": "Запланирован(а)",
       "invited": "Приглашён(а)",

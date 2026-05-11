@@ -2,9 +2,11 @@ package testutil
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"testing"
 
+	"github.com/AlekSi/pointer"
 	"github.com/stretchr/testify/require"
 
 	"github.com/alikhanmurzayev/ugcboost/backend/e2e/apiclient"
@@ -79,4 +81,48 @@ func ListAuditEntriesByAction(t *testing.T, c *apiclient.ClientWithResponses,
 		}
 	}
 	return out
+}
+
+// AuditValueMap decodes an audit_logs JSON snapshot (OldValue / NewValue —
+// both surfaced as `any` by the generated AuditLogEntry) into a generic
+// map[string]any so individual fields can be asserted without importing
+// internal/domain (e2e is a separate module). Fails the test if raw is nil
+// or cannot be remarshaled into a map.
+func AuditValueMap(t *testing.T, raw interface{}) map[string]any {
+	t.Helper()
+	require.NotNil(t, raw)
+	payload, err := json.Marshal(raw)
+	require.NoError(t, err)
+	var m map[string]any
+	require.NoError(t, json.Unmarshal(payload, &m))
+	return m
+}
+
+// CountAuditEntries returns the number of audit rows matching
+// (entityType, entityID, action). Caller pins entityID to a fresh fixture
+// row, so the per-row count never realistically nears the per_page cap —
+// the helper still asserts `got < perPage` to fail loudly if a future test
+// floods the same fixture id with audit rows and silently truncates.
+func CountAuditEntries(t *testing.T, c *apiclient.ClientWithResponses,
+	adminToken, entityType, entityID, action string,
+) int {
+	t.Helper()
+	const perPage = 100
+	resp, err := c.ListAuditLogsWithResponse(context.Background(),
+		&apiclient.ListAuditLogsParams{
+			Page:       pointer.ToInt(1),
+			PerPage:    pointer.ToInt(perPage),
+			EntityType: pointer.ToString(entityType),
+			EntityId:   pointer.ToString(entityID),
+			Action:     pointer.ToString(action),
+		},
+		WithAuth(adminToken))
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, resp.StatusCode())
+	require.NotNil(t, resp.JSON200)
+	got := len(resp.JSON200.Data.Logs)
+	require.Lessf(t, got, perPage,
+		"audit count reached per_page=%d cap — assertion would silently truncate; paginate or narrow filters",
+		perPage)
+	return got
 }

@@ -142,3 +142,25 @@ func TestAuthzService_CanRemindCampaignCreatorsSigning(t *testing.T) {
 		require.NoError(t, svc.CanRemindCampaignCreatorsSigning(ctxWithRole(api.Admin)))
 	})
 }
+
+func TestAuthzService_CanPatchCampaignCreator(t *testing.T) {
+	t.Parallel()
+
+	t.Run("manager forbidden", func(t *testing.T) {
+		t.Parallel()
+		svc := NewAuthzService(mocks.NewMockBrandService(t), nil, nil)
+		require.ErrorIs(t, svc.CanPatchCampaignCreator(ctxWithRole(api.BrandManager)), domain.ErrForbidden)
+	})
+
+	t.Run("missing role forbidden", func(t *testing.T) {
+		t.Parallel()
+		svc := NewAuthzService(mocks.NewMockBrandService(t), nil, nil)
+		require.ErrorIs(t, svc.CanPatchCampaignCreator(context.Background()), domain.ErrForbidden)
+	})
+
+	t.Run("admin allowed", func(t *testing.T) {
+		t.Parallel()
+		svc := NewAuthzService(mocks.NewMockBrandService(t), nil, nil)
+		require.NoError(t, svc.CanPatchCampaignCreator(ctxWithRole(api.Admin)))
+	})
+}

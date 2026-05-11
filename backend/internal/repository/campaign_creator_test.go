@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	campaignCreatorAllCols                      = "campaign_id, contract_id, created_at, creator_id, decided_at, id, invited_at, invited_count, reminded_at, reminded_count, status, updated_at"
+	campaignCreatorAllCols                      = "campaign_id, contract_id, created_at, creator_id, decided_at, id, invited_at, invited_count, reminded_at, reminded_count, status, ticket_sent_at, updated_at"
 	campaignCreatorAddSQL                       = "INSERT INTO campaign_creators (campaign_id,creator_id,status) VALUES ($1,$2,$3) RETURNING " + campaignCreatorAllCols
 	campaignCreatorGetSQL                       = "SELECT " + campaignCreatorAllCols + " FROM campaign_creators WHERE campaign_id = $1 AND creator_id = $2"
 	campaignCreatorListSQL                      = "SELECT " + campaignCreatorAllCols + " FROM campaign_creators WHERE campaign_id = $1 ORDER BY created_at ASC, id ASC"
@@ -31,7 +31,7 @@ const (
 var campaignCreatorRowCols = []string{
 	"campaign_id", "contract_id", "created_at", "creator_id", "decided_at", "id",
 	"invited_at", "invited_count", "reminded_at", "reminded_count",
-	"status", "updated_at",
+	"status", "ticket_sent_at", "updated_at",
 }
 
 func TestCampaignCreatorRepository_Add(t *testing.T) {
@@ -48,7 +48,7 @@ func TestCampaignCreatorRepository_Add(t *testing.T) {
 			WillReturnRows(pgxmock.NewRows(campaignCreatorRowCols).
 				AddRow("camp-1", (*string)(nil), createdAt, "cr-1", (*time.Time)(nil), "cc-1",
 					(*time.Time)(nil), 0, (*time.Time)(nil), 0,
-					domain.CampaignCreatorStatusPlanned, createdAt))
+					domain.CampaignCreatorStatusPlanned, (*time.Time)(nil), createdAt))
 
 		got, err := repo.Add(context.Background(), "camp-1", "cr-1", domain.CampaignCreatorStatusPlanned)
 		require.NoError(t, err)
@@ -159,7 +159,7 @@ func TestCampaignCreatorRepository_GetByCampaignAndCreator(t *testing.T) {
 			WillReturnRows(pgxmock.NewRows(campaignCreatorRowCols).
 				AddRow("camp-1", (*string)(nil), createdAt, "cr-1", (*time.Time)(nil), "cc-1",
 					&invitedAt, 1, (*time.Time)(nil), 0,
-					domain.CampaignCreatorStatusInvited, createdAt))
+					domain.CampaignCreatorStatusInvited, (*time.Time)(nil), createdAt))
 
 		got, err := repo.GetByCampaignAndCreator(context.Background(), "camp-1", "cr-1")
 		require.NoError(t, err)
@@ -217,10 +217,10 @@ func TestCampaignCreatorRepository_ListByCampaign(t *testing.T) {
 			WillReturnRows(pgxmock.NewRows(campaignCreatorRowCols).
 				AddRow("camp-1", (*string)(nil), t1, "cr-1", (*time.Time)(nil), "cc-1",
 					(*time.Time)(nil), 0, (*time.Time)(nil), 0,
-					domain.CampaignCreatorStatusPlanned, t1).
+					domain.CampaignCreatorStatusPlanned, (*time.Time)(nil), t1).
 				AddRow("camp-1", (*string)(nil), t2, "cr-2", (*time.Time)(nil), "cc-2",
 					(*time.Time)(nil), 0, (*time.Time)(nil), 0,
-					domain.CampaignCreatorStatusPlanned, t2))
+					domain.CampaignCreatorStatusPlanned, (*time.Time)(nil), t2))
 
 		got, err := repo.ListByCampaign(context.Background(), "camp-1")
 		require.NoError(t, err)
@@ -335,10 +335,10 @@ func TestCampaignCreatorRepository_ListByCampaignAndCreators(t *testing.T) {
 			WillReturnRows(pgxmock.NewRows(campaignCreatorRowCols).
 				AddRow("camp-1", (*string)(nil), t1, "cr-1", (*time.Time)(nil), "cc-1",
 					(*time.Time)(nil), 0, (*time.Time)(nil), 0,
-					domain.CampaignCreatorStatusPlanned, t1).
+					domain.CampaignCreatorStatusPlanned, (*time.Time)(nil), t1).
 				AddRow("camp-1", (*string)(nil), t1, "cr-2", (*time.Time)(nil), "cc-2",
 					(*time.Time)(nil), 0, (*time.Time)(nil), 0,
-					domain.CampaignCreatorStatusInvited, t1))
+					domain.CampaignCreatorStatusInvited, (*time.Time)(nil), t1))
 
 		got, err := repo.ListByCampaignAndCreators(context.Background(), "camp-1", []string{"cr-1", "cr-2"})
 		require.NoError(t, err)
@@ -436,10 +436,10 @@ func TestCampaignCreatorRepository_ListByCreatorIDs(t *testing.T) {
 			WillReturnRows(pgxmock.NewRows(campaignCreatorRowCols).
 				AddRow("camp-1", (*string)(nil), t1, "cr-1", (*time.Time)(nil), "cc-1",
 					(*time.Time)(nil), 0, (*time.Time)(nil), 0,
-					domain.CampaignCreatorStatusInvited, t1).
+					domain.CampaignCreatorStatusInvited, (*time.Time)(nil), t1).
 				AddRow("camp-2", (*string)(nil), t2, "cr-2", (*time.Time)(nil), "cc-2",
 					(*time.Time)(nil), 0, (*time.Time)(nil), 0,
-					domain.CampaignCreatorStatusPlanned, t2))
+					domain.CampaignCreatorStatusPlanned, (*time.Time)(nil), t2))
 
 		got, err := repo.ListByCreatorIDs(context.Background(), []string{"cr-1", "cr-2"})
 		require.NoError(t, err)
@@ -491,7 +491,7 @@ func TestCampaignCreatorRepository_ApplyInvite(t *testing.T) {
 			WillReturnRows(pgxmock.NewRows(campaignCreatorRowCols).
 				AddRow("camp-1", (*string)(nil), now, "cr-1", (*time.Time)(nil), "cc-1",
 					&now, 1, (*time.Time)(nil), 0,
-					domain.CampaignCreatorStatusInvited, now))
+					domain.CampaignCreatorStatusInvited, (*time.Time)(nil), now))
 
 		got, err := repo.ApplyInvite(context.Background(), "cc-1")
 		require.NoError(t, err)
@@ -539,7 +539,7 @@ func TestCampaignCreatorRepository_ApplyRemind(t *testing.T) {
 			WillReturnRows(pgxmock.NewRows(campaignCreatorRowCols).
 				AddRow("camp-1", (*string)(nil), t1, "cr-1", (*time.Time)(nil), "cc-1",
 					&t1, 1, &t2, 1,
-					domain.CampaignCreatorStatusInvited, t2))
+					domain.CampaignCreatorStatusInvited, (*time.Time)(nil), t2))
 
 		got, err := repo.ApplyRemind(context.Background(), "cc-1")
 		require.NoError(t, err)
@@ -630,7 +630,7 @@ func TestCampaignCreatorRepository_GetByIDForUpdate(t *testing.T) {
 			WillReturnRows(pgxmock.NewRows(campaignCreatorRowCols).
 				AddRow("camp-1", (*string)(nil), createdAt, "cr-1", (*time.Time)(nil), "cc-1",
 					&invitedAt, 1, (*time.Time)(nil), 0,
-					domain.CampaignCreatorStatusInvited, createdAt))
+					domain.CampaignCreatorStatusInvited, (*time.Time)(nil), createdAt))
 
 		got, err := repo.GetByIDForUpdate(context.Background(), "cc-1")
 		require.NoError(t, err)
@@ -694,7 +694,7 @@ func TestCampaignCreatorRepository_ApplyDecision(t *testing.T) {
 			WillReturnRows(pgxmock.NewRows(campaignCreatorRowCols).
 				AddRow("camp-1", (*string)(nil), createdAt, "cr-1", &decidedAt, "cc-1",
 					&invitedAt, 1, (*time.Time)(nil), 0,
-					domain.CampaignCreatorStatusAgreed, decidedAt))
+					domain.CampaignCreatorStatusAgreed, (*time.Time)(nil), decidedAt))
 
 		got, err := repo.ApplyDecision(context.Background(), "cc-1", domain.CampaignCreatorStatusAgreed)
 		require.NoError(t, err)
@@ -791,7 +791,7 @@ func TestCampaignCreatorRepository_GetByContractID(t *testing.T) {
 			WillReturnRows(pgxmock.NewRows(campaignCreatorRowCols).
 				AddRow("camp-1", &ctID, now, "cr-1", &now, "cc-1",
 					&now, 1, (*time.Time)(nil), 0,
-					domain.CampaignCreatorStatusSigning, now))
+					domain.CampaignCreatorStatusSigning, (*time.Time)(nil), now))
 
 		got, err := repo.GetByContractID(context.Background(), "ct-1")
 		require.NoError(t, err)
@@ -924,6 +924,82 @@ func TestCampaignCreatorRepository_UpdateStatus(t *testing.T) {
 			WillReturnError(errors.New("db down"))
 
 		err := repo.UpdateStatus(context.Background(), "cc-1", domain.CampaignCreatorStatusSigned)
+		require.ErrorContains(t, err, "db down")
+	})
+}
+
+func TestCampaignCreatorRepository_UpdateTicketSentAt(t *testing.T) {
+	t.Parallel()
+
+	const sqlStmt = "UPDATE campaign_creators SET ticket_sent_at = CASE WHEN $1 THEN now() ELSE NULL END, updated_at = now() WHERE id = $2 RETURNING " + campaignCreatorAllCols
+
+	t.Run("set stamps now() and returns row", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &campaignCreatorRepository{db: mock}
+		now := time.Date(2026, 5, 11, 18, 0, 0, 0, time.UTC)
+		invitedAt := now.Add(-2 * time.Hour)
+		decidedAt := now.Add(-1 * time.Hour)
+		ctID := "ct-1"
+
+		mock.ExpectQuery(sqlStmt).
+			WithArgs(true, "cc-1").
+			WillReturnRows(pgxmock.NewRows(campaignCreatorRowCols).
+				AddRow("camp-1", &ctID, now, "cr-1", &decidedAt, "cc-1",
+					&invitedAt, 1, (*time.Time)(nil), 0,
+					domain.CampaignCreatorStatusSigned, &now, now))
+
+		got, err := repo.UpdateTicketSentAt(context.Background(), "cc-1", true)
+		require.NoError(t, err)
+		require.NotNil(t, got.TicketSentAt)
+		require.Equal(t, now, *got.TicketSentAt)
+		require.Equal(t, domain.CampaignCreatorStatusSigned, got.Status)
+	})
+
+	t.Run("unset clears timestamp to NULL", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &campaignCreatorRepository{db: mock}
+		now := time.Date(2026, 5, 11, 18, 0, 0, 0, time.UTC)
+		invitedAt := now.Add(-2 * time.Hour)
+		decidedAt := now.Add(-1 * time.Hour)
+		ctID := "ct-1"
+
+		mock.ExpectQuery(sqlStmt).
+			WithArgs(false, "cc-1").
+			WillReturnRows(pgxmock.NewRows(campaignCreatorRowCols).
+				AddRow("camp-1", &ctID, now, "cr-1", &decidedAt, "cc-1",
+					&invitedAt, 1, (*time.Time)(nil), 0,
+					domain.CampaignCreatorStatusSigned, (*time.Time)(nil), now))
+
+		got, err := repo.UpdateTicketSentAt(context.Background(), "cc-1", false)
+		require.NoError(t, err)
+		require.Nil(t, got.TicketSentAt)
+	})
+
+	t.Run("missing row returns sql.ErrNoRows", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &campaignCreatorRepository{db: mock}
+
+		mock.ExpectQuery(sqlStmt).
+			WithArgs(true, "cc-missing").
+			WillReturnRows(pgxmock.NewRows(campaignCreatorRowCols))
+
+		_, err := repo.UpdateTicketSentAt(context.Background(), "cc-missing", true)
+		require.ErrorIs(t, err, sql.ErrNoRows)
+	})
+
+	t.Run("propagates db errors", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &campaignCreatorRepository{db: mock}
+
+		mock.ExpectQuery(sqlStmt).
+			WithArgs(true, "cc-1").
+			WillReturnError(errors.New("db down"))
+
+		_, err := repo.UpdateTicketSentAt(context.Background(), "cc-1", true)
 		require.ErrorContains(t, err, "db down")
 	})
 }

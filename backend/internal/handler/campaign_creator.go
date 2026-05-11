@@ -63,6 +63,37 @@ func (s *Server) RemoveCampaignCreator(ctx context.Context, request api.RemoveCa
 	return api.RemoveCampaignCreator204Response{}, nil
 }
 
+// PatchCampaignCreator handles PATCH /campaigns/{id}/creators/{creatorId}
+// (admin-only). The body must carry at least one toggleable field — an
+// empty body short-circuits with 422 before reaching the service. The
+// response is the fresh `CampaignCreator` row so the front-end can refresh
+// its react-query cache off the strict-server payload without a second GET.
+func (s *Server) PatchCampaignCreator(ctx context.Context, request api.PatchCampaignCreatorRequestObject) (api.PatchCampaignCreatorResponseObject, error) {
+	if err := s.authzService.CanPatchCampaignCreator(ctx); err != nil {
+		return nil, err
+	}
+	if request.Body.TicketSent == nil {
+		return nil, domain.ErrCampaignCreatorPatchEmpty
+	}
+
+	patch := domain.PatchCampaignCreatorInput{
+		TicketSent: request.Body.TicketSent,
+	}
+	updated, err := s.campaignCreatorService.PatchParticipation(
+		ctx, request.Id.String(), request.CreatorId.String(), patch,
+	)
+	if err != nil {
+		return nil, err
+	}
+	apiCC, err := domainCampaignCreatorToAPI(updated)
+	if err != nil {
+		return nil, err
+	}
+	resp := api.PatchCampaignCreator200JSONResponse{}
+	resp.Data = apiCC
+	return resp, nil
+}
+
 // ListCampaignCreators handles GET /campaigns/{id}/creators (admin-only). No
 // pagination — the whole roster is returned. Soft-deleted / missing
 // campaigns surface as 404 from the service.
@@ -242,6 +273,7 @@ func domainCampaignCreatorToAPI(cc *domain.CampaignCreator) (api.CampaignCreator
 		RemindedAt:    cc.RemindedAt,
 		RemindedCount: cc.RemindedCount,
 		DecidedAt:     cc.DecidedAt,
+		TicketSentAt:  cc.TicketSentAt,
 		CreatedAt:     cc.CreatedAt,
 		UpdatedAt:     cc.UpdatedAt,
 	}, nil

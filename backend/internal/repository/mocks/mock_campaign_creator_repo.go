@@ -1133,3 +1133,77 @@ func (_c *MockCampaignCreatorRepo_UpdateStatus_Call) RunAndReturn(run func(ctx c
 	_c.Call.Return(run)
 	return _c
 }
+
+// UpdateTicketSentAt provides a mock function for the type MockCampaignCreatorRepo
+func (_mock *MockCampaignCreatorRepo) UpdateTicketSentAt(ctx context.Context, id string, set bool) (*repository.CampaignCreatorRow, error) {
+	ret := _mock.Called(ctx, id, set)
+
+	if len(ret) == 0 {
+		panic("no return value specified for UpdateTicketSentAt")
+	}
+
+	var r0 *repository.CampaignCreatorRow
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, bool) (*repository.CampaignCreatorRow, error)); ok {
+		return returnFunc(ctx, id, set)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, bool) *repository.CampaignCreatorRow); ok {
+		r0 = returnFunc(ctx, id, set)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*repository.CampaignCreatorRow)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, bool) error); ok {
+		r1 = returnFunc(ctx, id, set)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockCampaignCreatorRepo_UpdateTicketSentAt_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'UpdateTicketSentAt'
+type MockCampaignCreatorRepo_UpdateTicketSentAt_Call struct {
+	*mock.Call
+}
+
+// UpdateTicketSentAt is a helper method to define mock.On call
+//   - ctx context.Context
+//   - id string
+//   - set bool
+func (_e *MockCampaignCreatorRepo_Expecter) UpdateTicketSentAt(ctx interface{}, id interface{}, set interface{}) *MockCampaignCreatorRepo_UpdateTicketSentAt_Call {
+	return &MockCampaignCreatorRepo_UpdateTicketSentAt_Call{Call: _e.mock.On("UpdateTicketSentAt", ctx, id, set)}
+}
+
+func (_c *MockCampaignCreatorRepo_UpdateTicketSentAt_Call) Run(run func(ctx context.Context, id string, set bool)) *MockCampaignCreatorRepo_UpdateTicketSentAt_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 bool
+		if args[2] != nil {
+			arg2 = args[2].(bool)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockCampaignCreatorRepo_UpdateTicketSentAt_Call) Return(campaignCreatorRow *repository.CampaignCreatorRow, err error) *MockCampaignCreatorRepo_UpdateTicketSentAt_Call {
+	_c.Call.Return(campaignCreatorRow, err)
+	return _c
+}
+
+func (_c *MockCampaignCreatorRepo_UpdateTicketSentAt_Call) RunAndReturn(run func(ctx context.Context, id string, set bool) (*repository.CampaignCreatorRow, error)) *MockCampaignCreatorRepo_UpdateTicketSentAt_Call {
+	_c.Call.Return(run)
+	return _c
+}

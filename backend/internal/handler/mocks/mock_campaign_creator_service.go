@@ -254,6 +254,86 @@ func (_c *MockCampaignCreatorService_Notify_Call) RunAndReturn(run func(ctx cont
 	return _c
 }
 
+// PatchParticipation provides a mock function for the type MockCampaignCreatorService
+func (_mock *MockCampaignCreatorService) PatchParticipation(ctx context.Context, campaignID string, creatorID string, patch domain.PatchCampaignCreatorInput) (*domain.CampaignCreator, error) {
+	ret := _mock.Called(ctx, campaignID, creatorID, patch)
+
+	if len(ret) == 0 {
+		panic("no return value specified for PatchParticipation")
+	}
+
+	var r0 *domain.CampaignCreator
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, domain.PatchCampaignCreatorInput) (*domain.CampaignCreator, error)); ok {
+		return returnFunc(ctx, campaignID, creatorID, patch)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, domain.PatchCampaignCreatorInput) *domain.CampaignCreator); ok {
+		r0 = returnFunc(ctx, campaignID, creatorID, patch)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*domain.CampaignCreator)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string, domain.PatchCampaignCreatorInput) error); ok {
+		r1 = returnFunc(ctx, campaignID, creatorID, patch)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockCampaignCreatorService_PatchParticipation_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'PatchParticipation'
+type MockCampaignCreatorService_PatchParticipation_Call struct {
+	*mock.Call
+}
+
+// PatchParticipation is a helper method to define mock.On call
+//   - ctx context.Context
+//   - campaignID string
+//   - creatorID string
+//   - patch domain.PatchCampaignCreatorInput
+func (_e *MockCampaignCreatorService_Expecter) PatchParticipation(ctx interface{}, campaignID interface{}, creatorID interface{}, patch interface{}) *MockCampaignCreatorService_PatchParticipation_Call {
+	return &MockCampaignCreatorService_PatchParticipation_Call{Call: _e.mock.On("PatchParticipation", ctx, campaignID, creatorID, patch)}
+}
+
+func (_c *MockCampaignCreatorService_PatchParticipation_Call) Run(run func(ctx context.Context, campaignID string, creatorID string, patch domain.PatchCampaignCreatorInput)) *MockCampaignCreatorService_PatchParticipation_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 string
+		if args[2] != nil {
+			arg2 = args[2].(string)
+		}
+		var arg3 domain.PatchCampaignCreatorInput
+		if args[3] != nil {
+			arg3 = args[3].(domain.PatchCampaignCreatorInput)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3,
+		)
+	})
+	return _c
+}
+
+func (_c *MockCampaignCreatorService_PatchParticipation_Call) Return(campaignCreator *domain.CampaignCreator, err error) *MockCampaignCreatorService_PatchParticipation_Call {
+	_c.Call.Return(campaignCreator, err)
+	return _c
+}
+
+func (_c *MockCampaignCreatorService_PatchParticipation_Call) RunAndReturn(run func(ctx context.Context, campaignID string, creatorID string, patch domain.PatchCampaignCreatorInput) (*domain.CampaignCreator, error)) *MockCampaignCreatorService_PatchParticipation_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // RemindInvitation provides a mock function for the type MockCampaignCreatorService
 func (_mock *MockCampaignCreatorService) RemindInvitation(ctx context.Context, campaignID string, creatorIDs []string) ([]domain.NotifyFailure, error) {
 	ret := _mock.Called(ctx, campaignID, creatorIDs)
