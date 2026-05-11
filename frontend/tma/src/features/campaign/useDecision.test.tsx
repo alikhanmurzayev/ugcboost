@@ -75,6 +75,31 @@ describe("useAgreeDecision", () => {
     });
   });
 
+  // Idempotent agree from a post-AGREED terminal status (signing / signed /
+  // signing_declined): backend returns 200 + the current status + alreadyDecided.
+  // Regression for a bug where the schema check only accepted AGREED|DECLINED,
+  // causing every other valid 200 to throw INTERNAL_ERROR and surface
+  // "Внутренняя ошибка сервера" instead of the real terminal state.
+  for (const status of [
+    CAMPAIGN_CREATOR_STATUS.SIGNING,
+    CAMPAIGN_CREATOR_STATUS.SIGNED,
+    CAMPAIGN_CREATOR_STATUS.SIGNING_DECLINED,
+  ] as const) {
+    it(`accepts idempotent agree returning status=${status} as a valid result, not an error`, async () => {
+      mockedPost.mockResolvedValue({
+        data: { status, alreadyDecided: true },
+        response: { status: 200 } as Response,
+      } as never);
+      const { result } = renderHook(() => useAgreeDecision("tok_xxxxxxxxxxxxxxxx"), {
+        wrapper: wrapper(),
+      });
+      result.current.mutate();
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(result.current.data).toEqual({ status, alreadyDecided: true });
+      expect(result.current.error).toBeNull();
+    });
+  }
+
   it("surfaces backend ErrorResponse code on failure", async () => {
     mockedPost.mockResolvedValue({
       error: {

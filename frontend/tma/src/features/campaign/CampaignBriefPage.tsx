@@ -46,11 +46,19 @@ export function CampaignBriefPage() {
   }
 
   const decisionResult = agree.data ?? decline.data;
-  if (decisionResult?.status === CAMPAIGN_CREATOR_STATUS.AGREED) {
-    return <AcceptedView alreadyDecided={decisionResult.alreadyDecided} />;
-  }
-  if (decisionResult?.status === CAMPAIGN_CREATOR_STATUS.DECLINED) {
-    return <DeclinedView alreadyDecided={decisionResult.alreadyDecided} />;
+  if (decisionResult) {
+    switch (decisionResult.status) {
+      case CAMPAIGN_CREATOR_STATUS.AGREED:
+      case CAMPAIGN_CREATOR_STATUS.SIGNING:
+      case CAMPAIGN_CREATOR_STATUS.SIGNED:
+        return <AcceptedView alreadyDecided={decisionResult.alreadyDecided} />;
+      case CAMPAIGN_CREATOR_STATUS.DECLINED:
+      case CAMPAIGN_CREATOR_STATUS.SIGNING_DECLINED:
+        return <DeclinedView alreadyDecided={decisionResult.alreadyDecided} />;
+      case CAMPAIGN_CREATOR_STATUS.PLANNED:
+      case CAMPAIGN_CREATOR_STATUS.INVITED:
+        break;
+    }
   }
 
   const handleAcceptClick = () => setConfirm("accept");
