@@ -72,7 +72,7 @@ func (s *Server) PatchCampaignCreator(ctx context.Context, request api.PatchCamp
 	if err := s.authzService.CanPatchCampaignCreator(ctx); err != nil {
 		return nil, err
 	}
-	if request.Body == nil || request.Body.TicketSent == nil {
+	if request.Body.TicketSent == nil {
 		return nil, domain.ErrCampaignCreatorPatchEmpty
 	}
 

@@ -68,3 +68,46 @@ optimistic / rollback / toast, backend unit — repo+service+handler.
   `domain.CampaignCreator.TicketSentAt`, тест silent pass (получит
   `"ticket_sent_at":null`). При следующем рефакторинге audit-payload —
   переключиться на полную struct-deserialize + сравнение полей.
+  **UPD 2026-05-11.** Закрыт во 2-м раунде review: omitempty убран,
+  ассерт переведён на `auditValueMap` (генерик-map) с явной проверкой
+  `null` vs not-null.
+
+## Findings из 2-го раунда review фичи `campaign-ticket-sent` (2026-05-11)
+
+Что вернулось в defer после доп. ревью (test/security/frontend-codegen/manual-qa).
+Реализация фичи закрывает все AC; перечисленное — known constraints
+для следующего касания этого слоя.
+
+- **[blocker→defer] Status check ordering для `unset` на не-`signed` строке.**
+  `PatchParticipation` сначала отвергает `status != signed`, потом делает
+  no-op early return. Если status уехал из `signed` после set (теоретический
+  путь: revoke / future business flow), админ не сможет снять `ticket_sent_at`
+  — будут 422. Сейчас status из `signed` не уезжает (нет business flow для
+  «откат подписания»), так что practical impact нулевой. Если такой переход
+  появится — пересмотреть: либо no-op перед status check, либо отдельный
+  «reset ticket» admin-эндпоинт.
+- **[major] Non-repeatable read + lost-update window (Patch/Add/Remove).**
+  `assertCampaignActive` + `GetByCampaignAndCreator` бегут на pool вне tx.
+  Между ними и UPDATE другой админ может soft-delete campaign / сменить
+  status, и audit OldValue будет stale. Применимо ко всему campaign_creator
+  слою (`ApplyInvite/ApplyRemind/ApplyDecision` тоже так). Лечится единым
+  `GetByIDForUpdate` внутри WithTx — реструктуризация, делаем когда придёт
+  первый реальный конфликт.
+- **[major] Concurrent admin toggles — race без FOR UPDATE.** Два админа
+  одновременно нажимают checkbox для одного row: оба читают TicketSentAt=null
+  на pool, оба попадают в UPDATE, audit пишет два диффа с одним и тем же
+  pre-image. Сейчас single-admin workflow → не воспроизводится.
+- **[major] Future-field gotcha в handler empty-body 422.** Когда добавим
+  второе toggleable поле, текущий guard `request.Body.TicketSent == nil`
+  начнёт выдавать `CAMPAIGN_CREATOR_PATCH_EMPTY` для запроса с другим полем
+  — переключить на struct-level `IsEmpty()` или дженерик-check.
+- **[minor] Audit JSON snake_case vs API camelCase.** `domain.CampaignCreator`
+  serialize'ится в audit_logs как `ticket_sent_at`, а API схема отдаёт
+  `ticketSentAt`. Внешний просмотр audit-логов (export, отчёт) удивит
+  читателя. Универсальная политика именования audit-payload — отдельная
+  задача.
+- **[minor] React `setState` после unmount в `usePatchCampaignCreator`.**
+  Если admin кликает чекбокс и сразу уходит со страницы — `onSettled`
+  попытается обновить state размонтированного компонента. React 18 не
+  warning'ует, но cosmetic. Wrap'нуть через `isMountedRef` при первом
+  visible bug.

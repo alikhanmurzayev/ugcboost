@@ -128,6 +128,35 @@ describe("usePatchCampaignCreator", () => {
     expect(onError).toHaveBeenCalledWith(err);
   });
 
+  it("cold cache (no prior setQueryData) — mutate succeeds and still invalidates", async () => {
+    const updated = makeCC({ ticketSentAt: "2026-05-11T14:00:00Z" });
+    vi.mocked(patchCampaignCreator).mockResolvedValueOnce(updated);
+
+    const { qc, Wrapper } = makeWrapper();
+    // No qc.setQueryData(...) — the list cache is genuinely cold (e.g. user
+    // toggled before the initial GET resolved). onMutate must not throw,
+    // onSettled must still invalidate so the refetch syncs the row.
+    const invalidateSpy = vi.spyOn(qc, "invalidateQueries");
+
+    const { result } = renderHook(
+      () => usePatchCampaignCreator(CAMPAIGN_ID),
+      { wrapper: Wrapper },
+    );
+
+    result.current.mutate({
+      creatorId: CREATOR_A,
+      patch: { ticketSent: true },
+    });
+
+    await waitFor(() => {
+      expect(result.current.isSuccess).toBe(true);
+    });
+
+    expect(invalidateSpy).toHaveBeenCalledWith({
+      queryKey: campaignCreatorKeys.list(CAMPAIGN_ID),
+    });
+  });
+
   it("unset (ticketSent=false) clears ticketSentAt in the cache optimistically", async () => {
     const updated = makeCC({ ticketSentAt: null });
     vi.mocked(patchCampaignCreator).mockResolvedValueOnce(updated);

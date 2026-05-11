@@ -93,7 +93,7 @@ type CampaignCreatorRepo interface {
 	ApplyInvite(ctx context.Context, id string) (*CampaignCreatorRow, error)
 	ApplyRemind(ctx context.Context, id string) (*CampaignCreatorRow, error)
 	ApplyDecision(ctx context.Context, id, status string) (*CampaignCreatorRow, error)
-	UpdateTicketSentAt(ctx context.Context, id string, sentAt *time.Time) (*CampaignCreatorRow, error)
+	UpdateTicketSentAt(ctx context.Context, id string, set bool) (*CampaignCreatorRow, error)
 	UpdateContractIDAndStatus(ctx context.Context, id, contractID, status string) error
 	UpdateStatus(ctx context.Context, id, status string) error
 	ExistsInvitedInCampaign(ctx context.Context, campaignID string) (bool, error)
@@ -326,15 +326,16 @@ func (r *campaignCreatorRepository) ApplyDecision(ctx context.Context, id, statu
 	return dbutil.One[CampaignCreatorRow](ctx, r.db, q)
 }
 
-// UpdateTicketSentAt stamps ticket_sent_at to the supplied value (nil to
-// clear) and bumps updated_at. The admin-side ticket toggle is the sole
-// caller (chunk-ticket-sent); callers verify the source status outside.
+// UpdateTicketSentAt stamps ticket_sent_at to DB-side now() (set=true) or
+// NULL (set=false) inside a single CASE expression so app-clock skew cannot
+// drift ticket_sent_at away from updated_at on the same write. The admin-side
+// ticket toggle is the sole caller; callers verify the source status outside.
 // Returns the freshly updated row for audit and response. dbutil.One wraps
 // sql.ErrNoRows when no row matches the id — the service maps it to
 // ErrCampaignCreatorNotFound at the boundary.
-func (r *campaignCreatorRepository) UpdateTicketSentAt(ctx context.Context, id string, sentAt *time.Time) (*CampaignCreatorRow, error) {
+func (r *campaignCreatorRepository) UpdateTicketSentAt(ctx context.Context, id string, set bool) (*CampaignCreatorRow, error) {
 	q := sq.Update(TableCampaignCreators).
-		Set(CampaignCreatorColumnTicketSentAt, sentAt).
+		Set(CampaignCreatorColumnTicketSentAt, sq.Expr("CASE WHEN ? THEN now() ELSE NULL END", set)).
 		Set(CampaignCreatorColumnUpdatedAt, sq.Expr("now()")).
 		Where(sq.Eq{CampaignCreatorColumnID: id}).
 		Suffix(returningClause(campaignCreatorSelectColumns))

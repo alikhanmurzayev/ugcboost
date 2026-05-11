@@ -931,9 +931,9 @@ func TestCampaignCreatorRepository_UpdateStatus(t *testing.T) {
 func TestCampaignCreatorRepository_UpdateTicketSentAt(t *testing.T) {
 	t.Parallel()
 
-	const sqlStmt = "UPDATE campaign_creators SET ticket_sent_at = $1, updated_at = now() WHERE id = $2 RETURNING " + campaignCreatorAllCols
+	const sqlStmt = "UPDATE campaign_creators SET ticket_sent_at = CASE WHEN $1 THEN now() ELSE NULL END, updated_at = now() WHERE id = $2 RETURNING " + campaignCreatorAllCols
 
-	t.Run("set stamps timestamp and returns row", func(t *testing.T) {
+	t.Run("set stamps now() and returns row", func(t *testing.T) {
 		t.Parallel()
 		mock := newPgxmock(t)
 		repo := &campaignCreatorRepository{db: mock}
@@ -943,13 +943,13 @@ func TestCampaignCreatorRepository_UpdateTicketSentAt(t *testing.T) {
 		ctID := "ct-1"
 
 		mock.ExpectQuery(sqlStmt).
-			WithArgs(&now, "cc-1").
+			WithArgs(true, "cc-1").
 			WillReturnRows(pgxmock.NewRows(campaignCreatorRowCols).
 				AddRow("camp-1", &ctID, now, "cr-1", &decidedAt, "cc-1",
 					&invitedAt, 1, (*time.Time)(nil), 0,
 					domain.CampaignCreatorStatusSigned, &now, now))
 
-		got, err := repo.UpdateTicketSentAt(context.Background(), "cc-1", &now)
+		got, err := repo.UpdateTicketSentAt(context.Background(), "cc-1", true)
 		require.NoError(t, err)
 		require.NotNil(t, got.TicketSentAt)
 		require.Equal(t, now, *got.TicketSentAt)
@@ -966,13 +966,13 @@ func TestCampaignCreatorRepository_UpdateTicketSentAt(t *testing.T) {
 		ctID := "ct-1"
 
 		mock.ExpectQuery(sqlStmt).
-			WithArgs((*time.Time)(nil), "cc-1").
+			WithArgs(false, "cc-1").
 			WillReturnRows(pgxmock.NewRows(campaignCreatorRowCols).
 				AddRow("camp-1", &ctID, now, "cr-1", &decidedAt, "cc-1",
 					&invitedAt, 1, (*time.Time)(nil), 0,
 					domain.CampaignCreatorStatusSigned, (*time.Time)(nil), now))
 
-		got, err := repo.UpdateTicketSentAt(context.Background(), "cc-1", nil)
+		got, err := repo.UpdateTicketSentAt(context.Background(), "cc-1", false)
 		require.NoError(t, err)
 		require.Nil(t, got.TicketSentAt)
 	})
@@ -981,13 +981,12 @@ func TestCampaignCreatorRepository_UpdateTicketSentAt(t *testing.T) {
 		t.Parallel()
 		mock := newPgxmock(t)
 		repo := &campaignCreatorRepository{db: mock}
-		now := time.Date(2026, 5, 11, 18, 0, 0, 0, time.UTC)
 
 		mock.ExpectQuery(sqlStmt).
-			WithArgs(&now, "cc-missing").
+			WithArgs(true, "cc-missing").
 			WillReturnRows(pgxmock.NewRows(campaignCreatorRowCols))
 
-		_, err := repo.UpdateTicketSentAt(context.Background(), "cc-missing", &now)
+		_, err := repo.UpdateTicketSentAt(context.Background(), "cc-missing", true)
 		require.ErrorIs(t, err, sql.ErrNoRows)
 	})
 
@@ -995,13 +994,12 @@ func TestCampaignCreatorRepository_UpdateTicketSentAt(t *testing.T) {
 		t.Parallel()
 		mock := newPgxmock(t)
 		repo := &campaignCreatorRepository{db: mock}
-		now := time.Date(2026, 5, 11, 18, 0, 0, 0, time.UTC)
 
 		mock.ExpectQuery(sqlStmt).
-			WithArgs(&now, "cc-1").
+			WithArgs(true, "cc-1").
 			WillReturnError(errors.New("db down"))
 
-		_, err := repo.UpdateTicketSentAt(context.Background(), "cc-1", &now)
+		_, err := repo.UpdateTicketSentAt(context.Background(), "cc-1", true)
 		require.ErrorContains(t, err, "db down")
 	})
 }

@@ -694,6 +694,7 @@ func TestPatchCampaignCreator(t *testing.T) {
 	t.Run("happy: signed → set, no-op repeat, unset, audit diff", func(t *testing.T) {
 		t.Parallel()
 		fx := testutil.SetupCampaignWithSigningCreator(t)
+		adminUserID := getAdminUserID(t, fx.AdminClient, fx.AdminToken)
 
 		// Flip to signed via TrustMe webhook (status=3 happy-signed payload).
 		token := testutil.TrustMeWebhookToken(t)
@@ -719,14 +720,25 @@ func TestPatchCampaignCreator(t *testing.T) {
 		entrySet := testutil.FindAuditEntry(t, fx.AdminClient, fx.AdminToken,
 			"campaign_creator", fx.CampaignCreatorID, "campaign_creator.ticket_sent")
 		require.NotNil(t, entrySet, "set must write audit row")
+		require.Equal(t, "campaign_creator.ticket_sent", entrySet.Action)
+		require.Equal(t, "campaign_creator", entrySet.EntityType)
+		require.NotNil(t, entrySet.EntityId)
+		require.Equal(t, fx.CampaignCreatorID, *entrySet.EntityId)
+		require.NotNil(t, entrySet.ActorId, "audit must record admin actor_id from middleware")
+		require.Equal(t, adminUserID, *entrySet.ActorId)
 		require.NotNil(t, entrySet.OldValue, "audit set must carry old snapshot")
 		require.NotNil(t, entrySet.NewValue, "audit set must carry new snapshot")
-		oldPayload, err := json.Marshal(entrySet.OldValue)
-		require.NoError(t, err)
-		require.NotContains(t, string(oldPayload), `"ticket_sent_at":"`, "audit old must not carry ticket_sent_at when previously null")
-		newPayload, err := json.Marshal(entrySet.NewValue)
-		require.NoError(t, err)
-		require.Contains(t, string(newPayload), `"ticket_sent_at":`, "audit new must carry ticket_sent_at after set")
+
+		// Audit payload — parse as map so we can assert exact field shapes
+		// without importing internal/domain (e2e is a separate module).
+		// `ticket_sent_at` MUST be present in both snapshots (no omitempty in
+		// the domain struct) and MUST be null in OldValue / non-null in NewValue.
+		oldMap := auditValueMap(t, entrySet.OldValue)
+		newMap := auditValueMap(t, entrySet.NewValue)
+		require.Contains(t, oldMap, "ticket_sent_at", "OldValue must carry the field explicitly")
+		require.Nil(t, oldMap["ticket_sent_at"], "OldValue.ticket_sent_at must be null pre-set")
+		require.Contains(t, newMap, "ticket_sent_at")
+		require.NotNil(t, newMap["ticket_sent_at"], "NewValue.ticket_sent_at must be a timestamp string")
 
 		// NO-OP REPEAT — same value, server returns row unchanged and skips audit.
 		noopResp, err := fx.AdminClient.PatchCampaignCreatorWithResponse(context.Background(),
@@ -755,7 +767,34 @@ func TestPatchCampaignCreator(t *testing.T) {
 		auditCount = countAuditEntries(t, fx.AdminClient, fx.AdminToken,
 			"campaign_creator", fx.CampaignCreatorID, "campaign_creator.ticket_sent")
 		require.Equal(t, 2, auditCount, "unset must write a second audit row")
+
+		// ListAuditLogs sorts created_at DESC, so the freshest entry is the
+		// just-written unset row — assert its actor + payload directly.
+		entryUnset := testutil.FindAuditEntry(t, fx.AdminClient, fx.AdminToken,
+			"campaign_creator", fx.CampaignCreatorID, "campaign_creator.ticket_sent")
+		require.NotNil(t, entryUnset, "unset must write audit row")
+		require.NotNil(t, entryUnset.ActorId)
+		require.Equal(t, adminUserID, *entryUnset.ActorId, "unset audit actor_id must match admin")
+		unsetOldMap := auditValueMap(t, entryUnset.OldValue)
+		unsetNewMap := auditValueMap(t, entryUnset.NewValue)
+		require.NotNil(t, unsetOldMap["ticket_sent_at"], "OldValue.ticket_sent_at must be the previously-set timestamp")
+		require.Contains(t, unsetNewMap, "ticket_sent_at")
+		require.Nil(t, unsetNewMap["ticket_sent_at"], "NewValue.ticket_sent_at must be null after unset")
 	})
+}
+
+// auditValueMap decodes an audit_logs JSON snapshot into a generic map so
+// individual fields can be asserted without importing internal/domain
+// (e2e is a separate module). Accepts the openapi-generated interface{} from
+// AuditLogEntry.OldValue / NewValue.
+func auditValueMap(t *testing.T, raw interface{}) map[string]any {
+	t.Helper()
+	require.NotNil(t, raw)
+	payload, err := json.Marshal(raw)
+	require.NoError(t, err)
+	var m map[string]any
+	require.NoError(t, json.Unmarshal(payload, &m))
+	return m
 }
 
 // countAuditEntries returns the number of audit rows matching

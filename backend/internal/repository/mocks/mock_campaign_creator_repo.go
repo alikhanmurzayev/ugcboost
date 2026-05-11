@@ -6,7 +6,6 @@ package mocks
 
 import (
 	"context"
-	"time"
 
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/repository"
 	mock "github.com/stretchr/testify/mock"
@@ -1136,8 +1135,8 @@ func (_c *MockCampaignCreatorRepo_UpdateStatus_Call) RunAndReturn(run func(ctx c
 }
 
 // UpdateTicketSentAt provides a mock function for the type MockCampaignCreatorRepo
-func (_mock *MockCampaignCreatorRepo) UpdateTicketSentAt(ctx context.Context, id string, sentAt *time.Time) (*repository.CampaignCreatorRow, error) {
-	ret := _mock.Called(ctx, id, sentAt)
+func (_mock *MockCampaignCreatorRepo) UpdateTicketSentAt(ctx context.Context, id string, set bool) (*repository.CampaignCreatorRow, error) {
+	ret := _mock.Called(ctx, id, set)
 
 	if len(ret) == 0 {
 		panic("no return value specified for UpdateTicketSentAt")
@@ -1145,18 +1144,18 @@ func (_mock *MockCampaignCreatorRepo) UpdateTicketSentAt(ctx context.Context, id
 
 	var r0 *repository.CampaignCreatorRow
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, *time.Time) (*repository.CampaignCreatorRow, error)); ok {
-		return returnFunc(ctx, id, sentAt)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, bool) (*repository.CampaignCreatorRow, error)); ok {
+		return returnFunc(ctx, id, set)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, *time.Time) *repository.CampaignCreatorRow); ok {
-		r0 = returnFunc(ctx, id, sentAt)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, bool) *repository.CampaignCreatorRow); ok {
+		r0 = returnFunc(ctx, id, set)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(*repository.CampaignCreatorRow)
 		}
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, string, *time.Time) error); ok {
-		r1 = returnFunc(ctx, id, sentAt)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, bool) error); ok {
+		r1 = returnFunc(ctx, id, set)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -1171,12 +1170,12 @@ type MockCampaignCreatorRepo_UpdateTicketSentAt_Call struct {
 // UpdateTicketSentAt is a helper method to define mock.On call
 //   - ctx context.Context
 //   - id string
-//   - sentAt *time.Time
-func (_e *MockCampaignCreatorRepo_Expecter) UpdateTicketSentAt(ctx interface{}, id interface{}, sentAt interface{}) *MockCampaignCreatorRepo_UpdateTicketSentAt_Call {
-	return &MockCampaignCreatorRepo_UpdateTicketSentAt_Call{Call: _e.mock.On("UpdateTicketSentAt", ctx, id, sentAt)}
+//   - set bool
+func (_e *MockCampaignCreatorRepo_Expecter) UpdateTicketSentAt(ctx interface{}, id interface{}, set interface{}) *MockCampaignCreatorRepo_UpdateTicketSentAt_Call {
+	return &MockCampaignCreatorRepo_UpdateTicketSentAt_Call{Call: _e.mock.On("UpdateTicketSentAt", ctx, id, set)}
 }
 
-func (_c *MockCampaignCreatorRepo_UpdateTicketSentAt_Call) Run(run func(ctx context.Context, id string, sentAt *time.Time)) *MockCampaignCreatorRepo_UpdateTicketSentAt_Call {
+func (_c *MockCampaignCreatorRepo_UpdateTicketSentAt_Call) Run(run func(ctx context.Context, id string, set bool)) *MockCampaignCreatorRepo_UpdateTicketSentAt_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -1186,9 +1185,9 @@ func (_c *MockCampaignCreatorRepo_UpdateTicketSentAt_Call) Run(run func(ctx cont
 		if args[1] != nil {
 			arg1 = args[1].(string)
 		}
-		var arg2 *time.Time
+		var arg2 bool
 		if args[2] != nil {
-			arg2 = args[2].(*time.Time)
+			arg2 = args[2].(bool)
 		}
 		run(
 			arg0,
@@ -1204,7 +1203,7 @@ func (_c *MockCampaignCreatorRepo_UpdateTicketSentAt_Call) Return(campaignCreato
 	return _c
 }
 
-func (_c *MockCampaignCreatorRepo_UpdateTicketSentAt_Call) RunAndReturn(run func(ctx context.Context, id string, sentAt *time.Time) (*repository.CampaignCreatorRow, error)) *MockCampaignCreatorRepo_UpdateTicketSentAt_Call {
+func (_c *MockCampaignCreatorRepo_UpdateTicketSentAt_Call) RunAndReturn(run func(ctx context.Context, id string, set bool) (*repository.CampaignCreatorRow, error)) *MockCampaignCreatorRepo_UpdateTicketSentAt_Call {
 	_c.Call.Return(run)
 	return _c
 }

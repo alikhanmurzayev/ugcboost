@@ -36,7 +36,7 @@ interface CampaignCreatorGroupSectionProps {
   drawerSelectedCreatorId?: string;
   onRowClick: (row: CampaignCreatorRow) => void;
   onToggleTicketSent?: (creatorId: string, next: boolean) => void;
-  ticketSentPendingFor?: Set<string>;
+  ticketSentPendingCreatorId?: string;
 }
 
 export default function CampaignCreatorGroupSection({
@@ -53,7 +53,7 @@ export default function CampaignCreatorGroupSection({
   drawerSelectedCreatorId,
   onRowClick,
   onToggleTicketSent,
-  ticketSentPendingFor,
+  ticketSentPendingCreatorId,
 }: CampaignCreatorGroupSectionProps) {
   const { t } = useTranslation("campaigns");
   const headingId = `campaign-creators-group-heading-${status}`;
@@ -205,7 +205,7 @@ export default function CampaignCreatorGroupSection({
           selectAllTestId={`campaign-creators-select-all-${status}`}
           rowSelectionDisabled={isBusy}
           onToggleTicketSent={onToggleTicketSent}
-          ticketSentPendingFor={ticketSentPendingFor}
+          ticketSentPendingCreatorId={ticketSentPendingCreatorId}
         />
       ) : (
         <p

@@ -14,6 +14,26 @@ type testTx struct{}
 
 func (testTx) Commit(context.Context) error   { return nil }
 func (testTx) Rollback(context.Context) error { return nil }
+
+// recordingTx is the same shape as testTx but records whether Commit /
+// Rollback fired. Use it when a test needs to verify dbutil.WithTx really
+// rolled back (e.g. callback returned an error and the data layer must not
+// commit the partial write).
+type recordingTx struct {
+	testTx
+	committed  bool
+	rolledBack bool
+}
+
+func (t *recordingTx) Commit(context.Context) error {
+	t.committed = true
+	return nil
+}
+
+func (t *recordingTx) Rollback(context.Context) error {
+	t.rolledBack = true
+	return nil
+}
 func (testTx) Begin(context.Context) (pgx.Tx, error) {
 	panic("testTx: unexpected Begin")
 }

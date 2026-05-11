@@ -72,9 +72,6 @@ export default function CampaignCreatorsSection({
   const [submittingByStatus, setSubmittingByStatus] = useState<
     Partial<Record<CampaignCreatorStatus, boolean>>
   >({});
-  const [ticketSentPending, setTicketSentPending] = useState<Set<string>>(
-    () => new Set(),
-  );
   const [ticketSentError, setTicketSentError] = useState<string | null>(null);
 
   const patchMutation = usePatchCampaignCreator(campaign.id, {
@@ -83,26 +80,17 @@ export default function CampaignCreatorsSection({
     },
   });
 
+  // Single source of truth for the per-row pending state — React Query owns
+  // `isPending` + `variables`, so the checkbox `disabled` window matches the
+  // actual in-flight PATCH (manual QA caught a ~13 ms parallel-Set version).
+  const ticketSentPendingCreatorId = patchMutation.isPending
+    ? patchMutation.variables?.creatorId
+    : undefined;
+
   function handleToggleTicketSent(creatorId: string, next: boolean) {
-    if (ticketSentPending.has(creatorId)) return;
-    setTicketSentPending((prev) => {
-      const np = new Set(prev);
-      np.add(creatorId);
-      return np;
-    });
+    if (patchMutation.isPending) return;
     setTicketSentError(null);
-    patchMutation.mutate(
-      { creatorId, patch: { ticketSent: next } },
-      {
-        onSettled: () => {
-          setTicketSentPending((prev) => {
-            const np = new Set(prev);
-            np.delete(creatorId);
-            return np;
-          });
-        },
-      },
-    );
+    patchMutation.mutate({ creatorId, patch: { ticketSent: next } });
   }
 
   const removeMutation = useMutation({
@@ -319,8 +307,8 @@ export default function CampaignCreatorsSection({
               onToggleTicketSent={
                 isSignedGroup ? handleToggleTicketSent : undefined
               }
-              ticketSentPendingFor={
-                isSignedGroup ? ticketSentPending : undefined
+              ticketSentPendingCreatorId={
+                isSignedGroup ? ticketSentPendingCreatorId : undefined
               }
             />
           );

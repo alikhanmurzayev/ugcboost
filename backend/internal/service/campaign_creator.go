@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"slices"
-	"time"
 
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/dbutil"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/domain"
@@ -337,12 +336,6 @@ func (s *CampaignCreatorService) PatchParticipation(
 		return campaignCreatorRowToDomain(row), nil
 	}
 
-	var sentAt *time.Time
-	if *patch.TicketSent {
-		now := time.Now().UTC()
-		sentAt = &now
-	}
-
 	oldCC := campaignCreatorRowToDomain(row)
 	var newCC *domain.CampaignCreator
 
@@ -350,7 +343,7 @@ func (s *CampaignCreatorService) PatchParticipation(
 		ccTx := s.repoFactory.NewCampaignCreatorRepo(tx)
 		auditTx := s.repoFactory.NewAuditRepo(tx)
 
-		updated, err := ccTx.UpdateTicketSentAt(ctx, row.ID, sentAt)
+		updated, err := ccTx.UpdateTicketSentAt(ctx, row.ID, *patch.TicketSent)
 		if err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				return domain.ErrCampaignCreatorNotFound

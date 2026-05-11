@@ -32,7 +32,7 @@ interface CampaignCreatorsTableProps {
   selectAllTestId?: string;
   rowSelectionDisabled?: boolean;
   onToggleTicketSent?: (creatorId: string, next: boolean) => void;
-  ticketSentPendingFor?: Set<string>;
+  ticketSentPendingCreatorId?: string;
 }
 
 export default function CampaignCreatorsTable({
@@ -49,7 +49,7 @@ export default function CampaignCreatorsTable({
   selectAllTestId,
   rowSelectionDisabled,
   onToggleTicketSent,
-  ticketSentPendingFor,
+  ticketSentPendingCreatorId,
 }: CampaignCreatorsTableProps) {
   const { t } = useTranslation("creators");
   const { t: tCampaigns } = useTranslation("campaigns");
@@ -66,7 +66,7 @@ export default function CampaignCreatorsTable({
         selectAllTestId,
         selectionDisabled: rowSelectionDisabled ?? false,
         onToggleTicketSent,
-        ticketSentPendingFor,
+        ticketSentPendingCreatorId,
       }),
     [
       t,
@@ -80,7 +80,7 @@ export default function CampaignCreatorsTable({
       selectAllTestId,
       rowSelectionDisabled,
       onToggleTicketSent,
-      ticketSentPendingFor,
+      ticketSentPendingCreatorId,
     ],
   );
 
@@ -107,7 +107,7 @@ interface BuildColumnsOpts {
   selectAllTestId?: string;
   selectionDisabled: boolean;
   onToggleTicketSent?: (creatorId: string, next: boolean) => void;
-  ticketSentPendingFor?: Set<string>;
+  ticketSentPendingCreatorId?: string;
 }
 
 function buildColumns(
@@ -390,7 +390,7 @@ function ticketSentColumn(
     render: (row) => {
       const creatorId = row.campaignCreator.creatorId;
       const checked = row.campaignCreator.ticketSentAt != null;
-      const pending = opts.ticketSentPendingFor?.has(creatorId) ?? false;
+      const pending = opts.ticketSentPendingCreatorId === creatorId;
       const name = row.creator
         ? `${row.creator.lastName} ${row.creator.firstName}`
         : deletedTitle;
@@ -398,7 +398,7 @@ function ticketSentColumn(
         <TicketSentCheckbox
           creatorId={creatorId}
           checked={checked}
-          disabled={pending || !opts.onToggleTicketSent}
+          disabled={pending}
           ariaLabel={tCampaigns("campaignCreators.ticketSentToggleAria", {
             name,
           })}

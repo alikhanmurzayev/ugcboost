@@ -871,12 +871,15 @@ func TestServer_PatchCampaignCreator(t *testing.T) {
 		t.Parallel()
 		authz := mocks.NewMockAuthzService(t)
 		authz.EXPECT().CanPatchCampaignCreator(mock.Anything).Return(nil)
+		ccSvc := mocks.NewMockCampaignCreatorService(t)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, ccSvc, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPatch, patchPath,
 			api.CampaignCreatorPatchInput{})
 		require.Equal(t, http.StatusUnprocessableEntity, w.Code)
 		require.Equal(t, domain.CodeCampaignCreatorPatchEmpty, resp.Error.Code)
+		// Handler guard must short-circuit before the service is reached.
+		ccSvc.AssertNotCalled(t, "PatchParticipation", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
 	})
 
 	t.Run("service ErrCampaignNotFound → 404 CAMPAIGN_NOT_FOUND", func(t *testing.T) {
@@ -978,11 +981,28 @@ func TestServer_PatchCampaignCreator(t *testing.T) {
 		w, resp := doJSON[api.PatchCampaignCreatorResult](t, router, http.MethodPatch, patchPath,
 			api.CampaignCreatorPatchInput{TicketSent: pointer.ToBool(true)})
 		require.Equal(t, http.StatusOK, w.Code)
-		require.Equal(t, openapi_types.UUID(uuid.MustParse(campaignUUID)), resp.Data.CampaignId)
-		require.Equal(t, openapi_types.UUID(uuid.MustParse(creatorAUUID)), resp.Data.CreatorId)
-		require.NotNil(t, resp.Data.TicketSentAt)
-		require.Equal(t, now, *resp.Data.TicketSentAt)
-		require.Equal(t, api.CampaignCreatorStatus(domain.CampaignCreatorStatusSigned), resp.Data.Status)
+
+		// Full-struct require.Equal catches a regression in any field of the
+		// response mapping (swapped fields, dropped counter, wrong status) —
+		// per-field asserts would silently miss e.g. CreatedAt swap with
+		// UpdatedAt. See backend-testing-unit.md § Handler / Assertions.
+		expected := api.PatchCampaignCreatorResult{
+			Data: api.CampaignCreator{
+				Id:            openapi_types.UUID(uuid.MustParse("44444444-4444-4444-4444-444444444444")),
+				CampaignId:    openapi_types.UUID(uuid.MustParse(campaignUUID)),
+				CreatorId:     openapi_types.UUID(uuid.MustParse(creatorAUUID)),
+				Status:        api.CampaignCreatorStatus(domain.CampaignCreatorStatusSigned),
+				InvitedAt:     nil,
+				InvitedCount:  0,
+				RemindedAt:    nil,
+				RemindedCount: 0,
+				DecidedAt:     nil,
+				TicketSentAt:  &now,
+				CreatedAt:     now,
+				UpdatedAt:     now,
+			},
+		}
+		require.Equal(t, expected, resp)
 
 		require.Equal(t, campaignUUID, capturedCampaignID)
 		require.Equal(t, creatorAUUID, capturedCreatorID)

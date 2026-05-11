@@ -2,7 +2,7 @@
 title: 'Чекбокс «Билет отправлен» в админской таблице креаторов кампании'
 type: 'feature'
 created: '2026-05-11'
-status: 'done'
+status: 'in-review'
 baseline_commit: '2e49517e7ba626186ac8815c126d921405493d9f'
 context:
   - docs/standards/backend-architecture.md
@@ -72,7 +72,7 @@ context:
 - [x] `frontend/web/src/api/campaignCreators.ts` -- `patchCampaignCreator(apiUrl, campaignId, creatorId, body, token)` через openapi-fetch (паттерн `removeCampaignCreator`).
 - [x] `frontend/web/src/features/campaigns/creators/hooks/usePatchCampaignCreator.ts` -- `useMutation`: `onMutate` (`cancelQueries(campaignCreatorKeys.list(campaignId))` → snapshot → `setQueryData` patch-in-place); `onError` (откат к snapshot + toast `campaignCreators.ticketSentSaveError`); `onSettled` (`invalidateQueries(campaignCreatorKeys.list(...))`).
 - [x] `frontend/web/src/features/campaigns/creators/hooks/usePatchCampaignCreator.test.ts` -- success: cache обновлён; error: откат + toast вызван.
-- [x] `frontend/web/src/features/campaigns/creators/CampaignCreatorsTable.tsx` + `CampaignCreatorGroupSection.tsx` -- колонка «Билет отправлен» под условием `status === 'signed'`; чекбокс с `data-testid="campaign-creator-ticket-sent-{creatorId}"`, `aria-label`, `disabled` при `mutation.isPending`. Текст через `t('campaignCreators.ticketSent')`.
+- [x] `frontend/web/src/features/campaigns/creators/CampaignCreatorsTable.tsx` + `CampaignCreatorGroupSection.tsx` -- колонка «Билет отправлен» под условием `status === 'signed'`; чекбокс с `data-testid="campaign-creator-ticket-sent-{creatorId}"`, `aria-label`, `disabled` при `mutation.isPending`. Текст через `t('campaignCreators.columns.ticketSent')` (по существующему `columns.{invited,reminded,decided}`-нэймингу).
 - [x] `frontend/web/src/shared/i18n/locales/ru/campaigns.json` -- `campaignCreators.ticketSent` + `campaignCreators.ticketSentSaveError`.
 - [~] `frontend/e2e/web/admin-campaign-creators-mutations.spec.ts` -- **DEFERRED** (см. Spec Change Log + `_bmad-output/implementation-artifacts/deferred-work.md`): требует composable helper для TrustMe webhook signed в `frontend/e2e/helpers/`, которого пока нет. Покрытие закрыто backend e2e + frontend unit.
 
@@ -80,13 +80,14 @@ context:
 
 - Given admin в кампании со signed-креатором, when кликает чекбокс «Билет отправлен», then UI сразу показывает галку, `PATCH` → 200, в БД `ticket_sent_at = NOW()`, в `audit_logs` появилась строка `campaign_creator.ticket_sent` с old=null/new=ts.
 - Given signed-креатор с уже выставленной отметкой, when admin кликает повторно с тем же значением, then 200, БД не тронута, новых audit-row нет.
-- Given креатор со status invited/signing/declined, when admin шлёт PATCH ticketSent=true, then 422 `CodeValidation`, UI откатывает optimistic-изменение и показывает toast.
+- Given креатор со status invited/signing/declined, when admin шлёт PATCH ticketSent=true, then 422 `CodeValidation`, UI откатывает optimistic-изменение и показывает inline alert над таблицей.
 - Given не-admin (brand_manager / creator), when шлёт PATCH, then 403.
 
 ## Spec Change Log
 
 - **Frontend e2e deferred (2026-05-11).** Под жёсткий дедлайн фичи UI-флип чекбокса не покрыт Playwright-тестом — для этого нужен composable helper, симулирующий TrustMe webhook signed на стороне frontend e2e (его сейчас нет в `frontend/e2e/helpers/`). Покрытие закрыто backend e2e (TrustMe webhook + PATCH), backend unit (repo+service+handler) и frontend unit (хук, optimistic/rollback/toast). Подробности — `_bmad-output/implementation-artifacts/deferred-work.md`. KEEP: трёхслойное покрытие без UI-флипа достаточно для приёмки фичи.
 - **E2E файл-локация (2026-05-11).** Бэк-e2e дополнили `backend/e2e/campaign_creator/campaign_creator_test.go` (это реальный home для /campaigns/{id}/creators сценариев), а не `backend/e2e/campaign/campaign_test.go`, как было заявлено в спеке. Логически — тесты campaign_creator живут рядом.
+- **2-й раунд review (2026-05-11).** Доп. ревью (test/security/frontend-codegen/manual-qa) поднял несколько правок без re-derive: (1) DB-side `now()` для `ticket_sent_at` через `CASE WHEN ? THEN now() ELSE NULL END` — убирает app/DB clock skew, тесты на repo/service переключены на `bool` вместо `*time.Time`; (2) убран `omitempty` у `domain.CampaignCreator.TicketSentAt`, audit OldValue/NewValue теперь явно отличают `null` от absent; (3) handler `request.Body == nil` ветка снята как dead (strict-server гарантирует non-nil); (4) per-row pending для чекбокса берётся из `patchMutation.isPending && variables?.creatorId` — параллельный Set удалён, чтобы `disabled` держался всю длительность PATCH (manual QA замерил ~13 мс на старой логике); (5) audit-error rollback явно проверяется через `recordingTx`; (6) handler success тест — full-struct `require.Equal`; e2e — explicit action/entity_type/entity_id/actor_id ассерты; новый non-ErrNoRows wrap subtest + cold-cache frontend hook test. KEEP: трёхслойное покрытие сохранено; UI-флоу остаётся без Playwright (см. deferred-work).
 
 ## Design Notes
 
