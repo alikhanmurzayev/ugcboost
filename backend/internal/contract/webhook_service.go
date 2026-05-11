@@ -52,7 +52,7 @@ type WebhookNotifier interface {
 
 // WebhookService — приёмник TrustMe webhook'а. HandleEvent идемпотентно
 // (двойной guard в SQL: idempotency `!= newStatus` + terminal-guard
-// `NOT IN (3,9)`) обновляет contracts + cc.status (для terminal 3/9) +
+// `NOT IN (3,4,9)`) обновляет contracts + cc.status (для terminal 3/4/9) +
 // audit, всё в одной Tx. Бот-уведомление шлётся ПОСЛЕ COMMIT — стандарт
 // backend-transactions «Логи успеха пишутся ПОСЛЕ WithTx».
 type WebhookService struct {
@@ -143,8 +143,10 @@ func (s *WebhookService) HandleEvent(ctx context.Context, ev domain.TrustMeWebho
 //     если row уже в terminal.
 //   - 2-step lookup: JOIN cc + campaigns + creators проектирует cc.id +
 //     c.is_deleted + c.tma_url + cr.telegram_user_id.
-//   - terminal status (3/9) → cc.status flips, notifyKind set.
-//   - intermediate status (0/2) → info-log; неожиданный (1/4-8) → warn-log.
+//   - terminal status (3/4/9) → cc.status flips, notifyKind set. Статусы
+//     4 (revoked) и 9 (signing_declined) склеены: одинаковая cc.status
+//     (signing_declined), одинаковый audit-action и одинаковый текст бота.
+//   - intermediate status (0/2) → info-log; неожиданный (1/5-8) → warn-log.
 //   - audit row внутри Tx.
 //   - soft-deleted кампания → notifyKind=None после state+audit (factual record).
 //
@@ -164,6 +166,7 @@ func (s *WebhookService) applyCampaignCreatorTransition(
 	}
 	if n == 0 {
 		if contractRow.TrustMeStatusCode == repository.TrustMeStatusSigned ||
+			contractRow.TrustMeStatusCode == repository.TrustMeStatusRevoked ||
 			contractRow.TrustMeStatusCode == repository.TrustMeStatusSigningDeclined {
 			s.logger.Info(ctx, "trustme webhook: stale_webhook_after_terminal",
 				"contract_id", contractRow.ID,
@@ -197,7 +200,7 @@ func (s *WebhookService) applyCampaignCreatorTransition(
 		}
 		actionSuffix = auditActionWebhookSignedSuffix
 		notifyKind = NotifyKindSigned
-	case repository.TrustMeStatusSigningDeclined:
+	case repository.TrustMeStatusRevoked, repository.TrustMeStatusSigningDeclined:
 		if err := ccRepo.UpdateStatus(ctx, view.CampaignCreatorID, domain.CampaignCreatorStatusSigningDeclined); err != nil {
 			return NotifyKindNone, 0, "", fmt.Errorf("update cc status: %w", err)
 		}

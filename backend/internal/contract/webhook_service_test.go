@@ -136,10 +136,35 @@ func TestWebhookService_HandleEvent_Declined(t *testing.T) {
 	require.NoError(t, svc.HandleEvent(context.Background(), ev))
 }
 
+func TestWebhookService_HandleEvent_Revoked(t *testing.T) {
+	t.Parallel()
+
+	// status=4 (Отозван компанией через UI Trust.me) склеен с status=9 на
+	// уровне cc.status / audit-action / текста бота. Различие фиксируется
+	// только в audit-payload через trustme_status_code_new:4.
+	rig := newWebhookRig(t)
+	rig.pool.ExpectBegin()
+	rig.pool.ExpectCommit()
+
+	row := contractRow("ct-rev", 0)
+	rig.contracts.EXPECT().LockByTrustMeDocumentID(mock.Anything, "doc-ct-rev").Return(row, nil)
+	rig.contracts.EXPECT().UpdateAfterWebhook(mock.Anything, "ct-rev", 4).Return(1, nil)
+	rig.cc.EXPECT().GetWithCampaignAndCreatorByContractID(mock.Anything, "ct-rev").Return(ccView("cc-rev", false, 5004), nil)
+	rig.cc.EXPECT().UpdateStatus(mock.Anything, "cc-rev", domain.CampaignCreatorStatusSigningDeclined).Return(nil)
+	expectWebhookAudit(t, rig, "campaign_creator.contract_signing_declined", "cc-rev",
+		`{"contract_id":"ct-rev","trustme_status_code_old":0,"trustme_status_code_new":4}`)
+	rig.notifier.EXPECT().NotifyCampaignContractDeclined(mock.Anything, int64(5004))
+
+	svc := rig.build(t)
+	ev, err := domain.NewTrustMeWebhookEvent("doc-ct-rev", 4)
+	require.NoError(t, err)
+	require.NoError(t, svc.HandleEvent(context.Background(), ev))
+}
+
 func TestWebhookService_HandleEvent_IntermediateStatuses(t *testing.T) {
 	t.Parallel()
 
-	statuses := []int{0, 1, 2, 4, 5, 6, 7, 8}
+	statuses := []int{0, 1, 2, 5, 6, 7, 8}
 	for _, status := range statuses {
 		t.Run("status="+strconv.Itoa(status), func(t *testing.T) {
 			t.Parallel()
@@ -166,63 +191,137 @@ func TestWebhookService_HandleEvent_IntermediateStatuses(t *testing.T) {
 func TestWebhookService_HandleEvent_IdempotentRepeat(t *testing.T) {
 	t.Parallel()
 
-	rig := newWebhookRig(t)
-	rig.pool.ExpectBegin()
-	rig.pool.ExpectCommit()
+	t.Run("signed repeat", func(t *testing.T) {
+		t.Parallel()
 
-	row := contractRow("ct-3", 3) // уже signed
-	rig.contracts.EXPECT().LockByTrustMeDocumentID(mock.Anything, "doc-ct-3").Return(row, nil)
-	// UPDATE 0 affected (idempotent — тот же status уже).
-	rig.contracts.EXPECT().UpdateAfterWebhook(mock.Anything, "ct-3", 3).Return(0, nil)
-	// cc lookup НЕ зовётся, audit НЕ пишется, notify НЕ отправляется.
+		rig := newWebhookRig(t)
+		rig.pool.ExpectBegin()
+		rig.pool.ExpectCommit()
 
-	svc := rig.build(t)
-	ev, err := domain.NewTrustMeWebhookEvent("doc-ct-3", 3)
-	require.NoError(t, err)
-	require.NoError(t, svc.HandleEvent(context.Background(), ev))
+		row := contractRow("ct-3", 3) // уже signed
+		rig.contracts.EXPECT().LockByTrustMeDocumentID(mock.Anything, "doc-ct-3").Return(row, nil)
+		rig.contracts.EXPECT().UpdateAfterWebhook(mock.Anything, "ct-3", 3).Return(0, nil)
+		// cc lookup НЕ зовётся, audit НЕ пишется, notify НЕ отправляется.
+
+		svc := rig.build(t)
+		ev, err := domain.NewTrustMeWebhookEvent("doc-ct-3", 3)
+		require.NoError(t, err)
+		require.NoError(t, svc.HandleEvent(context.Background(), ev))
+	})
+
+	t.Run("revoked repeat", func(t *testing.T) {
+		t.Parallel()
+
+		rig := newWebhookRig(t)
+		rig.pool.ExpectBegin()
+		rig.pool.ExpectCommit()
+
+		row := contractRow("ct-rev-rep", 4) // уже revoked
+		rig.contracts.EXPECT().LockByTrustMeDocumentID(mock.Anything, "doc-ct-rev-rep").Return(row, nil)
+		rig.contracts.EXPECT().UpdateAfterWebhook(mock.Anything, "ct-rev-rep", 4).Return(0, nil)
+		// cc lookup НЕ зовётся, audit НЕ пишется, notify НЕ отправляется.
+
+		svc := rig.build(t)
+		ev, err := domain.NewTrustMeWebhookEvent("doc-ct-rev-rep", 4)
+		require.NoError(t, err)
+		require.NoError(t, svc.HandleEvent(context.Background(), ev))
+	})
 }
 
 func TestWebhookService_HandleEvent_TerminalGuard(t *testing.T) {
 	t.Parallel()
 
-	// БД уже terminal (signed=3), прилетает stale status=2 → 0 affected,
-	// info-лог `stale_webhook_after_terminal`, no audit, no notify.
-	rig := newWebhookRig(t)
-	rig.pool.ExpectBegin()
-	rig.pool.ExpectCommit()
+	t.Run("signed then stale status=2", func(t *testing.T) {
+		t.Parallel()
 
-	row := contractRow("ct-4", 3)
-	rig.contracts.EXPECT().LockByTrustMeDocumentID(mock.Anything, "doc-ct-4").Return(row, nil)
-	rig.contracts.EXPECT().UpdateAfterWebhook(mock.Anything, "ct-4", 2).Return(0, nil)
+		// БД уже terminal (signed=3), прилетает stale status=2 → 0 affected,
+		// info-лог `stale_webhook_after_terminal`, no audit, no notify.
+		rig := newWebhookRig(t)
+		rig.pool.ExpectBegin()
+		rig.pool.ExpectCommit()
 
-	svc := rig.build(t)
-	ev, err := domain.NewTrustMeWebhookEvent("doc-ct-4", 2)
-	require.NoError(t, err)
-	require.NoError(t, svc.HandleEvent(context.Background(), ev))
+		row := contractRow("ct-4", 3)
+		rig.contracts.EXPECT().LockByTrustMeDocumentID(mock.Anything, "doc-ct-4").Return(row, nil)
+		rig.contracts.EXPECT().UpdateAfterWebhook(mock.Anything, "ct-4", 2).Return(0, nil)
+
+		svc := rig.build(t)
+		ev, err := domain.NewTrustMeWebhookEvent("doc-ct-4", 2)
+		require.NoError(t, err)
+		require.NoError(t, svc.HandleEvent(context.Background(), ev))
+	})
+
+	t.Run("revoked then stale status=9", func(t *testing.T) {
+		t.Parallel()
+
+		// БД уже terminal (revoked=4), прилетает stale signing_declined=9 →
+		// terminal-guard в SQL даёт 0 affected, info-лог fires, no audit,
+		// no cc.status flip, no notify.
+		rig := newWebhookRig(t)
+		rig.pool.ExpectBegin()
+		rig.pool.ExpectCommit()
+
+		row := contractRow("ct-rev-stale", 4)
+		rig.contracts.EXPECT().LockByTrustMeDocumentID(mock.Anything, "doc-ct-rev-stale").Return(row, nil)
+		rig.contracts.EXPECT().UpdateAfterWebhook(mock.Anything, "ct-rev-stale", 9).Return(0, nil)
+
+		svc := rig.build(t)
+		ev, err := domain.NewTrustMeWebhookEvent("doc-ct-rev-stale", 9)
+		require.NoError(t, err)
+		require.NoError(t, svc.HandleEvent(context.Background(), ev))
+	})
 }
 
 func TestWebhookService_HandleEvent_SoftDeletedCampaign(t *testing.T) {
 	t.Parallel()
 
-	// soft-deleted campaign + status=3 → state-transition + audit пишутся
-	// (factual record), но notify пропускается + warn-лог.
-	rig := newWebhookRig(t)
-	rig.pool.ExpectBegin()
-	rig.pool.ExpectCommit()
+	// soft-deleted campaign → state-transition + audit пишутся (factual
+	// record), но notify пропускается + warn-лог. Проверяем для terminal
+	// 3 (signed) и 4 (revoked → signing_declined) — оба должны вести себя
+	// одинаково: state+audit без notify.
 
-	row := contractRow("ct-5", 0)
-	rig.contracts.EXPECT().LockByTrustMeDocumentID(mock.Anything, "doc-ct-5").Return(row, nil)
-	rig.contracts.EXPECT().UpdateAfterWebhook(mock.Anything, "ct-5", 3).Return(1, nil)
-	rig.cc.EXPECT().GetWithCampaignAndCreatorByContractID(mock.Anything, "ct-5").Return(ccView("cc-5", true, 7777), nil)
-	rig.cc.EXPECT().UpdateStatus(mock.Anything, "cc-5", domain.CampaignCreatorStatusSigned).Return(nil)
-	expectWebhookAudit(t, rig, "campaign_creator.contract_signed", "cc-5",
-		`{"contract_id":"ct-5","trustme_status_code_old":0,"trustme_status_code_new":3}`)
-	// notifier НЕ зовётся.
+	t.Run("signed", func(t *testing.T) {
+		t.Parallel()
 
-	svc := rig.build(t)
-	ev, err := domain.NewTrustMeWebhookEvent("doc-ct-5", 3)
-	require.NoError(t, err)
-	require.NoError(t, svc.HandleEvent(context.Background(), ev))
+		rig := newWebhookRig(t)
+		rig.pool.ExpectBegin()
+		rig.pool.ExpectCommit()
+
+		row := contractRow("ct-5", 0)
+		rig.contracts.EXPECT().LockByTrustMeDocumentID(mock.Anything, "doc-ct-5").Return(row, nil)
+		rig.contracts.EXPECT().UpdateAfterWebhook(mock.Anything, "ct-5", 3).Return(1, nil)
+		rig.cc.EXPECT().GetWithCampaignAndCreatorByContractID(mock.Anything, "ct-5").Return(ccView("cc-5", true, 7777), nil)
+		rig.cc.EXPECT().UpdateStatus(mock.Anything, "cc-5", domain.CampaignCreatorStatusSigned).Return(nil)
+		expectWebhookAudit(t, rig, "campaign_creator.contract_signed", "cc-5",
+			`{"contract_id":"ct-5","trustme_status_code_old":0,"trustme_status_code_new":3}`)
+		// notifier НЕ зовётся.
+
+		svc := rig.build(t)
+		ev, err := domain.NewTrustMeWebhookEvent("doc-ct-5", 3)
+		require.NoError(t, err)
+		require.NoError(t, svc.HandleEvent(context.Background(), ev))
+	})
+
+	t.Run("revoked", func(t *testing.T) {
+		t.Parallel()
+
+		rig := newWebhookRig(t)
+		rig.pool.ExpectBegin()
+		rig.pool.ExpectCommit()
+
+		row := contractRow("ct-rev-del", 0)
+		rig.contracts.EXPECT().LockByTrustMeDocumentID(mock.Anything, "doc-ct-rev-del").Return(row, nil)
+		rig.contracts.EXPECT().UpdateAfterWebhook(mock.Anything, "ct-rev-del", 4).Return(1, nil)
+		rig.cc.EXPECT().GetWithCampaignAndCreatorByContractID(mock.Anything, "ct-rev-del").Return(ccView("cc-rev-del", true, 7778), nil)
+		rig.cc.EXPECT().UpdateStatus(mock.Anything, "cc-rev-del", domain.CampaignCreatorStatusSigningDeclined).Return(nil)
+		expectWebhookAudit(t, rig, "campaign_creator.contract_signing_declined", "cc-rev-del",
+			`{"contract_id":"ct-rev-del","trustme_status_code_old":0,"trustme_status_code_new":4}`)
+		// notifier НЕ зовётся.
+
+		svc := rig.build(t)
+		ev, err := domain.NewTrustMeWebhookEvent("doc-ct-rev-del", 4)
+		require.NoError(t, err)
+		require.NoError(t, svc.HandleEvent(context.Background(), ev))
+	})
 }
 
 func TestWebhookService_HandleEvent_UnknownDocument(t *testing.T) {

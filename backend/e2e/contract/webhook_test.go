@@ -9,13 +9,18 @@
 // бот-уведомление через telegram spy.
 //
 // Сценарии: signed (status=3) → cc.status='signed' + audit
-// `contract_signed` + congrat-сообщение через bot; declined (status=9) →
-// cc.status='signing_declined' + audit + decline-сообщение; idempotent
-// повтор того же signed → 200, audit-row count не растёт; terminal-guard
-// (после signed status=2) → 200, состояние не меняется; intermediate
-// (status=1/2/4-8) → cc.status не тронут, audit `contract_unexpected_status`,
-// бот не отправлен; unknown contract_id → 404; missing/wrong token → 401
-// (anti-fingerprint между ними); status=15 (вне 0..9) → 422.
+// `contract_signed` + congrat-сообщение через bot; declined (status=9) и
+// revoked (status=4, отозван компанией через UI Trust.me) — оба склеены
+// в одну ветку: cc.status='signing_declined' + audit
+// `contract_signing_declined` + decline-сообщение без WebApp-кнопки;
+// различие 4 vs 9 видно только в audit-payload через trustme_status_code_new.
+// Идемпотентный повтор того же signed → 200, audit-row count не растёт;
+// terminal-guard (после signed status=2) → 200, состояние не меняется;
+// non-terminal статусы 0/2 (intermediate) и 1/5/6/7/8 (unexpected) →
+// cc.status не тронут, audit `contract_unexpected_status`, бот не
+// отправлен; различие 0/2 vs 1/5-8 — только уровень лога (info vs warn).
+// Unknown contract_id → 404; missing/wrong token → 401 (anti-fingerprint
+// между ними); status=15 (вне 0..9) → 422.
 //
 // Тестов с soft-deleted кампанией нет — пуб API не позволяет soft-delete
 // после Phase 3 finalize в e2e в одном тике; покрытие на unit-уровне
@@ -165,25 +170,26 @@ func TestTrustMeWebhook(t *testing.T) {
 		require.Empty(t, unexpAudits, "terminal-guard блок ДОЛЖЕН пропустить audit")
 	})
 
-	t.Run("intermediate status=4 → cc.status untouched, audit unexpected, no bot", func(t *testing.T) {
+	t.Run("revoked (status=4) flips cc to signing_declined + audit + decline bot message", func(t *testing.T) {
 		t.Parallel()
 		fx := testutil.SetupCampaignWithSigningCreator(t)
 		baselineSize := fx.NotifyBaselineSize
-		afterStartedSince := time.Now()
 
-		status, _ := testutil.PostTrustMeWebhook(t,
+		status, body := testutil.PostTrustMeWebhook(t,
 			testutil.TrustMeWebhookStatusPayload(fx.TrustMeDocumentID, 4), token)
-		require.Equal(t, 200, status)
+		require.Equalf(t, 200, status, "webhook revoked: %s", string(body))
 
 		assertCCStatus(t, fx.AdminClient, fx.AdminToken, fx.CampaignID, fx.CampaignCreatorID,
-			apiclient.CampaignCreatorStatus("signing"))
+			apiclient.CampaignCreatorStatus("signing_declined"))
 		testutil.AssertAuditEntry(t, fx.AdminClient, fx.AdminToken,
-			"campaign_creator", fx.CampaignCreatorID, "campaign_creator.contract_unexpected_status")
+			"campaign_creator", fx.CampaignCreatorID, "campaign_creator.contract_signing_declined")
 
-		// Бот не отправлял ничего после baseline — intermediate статусы не
-		// триггерят notify.
-		testutil.EnsureNoNewTelegramSent(t, fx.CreatorTelegramID, afterStartedSince, 1*time.Second)
-		_ = baselineSize
+		messages := testutil.WaitForTelegramSent(t, fx.CreatorTelegramID, testutil.TelegramSentOptions{
+			ExpectCount: baselineSize + 1,
+		})
+		declinedMsg := newestSpyMessage(t, messages, expectedCampaignContractDeclinedText)
+		require.Equal(t, fx.CreatorTelegramID, declinedMsg.ChatId)
+		require.Nil(t, declinedMsg.WebAppUrl, "revoked message must be plain text — no WebApp button")
 	})
 
 	t.Run("unknown document → 404 CONTRACT_WEBHOOK_UNKNOWN_DOCUMENT", func(t *testing.T) {

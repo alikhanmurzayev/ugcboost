@@ -57,12 +57,16 @@ const (
 )
 
 // TrustMe terminal status codes per blueprint § «Получить статус документа».
-// 3 = signed (всеми сторонами), 9 = signing_declined (отказ инициирован
-// креатором). Webhook handler treats both as terminal — UPDATE с двойным
-// guard'ом (`!= newStatus AND NOT IN (3,9)`) защищает от reorder'а stale-
-// webhook'ов поверх terminal-state.
+// 3 = signed (всеми сторонами), 4 = revoked (отозван компанией через UI
+// Trust.me), 9 = signing_declined (отказ инициирован креатором). Webhook
+// handler treats all three as terminal — UPDATE с двойным guard'ом
+// (`!= newStatus AND NOT IN (3,4,9)`) защищает от reorder'а stale-webhook'ов
+// поверх terminal-state. Status 4 и 9 склеены: одинаковая cc.status
+// (signing_declined), одинаковый audit-action и одинаковый текст бота;
+// различие видно в audit-payload через trustme_status_code_new.
 const (
 	TrustMeStatusSigned          = 3
+	TrustMeStatusRevoked         = 4
 	TrustMeStatusSigningDeclined = 9
 )
 
@@ -405,13 +409,14 @@ func (r *contractRepository) LockByTrustMeDocumentID(ctx context.Context, docume
 //   - idempotency-guard (`trustme_status_code != newStatus`) — повтор того
 //     же события → 0 affected → no-op (no audit, no cc.status update, no
 //     notify, no webhook_received_at update).
-//   - terminal-guard (`trustme_status_code NOT IN (3, 9)`) — после
-//     `signed`/`signing_declined` любой stale-webhook с другим status
-//     → 0 affected. Service логирует `stale_webhook_after_terminal`.
+//   - terminal-guard (`trustme_status_code NOT IN (3, 4, 9)`) — после
+//     `signed`/`revoked`/`signing_declined` любой stale-webhook с другим
+//     status → 0 affected. Service логирует `stale_webhook_after_terminal`.
 //
 // signed_at / declined_at land alongside trustme_status_code only on the
-// terminal transitions (3 = signed, 9 = signing_declined).
-// webhook_received_at is stamped on every successful match.
+// terminal transitions (3 = signed, 4 = revoked → declined_at,
+// 9 = signing_declined). webhook_received_at is stamped on every successful
+// match.
 //
 // Returns affected rows count (0 → idempotent or terminal-guard hit, no
 // state-transition / audit / notify follows). Caller wraps the call in a
@@ -423,11 +428,11 @@ func (r *contractRepository) UpdateAfterWebhook(ctx context.Context, contractID 
 		Set(ContractColumnUpdatedAt, sq.Expr("now()")).
 		Where(sq.Eq{ContractColumnID: contractID}).
 		Where(sq.NotEq{ContractColumnTrustMeStatusCode: newStatus}).
-		Where(sq.NotEq{ContractColumnTrustMeStatusCode: []int{TrustMeStatusSigned, TrustMeStatusSigningDeclined}})
+		Where(sq.NotEq{ContractColumnTrustMeStatusCode: []int{TrustMeStatusSigned, TrustMeStatusRevoked, TrustMeStatusSigningDeclined}})
 	switch newStatus {
 	case TrustMeStatusSigned:
 		qb = qb.Set(ContractColumnSignedAt, sq.Expr("now()"))
-	case TrustMeStatusSigningDeclined:
+	case TrustMeStatusRevoked, TrustMeStatusSigningDeclined:
 		qb = qb.Set(ContractColumnDeclinedAt, sq.Expr("now()"))
 	}
 	n, err := dbutil.Exec(ctx, r.db, qb)

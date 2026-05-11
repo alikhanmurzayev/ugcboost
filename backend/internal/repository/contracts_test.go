@@ -24,7 +24,7 @@ const (
 	contractRecordFailedSQL      = "UPDATE contracts SET last_error_code = $1, last_error_message = $2, last_attempted_at = now(), next_retry_at = $3, updated_at = now() WHERE id = $4"
 	contractLockByDocSQL         = "SELECT " + contractAllCols + " FROM contracts WHERE trustme_document_id = $1 FOR UPDATE"
 	contractWebhookUpdateBaseSQL = "UPDATE contracts SET trustme_status_code = $1, webhook_received_at = now(), updated_at = now()"
-	contractWebhookGuardSQL      = " WHERE id = $2 AND trustme_status_code <> $3 AND trustme_status_code NOT IN ($4,$5)"
+	contractWebhookGuardSQL      = " WHERE id = $2 AND trustme_status_code <> $3 AND trustme_status_code NOT IN ($4,$5,$6)"
 )
 
 var contractRowCols = []string{
@@ -451,10 +451,24 @@ func TestContractRepository_UpdateAfterWebhook(t *testing.T) {
 		repo := &contractRepository{db: mock}
 
 		mock.ExpectExec(contractWebhookUpdateBaseSQL+", signed_at = now()"+contractWebhookGuardSQL).
-			WithArgs(3, "ct-1", 3, 3, 9).
+			WithArgs(3, "ct-1", 3, 3, 4, 9).
 			WillReturnResult(pgxmock.NewResult("UPDATE", 1))
 
 		n, err := repo.UpdateAfterWebhook(context.Background(), "ct-1", 3)
+		require.NoError(t, err)
+		require.Equal(t, 1, n)
+	})
+
+	t.Run("status=4 stamps declined_at", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &contractRepository{db: mock}
+
+		mock.ExpectExec(contractWebhookUpdateBaseSQL+", declined_at = now()"+contractWebhookGuardSQL).
+			WithArgs(4, "ct-1", 4, 3, 4, 9).
+			WillReturnResult(pgxmock.NewResult("UPDATE", 1))
+
+		n, err := repo.UpdateAfterWebhook(context.Background(), "ct-1", 4)
 		require.NoError(t, err)
 		require.Equal(t, 1, n)
 	})
@@ -465,7 +479,7 @@ func TestContractRepository_UpdateAfterWebhook(t *testing.T) {
 		repo := &contractRepository{db: mock}
 
 		mock.ExpectExec(contractWebhookUpdateBaseSQL+", declined_at = now()"+contractWebhookGuardSQL).
-			WithArgs(9, "ct-1", 9, 3, 9).
+			WithArgs(9, "ct-1", 9, 3, 4, 9).
 			WillReturnResult(pgxmock.NewResult("UPDATE", 1))
 
 		n, err := repo.UpdateAfterWebhook(context.Background(), "ct-1", 9)
@@ -479,7 +493,7 @@ func TestContractRepository_UpdateAfterWebhook(t *testing.T) {
 		repo := &contractRepository{db: mock}
 
 		mock.ExpectExec(contractWebhookUpdateBaseSQL+contractWebhookGuardSQL).
-			WithArgs(2, "ct-1", 2, 3, 9).
+			WithArgs(2, "ct-1", 2, 3, 4, 9).
 			WillReturnResult(pgxmock.NewResult("UPDATE", 1))
 
 		n, err := repo.UpdateAfterWebhook(context.Background(), "ct-1", 2)
@@ -493,7 +507,7 @@ func TestContractRepository_UpdateAfterWebhook(t *testing.T) {
 		repo := &contractRepository{db: mock}
 
 		mock.ExpectExec(contractWebhookUpdateBaseSQL+", signed_at = now()"+contractWebhookGuardSQL).
-			WithArgs(3, "ct-1", 3, 3, 9).
+			WithArgs(3, "ct-1", 3, 3, 4, 9).
 			WillReturnResult(pgxmock.NewResult("UPDATE", 0))
 
 		n, err := repo.UpdateAfterWebhook(context.Background(), "ct-1", 3)
@@ -507,7 +521,7 @@ func TestContractRepository_UpdateAfterWebhook(t *testing.T) {
 		repo := &contractRepository{db: mock}
 
 		mock.ExpectExec(contractWebhookUpdateBaseSQL+contractWebhookGuardSQL).
-			WithArgs(1, "ct-1", 1, 3, 9).
+			WithArgs(1, "ct-1", 1, 3, 4, 9).
 			WillReturnError(errors.New("db down"))
 
 		_, err := repo.UpdateAfterWebhook(context.Background(), "ct-1", 1)
