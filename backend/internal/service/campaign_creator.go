@@ -24,9 +24,13 @@ type CampaignCreatorRepoFactory interface {
 }
 
 // CampaignInviteNotifier abstracts the synchronous Telegram send used by the
-// notify / remind-invitation flow.
+// notify / remind-invitation / remind-signing flow. SendCampaignInvite ships
+// an inline web_app button to the TMA; SendCampaignReminder is plain-text
+// (used by remind-signing where the brief button would confuse a creator
+// who has already agreed and is awaiting the TrustMe SMS).
 type CampaignInviteNotifier interface {
 	SendCampaignInvite(ctx context.Context, chatID int64, text, tmaURL string) error
+	SendCampaignReminder(ctx context.Context, chatID int64, text string) error
 }
 
 // CampaignCreatorService owns the admin-only attachment lifecycle: batch
@@ -205,7 +209,16 @@ type batchOpSpec struct {
 	auditAction             string
 	text                    string
 	apply                   func(repo repository.CampaignCreatorRepo, ctx context.Context, id string) (*repository.CampaignCreatorRow, error)
+	send                    func(n CampaignInviteNotifier, ctx context.Context, chatID int64, text, tmaURL string) error
 	requireContractTemplate bool
+}
+
+func sendInvite(n CampaignInviteNotifier, ctx context.Context, chatID int64, text, tmaURL string) error {
+	return n.SendCampaignInvite(ctx, chatID, text, tmaURL)
+}
+
+func sendReminder(n CampaignInviteNotifier, ctx context.Context, chatID int64, text, _ string) error {
+	return n.SendCampaignReminder(ctx, chatID, text)
 }
 
 var batchOpSpecs = map[batchOp]batchOpSpec{
@@ -219,6 +232,7 @@ var batchOpSpecs = map[batchOp]batchOpSpec{
 		apply: func(r repository.CampaignCreatorRepo, ctx context.Context, id string) (*repository.CampaignCreatorRow, error) {
 			return r.ApplyInvite(ctx, id)
 		},
+		send:                    sendInvite,
 		requireContractTemplate: true,
 	},
 	batchOpRemindInvitation: {
@@ -230,6 +244,7 @@ var batchOpSpecs = map[batchOp]batchOpSpec{
 		apply: func(r repository.CampaignCreatorRepo, ctx context.Context, id string) (*repository.CampaignCreatorRow, error) {
 			return r.ApplyRemind(ctx, id)
 		},
+		send: sendInvite,
 	},
 	batchOpRemindSigning: {
 		allowedStatuses: map[string]bool{
@@ -240,6 +255,7 @@ var batchOpSpecs = map[batchOp]batchOpSpec{
 		apply: func(r repository.CampaignCreatorRepo, ctx context.Context, id string) (*repository.CampaignCreatorRow, error) {
 			return r.ApplyRemind(ctx, id)
 		},
+		send: sendReminder,
 	},
 }
 
@@ -348,7 +364,7 @@ func (s *CampaignCreatorService) dispatchBatch(ctx context.Context, campaignID s
 				"campaign_id", campaignID, "creator_id", cid, "op", string(op))
 			continue
 		}
-		if sendErr := s.notifier.SendCampaignInvite(ctx, chatID, spec.text, campaign.TmaURL); sendErr != nil {
+		if sendErr := spec.send(s.notifier, ctx, chatID, spec.text, campaign.TmaURL); sendErr != nil {
 			reason := telegram.MapTelegramErrorToReason(sendErr)
 			undelivered = append(undelivered, domain.NotifyFailure{
 				CreatorID: cid,

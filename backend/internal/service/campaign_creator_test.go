@@ -1316,9 +1316,9 @@ func TestCampaignCreatorService_RemindSigning(t *testing.T) {
 		k.creator.EXPECT().GetTelegramUserIDsByIDs(mock.Anything, []string{"cr-1", "cr-2"}).
 			Return(map[string]int64{"cr-1": 1001, "cr-2": 1002}, nil)
 
-		k.notifier.EXPECT().SendCampaignInvite(mock.Anything, int64(1001), telegram.CampaignRemindSigningText(), k.tmaURL).
+		k.notifier.EXPECT().SendCampaignReminder(mock.Anything, int64(1001), telegram.CampaignRemindSigningText()).
 			Return(errors.New("Forbidden: bot was blocked by the user")).Once()
-		k.notifier.EXPECT().SendCampaignInvite(mock.Anything, int64(1002), telegram.CampaignRemindSigningText(), k.tmaURL).
+		k.notifier.EXPECT().SendCampaignReminder(mock.Anything, int64(1002), telegram.CampaignRemindSigningText()).
 			Return(nil).Once()
 
 		newRow2 := &repository.CampaignCreatorRow{
@@ -1371,7 +1371,7 @@ func TestCampaignCreatorService_RemindSigning(t *testing.T) {
 		k.creator.EXPECT().GetTelegramUserIDsByIDs(mock.Anything, []string{"cr-1"}).
 			Return(map[string]int64{"cr-1": 1001}, nil)
 
-		k.notifier.EXPECT().SendCampaignInvite(mock.Anything, int64(1001), telegram.CampaignRemindSigningText(), k.tmaURL).
+		k.notifier.EXPECT().SendCampaignReminder(mock.Anything, int64(1001), telegram.CampaignRemindSigningText()).
 			Return(errors.New("network timeout")).Once()
 
 		k.log.EXPECT().Warn(mock.Anything, "campaign batch: telegram delivery failed", mock.Anything).Once()
@@ -1413,7 +1413,7 @@ func TestCampaignCreatorService_RemindSigning(t *testing.T) {
 		require.Equal(t, []domain.NotifyFailure{
 			{CreatorID: "cr-1", Reason: domain.NotifyFailureReasonUnknown},
 		}, undelivered)
-		k.notifier.AssertNotCalled(t, "SendCampaignInvite", mock.Anything, mock.Anything, mock.Anything, mock.Anything)
+		k.notifier.AssertNotCalled(t, "SendCampaignReminder", mock.Anything, mock.Anything, mock.Anything)
 	})
 
 	t.Run("send succeeds but ApplyRemind fails — reported as unknown, batch continues", func(t *testing.T) {
@@ -1440,8 +1440,8 @@ func TestCampaignCreatorService_RemindSigning(t *testing.T) {
 		k.creator.EXPECT().GetTelegramUserIDsByIDs(mock.Anything, []string{"cr-1", "cr-2"}).
 			Return(map[string]int64{"cr-1": 1001, "cr-2": 1002}, nil)
 
-		k.notifier.EXPECT().SendCampaignInvite(mock.Anything, int64(1001), telegram.CampaignRemindSigningText(), k.tmaURL).Return(nil).Once()
-		k.notifier.EXPECT().SendCampaignInvite(mock.Anything, int64(1002), telegram.CampaignRemindSigningText(), k.tmaURL).Return(nil).Once()
+		k.notifier.EXPECT().SendCampaignReminder(mock.Anything, int64(1001), telegram.CampaignRemindSigningText()).Return(nil).Once()
+		k.notifier.EXPECT().SendCampaignReminder(mock.Anything, int64(1002), telegram.CampaignRemindSigningText()).Return(nil).Once()
 
 		k.pool.EXPECT().Begin(mock.Anything).Return(testTx{}, nil).Times(2)
 		k.factory.EXPECT().NewAuditRepo(mock.Anything).Return(k.audit)
@@ -1501,10 +1501,12 @@ func TestCampaignCreatorService_RemindSigning(t *testing.T) {
 		// a future copy-paste where the batchOpSpec accidentally references
 		// CampaignRemindInvitationText (or any other constant) instead of
 		// CampaignRemindSigningText. mock.Anything on text would silently
-		// pass the regression.
+		// pass the regression. The 3-arg signature also enforces that
+		// remind-signing uses SendCampaignReminder (no WebApp button) and
+		// not SendCampaignInvite.
 		var capturedText string
-		k.notifier.EXPECT().SendCampaignInvite(mock.Anything, int64(1001), mock.Anything, k.tmaURL).
-			Run(func(_ context.Context, _ int64, text, _ string) {
+		k.notifier.EXPECT().SendCampaignReminder(mock.Anything, int64(1001), mock.Anything).
+			Run(func(_ context.Context, _ int64, text string) {
 				capturedText = text
 			}).
 			Return(nil).Once()

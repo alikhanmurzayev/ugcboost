@@ -30,10 +30,11 @@
 // зеркалят инварианты remind-invitation. Happy single + повтор: статус
 // остаётся signing, reminded_count инкрементируется, в каждом цикле пишется
 // audit campaign_creator_remind_signing и спай ловит сообщение с
-// chunk12RemindSigningText и WebApp-кнопкой на ту же tma_url. Partial-
-// success разводится на две кампании (одна с FailNext на креаторе, вторая
-// happy): undelivered содержит ровно failing с reason=bot_blocked, БД
-// failing creator'а не меняется и audit не пишется.
+// chunk12RemindSigningText БЕЗ WebApp-кнопки (креатор уже согласился, ТЗ-
+// кнопка лишняя — он подписывает по SMS-ссылке TrustMe). Partial-success
+// разводится на две кампании (одна с FailNext на креаторе, вторая happy):
+// undelivered содержит ровно failing с reason=bot_blocked, БД failing
+// creator'а не меняется и audit не пишется.
 //
 // TestNotifyPartialSuccess вешает на одного из creator'ов синтетический
 // сбой через /test/telegram/spy/fail-next. После A4 батча из двух
@@ -661,8 +662,7 @@ func TestRemindCampaignCreatorsSigning(t *testing.T) {
 
 		firstMsg := waitInviteSent(t, fx.TelegramUserID, firstStartedAt, chunk12RemindSigningText)
 		require.Nil(t, firstMsg.Error, "happy remind-signing must not record a spy error")
-		require.NotNil(t, firstMsg.WebAppUrl)
-		require.Equal(t, fx.TmaURL, *firstMsg.WebAppUrl)
+		require.Nil(t, firstMsg.WebAppUrl, "remind-signing must NOT carry a WebApp button — creator already agreed")
 
 		// Repeat — second call bumps reminded_count to 2 with a fresh audit row.
 		// `since` for the second waitInviteSent must be strictly after the first
@@ -692,11 +692,10 @@ func TestRemindCampaignCreatorsSigning(t *testing.T) {
 			"campaign_creator", cc2.Id.String(), "campaign_creator_remind_signing")
 		require.Len(t, auditRows, 2, "second remind must write a second audit row, not overwrite the first")
 
-		// Second spy message — separate record with the same text and WebApp URL.
+		// Second spy message — separate record with the same plain text, still no button.
 		secondMsg := waitInviteSent(t, fx.TelegramUserID, secondSince, chunk12RemindSigningText)
 		require.Nil(t, secondMsg.Error)
-		require.NotNil(t, secondMsg.WebAppUrl)
-		require.Equal(t, fx.TmaURL, *secondMsg.WebAppUrl)
+		require.Nil(t, secondMsg.WebAppUrl, "remind-signing repeat must also stay plain-text")
 	})
 
 	t.Run("partial-success: bot_blocked entry, others succeed (two campaigns)", func(t *testing.T) {
@@ -758,8 +757,7 @@ func TestRemindCampaignCreatorsSigning(t *testing.T) {
 
 		deliveredMsg := waitInviteSent(t, fxDelivered.TelegramUserID, deliveredStartedAt, chunk12RemindSigningText)
 		require.Nil(t, deliveredMsg.Error)
-		require.NotNil(t, deliveredMsg.WebAppUrl)
-		require.Equal(t, fxDelivered.TmaURL, *deliveredMsg.WebAppUrl)
+		require.Nil(t, deliveredMsg.WebAppUrl, "remind-signing partial-success delivered branch must also stay plain-text")
 	})
 }
 

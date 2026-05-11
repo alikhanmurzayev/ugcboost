@@ -84,9 +84,11 @@ const applicationApprovedText = "Здравствуйте!\n\n" +
 // carry the universal copy for outbound invite / remind messages. Generic by
 // design — the message body must not leak campaign details (name, brand,
 // deadlines) because notify covers re-invites after declines as well, and
-// stale text from a previous round would mislead. The accompanying inline
-// web_app button drops the creator straight into the TMA where the creator
-// reviews the brief and presses "Согласиться" inside the mini-app.
+// stale text from a previous round would mislead. invite / remind-invitation
+// ship with an inline web_app button that drops the creator straight into
+// the TMA. remind-signing is sent plain — the creator has already agreed
+// and the signing happens via the TrustMe SMS link, so surfacing the brief
+// button again would be confusing.
 //
 // These literals are mirrored in `backend/e2e/campaign_creator/
 // campaign_notify_test.go` (the e2e module cannot import internal/telegram
@@ -431,6 +433,21 @@ func (n *Notifier) SendCampaignInvite(ctx context.Context, chatID int64, text, t
 				WebApp: &models.WebAppInfo{URL: tmaURL},
 			}}},
 		},
+	})
+	return err
+}
+
+// SendCampaignReminder delivers a plain-text reminder synchronously, without
+// any inline keyboard. Used for the remind-signing flow: the creator has
+// already opened the TMA, agreed to the campaign, and the contract has been
+// dispatched to TrustMe by SMS — surfacing the ТЗ button again would be
+// confusing. Same partial-success contract as SendCampaignInvite.
+func (n *Notifier) SendCampaignReminder(ctx context.Context, chatID int64, text string) error {
+	callCtx, cancel := context.WithTimeout(ctx, n.timeout)
+	defer cancel()
+	_, err := n.sender.SendMessage(callCtx, &bot.SendMessageParams{
+		ChatID: chatID,
+		Text:   text,
 	})
 	return err
 }
