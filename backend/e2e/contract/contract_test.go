@@ -132,6 +132,12 @@ func TestContractSending(t *testing.T) {
 				matching = append(matching, r)
 			}
 		}
+		// Register cleanup BEFORE require.Len so a Fatalf cannot leak the
+		// contracts row that Phase 1 already INSERT'ed. AdditionalInfo carries
+		// the internal contracts.id even on failed SendToSign attempts.
+		for _, r := range matching {
+			testutil.RegisterContractCleanup(t, r.AdditionalInfo)
+		}
 		require.Len(t, matching, 1, "expected exactly one TrustMe record for our IIN")
 
 		ours := matching[0]
@@ -197,6 +203,12 @@ func TestContractSending(t *testing.T) {
 		runOutboxOnce(t)
 
 		afterFail := spyMatchingByIIN(t, fx.CreatorIIN)
+		// Register cleanup BEFORE require.Len — Phase 1 already INSERT'ed the
+		// contracts row even though SendToSign failed; spy.AdditionalInfo
+		// carries the internal contracts.id regardless of TrustMe outcome.
+		for _, r := range afterFail {
+			testutil.RegisterContractCleanup(t, r.AdditionalInfo)
+		}
 		require.Len(t, afterFail, 1,
 			"Tick #1 must produce exactly one SendToSign attempt on our IIN")
 		require.NotNil(t, afterFail[0].Err)
