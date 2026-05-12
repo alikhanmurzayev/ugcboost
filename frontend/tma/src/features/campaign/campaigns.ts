@@ -384,7 +384,7 @@ export const campaigns: Record<string, CampaignBrief> = {
 // reach a real campaign on the backend, so we render NotFoundPage straight
 // away instead of showing a generic brief + CTA. This shrinks the
 // phishing-link UX surface.
-const secretTokenFormat = /^[A-Za-z0-9_-]{16,256}$/;
+export const secretTokenFormat = /^[A-Za-z0-9_-]{16,256}$/;
 
 // genericBrief is the fallback for tokens we don't have a hand-crafted
 // brief for yet — backend has the real campaign + invitation, but the brief

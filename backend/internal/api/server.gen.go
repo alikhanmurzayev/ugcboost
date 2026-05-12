@@ -1482,6 +1482,21 @@ type TmaDecisionResult struct {
 	Status CampaignCreatorStatus `json:"status"`
 }
 
+// TmaParticipationResult Current `campaign_creators.status` for the authenticated creator's
+// row in the campaign identified by `secretToken`. Read-only.
+type TmaParticipationResult struct {
+	// Status Lifecycle state of a creator within a campaign.
+	//
+	// - `planned` — admin added the creator to the campaign (default on create).
+	// - `invited` — admin sent an invitation; awaiting creator response.
+	// - `declined` — creator declined via TMA.
+	// - `agreed` — creator accepted via TMA; awaiting contract send.
+	// - `signing` — contract sent to TrustMe and awaiting creator signature.
+	// - `signed` — creator signed the contract via TrustMe. Terminal.
+	// - `signing_declined` — creator declined the contract via TrustMe. Terminal.
+	Status CampaignCreatorStatus `json:"status"`
+}
+
 // TrustMeWebhookRequest TrustMe document state-change payload. Wire-format поля повторяют
 // формат из blueprint § «Содержимое хука» (`contract_id`, `status`,
 // `client`, `contract_url`); реальный смысл указан в `description`
@@ -1791,6 +1806,9 @@ type ServerInterface interface {
 	// Creator declines to participate in a campaign (TMA-only)
 	// (POST /tma/campaigns/{secretToken}/decline)
 	TmaDecline(w http.ResponseWriter, r *http.Request, secretToken TmaSecretTokenPathParam)
+	// Read creator participation status for a campaign (TMA-only)
+	// (GET /tma/campaigns/{secretToken}/participation)
+	TmaGetParticipation(w http.ResponseWriter, r *http.Request, secretToken TmaSecretTokenPathParam)
 	// TrustMe document status webhook
 	// (POST /trustme/webhook)
 	TrustMeWebhook(w http.ResponseWriter, r *http.Request)
@@ -2040,6 +2058,12 @@ func (_ Unimplemented) TmaAgree(w http.ResponseWriter, r *http.Request, secretTo
 // Creator declines to participate in a campaign (TMA-only)
 // (POST /tma/campaigns/{secretToken}/decline)
 func (_ Unimplemented) TmaDecline(w http.ResponseWriter, r *http.Request, secretToken TmaSecretTokenPathParam) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Read creator participation status for a campaign (TMA-only)
+// (GET /tma/campaigns/{secretToken}/participation)
+func (_ Unimplemented) TmaGetParticipation(w http.ResponseWriter, r *http.Request, secretToken TmaSecretTokenPathParam) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -3266,6 +3290,37 @@ func (siw *ServerInterfaceWrapper) TmaDecline(w http.ResponseWriter, r *http.Req
 	handler.ServeHTTP(w, r)
 }
 
+// TmaGetParticipation operation middleware
+func (siw *ServerInterfaceWrapper) TmaGetParticipation(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "secretToken" -------------
+	var secretToken TmaSecretTokenPathParam
+
+	err = runtime.BindStyledParameterWithOptions("simple", "secretToken", chi.URLParam(r, "secretToken"), &secretToken, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "secretToken", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, TmaInitDataScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.TmaGetParticipation(w, r, secretToken)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // TrustMeWebhook operation middleware
 func (siw *ServerInterfaceWrapper) TrustMeWebhook(w http.ResponseWriter, r *http.Request) {
 
@@ -3526,6 +3581,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/tma/campaigns/{secretToken}/decline", wrapper.TmaDecline)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/tma/campaigns/{secretToken}/participation", wrapper.TmaGetParticipation)
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/trustme/webhook", wrapper.TrustMeWebhook)
@@ -5684,6 +5742,62 @@ func (response TmaDeclinedefaultJSONResponse) VisitTmaDeclineResponse(w http.Res
 	return json.NewEncoder(w).Encode(response.Body)
 }
 
+type TmaGetParticipationRequestObject struct {
+	SecretToken TmaSecretTokenPathParam `json:"secretToken"`
+}
+
+type TmaGetParticipationResponseObject interface {
+	VisitTmaGetParticipationResponse(w http.ResponseWriter) error
+}
+
+type TmaGetParticipation200JSONResponse TmaParticipationResult
+
+func (response TmaGetParticipation200JSONResponse) VisitTmaGetParticipationResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type TmaGetParticipation401JSONResponse ErrorResponse
+
+func (response TmaGetParticipation401JSONResponse) VisitTmaGetParticipationResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type TmaGetParticipation403JSONResponse ErrorResponse
+
+func (response TmaGetParticipation403JSONResponse) VisitTmaGetParticipationResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type TmaGetParticipation404JSONResponse ErrorResponse
+
+func (response TmaGetParticipation404JSONResponse) VisitTmaGetParticipationResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(404)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type TmaGetParticipationdefaultJSONResponse struct {
+	Body       ErrorResponse
+	StatusCode int
+}
+
+func (response TmaGetParticipationdefaultJSONResponse) VisitTmaGetParticipationResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+
+	return json.NewEncoder(w).Encode(response.Body)
+}
+
 type TrustMeWebhookRequestObject struct {
 	Body *TrustMeWebhookJSONRequestBody
 }
@@ -5900,6 +6014,9 @@ type StrictServerInterface interface {
 	// Creator declines to participate in a campaign (TMA-only)
 	// (POST /tma/campaigns/{secretToken}/decline)
 	TmaDecline(ctx context.Context, request TmaDeclineRequestObject) (TmaDeclineResponseObject, error)
+	// Read creator participation status for a campaign (TMA-only)
+	// (GET /tma/campaigns/{secretToken}/participation)
+	TmaGetParticipation(ctx context.Context, request TmaGetParticipationRequestObject) (TmaGetParticipationResponseObject, error)
 	// TrustMe document status webhook
 	// (POST /trustme/webhook)
 	TrustMeWebhook(ctx context.Context, request TrustMeWebhookRequestObject) (TrustMeWebhookResponseObject, error)
@@ -7080,6 +7197,32 @@ func (sh *strictHandler) TmaDecline(w http.ResponseWriter, r *http.Request, secr
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(TmaDeclineResponseObject); ok {
 		if err := validResponse.VisitTmaDeclineResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// TmaGetParticipation operation middleware
+func (sh *strictHandler) TmaGetParticipation(w http.ResponseWriter, r *http.Request, secretToken TmaSecretTokenPathParam) {
+	var request TmaGetParticipationRequestObject
+
+	request.SecretToken = secretToken
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.TmaGetParticipation(ctx, request.(TmaGetParticipationRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "TmaGetParticipation")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(TmaGetParticipationResponseObject); ok {
+		if err := validResponse.VisitTmaGetParticipationResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

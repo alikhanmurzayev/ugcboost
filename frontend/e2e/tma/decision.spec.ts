@@ -10,15 +10,16 @@
  * (idempotent — на повторе чекбокса уже нет, хелпер тихо no-op'ит) и
  * взаимодействует с CTA через ConfirmDialog.
  *
- * Покрытие соответствует spec-creator-campaign-decision.md: happy-path
- * invited → agree приводит на AcceptedView без `tma-already-decided-banner`,
- * симметричный invited → decline — на DeclinedView. Идемпотентность
- * проверяется повторным agree после reload — тот же экран AcceptedView, но
- * с видимым баннером. State-machine 422 закрывается сценарием declined →
- * agree: backend отвечает CAMPAIGN_CREATOR_DECLINED_NEED_REINVITE, фронт
- * рендерит inline-ошибку. Ассерт цепляется за `data-error-code` атрибут
- * (стандарт `frontend-testing-e2e.md` § Локаторы запрещает text-based
- * assert'ы на i18n-зависимый копирайт).
+ * Happy-path invited → agree приводит на AcceptedView; симметричный
+ * invited → decline — на DeclinedView. Видимость кнопок accept/decline
+ * теперь привязана к GET /tma/campaigns/{secretToken}/participation: блок
+ * с кнопками рендерится только когда статус participation = `invited`. В
+ * любом другом статусе бриф всё равно отображается полностью, но кнопки
+ * скрыты — отдельный negative-кейс «post-agree archived mode» покрывает
+ * этот сценарий: после успешного agree и reload страницы кнопок больше
+ * нет, а бриф виден. Идемпотентность state-machine'а на бэке (повторный
+ * agree, agree после decline и т.п.) покрывается backend e2e в
+ * `backend/e2e/tma/tma_test.go` — через UI она недостижима по дизайну.
  *
  * Cleanup идёт LIFO: campaign_creator (DELETE /campaigns/{id}/creators/{cid})
  * → creator → application → campaign. Каждый шаг идемпотентный (404 = OK).
@@ -183,7 +184,7 @@ test.describe("TMA decision flow", () => {
     await expect(page.getByTestId("tma-already-decided-banner")).toHaveCount(0);
   });
 
-  test("agree-after-agree → AcceptedView с already-decided баннером", async ({ page, request }) => {
+  test("после agree и reload — бриф виден, кнопок нет (archived mode)", async ({ page, request }) => {
     const fx = await setupInvited(request);
     cleanupStack.push(fx.cleanup);
 
@@ -193,36 +194,24 @@ test.describe("TMA decision flow", () => {
     await page.getByTestId("accept-confirm").click();
     await expect(page.getByTestId("tma-accepted-view")).toBeVisible();
 
-    // Reload and click agree again — must be the idempotent no-op path.
-    await page.goto(`/${fx.secretToken}`, { waitUntil: "domcontentloaded" });
-    await acceptNda(page);
-    await page.getByTestId("campaign-accept-button").click();
-    await page.getByTestId("accept-confirm").click();
-
-    await expect(page.getByTestId("tma-already-decided-banner")).toBeVisible();
-  });
-
-  test("declined → agree → ошибка need-reinvite", async ({ page, request }) => {
-    const fx = await setupInvited(request);
-    cleanupStack.push(fx.cleanup);
-
-    // First decline — flips invited → declined.
-    await gotoDecisionPage(page, fx);
-    await page.getByTestId("campaign-decline-button").click();
-    await page.getByTestId("decline-confirm").click();
-    await expect(page.getByTestId("tma-declined-view")).toBeVisible();
-
-    // Reload, try to agree — backend returns 422 CAMPAIGN_CREATOR_DECLINED_NEED_REINVITE.
-    await page.goto(`/${fx.secretToken}`, { waitUntil: "domcontentloaded" });
-    await acceptNda(page);
-    await page.getByTestId("campaign-accept-button").click();
-    await page.getByTestId("accept-confirm").click();
-
-    const errorBanner = page.getByTestId("tma-decision-error");
-    await expect(errorBanner).toBeVisible();
-    await expect(errorBanner).toHaveAttribute(
-      "data-error-code",
-      "CAMPAIGN_CREATOR_DECLINED_NEED_REINVITE",
+    // Reload — на свежей странице participation status уже не invited,
+    // поэтому ручка GET /participation вернёт `agreed` и фронт не
+    // отрендерит блок с кнопками. Бриф при этом остаётся виден полностью.
+    const participationResponse = page.waitForResponse(
+      (resp) => resp.url().includes("/participation") && resp.status() === 200,
     );
+    await page.goto(`/${fx.secretToken}`, { waitUntil: "domcontentloaded" });
+    await acceptNda(page);
+    await participationResponse;
+
+    // Brief content is present (заголовок кампании + блок «От бренда»
+    // отрисованы — не только пустая шапка с h1).
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+    await expect(
+      page.getByRole("heading", { level: 2, name: /Условия коллаборации/i }),
+    ).toBeVisible();
+    // Buttons are gone.
+    await expect(page.getByTestId("campaign-accept-button")).toHaveCount(0);
+    await expect(page.getByTestId("campaign-decline-button")).toHaveCount(0);
   });
 });

@@ -46,6 +46,25 @@ func (s *Server) TmaAgree(ctx context.Context, request api.TmaAgreeRequestObject
 	}, nil
 }
 
+// TmaGetParticipation handles GET /tma/campaigns/{secret_token}/participation.
+// Read-only counterpart to TmaAgree/TmaDecline used by the TMA brief page to
+// decide whether to render the agree/decline buttons (visible only when the
+// row is in `invited`). Reuses the same authz pre-pass — the resulting
+// TMACampaignDecisionAuth already carries CurrentStatus, so no service / repo
+// hop is required and no audit row is written.
+func (s *Server) TmaGetParticipation(ctx context.Context, request api.TmaGetParticipationRequestObject) (api.TmaGetParticipationResponseObject, error) {
+	if !domain.SecretTokenRegex().MatchString(string(request.SecretToken)) {
+		return nil, domain.ErrCampaignNotFound
+	}
+	auth, err := s.authzService.AuthorizeTMACampaignDecision(ctx, string(request.SecretToken))
+	if err != nil {
+		return nil, err
+	}
+	return api.TmaGetParticipation200JSONResponse{
+		Status: api.CampaignCreatorStatus(auth.CurrentStatus),
+	}, nil
+}
+
 // TmaDecline handles POST /tma/campaigns/{secret_token}/decline. Symmetric
 // counterpart to TmaAgree — same regex / authz / service guards, flips the
 // row to declined.
