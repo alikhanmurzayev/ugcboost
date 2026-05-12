@@ -173,6 +173,88 @@ func TestServer_TmaAgree(t *testing.T) {
 	})
 }
 
+func TestServer_TmaGetParticipation(t *testing.T) {
+	t.Parallel()
+
+	t.Run("regex-reject malformed token → 404 without authz call", func(t *testing.T) {
+		t.Parallel()
+		// authz / svc both nil mocks — they MUST NOT be invoked.
+		router := newTestRouter(t, newTmaServer(t, mocks.NewMockAuthzService(t), mocks.NewMockTmaCampaignCreatorService(t)))
+		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodGet, "/tma/campaigns/short/participation", nil)
+		require.Equal(t, http.StatusNotFound, w.Code)
+		require.Equal(t, domain.CodeCampaignNotFound, resp.Error.Code)
+	})
+
+	t.Run("authz forbidden → 403", func(t *testing.T) {
+		t.Parallel()
+		authzSvc := mocks.NewMockAuthzService(t)
+		authzSvc.EXPECT().AuthorizeTMACampaignDecision(mock.Anything, tmaTestValidToken).
+			Return(authz.TMACampaignDecisionAuth{}, domain.ErrTMAForbidden)
+
+		router := newTestRouter(t, newTmaServer(t, authzSvc, mocks.NewMockTmaCampaignCreatorService(t)))
+		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodGet, "/tma/campaigns/"+tmaTestValidToken+"/participation", nil)
+		require.Equal(t, http.StatusForbidden, w.Code)
+		require.Equal(t, domain.CodeTMAForbidden, resp.Error.Code)
+	})
+
+	t.Run("authz campaign not found → 404", func(t *testing.T) {
+		t.Parallel()
+		authzSvc := mocks.NewMockAuthzService(t)
+		authzSvc.EXPECT().AuthorizeTMACampaignDecision(mock.Anything, tmaTestValidToken).
+			Return(authz.TMACampaignDecisionAuth{}, domain.ErrCampaignNotFound)
+
+		router := newTestRouter(t, newTmaServer(t, authzSvc, mocks.NewMockTmaCampaignCreatorService(t)))
+		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodGet, "/tma/campaigns/"+tmaTestValidToken+"/participation", nil)
+		require.Equal(t, http.StatusNotFound, w.Code)
+		require.Equal(t, domain.CodeCampaignNotFound, resp.Error.Code)
+	})
+
+	t.Run("authz generic error → 500", func(t *testing.T) {
+		t.Parallel()
+		authzSvc := mocks.NewMockAuthzService(t)
+		authzSvc.EXPECT().AuthorizeTMACampaignDecision(mock.Anything, tmaTestValidToken).
+			Return(authz.TMACampaignDecisionAuth{}, errors.New("db down"))
+
+		log := logmocks.NewMockLogger(t)
+		expectHandlerUnexpectedErrorLog(log, "/tma/campaigns/"+tmaTestValidToken+"/participation")
+		router := newTestRouter(t, NewServer(nil, nil, authzSvc, nil, nil, nil, nil, nil, mocks.NewMockTmaCampaignCreatorService(t), nil, nil, ServerConfig{Version: "test-version"}, log))
+		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodGet, "/tma/campaigns/"+tmaTestValidToken+"/participation", nil)
+		require.Equal(t, http.StatusInternalServerError, w.Code)
+		require.Equal(t, domain.CodeInternal, resp.Error.Code)
+	})
+
+	// Table-driven over the 7 CampaignCreatorStatus values: the handler is a
+	// pure pass-through of auth.CurrentStatus, but the contract assert is what
+	// catches a future regression that drops the field on the floor.
+	statuses := []string{
+		domain.CampaignCreatorStatusPlanned,
+		domain.CampaignCreatorStatusInvited,
+		domain.CampaignCreatorStatusDeclined,
+		domain.CampaignCreatorStatusAgreed,
+		domain.CampaignCreatorStatusSigning,
+		domain.CampaignCreatorStatusSigned,
+		domain.CampaignCreatorStatusSigningDeclined,
+	}
+	for _, status := range statuses {
+		t.Run("success returns "+status, func(t *testing.T) {
+			t.Parallel()
+			authzSvc := mocks.NewMockAuthzService(t)
+			authzSvc.EXPECT().AuthorizeTMACampaignDecision(mock.Anything, tmaTestValidToken).
+				Return(authz.TMACampaignDecisionAuth{
+					CreatorID:         "cr-1",
+					CampaignID:        "camp-1",
+					CampaignCreatorID: "cc-1",
+					CurrentStatus:     status,
+				}, nil)
+
+			router := newTestRouter(t, newTmaServer(t, authzSvc, mocks.NewMockTmaCampaignCreatorService(t)))
+			w, resp := doJSON[api.TmaParticipationResult](t, router, http.MethodGet, "/tma/campaigns/"+tmaTestValidToken+"/participation", nil)
+			require.Equal(t, http.StatusOK, w.Code)
+			require.Equal(t, api.CampaignCreatorStatus(status), resp.Status)
+		})
+	}
+}
+
 func TestServer_TmaDecline(t *testing.T) {
 	t.Parallel()
 

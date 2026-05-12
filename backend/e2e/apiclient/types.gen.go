@@ -1447,6 +1447,21 @@ type TmaDecisionResult struct {
 	Status CampaignCreatorStatus `json:"status"`
 }
 
+// TmaParticipationResult Current `campaign_creators.status` for the authenticated creator's
+// row in the campaign identified by `secretToken`. Read-only.
+type TmaParticipationResult struct {
+	// Status Lifecycle state of a creator within a campaign.
+	//
+	// - `planned` — admin added the creator to the campaign (default on create).
+	// - `invited` — admin sent an invitation; awaiting creator response.
+	// - `declined` — creator declined via TMA.
+	// - `agreed` — creator accepted via TMA; awaiting contract send.
+	// - `signing` — contract sent to TrustMe and awaiting creator signature.
+	// - `signed` — creator signed the contract via TrustMe. Terminal.
+	// - `signing_declined` — creator declined the contract via TrustMe. Terminal.
+	Status CampaignCreatorStatus `json:"status"`
+}
+
 // TrustMeWebhookRequest TrustMe document state-change payload. Wire-format поля повторяют
 // формат из blueprint § «Содержимое хука» (`contract_id`, `status`,
 // `client`, `contract_url`); реальный смысл указан в `description`

@@ -1,10 +1,35 @@
-import { describe, it, expect } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
+vi.mock("../../api/client", () => ({
+  apiClient: {
+    GET: vi.fn(),
+    POST: vi.fn(),
+  },
+}));
+
+import { apiClient } from "../../api/client";
 import { CampaignBriefPage } from "./CampaignBriefPage";
+import { CAMPAIGN_CREATOR_STATUS } from "../../shared/constants/campaignCreatorStatus";
+
+const mockedGet = vi.mocked(apiClient.GET);
+
+// Default mock keeps the visibility-block hidden for existing tests that
+// assert brief content only. Visibility-specific tests override this.
+beforeEach(() => {
+  mockedGet.mockReset();
+  mockedGet.mockResolvedValue({
+    data: { status: CAMPAIGN_CREATOR_STATUS.PLANNED },
+    response: { status: 200 } as Response,
+  } as never);
+});
+
+afterEach(() => {
+  vi.clearAllMocks();
+});
 
 // Token values mirror the keys in campaigns.ts. Repeated here verbatim so
 // each test asserts the rendered page by URL the way the bot reaches it.
@@ -301,5 +326,35 @@ describe("CampaignBriefPage — KIDS FASHION DAY", () => {
     expect(
       screen.queryByRole("heading", { level: 2, name: "Дизайнеры" }),
     ).not.toBeInTheDocument();
+  });
+});
+
+describe("CampaignBriefPage — кнопки accept/decline зависят от статуса", () => {
+  it("показывает обе кнопки при статусе invited", async () => {
+    mockedGet.mockResolvedValue({
+      data: { status: CAMPAIGN_CREATOR_STATUS.INVITED },
+      response: { status: 200 } as Response,
+    } as never);
+    await renderAndAcceptNda(`/${QARA_BURN}`);
+    expect(
+      await screen.findByTestId("campaign-accept-button"),
+    ).toBeInTheDocument();
+    expect(screen.getByTestId("campaign-decline-button")).toBeInTheDocument();
+  });
+
+  it("скрывает кнопки при статусе signed (постпродписной архивный режим)", async () => {
+    mockedGet.mockResolvedValue({
+      data: { status: CAMPAIGN_CREATOR_STATUS.SIGNED },
+      response: { status: 200 } as Response,
+    } as never);
+    await renderAndAcceptNda(`/${QARA_BURN}`);
+    // бриф виден
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
+      "QARA BURN",
+    );
+    // дождаться завершения GET /participation
+    await waitFor(() => expect(mockedGet).toHaveBeenCalled());
+    expect(screen.queryByTestId("campaign-accept-button")).toBeNull();
+    expect(screen.queryByTestId("campaign-decline-button")).toBeNull();
   });
 });

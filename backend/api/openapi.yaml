@@ -1794,6 +1794,51 @@ paths:
         default:
           $ref: "#/components/responses/UnexpectedError"
 
+  /tma/campaigns/{secretToken}/participation:
+    get:
+      operationId: tmaGetParticipation
+      summary: Read creator participation status for a campaign (TMA-only)
+      description: |
+        Returns the current `campaign_creators.status` for the authenticated
+        creator's row in the campaign identified by `secretToken`. Used by
+        the TMA brief page to conditionally render the agree / decline
+        buttons — they are shown only when `status == "invited"`.
+
+        Read-only: no UPDATE, no audit row. Authentication, authorization and
+        anti-fingerprint behaviour mirror `tmaAgree` / `tmaDecline`.
+      tags: [tma]
+      security:
+        - tmaInitData: []
+      parameters:
+        - $ref: "#/components/parameters/TmaSecretTokenPathParam"
+      responses:
+        "200":
+          description: Current participation status.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TmaParticipationResult"
+        "401":
+          description: TMA initData header missing / invalid / expired.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Creator not registered or not invited.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: Campaign not found / soft-deleted / token format mismatch.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: "#/components/responses/UnexpectedError"
+
   /webhooks/sendpulse/instagram:
     post:
       operationId: sendPulseInstagramWebhook
@@ -3726,6 +3771,16 @@ components:
           $ref: "#/components/schemas/CampaignCreatorStatus"
         alreadyDecided:
           type: boolean
+
+    TmaParticipationResult:
+      type: object
+      description: |
+        Current `campaign_creators.status` for the authenticated creator's
+        row in the campaign identified by `secretToken`. Read-only.
+      required: [status]
+      properties:
+        status:
+          $ref: "#/components/schemas/CampaignCreatorStatus"
 
   securitySchemes:
     bearerAuth:

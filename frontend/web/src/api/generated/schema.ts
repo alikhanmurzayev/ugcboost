@@ -899,6 +899,32 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/tma/campaigns/{secretToken}/participation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read creator participation status for a campaign (TMA-only)
+         * @description Returns the current `campaign_creators.status` for the authenticated
+         *     creator's row in the campaign identified by `secretToken`. Used by
+         *     the TMA brief page to conditionally render the agree / decline
+         *     buttons — they are shown only when `status == "invited"`.
+         *
+         *     Read-only: no UPDATE, no audit row. Authentication, authorization and
+         *     anti-fingerprint behaviour mirror `tmaAgree` / `tmaDecline`.
+         */
+        get: operations["tmaGetParticipation"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/webhooks/sendpulse/instagram": {
         parameters: {
             query?: never;
@@ -2035,6 +2061,13 @@ export interface components {
         TmaDecisionResult: {
             status: components["schemas"]["CampaignCreatorStatus"];
             alreadyDecided: boolean;
+        };
+        /**
+         * @description Current `campaign_creators.status` for the authenticated creator's
+         *     row in the campaign identified by `secretToken`. Read-only.
+         */
+        TmaParticipationResult: {
+            status: components["schemas"]["CampaignCreatorStatus"];
         };
     };
     responses: {
@@ -3782,6 +3815,61 @@ export interface operations {
             };
             /** @description Granular state-machine error. */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            default: components["responses"]["UnexpectedError"];
+        };
+    };
+    tmaGetParticipation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /**
+                 * @description URL-safe secret token — last path segment of the campaign's tma_url.
+                 *     Format `^[A-Za-z0-9_-]{16,256}$`. Strict regex match in the handler
+                 *     rejects malformed tokens with 404 before any DB lookup.
+                 */
+                secretToken: components["parameters"]["TmaSecretTokenPathParam"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current participation status. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TmaParticipationResult"];
+                };
+            };
+            /** @description TMA initData header missing / invalid / expired. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Creator not registered or not invited. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Campaign not found / soft-deleted / token format mismatch. */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };

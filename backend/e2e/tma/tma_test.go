@@ -42,6 +42,13 @@
 // бизнес/тест-ручки soft-delete'а — покрытие is_deleted-фильтра живёт на
 // repo-уровне (`TestCampaignRepository_GetBySecretToken`).
 //
+// TestTmaGetParticipation покрывает read-only GET
+// /tma/campaigns/{secret_token}/participation, который TMA дёргает на mount
+// страницы ТЗ, чтобы решить, рендерить ли кнопки accept/decline. Эндпоинт
+// разделяет regex/authz pre-pass с agree/decline (TestTmaDecision*
+// покрывают эти ветки), поэтому здесь — один happy-path: invited creator
+// получает 200 + status="invited" из своей кампании.
+//
 // Setup для каждого теста независимо собирает кампанию + invited creator
 // через testutil.SetupCampaignWithInvitedCreator; cleanup идёт через
 // /test/cleanup-entity при E2E_CLEANUP=true.
@@ -97,6 +104,33 @@ func tmaPostWithScheme(t *testing.T, secretToken, action, scheme, payload string
 	body, err = io.ReadAll(resp.Body)
 	require.NoError(t, err)
 	return resp.StatusCode, body
+}
+
+// tmaGetParticipation is the read-only GET counterpart to tmaPost. The
+// /participation endpoint shares the secretToken / initData contract.
+func tmaGetParticipation(t *testing.T, secretToken, initData string) (status int, body []byte) {
+	t.Helper()
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet,
+		testutil.BaseURL+tmaPathPrefix+secretToken+"/participation", nil)
+	require.NoError(t, err)
+	if initData != "" {
+		req.Header.Set("Authorization", "tma "+initData)
+	}
+	resp, err := testutil.HTTPClient(nil).Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	body, err = io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	return resp.StatusCode, body
+}
+
+// decodeParticipation decodes the response body as the typed apiclient
+// TmaParticipationResult.
+func decodeParticipation(t *testing.T, body []byte) apiclient.TmaParticipationResult {
+	t.Helper()
+	var got apiclient.TmaParticipationResult
+	require.NoErrorf(t, json.Unmarshal(body, &got), "decode TmaParticipationResult: %s", string(body))
+	return got
 }
 
 // decodeDecision decodes the response body as the typed apiclient
@@ -405,6 +439,17 @@ func TestTmaDecisionFromPlanned(t *testing.T) {
 	require.Equal(t, http.StatusUnprocessableEntity, status)
 	errResp := decodeError(t, body)
 	require.Equal(t, "CAMPAIGN_CREATOR_NOT_INVITED", errResp.Error.Code)
+}
+
+func TestTmaGetParticipation(t *testing.T) {
+	t.Parallel()
+	fx := testutil.SetupCampaignWithInvitedCreator(t)
+	initData := testutil.SignInitData(t, fx.TelegramUserID, testutil.SignInitDataOpts{})
+
+	status, body := tmaGetParticipation(t, fx.SecretToken, initData)
+	require.Equalf(t, http.StatusOK, status, "body=%s", string(body))
+	got := decodeParticipation(t, body)
+	require.Equal(t, apiclient.CampaignCreatorStatus(apiclient.Invited), got.Status)
 }
 
 // flipLastByte mutates the final character of s — for crafting a hash that
