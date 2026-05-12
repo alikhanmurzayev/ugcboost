@@ -973,14 +973,18 @@ func TestCreatorApplicationRepository_Counts(t *testing.T) {
 func TestCreatorApplicationRepository_DeleteForTests(t *testing.T) {
 	t.Parallel()
 
-	const sqlStmt = "DELETE FROM creator_applications WHERE id = $1"
+	const auditSQL = "DELETE FROM audit_logs WHERE entity_id = $1 AND entity_type = $2"
+	const rowSQL = "DELETE FROM creator_applications WHERE id = $1"
 
-	t.Run("success returns nil", func(t *testing.T) {
+	t.Run("success drops audit_logs then the row", func(t *testing.T) {
 		t.Parallel()
 		mock := newPgxmock(t)
 		repo := &creatorApplicationRepository{db: mock}
 
-		mock.ExpectExec(sqlStmt).
+		mock.ExpectExec(auditSQL).
+			WithArgs("app-1", "creator_application").
+			WillReturnResult(pgconn.NewCommandTag("DELETE 3"))
+		mock.ExpectExec(rowSQL).
 			WithArgs("app-1").
 			WillReturnResult(pgconn.NewCommandTag("DELETE 1"))
 
@@ -992,24 +996,40 @@ func TestCreatorApplicationRepository_DeleteForTests(t *testing.T) {
 		mock := newPgxmock(t)
 		repo := &creatorApplicationRepository{db: mock}
 
-		mock.ExpectExec(sqlStmt).
+		mock.ExpectExec(auditSQL).
+			WithArgs("missing", "creator_application").
+			WillReturnResult(pgconn.NewCommandTag("DELETE 0"))
+		mock.ExpectExec(rowSQL).
 			WithArgs("missing").
 			WillReturnResult(pgconn.NewCommandTag("DELETE 0"))
 
-		err := repo.DeleteForTests(context.Background(), "missing")
-		require.ErrorIs(t, err, sql.ErrNoRows)
+		require.ErrorIs(t, repo.DeleteForTests(context.Background(), "missing"), sql.ErrNoRows)
 	})
 
-	t.Run("propagates db error", func(t *testing.T) {
+	t.Run("audit cleanup failure short-circuits before row delete", func(t *testing.T) {
 		t.Parallel()
 		mock := newPgxmock(t)
 		repo := &creatorApplicationRepository{db: mock}
 
-		mock.ExpectExec(sqlStmt).
+		mock.ExpectExec(auditSQL).
+			WithArgs("app-1", "creator_application").
+			WillReturnError(errors.New("audit boom"))
+
+		require.ErrorContains(t, repo.DeleteForTests(context.Background(), "app-1"), "audit boom")
+	})
+
+	t.Run("propagates db error on row delete", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &creatorApplicationRepository{db: mock}
+
+		mock.ExpectExec(auditSQL).
+			WithArgs("app-1", "creator_application").
+			WillReturnResult(pgconn.NewCommandTag("DELETE 0"))
+		mock.ExpectExec(rowSQL).
 			WithArgs("app-1").
 			WillReturnError(errors.New("db down"))
 
-		err := repo.DeleteForTests(context.Background(), "app-1")
-		require.ErrorContains(t, err, "db down")
+		require.ErrorContains(t, repo.DeleteForTests(context.Background(), "app-1"), "db down")
 	})
 }

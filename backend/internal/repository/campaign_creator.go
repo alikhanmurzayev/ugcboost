@@ -185,12 +185,23 @@ func (r *campaignCreatorRepository) DeleteByID(ctx context.Context, id string) e
 }
 
 // DeleteByCampaignAndCreatorForTests hard-deletes the (campaign_id, creator_id)
-// row irrespective of campaign soft-delete state. Used by the test-only
-// force-cleanup endpoint to drain campaign_creators rows when the parent
-// campaign has been flipped to `is_deleted = true` and the production admin
-// DELETE endpoint refuses to operate on it. Returns sql.ErrNoRows when no
-// matching row exists so callers can map it to a 404.
+// row irrespective of campaign soft-delete state and wipes the anonymous
+// audit_logs (entity_type='campaign_creator') tied to that row. Production
+// audit_logs from TMA agree/decline + contract phase events carry
+// actor_id=NULL, so UserRepo.DeleteForTests does not reach them. Returns
+// sql.ErrNoRows when no matching row exists so callers can map it to a 404.
+//
+// DANGER: TEST-ONLY. This destroys audit history.
 func (r *campaignCreatorRepository) DeleteByCampaignAndCreatorForTests(ctx context.Context, campaignID, creatorID string) error {
+	auditQ := sq.Delete(TableAuditLogs).
+		Where(sq.Eq{AuditLogColumnEntityType: AuditEntityTypeCampaignCreator}).
+		Where(sq.Expr(AuditLogColumnEntityID+" IN (SELECT "+CampaignCreatorColumnID+
+			" FROM "+TableCampaignCreators+
+			" WHERE "+CampaignCreatorColumnCampaignID+" = ? AND "+
+			CampaignCreatorColumnCreatorID+" = ?)", campaignID, creatorID))
+	if _, err := dbutil.Exec(ctx, r.db, auditQ); err != nil {
+		return err
+	}
 	q := sq.Delete(TableCampaignCreators).
 		Where(sq.Eq{
 			CampaignCreatorColumnCampaignID: campaignID,

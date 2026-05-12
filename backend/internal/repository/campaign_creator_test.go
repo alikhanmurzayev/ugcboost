@@ -373,11 +373,16 @@ func TestCampaignCreatorRepository_ListByCampaignAndCreators(t *testing.T) {
 func TestCampaignCreatorRepository_DeleteByCampaignAndCreatorForTests(t *testing.T) {
 	t.Parallel()
 
-	t.Run("success", func(t *testing.T) {
+	const auditCleanupSQL = "DELETE FROM audit_logs WHERE entity_type = $1 AND entity_id IN (SELECT id FROM campaign_creators WHERE campaign_id = $2 AND creator_id = $3)"
+
+	t.Run("success drops audit_logs then the row", func(t *testing.T) {
 		t.Parallel()
 		mock := newPgxmock(t)
 		repo := &campaignCreatorRepository{db: mock}
 
+		mock.ExpectExec(auditCleanupSQL).
+			WithArgs("campaign_creator", "camp-1", "cr-1").
+			WillReturnResult(pgconn.NewCommandTag("DELETE 3"))
 		mock.ExpectExec(campaignCreatorForceCleanupSQL).
 			WithArgs("camp-1", "cr-1").
 			WillReturnResult(pgconn.NewCommandTag("DELETE 1"))
@@ -390,6 +395,9 @@ func TestCampaignCreatorRepository_DeleteByCampaignAndCreatorForTests(t *testing
 		mock := newPgxmock(t)
 		repo := &campaignCreatorRepository{db: mock}
 
+		mock.ExpectExec(auditCleanupSQL).
+			WithArgs("campaign_creator", "camp-1", "cr-1").
+			WillReturnResult(pgconn.NewCommandTag("DELETE 0"))
 		mock.ExpectExec(campaignCreatorForceCleanupSQL).
 			WithArgs("camp-1", "cr-1").
 			WillReturnResult(pgconn.NewCommandTag("DELETE 0"))
@@ -397,11 +405,27 @@ func TestCampaignCreatorRepository_DeleteByCampaignAndCreatorForTests(t *testing
 		require.ErrorIs(t, repo.DeleteByCampaignAndCreatorForTests(context.Background(), "camp-1", "cr-1"), sql.ErrNoRows)
 	})
 
-	t.Run("propagates errors", func(t *testing.T) {
+	t.Run("audit cleanup failure short-circuits before the row delete", func(t *testing.T) {
 		t.Parallel()
 		mock := newPgxmock(t)
 		repo := &campaignCreatorRepository{db: mock}
 
+		mock.ExpectExec(auditCleanupSQL).
+			WithArgs("campaign_creator", "camp-1", "cr-1").
+			WillReturnError(errors.New("audit boom"))
+
+		err := repo.DeleteByCampaignAndCreatorForTests(context.Background(), "camp-1", "cr-1")
+		require.ErrorContains(t, err, "audit boom")
+	})
+
+	t.Run("propagates row delete errors", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &campaignCreatorRepository{db: mock}
+
+		mock.ExpectExec(auditCleanupSQL).
+			WithArgs("campaign_creator", "camp-1", "cr-1").
+			WillReturnResult(pgconn.NewCommandTag("DELETE 0"))
 		mock.ExpectExec(campaignCreatorForceCleanupSQL).
 			WithArgs("camp-1", "cr-1").
 			WillReturnError(errors.New("db unavailable"))
