@@ -121,7 +121,7 @@ func SetupCampaignWithInvitedCreator(t *testing.T) TmaCampaignFixture {
 	require.NotNil(t, addResp.JSON201)
 	require.Len(t, addResp.JSON201.Data.Items, 1, "A1 must return one campaign_creator row")
 	campaignCreatorID := addResp.JSON201.Data.Items[0].Id.String()
-	RegisterCampaignCreatorCleanup(t, c, adminToken, campaignID, creator.CreatorID)
+	RegisterCampaignCreatorCleanup(t, campaignID, creator.CreatorID)
 
 	notifyResp, err := c.NotifyCampaignCreatorsWithResponse(context.Background(), campUUID,
 		apiclient.NotifyCampaignCreatorsJSONRequestBody{CreatorIds: []openapiUUID{creatorUUID}},

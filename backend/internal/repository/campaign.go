@@ -346,10 +346,17 @@ func (r *campaignRepository) MarkDeletedForTests(ctx context.Context, id string)
 	return nil
 }
 
-// DeleteForTests hard-deletes a campaign by id. Returns sql.ErrNoRows when
-// the campaign does not exist, matching the cleanup-stack semantics where
-// "already gone" is treated as success at the caller.
+// DeleteForTests hard-deletes a campaign by id, draining campaign_creators
+// rows first so the FK does not block the campaign DELETE. The caller is
+// expected to wrap the two statements in a transaction (testapi handler does
+// via dbutil.WithTx) so a partial cleanup cannot leave orphan campaign_creators
+// rows. Returns sql.ErrNoRows when the campaign row itself is absent;
+// pre-draining children when no campaign exists is a no-op.
 func (r *campaignRepository) DeleteForTests(ctx context.Context, id string) error {
+	drainChildren := sq.Delete(TableCampaignCreators).Where(sq.Eq{CampaignCreatorColumnCampaignID: id})
+	if _, err := dbutil.Exec(ctx, r.db, drainChildren); err != nil {
+		return err
+	}
 	q := sq.Delete(TableCampaigns).Where(sq.Eq{CampaignColumnID: id})
 	n, err := dbutil.Exec(ctx, r.db, q)
 	if err != nil {

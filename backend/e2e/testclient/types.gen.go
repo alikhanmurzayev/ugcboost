@@ -13,6 +13,8 @@ import (
 const (
 	Brand              CleanupEntityRequestType = "brand"
 	Campaign           CleanupEntityRequestType = "campaign"
+	CampaignCreator    CleanupEntityRequestType = "campaign_creator"
+	Contract           CleanupEntityRequestType = "contract"
 	Creator            CleanupEntityRequestType = "creator"
 	CreatorApplication CleanupEntityRequestType = "creator_application"
 	User               CleanupEntityRequestType = "user"
@@ -24,6 +26,10 @@ func (e CleanupEntityRequestType) Valid() bool {
 	case Brand:
 		return true
 	case Campaign:
+		return true
+	case CampaignCreator:
+		return true
+	case Contract:
 		return true
 	case Creator:
 		return true

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	tgbot "github.com/go-telegram/bot"
@@ -43,6 +44,7 @@ type TestAPICleanupRepoFactory interface {
 	NewCreatorRepo(db dbutil.DB) repository.CreatorRepo
 	NewCampaignRepo(db dbutil.DB) repository.CampaignRepo
 	NewCampaignCreatorRepo(db dbutil.DB) repository.CampaignCreatorRepo
+	NewContractsRepo(db dbutil.DB) repository.ContractRepo
 }
 
 // TestAPIHandler provides test-only endpoints that back openapi-test.yaml.
@@ -177,6 +179,9 @@ func (h *TestAPIHandler) SeedUser(ctx context.Context, request testapi.SeedUserR
 // CleanupEntity handles POST /test/cleanup-entity.
 // Dispatches by req.Type: "user" hard-deletes the user and its references
 // inside a transaction; "brand" forwards to the standard brand delete.
+// "campaign_creator" expects a compound id "campaignID:creatorID" so callers
+// can drain rows without knowing the campaign_creators.id UUID — the
+// (campaign, creator) pair is always available on the test side.
 func (h *TestAPIHandler) CleanupEntity(ctx context.Context, request testapi.CleanupEntityRequestObject) (testapi.CleanupEntityResponseObject, error) {
 	req := request.Body
 
@@ -197,7 +202,23 @@ func (h *TestAPIHandler) CleanupEntity(ctx context.Context, request testapi.Clea
 	case testapi.Creator:
 		deleteErr = h.repos.NewCreatorRepo(h.pool).DeleteForTests(ctx, req.Id)
 	case testapi.Campaign:
-		deleteErr = h.repos.NewCampaignRepo(h.pool).DeleteForTests(ctx, req.Id)
+		// Two-statement cascade (drain campaign_creators → delete campaign) is
+		// wrapped here so partial failure cannot orphan child rows.
+		deleteErr = dbutil.WithTx(ctx, h.pool, func(tx dbutil.DB) error {
+			return h.repos.NewCampaignRepo(tx).DeleteForTests(ctx, req.Id)
+		})
+	case testapi.CampaignCreator:
+		// Compound id: "campaignID:creatorID". UUIDs cannot contain ":" so
+		// SplitN with sep=":" is unambiguous.
+		parts := strings.SplitN(req.Id, ":", 2)
+		if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+			return nil, domain.NewValidationError(domain.CodeValidation,
+				"campaign_creator id must be \"campaignID:creatorID\"")
+		}
+		deleteErr = h.repos.NewCampaignCreatorRepo(h.pool).
+			DeleteByCampaignAndCreatorForTests(ctx, parts[0], parts[1])
+	case testapi.Contract:
+		deleteErr = h.repos.NewContractsRepo(h.pool).DeleteForTests(ctx, req.Id)
 	default:
 		if !req.Type.Valid() {
 			return nil, domain.NewValidationError(domain.CodeValidation,

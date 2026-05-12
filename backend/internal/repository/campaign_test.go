@@ -728,14 +728,18 @@ func TestCampaignRepository_List(t *testing.T) {
 func TestCampaignRepository_DeleteForTests(t *testing.T) {
 	t.Parallel()
 
-	const sqlStmt = "DELETE FROM campaigns WHERE id = $1"
+	const drainChildrenSQL = "DELETE FROM campaign_creators WHERE campaign_id = $1"
+	const deleteCampaignSQL = "DELETE FROM campaigns WHERE id = $1"
 
-	t.Run("success", func(t *testing.T) {
+	t.Run("success drains campaign_creators then deletes campaign", func(t *testing.T) {
 		t.Parallel()
 		mock := newPgxmock(t)
 		repo := &campaignRepository{db: mock}
 
-		mock.ExpectExec(sqlStmt).
+		mock.ExpectExec(drainChildrenSQL).
+			WithArgs("c-1").
+			WillReturnResult(pgconn.NewCommandTag("DELETE 3"))
+		mock.ExpectExec(deleteCampaignSQL).
 			WithArgs("c-1").
 			WillReturnResult(pgconn.NewCommandTag("DELETE 1"))
 
@@ -743,12 +747,31 @@ func TestCampaignRepository_DeleteForTests(t *testing.T) {
 		require.NoError(t, err)
 	})
 
-	t.Run("no rows affected returns sql.ErrNoRows", func(t *testing.T) {
+	t.Run("succeeds even when no campaign_creators rows to drain", func(t *testing.T) {
 		t.Parallel()
 		mock := newPgxmock(t)
 		repo := &campaignRepository{db: mock}
 
-		mock.ExpectExec(sqlStmt).
+		mock.ExpectExec(drainChildrenSQL).
+			WithArgs("c-1").
+			WillReturnResult(pgconn.NewCommandTag("DELETE 0"))
+		mock.ExpectExec(deleteCampaignSQL).
+			WithArgs("c-1").
+			WillReturnResult(pgconn.NewCommandTag("DELETE 1"))
+
+		err := repo.DeleteForTests(context.Background(), "c-1")
+		require.NoError(t, err)
+	})
+
+	t.Run("no campaign rows affected returns sql.ErrNoRows", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &campaignRepository{db: mock}
+
+		mock.ExpectExec(drainChildrenSQL).
+			WithArgs("missing").
+			WillReturnResult(pgconn.NewCommandTag("DELETE 0"))
+		mock.ExpectExec(deleteCampaignSQL).
 			WithArgs("missing").
 			WillReturnResult(pgconn.NewCommandTag("DELETE 0"))
 
@@ -756,12 +779,28 @@ func TestCampaignRepository_DeleteForTests(t *testing.T) {
 		require.ErrorIs(t, err, sql.ErrNoRows)
 	})
 
-	t.Run("propagates other errors", func(t *testing.T) {
+	t.Run("drain failure propagates without touching campaigns table", func(t *testing.T) {
 		t.Parallel()
 		mock := newPgxmock(t)
 		repo := &campaignRepository{db: mock}
 
-		mock.ExpectExec(sqlStmt).
+		mock.ExpectExec(drainChildrenSQL).
+			WithArgs("c-1").
+			WillReturnError(errors.New("drain error"))
+
+		err := repo.DeleteForTests(context.Background(), "c-1")
+		require.ErrorContains(t, err, "drain error")
+	})
+
+	t.Run("propagates campaigns DELETE errors", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &campaignRepository{db: mock}
+
+		mock.ExpectExec(drainChildrenSQL).
+			WithArgs("c-1").
+			WillReturnResult(pgconn.NewCommandTag("DELETE 0"))
+		mock.ExpectExec(deleteCampaignSQL).
 			WithArgs("c-1").
 			WillReturnError(errors.New("db error"))
 

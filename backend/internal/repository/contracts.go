@@ -151,6 +151,7 @@ type ContractRepo interface {
 	RecordFailedAttempt(ctx context.Context, contractID, code, message string, nextRetryAt time.Time) error
 	LockByTrustMeDocumentID(ctx context.Context, documentID string) (*ContractRow, error)
 	UpdateAfterWebhook(ctx context.Context, contractID string, newStatus int) (int, error)
+	DeleteForTests(ctx context.Context, id string) error
 }
 
 type contractRepository struct {
@@ -502,4 +503,20 @@ func (r *contractRepository) GetOrphanRequisites(ctx context.Context, contractID
 	}
 	out.CreatorMiddleName = middleName
 	return &out, nil
+}
+
+// DeleteForTests hard-deletes a contracts row by primary key. FK
+// campaign_creators.contract_id → contracts(id) ON DELETE SET NULL nulls the
+// reference instead of blocking. Returns sql.ErrNoRows when the row is absent
+// so the testapi handler can map it to 404.
+func (r *contractRepository) DeleteForTests(ctx context.Context, id string) error {
+	q := sq.Delete(TableContracts).Where(sq.Eq{ContractColumnID: id})
+	n, err := dbutil.Exec(ctx, r.db, q)
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return sql.ErrNoRows
+	}
+	return nil
 }

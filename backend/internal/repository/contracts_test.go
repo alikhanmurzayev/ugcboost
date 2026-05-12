@@ -590,3 +590,48 @@ func TestContractRepository_UpdateAfterSend(t *testing.T) {
 		require.ErrorContains(t, err, "db down")
 	})
 }
+
+func TestContractRepository_DeleteForTests(t *testing.T) {
+	t.Parallel()
+
+	const sqlStmt = "DELETE FROM contracts WHERE id = $1"
+
+	t.Run("success", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &contractRepository{db: mock}
+
+		mock.ExpectExec(sqlStmt).
+			WithArgs("ct-1").
+			WillReturnResult(pgconn.NewCommandTag("DELETE 1"))
+
+		err := repo.DeleteForTests(context.Background(), "ct-1")
+		require.NoError(t, err)
+	})
+
+	t.Run("no rows affected returns sql.ErrNoRows", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &contractRepository{db: mock}
+
+		mock.ExpectExec(sqlStmt).
+			WithArgs("missing").
+			WillReturnResult(pgconn.NewCommandTag("DELETE 0"))
+
+		err := repo.DeleteForTests(context.Background(), "missing")
+		require.ErrorIs(t, err, sql.ErrNoRows)
+	})
+
+	t.Run("propagates other errors", func(t *testing.T) {
+		t.Parallel()
+		mock := newPgxmock(t)
+		repo := &contractRepository{db: mock}
+
+		mock.ExpectExec(sqlStmt).
+			WithArgs("ct-1").
+			WillReturnError(errors.New("db down"))
+
+		err := repo.DeleteForTests(context.Background(), "ct-1")
+		require.ErrorContains(t, err, "db down")
+	})
+}

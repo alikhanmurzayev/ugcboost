@@ -397,7 +397,7 @@ func TestTmaDecisionFromPlanned(t *testing.T) {
 		testutil.WithAuth(adminToken))
 	require.NoError(t, err)
 	require.Equal(t, http.StatusCreated, addResp.StatusCode())
-	testutil.RegisterCampaignCreatorCleanup(t, c, adminToken, campaignID, creator.CreatorID)
+	testutil.RegisterCampaignCreatorCleanup(t, campaignID, creator.CreatorID)
 
 	initData := testutil.SignInitData(t, creator.TelegramUserID, testutil.SignInitDataOpts{})
 

@@ -116,8 +116,8 @@ func TestApproveWithCampaigns(t *testing.T) {
 		// the rows must drop before the creator. RegisterCampaignCreatorCleanup
 		// is LIFO and fires first because it is registered AFTER the creator.
 		testutil.RegisterCreatorCleanup(t, creatorID.String())
-		testutil.RegisterCampaignCreatorCleanup(t, c, fx.AdminToken, campA.String(), creatorID.String())
-		testutil.RegisterCampaignCreatorCleanup(t, c, fx.AdminToken, campB.String(), creatorID.String())
+		testutil.RegisterCampaignCreatorCleanup(t, campA.String(), creatorID.String())
+		testutil.RegisterCampaignCreatorCleanup(t, campB.String(), creatorID.String())
 
 		// Application moved to approved.
 		detail := getApplicationDetailForApprove(t, c, fx.AdminToken, fx.ApplicationID)
