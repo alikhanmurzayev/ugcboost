@@ -8,12 +8,17 @@
 // (TRUSTME_MOCK=true в тестовой среде); записи доступны через
 // /test/trustme/spy-list. Endpoint gated EnableTestEndpoints (404 в проде),
 // поэтому spy возвращает сырые FIO/IIN/Phone — фикстуры синтетические.
-// На happy-path тест ожидает один SendToSign-вызов с NumberDial формата
-// UGC-{n}, audit-row campaign_creator.contract_initiated с actor_id=NULL и
-// entity_id=cc.ID, ненулевой PDFSha256. На fail-and-recovery (spy-fail-next
-// синтетически фейлит первую попытку) — два SendToSign'а с идентичным
-// PDFSha256 (resend без re-render). Сценарии «empty template» и «known
-// orphan finalize» закрыты repo/unit-уровнем — здесь t.Skip с явной ссылкой.
+// На happy-path тест ожидает ≥1 успешный SendToSign-вызов с NumberDial
+// формата UGC-{n}, audit-row campaign_creator.contract_initiated с
+// actor_id=NULL и entity_id=cc.ID, ненулевой PDFSha256. Точное количество
+// записей не фиксируется: параллельный cron-tick @every 3s в окне между
+// Phase 2b persist и Phase 3 finalize может Phase 0-recover'ить наш orphan и
+// сделать второй SendToSign — все retry разделяют один contract.id и один
+// PDFSha256, ассертим инварианты, не count. На fail-and-recovery
+// (spy-fail-next синтетически фейлит первую попытку) — те же инварианты
+// плюс хотя бы один успешный attempt после spyClearFail. Сценарии «empty
+// template» и «known orphan finalize» закрыты repo/unit-уровнем — здесь
+// t.Skip с явной ссылкой.
 //
 // Setup для каждого сценария — testutil.SetupCampaignWithInvitedCreator
 // (готовая «приглашённая» пара) с уникальным suffix в email/handle, чтобы
@@ -150,24 +155,42 @@ func TestContractSending(t *testing.T) {
 
 		runOutboxOnce(t)
 
-		// Изолируем нашу запись по уникальному IIN — testutil.UniqueIIN()
-		// гарантирует уникальность между параллельными тестами.
-		records := spyList(t)
-		var matching []testclient.TrustMeSentRecord
-		for _, r := range records {
-			if r.Iin == fx.CreatorIIN {
-				matching = append(matching, r)
-			}
-		}
-		// Register cleanup BEFORE require.Len so a Fatalf cannot leak the
-		// contracts row that Phase 1 already INSERT'ed. AdditionalInfo carries
-		// the internal contracts.id even on failed SendToSign attempts.
+		// Параллельный cron-tick contractSenderSvc.RunOnce (@every 3s) может
+		// успеть в окне между Phase 2b persist и Phase 3 finalize нашего
+		// runOutboxOnce: его Phase 0 видит наш contract как orphan
+		// (trustme_document_id ещё NULL), SearchContractByAdditionalInfo
+		// возвращает NotFound (spy ещё не принял первый Send) → resendOrphan
+		// делает повторный SendToSign на тот же contract.id. В spy окажутся
+		// два успешных attempts на наш IIN. Ассертим инварианты "≥1 успех
+		// с одним contract.id и одним PdfSha256", не точное количество.
+		matching := spyMatchingByIIN(t, fx.CreatorIIN)
+		// Register cleanup BEFORE assertions so a Fatalf не утечёт contracts
+		// row — Phase 1 уже INSERT'ит ряд. Все race-retry разделяют один
+		// contract.id, дедуплицируем по AdditionalInfo.
+		registeredContracts := make(map[string]struct{})
 		for _, r := range matching {
+			if _, seen := registeredContracts[r.AdditionalInfo]; seen {
+				continue
+			}
+			registeredContracts[r.AdditionalInfo] = struct{}{}
 			testutil.RegisterContractCleanup(t, r.AdditionalInfo)
 		}
-		require.Len(t, matching, 1, "expected exactly one TrustMe record for our IIN")
+		require.NotEmpty(t, matching,
+			"outbox tick must record at least one TrustMe send on our IIN")
+		// Все записи — один contract.id и один рендер PDF (resend без
+		// re-render, Decision #10).
+		first := matching[0]
+		for _, r := range matching[1:] {
+			require.Equalf(t, first.AdditionalInfo, r.AdditionalInfo,
+				"race retry must share the same contract.id")
+			require.Equalf(t, first.PdfSha256, r.PdfSha256,
+				"race retry must reuse the persisted PDF (Decision #10)")
+			require.Equalf(t, first.NumberDial, r.NumberDial,
+				"NumberDial (UGC-{serial}) must equal across retries")
+		}
 
-		ours := matching[0]
+		ours, ok := successfulAttempt(matching)
+		require.True(t, ok, "happy path must have at least one successful SendToSign")
 		require.NotNil(t, ours.DocumentId)
 		require.NotEmpty(t, *ours.DocumentId)
 		require.Equal(t, fx.CreatorFIO, ours.Fio)
@@ -175,7 +198,6 @@ func TestContractSending(t *testing.T) {
 		require.Equal(t, fx.CreatorPhone, ours.Phone)
 		require.Regexp(t, `^UGC-\d+$`, ours.NumberDial,
 			"NumberDial должен иметь формат UGC-{serial}")
-		require.Nil(t, ours.Err, "happy path must not record err")
 		pdfShaIsHex64(t, ours.PdfSha256)
 
 		// Audit-row campaign_creator.contract_initiated с actor_id=NULL и
