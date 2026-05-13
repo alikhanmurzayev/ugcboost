@@ -346,10 +346,36 @@ func (r *campaignRepository) MarkDeletedForTests(ctx context.Context, id string)
 	return nil
 }
 
-// DeleteForTests hard-deletes a campaign by id. Returns sql.ErrNoRows when
-// the campaign does not exist, matching the cleanup-stack semantics where
-// "already gone" is treated as success at the caller.
+// DeleteForTests hard-deletes a campaign by id, draining campaign_creators
+// rows first so the FK does not block the campaign DELETE. Anonymous
+// audit_logs for the campaign itself and for each drained campaign_creator
+// child are wiped alongside — they carry actor_id=NULL and would otherwise
+// be unreachable from UserRepo.DeleteForTests. The caller is expected to wrap
+// the statements in a transaction (testapi handler does via dbutil.WithTx) so
+// a partial cleanup cannot leave orphan rows. Returns sql.ErrNoRows when the
+// campaign row itself is absent; pre-cleanups on an empty result are no-ops.
+//
+// DANGER: TEST-ONLY. This destroys audit history.
 func (r *campaignRepository) DeleteForTests(ctx context.Context, id string) error {
+	auditCCQ := sq.Delete(TableAuditLogs).
+		Where(sq.Eq{AuditLogColumnEntityType: AuditEntityTypeCampaignCreator}).
+		Where(sq.Expr(AuditLogColumnEntityID+" IN (SELECT "+CampaignCreatorColumnID+
+			" FROM "+TableCampaignCreators+
+			" WHERE "+CampaignCreatorColumnCampaignID+" = ?)", id))
+	if _, err := dbutil.Exec(ctx, r.db, auditCCQ); err != nil {
+		return err
+	}
+	drainChildren := sq.Delete(TableCampaignCreators).Where(sq.Eq{CampaignCreatorColumnCampaignID: id})
+	if _, err := dbutil.Exec(ctx, r.db, drainChildren); err != nil {
+		return err
+	}
+	auditCampQ := sq.Delete(TableAuditLogs).Where(sq.Eq{
+		AuditLogColumnEntityType: AuditEntityTypeCampaign,
+		AuditLogColumnEntityID:   id,
+	})
+	if _, err := dbutil.Exec(ctx, r.db, auditCampQ); err != nil {
+		return err
+	}
 	q := sq.Delete(TableCampaigns).Where(sq.Eq{CampaignColumnID: id})
 	n, err := dbutil.Exec(ctx, r.db, q)
 	if err != nil {

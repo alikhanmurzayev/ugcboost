@@ -286,9 +286,21 @@ func (r *creatorApplicationRepository) UpdateStatus(ctx context.Context, id, sta
 
 // DeleteForTests hard-deletes an application by id. Related rows in
 // creator_application_{categories,socials,consents} cascade automatically.
-// Returns sql.ErrNoRows when the application does not exist, matching the
-// semantics the cleanup stack relies on to treat "already gone" as success.
+// Also wipes anonymous audit_logs for this application (submit /
+// link_telegram / verification_*) — they have actor_id=NULL so
+// UserRepo.DeleteForTests cannot reach them. Returns sql.ErrNoRows when the
+// application does not exist, matching the semantics the cleanup stack relies
+// on to treat "already gone" as success.
+//
+// DANGER: TEST-ONLY. This destroys audit history.
 func (r *creatorApplicationRepository) DeleteForTests(ctx context.Context, id string) error {
+	auditQ := sq.Delete(TableAuditLogs).Where(sq.Eq{
+		AuditLogColumnEntityType: AuditEntityTypeCreatorApplication,
+		AuditLogColumnEntityID:   id,
+	})
+	if _, err := dbutil.Exec(ctx, r.db, auditQ); err != nil {
+		return err
+	}
 	q := sq.Delete(TableCreatorApplications).Where(sq.Eq{CreatorApplicationColumnID: id})
 	n, err := dbutil.Exec(ctx, r.db, q)
 	if err != nil {

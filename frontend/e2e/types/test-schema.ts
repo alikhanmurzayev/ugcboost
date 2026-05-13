@@ -377,7 +377,7 @@ export interface components {
         };
         CleanupEntityRequest: {
             /** @enum {string} */
-            type: "user" | "brand" | "creator_application" | "creator" | "campaign";
+            type: "user" | "brand" | "creator_application" | "creator" | "campaign" | "campaign_creator" | "contract";
             id: string;
         };
         SendTelegramMessageRequest: {

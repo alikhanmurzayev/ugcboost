@@ -284,15 +284,18 @@ func TestTestAPIHandler_CleanupEntity(t *testing.T) {
 		require.Equal(t, http.StatusNotFound, w.Code)
 	})
 
-	t.Run("campaign success calls campaign repo directly", func(t *testing.T) {
+	t.Run("campaign success runs inside a transaction", func(t *testing.T) {
 		t.Parallel()
 		auth := mocks.NewMockTestAPIAuthService(t)
 		repos := mocks.NewMockTestAPICleanupRepoFactory(t)
 		pool := dbutilmocks.NewMockPool(t)
+		tx := dbutilmocks.NewMockDB(t)
 		campaignRepo := repomocks.NewMockCampaignRepo(t)
 		store := mocks.NewMockTokenStore(t)
 		log := logmocks.NewMockLogger(t)
 
+		txWrapper := pgxmockTx(t, tx)
+		pool.EXPECT().Begin(mock.Anything).Return(txWrapper, nil)
 		repos.EXPECT().NewCampaignRepo(mock.Anything).Return(campaignRepo)
 		campaignRepo.EXPECT().DeleteForTests(mock.Anything, "c-1").Return(nil)
 
@@ -308,10 +311,13 @@ func TestTestAPIHandler_CleanupEntity(t *testing.T) {
 		auth := mocks.NewMockTestAPIAuthService(t)
 		repos := mocks.NewMockTestAPICleanupRepoFactory(t)
 		pool := dbutilmocks.NewMockPool(t)
+		tx := dbutilmocks.NewMockDB(t)
 		campaignRepo := repomocks.NewMockCampaignRepo(t)
 		store := mocks.NewMockTokenStore(t)
 		log := logmocks.NewMockLogger(t)
 
+		txWrapper := pgxmockTx(t, tx)
+		pool.EXPECT().Begin(mock.Anything).Return(txWrapper, nil)
 		repos.EXPECT().NewCampaignRepo(mock.Anything).Return(campaignRepo)
 		campaignRepo.EXPECT().DeleteForTests(mock.Anything, "c-missing").Return(sql.ErrNoRows)
 
@@ -319,6 +325,118 @@ func TestTestAPIHandler_CleanupEntity(t *testing.T) {
 
 		w, _ := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/test/cleanup-entity",
 			testapi.CleanupEntityRequest{Type: testapi.Campaign, Id: "c-missing"})
+		require.Equal(t, http.StatusNotFound, w.Code)
+	})
+
+	t.Run("campaign_creator success splits compound id", func(t *testing.T) {
+		t.Parallel()
+		auth := mocks.NewMockTestAPIAuthService(t)
+		repos := mocks.NewMockTestAPICleanupRepoFactory(t)
+		pool := dbutilmocks.NewMockPool(t)
+		ccRepo := repomocks.NewMockCampaignCreatorRepo(t)
+		store := mocks.NewMockTokenStore(t)
+		log := logmocks.NewMockLogger(t)
+
+		repos.EXPECT().NewCampaignCreatorRepo(mock.Anything).Return(ccRepo)
+		ccRepo.EXPECT().
+			DeleteByCampaignAndCreatorForTests(mock.Anything, "camp-1", "creator-1").
+			Return(nil)
+
+		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, log), telegram.NewSentSpyStore(), "", nil, nil, log))
+
+		w, _ := doJSON[any](t, router, http.MethodPost, "/test/cleanup-entity",
+			testapi.CleanupEntityRequest{Type: testapi.CampaignCreator, Id: "camp-1:creator-1"})
+		require.Equal(t, http.StatusNoContent, w.Code)
+	})
+
+	t.Run("campaign_creator id without colon returns 422", func(t *testing.T) {
+		t.Parallel()
+		auth := mocks.NewMockTestAPIAuthService(t)
+		repos := mocks.NewMockTestAPICleanupRepoFactory(t)
+		pool := dbutilmocks.NewMockPool(t)
+		store := mocks.NewMockTokenStore(t)
+		log := logmocks.NewMockLogger(t)
+
+		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, log), telegram.NewSentSpyStore(), "", nil, nil, log))
+
+		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/test/cleanup-entity",
+			testapi.CleanupEntityRequest{Type: testapi.CampaignCreator, Id: "single-uuid"})
+		require.Equal(t, http.StatusUnprocessableEntity, w.Code)
+		require.Equal(t, domain.CodeValidation, resp.Error.Code)
+	})
+
+	t.Run("campaign_creator id with empty half returns 422", func(t *testing.T) {
+		t.Parallel()
+		auth := mocks.NewMockTestAPIAuthService(t)
+		repos := mocks.NewMockTestAPICleanupRepoFactory(t)
+		pool := dbutilmocks.NewMockPool(t)
+		store := mocks.NewMockTokenStore(t)
+		log := logmocks.NewMockLogger(t)
+
+		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, log), telegram.NewSentSpyStore(), "", nil, nil, log))
+
+		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/test/cleanup-entity",
+			testapi.CleanupEntityRequest{Type: testapi.CampaignCreator, Id: "camp-1:"})
+		require.Equal(t, http.StatusUnprocessableEntity, w.Code)
+		require.Equal(t, domain.CodeValidation, resp.Error.Code)
+	})
+
+	t.Run("campaign_creator not found returns 404", func(t *testing.T) {
+		t.Parallel()
+		auth := mocks.NewMockTestAPIAuthService(t)
+		repos := mocks.NewMockTestAPICleanupRepoFactory(t)
+		pool := dbutilmocks.NewMockPool(t)
+		ccRepo := repomocks.NewMockCampaignCreatorRepo(t)
+		store := mocks.NewMockTokenStore(t)
+		log := logmocks.NewMockLogger(t)
+
+		repos.EXPECT().NewCampaignCreatorRepo(mock.Anything).Return(ccRepo)
+		ccRepo.EXPECT().
+			DeleteByCampaignAndCreatorForTests(mock.Anything, "camp-1", "creator-missing").
+			Return(sql.ErrNoRows)
+
+		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, log), telegram.NewSentSpyStore(), "", nil, nil, log))
+
+		w, _ := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/test/cleanup-entity",
+			testapi.CleanupEntityRequest{Type: testapi.CampaignCreator, Id: "camp-1:creator-missing"})
+		require.Equal(t, http.StatusNotFound, w.Code)
+	})
+
+	t.Run("contract success calls contracts repo directly", func(t *testing.T) {
+		t.Parallel()
+		auth := mocks.NewMockTestAPIAuthService(t)
+		repos := mocks.NewMockTestAPICleanupRepoFactory(t)
+		pool := dbutilmocks.NewMockPool(t)
+		contractRepo := repomocks.NewMockContractRepo(t)
+		store := mocks.NewMockTokenStore(t)
+		log := logmocks.NewMockLogger(t)
+
+		repos.EXPECT().NewContractsRepo(mock.Anything).Return(contractRepo)
+		contractRepo.EXPECT().DeleteForTests(mock.Anything, "ct-1").Return(nil)
+
+		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, log), telegram.NewSentSpyStore(), "", nil, nil, log))
+
+		w, _ := doJSON[any](t, router, http.MethodPost, "/test/cleanup-entity",
+			testapi.CleanupEntityRequest{Type: testapi.Contract, Id: "ct-1"})
+		require.Equal(t, http.StatusNoContent, w.Code)
+	})
+
+	t.Run("contract not found returns 404", func(t *testing.T) {
+		t.Parallel()
+		auth := mocks.NewMockTestAPIAuthService(t)
+		repos := mocks.NewMockTestAPICleanupRepoFactory(t)
+		pool := dbutilmocks.NewMockPool(t)
+		contractRepo := repomocks.NewMockContractRepo(t)
+		store := mocks.NewMockTokenStore(t)
+		log := logmocks.NewMockLogger(t)
+
+		repos.EXPECT().NewContractsRepo(mock.Anything).Return(contractRepo)
+		contractRepo.EXPECT().DeleteForTests(mock.Anything, "ct-missing").Return(sql.ErrNoRows)
+
+		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, log), telegram.NewSentSpyStore(), "", nil, nil, log))
+
+		w, _ := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/test/cleanup-entity",
+			testapi.CleanupEntityRequest{Type: testapi.Contract, Id: "ct-missing"})
 		require.Equal(t, http.StatusNotFound, w.Code)
 	})
 }

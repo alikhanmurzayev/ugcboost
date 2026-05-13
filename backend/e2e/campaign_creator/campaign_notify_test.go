@@ -131,7 +131,7 @@ func addCreatorToCampaign(t *testing.T, c *apiclient.ClientWithResponses, adminT
 		}, testutil.WithAuth(adminToken))
 	require.NoError(t, err)
 	require.Equal(t, http.StatusCreated, resp.StatusCode())
-	testutil.RegisterCampaignCreatorCleanup(t, c, adminToken, campaignID.String(), creatorID)
+	testutil.RegisterCampaignCreatorCleanup(t, campaignID.String(), creatorID)
 }
 
 // expectBatchInvalid parses a 422 body into the typed batch-invalid shape.

@@ -2,15 +2,50 @@ package testutil
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	"github.com/alikhanmurzayev/ugcboost/backend/e2e/testclient"
 )
+
+// RegisterContractCleanup schedules a hard-delete of the contracts row via
+// POST /test/cleanup-entity (type=contract). The FK
+// campaign_creators.contract_id → contracts(id) is declared ON DELETE SET
+// NULL, so Postgres nulls the reference instead of blocking the DELETE — no
+// pre-step needed on the caller side. 404 is treated as success: the row may
+// already be gone (sibling cleanup or test-level reset).
+//
+// LIFO ordering: register this AFTER RegisterCampaignCreatorCleanup so the
+// contracts row dies first; the FK guarantees the campaign_creators row keeps
+// its other columns intact and is then hard-deleted by the campaign_creator
+// cleanup that fires next.
+func RegisterContractCleanup(t *testing.T, contractID string) {
+	t.Helper()
+	if _, err := uuid.Parse(contractID); err != nil {
+		t.Fatalf("RegisterContractCleanup: invalid contract id %q: %v", contractID, err)
+	}
+	RegisterCleanup(t, func(ctx context.Context) error {
+		tc := NewTestClient(t)
+		resp, err := tc.CleanupEntityWithResponse(ctx, testclient.CleanupEntityJSONRequestBody{
+			Type: testclient.Contract,
+			Id:   contractID,
+		})
+		if err != nil {
+			return fmt.Errorf("cleanup contract %s: %w", contractID, err)
+		}
+		if resp.StatusCode() != http.StatusNoContent && resp.StatusCode() != http.StatusNotFound {
+			return fmt.Errorf("cleanup contract %s: unexpected status %d",
+				contractID, resp.StatusCode())
+		}
+		return nil
+	})
+}
 
 // ExpectedCampaignContractSentText mirrors internal/telegram/notifier.go::
 // campaignContractSentText so e2e ассертит точный Phase-3 ContractSent
@@ -116,6 +151,16 @@ func SetupCampaignWithSigningCreator(t *testing.T) SigningCampaignFixture {
 		time.Sleep(150 * time.Millisecond)
 	}
 	require.NotEmpty(t, rec.AdditionalInfo, "TrustMe spy must capture our IIN after retried outbox ticks")
+
+	// Register contract cleanup AFTER campaign_creator cleanup is already in
+	// the LIFO stack (via SetupCampaignWithInvitedCreator → A1 add) so the
+	// contracts row dies first; FK ON DELETE SET NULL nulls
+	// campaign_creators.contract_id, then campaign_creator cleanup fires.
+	// Registered immediately after rec.AdditionalInfo is known non-empty so
+	// any later require.Fatalf in this fixture (DocumentId / spy stabilisation
+	// / baseline assertions) cannot leak the already-persisted contracts row.
+	RegisterContractCleanup(t, rec.AdditionalInfo)
+
 	require.NotNil(t, rec.DocumentId)
 	require.NotEmpty(t, *rec.DocumentId)
 

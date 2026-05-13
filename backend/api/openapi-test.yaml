@@ -463,7 +463,7 @@ components:
       properties:
         type:
           type: string
-          enum: [user, brand, creator_application, creator, campaign]
+          enum: [user, brand, creator_application, creator, campaign, campaign_creator, contract]
         id:
           type: string
 

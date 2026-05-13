@@ -236,7 +236,7 @@ func TestAddCampaignCreators(t *testing.T) {
 			testutil.WithAuth(adminToken))
 		require.NoError(t, err)
 		require.Equal(t, http.StatusCreated, first.StatusCode())
-		testutil.RegisterCampaignCreatorCleanup(t, adminClient, adminToken, campaignID.String(), creator.CreatorID)
+		testutil.RegisterCampaignCreatorCleanup(t, campaignID.String(), creator.CreatorID)
 
 		// Second add of the same creator hits the partial unique → 422.
 		second, err := adminClient.AddCampaignCreatorsWithResponse(context.Background(), campaignID,
@@ -269,7 +269,7 @@ func TestAddCampaignCreators(t *testing.T) {
 		// creator hard-delete via the FK without ON DELETE CASCADE.
 		if resp.JSON201 != nil {
 			for _, item := range resp.JSON201.Data.Items {
-				testutil.RegisterCampaignCreatorCleanup(t, adminClient, adminToken,
+				testutil.RegisterCampaignCreatorCleanup(t,
 					campaignID.String(), item.CreatorId.String())
 			}
 		}
@@ -405,7 +405,7 @@ func TestRemoveCampaignCreator(t *testing.T) {
 		// Register cleanup BEFORE the explicit Remove below — guards against
 		// require-failure between Add and Remove leaving an orphan row that
 		// blocks parent campaign / creator hard-delete via the FK.
-		testutil.RegisterCampaignCreatorCleanup(t, adminClient, adminToken,
+		testutil.RegisterCampaignCreatorCleanup(t,
 			campaignID.String(), creator.CreatorID)
 
 		addResp, err := adminClient.AddCampaignCreatorsWithResponse(context.Background(), campaignID,
@@ -522,7 +522,7 @@ func TestListCampaignCreators(t *testing.T) {
 		// Register cleanup BEFORE require asserts to guard row leaks on flake.
 		if addResp.JSON201 != nil {
 			for _, item := range addResp.JSON201.Data.Items {
-				testutil.RegisterCampaignCreatorCleanup(t, adminClient, adminToken,
+				testutil.RegisterCampaignCreatorCleanup(t,
 					campaignID.String(), item.CreatorId.String())
 			}
 		}
@@ -671,7 +671,7 @@ func TestPatchCampaignCreator(t *testing.T) {
 		campaignID := setupCampaign(t, adminClient, adminToken, "ccPatch-badstatus-"+testutil.UniqueEmail("camp"))
 		creator := testutil.SetupApprovedCreator(t, defaultCreatorOpts(testutil.UniqueIIN()[6:]))
 		creatorUUID := uuid.MustParse(creator.CreatorID)
-		testutil.RegisterCampaignCreatorCleanup(t, adminClient, adminToken,
+		testutil.RegisterCampaignCreatorCleanup(t,
 			campaignID.String(), creator.CreatorID)
 
 		// Add as `planned` (default initial state — not `signed`).

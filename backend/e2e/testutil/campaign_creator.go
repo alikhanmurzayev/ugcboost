@@ -74,26 +74,36 @@ func RegisterCampaignCreatorForceCleanup(t *testing.T, campaignID, creatorID str
 	})
 }
 
-// RegisterCampaignCreatorCleanup schedules a DELETE /campaigns/{id}/creators/{creatorId}
-// (admin) for the given pair after the test. 404 is treated as success — the
-// row may have been removed already by an inline assertion or sibling
-// cleanup. The campaign_creators FK to campaigns has no ON DELETE CASCADE, so
-// LIFO cleanup order MUST remove campaign_creators rows before the parent
-// campaign / creator rows; tests register this AFTER the parent
-// RegisterCampaignCleanup / RegisterCreatorCleanup so it fires first.
-func RegisterCampaignCreatorCleanup(t *testing.T, c *apiclient.ClientWithResponses,
-	adminToken, campaignID, creatorID string) {
+// RegisterCampaignCreatorCleanup schedules a hard-delete of the (campaign_id,
+// creator_id) row via POST /test/cleanup-entity (type=campaign_creator). The
+// production admin DELETE /campaigns/{id}/creators/{creatorId} refuses to
+// operate on rows in terminal statuses (agreed / signing / signed / declined),
+// so cleanup that goes through the production path silently leaks 422s and
+// leaves rows in staging. The testapi endpoint hard-deletes without the
+// business-layer guard. 404 is treated as success — the row may have been
+// removed already by an inline assertion or sibling cleanup. The
+// campaign_creators FK to campaigns has no ON DELETE CASCADE, so LIFO cleanup
+// order MUST remove campaign_creators rows before the parent campaign /
+// creator rows; tests register this AFTER the parent RegisterCampaignCleanup /
+// RegisterCreatorCleanup so it fires first.
+//
+// Compound id: cleanup-entity dispatches by (campaign_id, creator_id) — the
+// pair is what callers already know; the campaign_creators.id UUID is often
+// not even read by the test (e.g. approve_with_campaigns flows).
+func RegisterCampaignCreatorCleanup(t *testing.T, campaignID, creatorID string) {
 	t.Helper()
-	campUUID, err := uuid.Parse(campaignID)
-	if err != nil {
+	if _, err := uuid.Parse(campaignID); err != nil {
 		t.Fatalf("RegisterCampaignCreatorCleanup: invalid campaign id %q: %v", campaignID, err)
 	}
-	creatorUUID, err := uuid.Parse(creatorID)
-	if err != nil {
+	if _, err := uuid.Parse(creatorID); err != nil {
 		t.Fatalf("RegisterCampaignCreatorCleanup: invalid creator id %q: %v", creatorID, err)
 	}
 	RegisterCleanup(t, func(ctx context.Context) error {
-		resp, err := c.RemoveCampaignCreatorWithResponse(ctx, campUUID, creatorUUID, WithAuth(adminToken))
+		tc := NewTestClient(t)
+		resp, err := tc.CleanupEntityWithResponse(ctx, testclient.CleanupEntityJSONRequestBody{
+			Type: testclient.CampaignCreator,
+			Id:   campaignID + ":" + creatorID,
+		})
 		if err != nil {
 			return fmt.Errorf("cleanup campaign_creator (%s, %s): %w", campaignID, creatorID, err)
 		}

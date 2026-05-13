@@ -26,6 +26,15 @@ const (
 	AuditLogColumnCreatedAt  = "created_at"
 )
 
+// Audit entity_type values. Mirrors service.AuditEntityType* — repo-side
+// DeleteForTests cleanup writes WHERE entity_type = $1 against these, so the
+// constants live here to keep test cleanup independent of the service package.
+const (
+	AuditEntityTypeCreatorApplication = "creator_application"
+	AuditEntityTypeCampaign           = "campaign"
+	AuditEntityTypeCampaignCreator    = "campaign_creator"
+)
+
 // AuditLogRow maps to the audit_logs table. ActorID is nullable: public
 // endpoints (e.g. creator application submission) record audit entries
 // without an authenticated user (see migration 20260420181757).
