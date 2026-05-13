@@ -69,6 +69,46 @@ func (_c *MockSpyStore_Clear_Call) RunAndReturn(run func()) *MockSpyStore_Clear_
 	return _c
 }
 
+// ClearFail provides a mock function for the type MockSpyStore
+func (_mock *MockSpyStore) ClearFail(iin string) {
+	_mock.Called(iin)
+	return
+}
+
+// MockSpyStore_ClearFail_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ClearFail'
+type MockSpyStore_ClearFail_Call struct {
+	*mock.Call
+}
+
+// ClearFail is a helper method to define mock.On call
+//   - iin string
+func (_e *MockSpyStore_Expecter) ClearFail(iin interface{}) *MockSpyStore_ClearFail_Call {
+	return &MockSpyStore_ClearFail_Call{Call: _e.mock.On("ClearFail", iin)}
+}
+
+func (_c *MockSpyStore_ClearFail_Call) Run(run func(iin string)) *MockSpyStore_ClearFail_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 string
+		if args[0] != nil {
+			arg0 = args[0].(string)
+		}
+		run(
+			arg0,
+		)
+	})
+	return _c
+}
+
+func (_c *MockSpyStore_ClearFail_Call) Return() *MockSpyStore_ClearFail_Call {
+	_c.Call.Return()
+	return _c
+}
+
+func (_c *MockSpyStore_ClearFail_Call) RunAndReturn(run func(iin string)) *MockSpyStore_ClearFail_Call {
+	_c.Run(run)
+	return _c
+}
+
 // List provides a mock function for the type MockSpyStore
 func (_mock *MockSpyStore) List() []trustmeport.SentRecord {
 	ret := _mock.Called()
@@ -173,26 +213,25 @@ func (_c *MockSpyStore_RegisterDocument_Call) RunAndReturn(run func(additionalIn
 	return _c
 }
 
-// RegisterFailNext provides a mock function for the type MockSpyStore
-func (_mock *MockSpyStore) RegisterFailNext(iin string, reason string, count int) {
-	_mock.Called(iin, reason, count)
+// RegisterFail provides a mock function for the type MockSpyStore
+func (_mock *MockSpyStore) RegisterFail(iin string, reason string) {
+	_mock.Called(iin, reason)
 	return
 }
 
-// MockSpyStore_RegisterFailNext_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'RegisterFailNext'
-type MockSpyStore_RegisterFailNext_Call struct {
+// MockSpyStore_RegisterFail_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'RegisterFail'
+type MockSpyStore_RegisterFail_Call struct {
 	*mock.Call
 }
 
-// RegisterFailNext is a helper method to define mock.On call
+// RegisterFail is a helper method to define mock.On call
 //   - iin string
 //   - reason string
-//   - count int
-func (_e *MockSpyStore_Expecter) RegisterFailNext(iin interface{}, reason interface{}, count interface{}) *MockSpyStore_RegisterFailNext_Call {
-	return &MockSpyStore_RegisterFailNext_Call{Call: _e.mock.On("RegisterFailNext", iin, reason, count)}
+func (_e *MockSpyStore_Expecter) RegisterFail(iin interface{}, reason interface{}) *MockSpyStore_RegisterFail_Call {
+	return &MockSpyStore_RegisterFail_Call{Call: _e.mock.On("RegisterFail", iin, reason)}
 }
 
-func (_c *MockSpyStore_RegisterFailNext_Call) Run(run func(iin string, reason string, count int)) *MockSpyStore_RegisterFailNext_Call {
+func (_c *MockSpyStore_RegisterFail_Call) Run(run func(iin string, reason string)) *MockSpyStore_RegisterFail_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 string
 		if args[0] != nil {
@@ -202,25 +241,20 @@ func (_c *MockSpyStore_RegisterFailNext_Call) Run(run func(iin string, reason st
 		if args[1] != nil {
 			arg1 = args[1].(string)
 		}
-		var arg2 int
-		if args[2] != nil {
-			arg2 = args[2].(int)
-		}
 		run(
 			arg0,
 			arg1,
-			arg2,
 		)
 	})
 	return _c
 }
 
-func (_c *MockSpyStore_RegisterFailNext_Call) Return() *MockSpyStore_RegisterFailNext_Call {
+func (_c *MockSpyStore_RegisterFail_Call) Return() *MockSpyStore_RegisterFail_Call {
 	_c.Call.Return()
 	return _c
 }
 
-func (_c *MockSpyStore_RegisterFailNext_Call) RunAndReturn(run func(iin string, reason string, count int)) *MockSpyStore_RegisterFailNext_Call {
+func (_c *MockSpyStore_RegisterFail_Call) RunAndReturn(run func(iin string, reason string)) *MockSpyStore_RegisterFail_Call {
 	_c.Run(run)
 	return _c
 }

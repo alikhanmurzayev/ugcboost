@@ -266,14 +266,17 @@ type TrustMeSentRecord struct {
 	ShortUrl *string `json:"shortUrl,omitempty"`
 }
 
-// TrustMeSpyFailNextRequest defines model for TrustMeSpyFailNextRequest.
-type TrustMeSpyFailNextRequest struct {
-	// Count How many subsequent calls on this IIN to fail. Defaults to 1.
-	Count *int `json:"count,omitempty"`
+// TrustMeSpyClearFailRequest defines model for TrustMeSpyClearFailRequest.
+type TrustMeSpyClearFailRequest struct {
+	// Iin IIN whose fail registration must be dropped.
+	Iin string `json:"iin"`
+}
 
-	// Iin IIN of the creator whose next SendToSign should fail. Tests
-	// register BEFORE the creator agrees, so the outbox tick consumes
-	// the registered failure on its first attempt at this IIN. Mirrors
+// TrustMeSpyFailRequest defines model for TrustMeSpyFailRequest.
+type TrustMeSpyFailRequest struct {
+	// Iin IIN of the creator whose SendToSign should fail. Tests register
+	// BEFORE the creator agrees; every outbox tick that attempts
+	// SendToSign on this IIN returns the registered reason. Mirrors
 	// telegramSpyFailNext (chatId-keyed) — no wildcard, otherwise a
 	// parallel test in another package would consume our failure.
 	Iin string `json:"iin"`
@@ -341,8 +344,11 @@ type TelegramSpyFakeChatJSONRequestBody = TelegramSpyFakeChatRequest
 // SignTMAInitDataJSONRequestBody defines body for SignTMAInitData for application/json ContentType.
 type SignTMAInitDataJSONRequestBody = SignTMAInitDataRequest
 
-// TrustMeSpyFailNextJSONRequestBody defines body for TrustMeSpyFailNext for application/json ContentType.
-type TrustMeSpyFailNextJSONRequestBody = TrustMeSpyFailNextRequest
+// TrustMeSpyClearFailJSONRequestBody defines body for TrustMeSpyClearFail for application/json ContentType.
+type TrustMeSpyClearFailJSONRequestBody = TrustMeSpyClearFailRequest
+
+// TrustMeSpyFailJSONRequestBody defines body for TrustMeSpyFail for application/json ContentType.
+type TrustMeSpyFailJSONRequestBody = TrustMeSpyFailRequest
 
 // TrustMeSpyRegisterDocumentJSONRequestBody defines body for TrustMeSpyRegisterDocument for application/json ContentType.
 type TrustMeSpyRegisterDocumentJSONRequestBody = TrustMeSpyRegisterDocumentRequest

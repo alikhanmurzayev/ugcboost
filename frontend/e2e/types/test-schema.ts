@@ -297,7 +297,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/test/trustme/spy-fail-next": {
+    "/test/trustme/spy-fail": {
         parameters: {
             query?: never;
             header?: never;
@@ -307,12 +307,39 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Force the next TrustMe SendToSign for additionalInfo to fail
-         * @description Registers a synthetic failure for the next `count` SendToSign calls
-         *     with the given AdditionalInfo. Used to exercise Phase 2c failure +
-         *     Phase 0 recovery in e2e. NEVER enabled in production.
+         * Make every TrustMe SendToSign for the IIN fail until cleared
+         * @description Registers a synthetic failure for SendToSign on the given IIN. Every
+         *     consume returns the registered reason — the registration persists
+         *     until explicitly dropped via /test/trustme/spy-clear-fail. Used to
+         *     exercise Phase 2c failure + Phase 0 recovery in e2e under parallel
+         *     staging workers, where count-based one-shot semantics are racy
+         *     (Phase 0 recovery could consume the only one-shot before the test
+         *     observes it). NEVER enabled in production.
          */
-        post: operations["trustMeSpyFailNext"];
+        post: operations["trustMeSpyFail"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/test/trustme/spy-clear-fail": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Drop the spy fail registration for the IIN
+         * @description Removes the previously registered fail for the IIN. Subsequent
+         *     SendToSign calls proceed normally. No-op when no registration
+         *     exists. Pair endpoint for /test/trustme/spy-fail. NEVER enabled in
+         *     production.
+         */
+        post: operations["trustMeSpyClearFail"];
         delete?: never;
         options?: never;
         head?: never;
@@ -480,19 +507,21 @@ export interface components {
         TrustMeSpyListResult: {
             data: components["schemas"]["TrustMeSpyListData"];
         };
-        TrustMeSpyFailNextRequest: {
+        TrustMeSpyFailRequest: {
             /**
-             * @description IIN of the creator whose next SendToSign should fail. Tests
-             *     register BEFORE the creator agrees, so the outbox tick consumes
-             *     the registered failure on its first attempt at this IIN. Mirrors
+             * @description IIN of the creator whose SendToSign should fail. Tests register
+             *     BEFORE the creator agrees; every outbox tick that attempts
+             *     SendToSign on this IIN returns the registered reason. Mirrors
              *     telegramSpyFailNext (chatId-keyed) — no wildcard, otherwise a
              *     parallel test in another package would consume our failure.
              */
             iin: string;
             /** @description Optional override for the error string the spy returns. */
             reason?: string;
-            /** @description How many subsequent calls on this IIN to fail. Defaults to 1. */
-            count?: number;
+        };
+        TrustMeSpyClearFailRequest: {
+            /** @description IIN whose fail registration must be dropped. */
+            iin: string;
         };
         TrustMeSpyRegisterDocumentRequest: {
             additionalInfo: string;
@@ -923,7 +952,7 @@ export interface operations {
             };
         };
     };
-    trustMeSpyFailNext: {
+    trustMeSpyFail: {
         parameters: {
             query?: never;
             header?: never;
@@ -932,11 +961,42 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["TrustMeSpyFailNextRequest"];
+                "application/json": components["schemas"]["TrustMeSpyFailRequest"];
             };
         };
         responses: {
             /** @description Failure registered */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    trustMeSpyClearFail: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TrustMeSpyClearFailRequest"];
+            };
+        };
+        responses: {
+            /** @description Fail cleared (or no-op) */
             204: {
                 headers: {
                     [name: string]: unknown;

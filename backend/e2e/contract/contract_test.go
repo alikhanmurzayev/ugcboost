@@ -70,22 +70,38 @@ func spyList(t *testing.T) []testclient.TrustMeSentRecord {
 	return resp.JSON200.Data.Items
 }
 
-func spyFailNext(t *testing.T, iin string, count int) {
+// spyFail регистрирует постоянный синтетический сбой SendToSign на IIN —
+// каждый attempt будет падать с reason до явного spyClearFail. Аналог
+// telegramSpyFailNext (chat-keyed), но для TrustMe SpyOnlyClient. Устойчив
+// к параллельным staging-worker тикам: pattern теста — register fail →
+// дёрнуть worker один или несколько раз → проверить, что ВСЕ записи по
+// нашему IIN зафейлены → clear fail → дёрнуть worker → success.
+func spyFail(t *testing.T, iin string) {
 	t.Helper()
 	tc := testutil.NewTestClient(t)
-	body := testclient.TrustMeSpyFailNextRequest{
-		Iin:   iin,
-		Count: &count,
-	}
-	resp, err := tc.TrustMeSpyFailNextWithResponse(context.Background(), body)
+	resp, err := tc.TrustMeSpyFailWithResponse(context.Background(),
+		testclient.TrustMeSpyFailRequest{Iin: iin})
 	require.NoError(t, err)
 	require.Equal(t, http.StatusNoContent, resp.StatusCode())
 }
 
-// spyMatchingByIIN читает spy-list и фильтрует по нашему IIN. Повторно
-// вызывается между outbox-тиками: каждый тик добавляет ровно одну запись
-// (fail или success), мы фиксируем factual после каждого тика, не угадываем
-// порядок «оба тика прошли — посмотрим что в spy».
+// spyClearFail снимает fail-регистрацию для IIN, чтобы следующий
+// SendToSign на этот IIN прошёл успешно.
+func spyClearFail(t *testing.T, iin string) {
+	t.Helper()
+	tc := testutil.NewTestClient(t)
+	resp, err := tc.TrustMeSpyClearFailWithResponse(context.Background(),
+		testclient.TrustMeSpyClearFailRequest{Iin: iin})
+	require.NoError(t, err)
+	require.Equal(t, http.StatusNoContent, resp.StatusCode())
+}
+
+// spyMatchingByIIN читает spy-list и фильтрует по нашему IIN. Возвращает
+// все записи в порядке вставки — каждый outbox-тик добавляет ровно одну
+// запись на наш ряд, но параллельные worker-инстансы могут добавлять
+// дополнительные между нашими шагами; тест должен ассертить инварианты
+// (все pre-clear записи — с Err, post-clear — хотя бы одна без Err),
+// а не точное количество.
 func spyMatchingByIIN(t *testing.T, iin string) []testclient.TrustMeSentRecord {
 	t.Helper()
 	var ours []testclient.TrustMeSentRecord
@@ -95,6 +111,17 @@ func spyMatchingByIIN(t *testing.T, iin string) []testclient.TrustMeSentRecord {
 		}
 	}
 	return ours
+}
+
+// successfulAttempt returns the first record without Err (i.e. SendToSign
+// completed). Used to assert post-clear-fail recovery converged.
+func successfulAttempt(records []testclient.TrustMeSentRecord) (testclient.TrustMeSentRecord, bool) {
+	for _, r := range records {
+		if r.Err == nil || *r.Err == "" {
+			return r, true
+		}
+	}
+	return testclient.TrustMeSentRecord{}, false
 }
 
 // pdfShaIsHex64 — sanity-чек: spy положил полный hex sha256 (64 chars).
@@ -189,57 +216,83 @@ func TestContractSending(t *testing.T) {
 		fx := testutil.SetupCampaignWithInvitedCreator(t)
 		initData := testutil.SignInitData(t, fx.TelegramUserID, testutil.SignInitDataOpts{})
 
-		// Регистрируем fail на наш IIN ДО agree, чтобы первый же SendToSign
-		// от outbox'а гарантированно был зафейлен. IIN-key изолирует нас от
-		// параллельных тестов в других packages, которые шарят spy-store.
-		spyFailNext(t, fx.CreatorIIN, 1)
+		// Sticky fail на наш IIN ДО agree: каждый SendToSign на этот IIN
+		// будет падать до явного spyClearFail. Под параллельным staging-
+		// worker pool count-based one-shot был flaky — Phase 0 другого тика
+		// мог consume единственную регистрацию между Phase 1 INSERT и нашим
+		// проверкой spy.
+		spyFail(t, fx.CreatorIIN)
+		t.Cleanup(func() { spyClearFail(t, fx.CreatorIIN) })
 
 		status, _ := tmaPostAgree(t, fx.SecretToken, initData)
 		require.Equal(t, http.StatusOK, status)
 
-		// Tick #1: Phase 1 создаёт contract_id, Phase 2b persist'ит PDF,
-		// Phase 2c вызывает SendToSign — spy фейлит по нашему IIN. Ряд
-		// остаётся orphan'ом (contract без trustme_document_id).
+		// Phase 1 создаёт contract_id, Phase 2b persist'ит PDF, Phase 2c
+		// вызывает SendToSign — spy фейлит. Параллельные worker-инстансы
+		// могут добавить ещё попытки Phase 0 recovery на тот же orphan;
+		// все они должны fail, пока sticky активен. Дёргаем worker'а один
+		// раз синхронно — после этого хотя бы одна fail-запись гарантирована.
 		runOutboxOnce(t)
 
 		afterFail := spyMatchingByIIN(t, fx.CreatorIIN)
-		// Register cleanup BEFORE require.Len — Phase 1 already INSERT'ed the
-		// contracts row even though SendToSign failed; spy.AdditionalInfo
-		// carries the internal contracts.id regardless of TrustMe outcome.
+		// Register cleanup BEFORE assertions — Phase 1 already INSERT'ed the
+		// contracts row even though SendToSign failed. spy.AdditionalInfo
+		// carries the internal contracts.id regardless of TrustMe outcome;
+		// any retry on the same row reuses it, so registering for every
+		// distinct AdditionalInfo here is safe and de-duplicating.
+		registeredContracts := make(map[string]struct{})
 		for _, r := range afterFail {
+			if _, seen := registeredContracts[r.AdditionalInfo]; seen {
+				continue
+			}
+			registeredContracts[r.AdditionalInfo] = struct{}{}
 			testutil.RegisterContractCleanup(t, r.AdditionalInfo)
 		}
-		require.Len(t, afterFail, 1,
-			"Tick #1 must produce exactly one SendToSign attempt on our IIN")
-		require.NotNil(t, afterFail[0].Err)
-		require.NotEmpty(t, *afterFail[0].Err, "Tick #1 attempt must record err (spyFailNext)")
-		require.True(t, afterFail[0].DocumentId == nil || *afterFail[0].DocumentId == "",
-			"failed attempt must not carry a document_id")
 
-		// Tick #2: spyFailNext exhausted (count=1). Phase 0 поднимает orphan
+		require.NotEmpty(t, afterFail,
+			"after Tick #1 spy must record at least one SendToSign attempt on our IIN")
+		for i, r := range afterFail {
+			require.NotNilf(t, r.Err, "attempt %d must record err while sticky fail is active", i)
+			require.NotEmptyf(t, *r.Err, "attempt %d err must be non-empty", i)
+			require.Truef(t, r.DocumentId == nil || *r.DocumentId == "",
+				"attempt %d must not carry a document_id (SendToSign failed)", i)
+		}
+		// All failed attempts share the same contracts.id — Phase 1 INSERT'ит
+		// один ряд, Phase 0 recovery его же re-pick'ает.
+		firstFail := afterFail[0]
+		for _, r := range afterFail[1:] {
+			require.Equalf(t, firstFail.AdditionalInfo, r.AdditionalInfo,
+				"all retry attempts must share the same contracts.id")
+			require.Equalf(t, firstFail.PdfSha256, r.PdfSha256,
+				"retry attempts must not re-render the PDF (Decision #10)")
+			require.Equalf(t, firstFail.NumberDial, r.NumberDial,
+				"NumberDial (UGC-{serial}) must equal across retries")
+		}
+
+		// Clear sticky fail и дёргаем worker'а — Phase 0 поднимает orphan
 		// (search вернёт ErrTrustMeNotFound) → resend с persisted PDF.
+		// Параллельные worker'ы тоже могут подобрать ряд после clear — нам
+		// важен инвариант "хотя бы одна success запись с тем же contracts.id
+		// и тем же PdfSha256", а не точный count.
+		spyClearFail(t, fx.CreatorIIN)
 		runOutboxOnce(t)
 
 		afterRecovery := spyMatchingByIIN(t, fx.CreatorIIN)
-		require.Len(t, afterRecovery, 2,
-			"Tick #2 must add a recovery SendToSign on our IIN")
-		fail, success := afterRecovery[0], afterRecovery[1]
+		require.Greater(t, len(afterRecovery), len(afterFail),
+			"Tick after clear must add at least one new SendToSign attempt")
 
-		require.NotNil(t, fail.Err)
-		require.NotEmpty(t, *fail.Err)
-		require.True(t, fail.DocumentId == nil || *fail.DocumentId == "")
-		require.True(t, success.Err == nil || *success.Err == "",
-			"recovery attempt must succeed")
+		success, ok := successfulAttempt(afterRecovery)
+		require.True(t, ok, "after clear, at least one attempt on our IIN must succeed")
 		require.NotNil(t, success.DocumentId)
 		require.NotEmpty(t, *success.DocumentId)
 
-		// Sha256 PDF идентичный — Phase 0 resend без re-render (Decision #10).
-		require.Equal(t, fail.PdfSha256, success.PdfSha256,
-			"PdfSha256 must equal between fail and recovery (no re-render)")
-		require.Equal(t, fail.AdditionalInfo, success.AdditionalInfo,
-			"additionalInfo (=contract.id) must equal between attempts")
-		require.Equal(t, fail.NumberDial, success.NumberDial,
-			"NumberDial (UGC-{serial}) одинаковый — serial_number один на ряд")
+		// Same contracts.id, same PDF — recovery resend без re-render.
+		require.Equal(t, firstFail.AdditionalInfo, success.AdditionalInfo,
+			"recovery success must reuse the same contracts.id as the failed attempts")
+		require.Equal(t, firstFail.PdfSha256, success.PdfSha256,
+			"recovery success must reuse the persisted PDF (Decision #10)")
+		require.Equal(t, firstFail.NumberDial, success.NumberDial,
+			"NumberDial (UGC-{serial}) must equal across fail and recovery")
 	})
 
 	t.Run("known orphan finalize without re-send", func(t *testing.T) {

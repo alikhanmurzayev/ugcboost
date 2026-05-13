@@ -68,11 +68,11 @@ func TestHashPDFBase64_Empty(t *testing.T) {
 	require.Len(t, HashPDFBase64("X"), 64)
 }
 
-func TestSpyClient_SendToSign_FailNext(t *testing.T) {
+func TestSpyClient_SendToSign_Fail(t *testing.T) {
 	t.Parallel()
 
 	c, store := newClient(t)
-	store.RegisterFailNext("880101300123", "synthetic 502", 1)
+	store.RegisterFail("880101300123", "synthetic 502")
 
 	// SendToSign with a different IIN must NOT consume the registered failure.
 	otherIIN, err := c.SendToSign(context.Background(), trustme.SendToSignInput{
@@ -84,25 +84,30 @@ func TestSpyClient_SendToSign_FailNext(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEmpty(t, otherIIN.DocumentID)
 
-	// SendToSign with the registered IIN consumes it: error returned, error
-	// recorded in spy.
-	_, err = c.SendToSign(context.Background(), trustme.SendToSignInput{
-		AdditionalInfo: "ct-1",
-		Requisites: []trustme.Requisite{{
-			FIO: "X", IINBIN: "880101300123", PhoneNumber: "+77",
-		}},
-	})
-	require.Error(t, err)
-	require.Equal(t, "synthetic 502", err.Error())
+	// Two consecutive attempts on the registered IIN — both fail with the
+	// same reason: registration is sticky, persists across consumes.
+	for i := 0; i < 2; i++ {
+		_, err = c.SendToSign(context.Background(), trustme.SendToSignInput{
+			AdditionalInfo: "ct-1",
+			Requisites: []trustme.Requisite{{
+				FIO: "X", IINBIN: "880101300123", PhoneNumber: "+77",
+			}},
+		})
+		require.Errorf(t, err, "attempt %d must fail while registration is live", i)
+		require.Equal(t, "synthetic 502", err.Error())
+	}
 
 	records := store.List()
-	require.Len(t, records, 2)
+	require.Len(t, records, 3)
 	require.Empty(t, records[0].Err, "first call (other IIN) succeeded")
 	require.NotEmpty(t, records[0].DocumentID)
 	require.Equal(t, "synthetic 502", records[1].Err, "second call (matching IIN) failed")
 	require.Empty(t, records[1].DocumentID)
+	require.Equal(t, "synthetic 502", records[2].Err, "third call (matching IIN, sticky) failed again")
+	require.Empty(t, records[2].DocumentID)
 
-	// After the count budget is exhausted, the next call on the same IIN succeeds.
+	// After explicit ClearFail, the next call on the same IIN succeeds.
+	store.ClearFail("880101300123")
 	got, err := c.SendToSign(context.Background(), trustme.SendToSignInput{
 		AdditionalInfo: "ct-1",
 		Requisites: []trustme.Requisite{{

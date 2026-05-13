@@ -453,27 +453,37 @@ func (h *TestAPIHandler) TrustMeSpyClear(_ context.Context, _ testapi.TrustMeSpy
 	return testapi.TrustMeSpyClear204Response{}, nil
 }
 
-// TrustMeSpyFailNext handles POST /test/trustme/spy-fail-next. Failure is
-// keyed by IIN — known to the test before the creator agrees, isolates
-// our failure from parallel tests in other packages that share this
-// backend's spy-store.
-func (h *TestAPIHandler) TrustMeSpyFailNext(_ context.Context, request testapi.TrustMeSpyFailNextRequestObject) (testapi.TrustMeSpyFailNextResponseObject, error) {
+// TrustMeSpyFail handles POST /test/trustme/spy-fail. Registers a persistent
+// synthetic failure for SendToSign on the given IIN — every attempt fails
+// until the registration is dropped via TrustMeSpyClearFail. Keyed by IIN
+// (known to the test before the creator agrees) so a parallel test in
+// another package cannot consume our failure.
+func (h *TestAPIHandler) TrustMeSpyFail(_ context.Context, request testapi.TrustMeSpyFailRequestObject) (testapi.TrustMeSpyFailResponseObject, error) {
 	if h.trustMeSpy == nil {
 		return nil, domain.ErrNotFound
 	}
-	if request.Body == nil {
-		return nil, domain.NewValidationError(domain.CodeValidation, "body is required")
+	if request.Body == nil || request.Body.Iin == "" {
+		return nil, domain.NewValidationError(domain.CodeValidation, "iin is required")
 	}
 	reason := ""
 	if request.Body.Reason != nil {
 		reason = *request.Body.Reason
 	}
-	count := 1
-	if request.Body.Count != nil && *request.Body.Count > 0 {
-		count = *request.Body.Count
+	h.trustMeSpy.RegisterFail(request.Body.Iin, reason)
+	return testapi.TrustMeSpyFail204Response{}, nil
+}
+
+// TrustMeSpyClearFail handles POST /test/trustme/spy-clear-fail. Drops the
+// fail registration for the IIN. No-op when nothing registered.
+func (h *TestAPIHandler) TrustMeSpyClearFail(_ context.Context, request testapi.TrustMeSpyClearFailRequestObject) (testapi.TrustMeSpyClearFailResponseObject, error) {
+	if h.trustMeSpy == nil {
+		return nil, domain.ErrNotFound
 	}
-	h.trustMeSpy.RegisterFailNext(request.Body.Iin, reason, count)
-	return testapi.TrustMeSpyFailNext204Response{}, nil
+	if request.Body == nil || request.Body.Iin == "" {
+		return nil, domain.NewValidationError(domain.CodeValidation, "iin is required")
+	}
+	h.trustMeSpy.ClearFail(request.Body.Iin)
+	return testapi.TrustMeSpyClearFail204Response{}, nil
 }
 
 // TrustMeSpyRegisterDocument handles POST /test/trustme/spy-register-document.
