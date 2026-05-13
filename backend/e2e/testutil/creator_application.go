@@ -316,6 +316,12 @@ func LinkTelegramToApplication(t *testing.T, applicationID string) TelegramUpdat
 	tc := NewTestClient(t)
 	upd := DefaultTelegramUpdate(t)
 	upd.Text = "/start " + applicationID
+	// The /start inbound + the post-commit welcome outbound both land in
+	// telegram_messages for this chat. Register cleanup here so any caller
+	// of LinkTelegramToApplication transparently drops those rows in LIFO
+	// teardown — without this the recorder rows would accumulate across
+	// every e2e run that links a synthetic creator.
+	CleanupTelegramMessagesByChat(t, upd.ChatID)
 	since := time.Now().UTC()
 	replies := SendTelegramUpdate(t, tc, upd)
 	require.Empty(t, replies, "telegram bot must not produce a synchronous reply on success-link (welcome is async via Notifier)")

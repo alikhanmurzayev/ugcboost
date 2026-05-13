@@ -326,7 +326,6 @@ func TestTelegramFallback(t *testing.T) {
 			t.Parallel()
 			upd := testutil.DefaultTelegramUpdate(t)
 			upd.Text = tc2.text
-			testutil.CleanupTelegramMessagesByChat(t, upd.ChatID)
 			require.Equal(t, tc2.want, singleReply(t, testutil.SendTelegramUpdate(t, tc, upd), upd.ChatID))
 
 			// Recorder writes one inbound row per private update (regardless of

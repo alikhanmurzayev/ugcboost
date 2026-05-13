@@ -90,7 +90,7 @@ func TestTrustMeWebhook(t *testing.T) {
 
 		// Recorder writes the signed notify row alongside the spy capture.
 		// Status not pinned (see other recorder asserts for the rationale).
-		testutil.CleanupTelegramMessagesByChat(t, fx.CreatorTelegramID)
+		// Cleanup auto-registered by LinkTelegramToApplication.
 		row := testutil.AssertTelegramMessageRecorded(t, fx.AdminClient, fx.AdminToken, fx.CreatorTelegramID,
 			testutil.TelegramMessageMatcher{Direction: "outbound", TextContains: signedMsg.Text})
 		require.Equal(t, signedMsg.Text, row.Text)

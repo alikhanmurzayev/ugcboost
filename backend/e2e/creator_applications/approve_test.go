@@ -232,8 +232,8 @@ func TestApproveCreatorApplication(t *testing.T) {
 		// Outbound notify lands in telegram_messages with direction=outbound
 		// and the same body the spy captured. Status is not pinned — staging
 		// TeeSender mode reports failed sends for synthetic chat ids; the
-		// row itself is the invariant under test.
-		testutil.CleanupTelegramMessagesByChat(t, fx.TelegramUserID)
+		// row itself is the invariant under test. Cleanup is auto-registered
+		// inside LinkTelegramToApplication (called from the fixture setup).
 		row := testutil.AssertTelegramMessageRecorded(t, c, fx.AdminToken, fx.TelegramUserID,
 			testutil.TelegramMessageMatcher{Direction: "outbound", TextContains: msgs[0].Text})
 		require.Equal(t, msgs[0].Text, row.Text)

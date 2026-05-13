@@ -763,8 +763,7 @@ func TestRemindCampaignCreatorsSigning(t *testing.T) {
 		// reminder text (status not pinned — staging TeeSender flips it to
 		// failed for synthetic chat ids). Failing creator: outbound with the
 		// canonical "bot was blocked" error captured in the error column.
-		testutil.CleanupTelegramMessagesByChat(t, fxDelivered.TelegramUserID)
-		testutil.CleanupTelegramMessagesByChat(t, fxFailing.TelegramUserID)
+		// Cleanup for both chat ids is auto-registered by LinkTelegramToApplication.
 		deliveredRow := testutil.AssertTelegramMessageRecorded(t, adminClient, adminToken, fxDelivered.TelegramUserID,
 			testutil.TelegramMessageMatcher{Direction: "outbound", TextContains: deliveredMsg.Text})
 		require.Equal(t, deliveredMsg.Text, deliveredRow.Text)

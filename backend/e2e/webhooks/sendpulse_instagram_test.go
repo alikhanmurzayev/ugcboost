@@ -119,11 +119,9 @@ func TestSendPulseInstagramWebhook(t *testing.T) {
 
 		// Recorder writes the verification-approved outbound row alongside
 		// the spy capture. Match on text body to disambiguate from the
-		// earlier welcome row. Status is intentionally not pinned — in the
-		// staging TeeSender mode synthetic chat ids surface as "chat not
-		// found" and the recorder stores status='failed' (the row itself
-		// is the invariant under test).
-		testutil.CleanupTelegramMessagesByChat(t, tgUpd.UserID)
+		// earlier welcome row. Status not pinned — staging TeeSender mode
+		// reports synthetic chat ids as failed. Cleanup auto-registered by
+		// LinkTelegramToApplication.
 		row := testutil.AssertTelegramMessageRecorded(t, adminClient, adminToken, tgUpd.UserID,
 			testutil.TelegramMessageMatcher{Direction: "outbound", TextContains: sent[0].Text})
 		require.Equal(t, sent[0].Text, row.Text)
