@@ -87,6 +87,13 @@ func TestTrustMeWebhook(t *testing.T) {
 		require.Equal(t, fx.CreatorTelegramID, signedMsg.ChatId)
 		require.NotNil(t, signedMsg.WebAppUrl, "signed message must carry an inline WebApp button")
 		require.Equal(t, fx.TmaURL, *signedMsg.WebAppUrl)
+
+		// Recorder writes the signed notify row alongside the spy capture.
+		// Status not pinned (see other recorder asserts for the rationale).
+		// Cleanup auto-registered by LinkTelegramToApplication.
+		row := testutil.AssertTelegramMessageRecorded(t, fx.AdminClient, fx.AdminToken, fx.CreatorTelegramID,
+			testutil.TelegramMessageMatcher{Direction: "outbound", TextContains: signedMsg.Text})
+		require.Equal(t, signedMsg.Text, row.Text)
 	})
 
 	t.Run("declined (status=9) flips cc to signing_declined + audit + decline bot message", func(t *testing.T) {

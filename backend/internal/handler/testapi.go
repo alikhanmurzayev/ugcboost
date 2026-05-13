@@ -45,6 +45,7 @@ type TestAPICleanupRepoFactory interface {
 	NewCampaignRepo(db dbutil.DB) repository.CampaignRepo
 	NewCampaignCreatorRepo(db dbutil.DB) repository.CampaignCreatorRepo
 	NewContractsRepo(db dbutil.DB) repository.ContractRepo
+	NewTelegramMessageRepo(db dbutil.DB) repository.TelegramMessageRepo
 }
 
 // TestAPIHandler provides test-only endpoints that back openapi-test.yaml.
@@ -471,6 +472,56 @@ func (h *TestAPIHandler) TrustMeSpyFail(_ context.Context, request testapi.Trust
 	}
 	h.trustMeSpy.RegisterFail(request.Body.Iin, reason)
 	return testapi.TrustMeSpyFail204Response{}, nil
+}
+
+// SeedTelegramMessage handles POST /test/seed-telegram-message. Bypasses the
+// recorder + RecordingSender and inserts straight through the repo so e2e
+// suites can stage deterministic pagination fixtures.
+func (h *TestAPIHandler) SeedTelegramMessage(ctx context.Context, request testapi.SeedTelegramMessageRequestObject) (testapi.SeedTelegramMessageResponseObject, error) {
+	if request.Body == nil {
+		return nil, domain.NewValidationError(domain.CodeValidation, "body is required")
+	}
+	body := request.Body
+	if !body.Direction.Valid() {
+		return nil, domain.NewValidationError(domain.CodeValidation, "direction must be inbound or outbound")
+	}
+	row := &repository.TelegramMessageRow{
+		ChatID:            body.ChatId,
+		Direction:         string(body.Direction),
+		Text:              body.Text,
+		TelegramMessageID: body.TelegramMessageId,
+		TelegramUsername:  body.TelegramUsername,
+		Error:             body.Error,
+	}
+	if body.Status != nil {
+		if !body.Status.Valid() {
+			return nil, domain.NewValidationError(domain.CodeValidation, "status must be sent or failed")
+		}
+		s := string(*body.Status)
+		row.Status = &s
+	}
+	repo := h.repos.NewTelegramMessageRepo(h.pool)
+	if err := repo.Insert(ctx, row); err != nil {
+		return nil, err
+	}
+	id, err := uuid.Parse(row.ID)
+	if err != nil {
+		return nil, err
+	}
+	return testapi.SeedTelegramMessage201JSONResponse{
+		Data: testapi.SeedTelegramMessageData{Id: id},
+	}, nil
+}
+
+// CleanupTelegramMessages handles DELETE /test/telegram-messages?chatId=...
+// Hard-deletes every row for the chat. 204 even when no rows matched so the
+// cleanup stack stays idempotent under parallel teardown.
+func (h *TestAPIHandler) CleanupTelegramMessages(ctx context.Context, request testapi.CleanupTelegramMessagesRequestObject) (testapi.CleanupTelegramMessagesResponseObject, error) {
+	repo := h.repos.NewTelegramMessageRepo(h.pool)
+	if err := repo.DeleteByChatForTests(ctx, request.Params.ChatId); err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return nil, err
+	}
+	return testapi.CleanupTelegramMessages204Response{}, nil
 }
 
 // TrustMeSpyClearFail handles POST /test/trustme/spy-clear-fail. Drops the

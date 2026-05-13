@@ -25,6 +25,7 @@ import (
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/domain"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/handler/mocks"
 	logmocks "github.com/alikhanmurzayev/ugcboost/backend/internal/logger/mocks"
+	"github.com/alikhanmurzayev/ugcboost/backend/internal/repository"
 	repomocks "github.com/alikhanmurzayev/ugcboost/backend/internal/repository/mocks"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/telegram"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/testapi"
@@ -58,7 +59,7 @@ func TestTestAPIHandler_SeedUser(t *testing.T) {
 		pool := dbutilmocks.NewMockPool(t)
 		store := mocks.NewMockTokenStore(t)
 		log := logmocks.NewMockLogger(t)
-		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, log), telegram.NewSentSpyStore(), "", nil, nil, log))
+		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, telegram.NoopRecorder(), log), telegram.NewSentSpyStore(), "", nil, nil, log))
 
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/test/seed-user",
 			map[string]any{"email": 123})
@@ -73,7 +74,7 @@ func TestTestAPIHandler_SeedUser(t *testing.T) {
 		pool := dbutilmocks.NewMockPool(t)
 		store := mocks.NewMockTokenStore(t)
 		log := logmocks.NewMockLogger(t)
-		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, log), telegram.NewSentSpyStore(), "", nil, nil, log))
+		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, telegram.NoopRecorder(), log), telegram.NewSentSpyStore(), "", nil, nil, log))
 
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/test/seed-user",
 			testapi.SeedUserRequest{Email: "user@example.com", Password: "pass"})
@@ -91,7 +92,7 @@ func TestTestAPIHandler_SeedUser(t *testing.T) {
 		auth.EXPECT().SeedUser(mock.Anything, "user@example.com", "pass", "admin").
 			Return(nil, errors.New("db error"))
 		expectUnexpectedErrorLog(log, "/test/seed-user")
-		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, log), telegram.NewSentSpyStore(), "", nil, nil, log))
+		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, telegram.NoopRecorder(), log), telegram.NewSentSpyStore(), "", nil, nil, log))
 
 		w, _ := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/test/seed-user",
 			testapi.SeedUserRequest{
@@ -110,7 +111,7 @@ func TestTestAPIHandler_SeedUser(t *testing.T) {
 		log := logmocks.NewMockLogger(t)
 		auth.EXPECT().SeedUser(mock.Anything, "user@example.com", "pass", "admin").
 			Return(&domain.User{ID: "u-seed", Email: "user@example.com", Role: api.Admin}, nil)
-		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, log), telegram.NewSentSpyStore(), "", nil, nil, log))
+		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, telegram.NoopRecorder(), log), telegram.NewSentSpyStore(), "", nil, nil, log))
 
 		w, resp := doJSON[testapi.SeedUserResult](t, router, http.MethodPost, "/test/seed-user",
 			testapi.SeedUserRequest{
@@ -138,7 +139,7 @@ func TestTestAPIHandler_CleanupEntity(t *testing.T) {
 		pool := dbutilmocks.NewMockPool(t)
 		store := mocks.NewMockTokenStore(t)
 		log := logmocks.NewMockLogger(t)
-		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, log), telegram.NewSentSpyStore(), "", nil, nil, log))
+		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, telegram.NoopRecorder(), log), telegram.NewSentSpyStore(), "", nil, nil, log))
 
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/test/cleanup-entity",
 			map[string]any{"type": 42})
@@ -153,7 +154,7 @@ func TestTestAPIHandler_CleanupEntity(t *testing.T) {
 		pool := dbutilmocks.NewMockPool(t)
 		store := mocks.NewMockTokenStore(t)
 		log := logmocks.NewMockLogger(t)
-		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, log), telegram.NewSentSpyStore(), "", nil, nil, log))
+		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, telegram.NoopRecorder(), log), telegram.NewSentSpyStore(), "", nil, nil, log))
 
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/test/cleanup-entity",
 			testapi.CleanupEntityRequest{Type: testapi.User, Id: ""})
@@ -168,7 +169,7 @@ func TestTestAPIHandler_CleanupEntity(t *testing.T) {
 		pool := dbutilmocks.NewMockPool(t)
 		store := mocks.NewMockTokenStore(t)
 		log := logmocks.NewMockLogger(t)
-		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, log), telegram.NewSentSpyStore(), "", nil, nil, log))
+		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, telegram.NoopRecorder(), log), telegram.NewSentSpyStore(), "", nil, nil, log))
 
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/test/cleanup-entity",
 			map[string]any{"type": "totally_unknown", "id": "c-1"})
@@ -194,7 +195,7 @@ func TestTestAPIHandler_CleanupEntity(t *testing.T) {
 		repos.EXPECT().NewUserRepo(mock.Anything).Return(userRepo)
 		userRepo.EXPECT().DeleteForTests(mock.Anything, "u-1").Return(nil)
 
-		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, log), telegram.NewSentSpyStore(), "", nil, nil, log))
+		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, telegram.NoopRecorder(), log), telegram.NewSentSpyStore(), "", nil, nil, log))
 
 		w, _ := doJSON[any](t, router, http.MethodPost, "/test/cleanup-entity",
 			testapi.CleanupEntityRequest{Type: testapi.User, Id: "u-1"})
@@ -216,7 +217,7 @@ func TestTestAPIHandler_CleanupEntity(t *testing.T) {
 		repos.EXPECT().NewUserRepo(mock.Anything).Return(userRepo)
 		userRepo.EXPECT().DeleteForTests(mock.Anything, "u-missing").Return(sql.ErrNoRows)
 
-		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, log), telegram.NewSentSpyStore(), "", nil, nil, log))
+		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, telegram.NoopRecorder(), log), telegram.NewSentSpyStore(), "", nil, nil, log))
 
 		w, _ := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/test/cleanup-entity",
 			testapi.CleanupEntityRequest{Type: testapi.User, Id: "u-missing"})
@@ -239,7 +240,7 @@ func TestTestAPIHandler_CleanupEntity(t *testing.T) {
 		userRepo.EXPECT().DeleteForTests(mock.Anything, "u-boom").Return(errors.New("db boom"))
 		expectUnexpectedErrorLog(log, "/test/cleanup-entity")
 
-		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, log), telegram.NewSentSpyStore(), "", nil, nil, log))
+		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, telegram.NoopRecorder(), log), telegram.NewSentSpyStore(), "", nil, nil, log))
 
 		w, _ := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/test/cleanup-entity",
 			testapi.CleanupEntityRequest{Type: testapi.User, Id: "u-boom"})
@@ -258,7 +259,7 @@ func TestTestAPIHandler_CleanupEntity(t *testing.T) {
 		repos.EXPECT().NewBrandRepo(mock.Anything).Return(brandRepo)
 		brandRepo.EXPECT().Delete(mock.Anything, "b-1").Return(nil)
 
-		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, log), telegram.NewSentSpyStore(), "", nil, nil, log))
+		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, telegram.NoopRecorder(), log), telegram.NewSentSpyStore(), "", nil, nil, log))
 
 		w, _ := doJSON[any](t, router, http.MethodPost, "/test/cleanup-entity",
 			testapi.CleanupEntityRequest{Type: testapi.Brand, Id: "b-1"})
@@ -277,7 +278,7 @@ func TestTestAPIHandler_CleanupEntity(t *testing.T) {
 		repos.EXPECT().NewBrandRepo(mock.Anything).Return(brandRepo)
 		brandRepo.EXPECT().Delete(mock.Anything, "b-missing").Return(sql.ErrNoRows)
 
-		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, log), telegram.NewSentSpyStore(), "", nil, nil, log))
+		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, telegram.NoopRecorder(), log), telegram.NewSentSpyStore(), "", nil, nil, log))
 
 		w, _ := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/test/cleanup-entity",
 			testapi.CleanupEntityRequest{Type: testapi.Brand, Id: "b-missing"})
@@ -299,7 +300,7 @@ func TestTestAPIHandler_CleanupEntity(t *testing.T) {
 		repos.EXPECT().NewCampaignRepo(mock.Anything).Return(campaignRepo)
 		campaignRepo.EXPECT().DeleteForTests(mock.Anything, "c-1").Return(nil)
 
-		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, log), telegram.NewSentSpyStore(), "", nil, nil, log))
+		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, telegram.NoopRecorder(), log), telegram.NewSentSpyStore(), "", nil, nil, log))
 
 		w, _ := doJSON[any](t, router, http.MethodPost, "/test/cleanup-entity",
 			testapi.CleanupEntityRequest{Type: testapi.Campaign, Id: "c-1"})
@@ -321,7 +322,7 @@ func TestTestAPIHandler_CleanupEntity(t *testing.T) {
 		repos.EXPECT().NewCampaignRepo(mock.Anything).Return(campaignRepo)
 		campaignRepo.EXPECT().DeleteForTests(mock.Anything, "c-missing").Return(sql.ErrNoRows)
 
-		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, log), telegram.NewSentSpyStore(), "", nil, nil, log))
+		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, telegram.NoopRecorder(), log), telegram.NewSentSpyStore(), "", nil, nil, log))
 
 		w, _ := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/test/cleanup-entity",
 			testapi.CleanupEntityRequest{Type: testapi.Campaign, Id: "c-missing"})
@@ -342,7 +343,7 @@ func TestTestAPIHandler_CleanupEntity(t *testing.T) {
 			DeleteByCampaignAndCreatorForTests(mock.Anything, "camp-1", "creator-1").
 			Return(nil)
 
-		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, log), telegram.NewSentSpyStore(), "", nil, nil, log))
+		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, telegram.NoopRecorder(), log), telegram.NewSentSpyStore(), "", nil, nil, log))
 
 		w, _ := doJSON[any](t, router, http.MethodPost, "/test/cleanup-entity",
 			testapi.CleanupEntityRequest{Type: testapi.CampaignCreator, Id: "camp-1:creator-1"})
@@ -357,7 +358,7 @@ func TestTestAPIHandler_CleanupEntity(t *testing.T) {
 		store := mocks.NewMockTokenStore(t)
 		log := logmocks.NewMockLogger(t)
 
-		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, log), telegram.NewSentSpyStore(), "", nil, nil, log))
+		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, telegram.NoopRecorder(), log), telegram.NewSentSpyStore(), "", nil, nil, log))
 
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/test/cleanup-entity",
 			testapi.CleanupEntityRequest{Type: testapi.CampaignCreator, Id: "single-uuid"})
@@ -373,7 +374,7 @@ func TestTestAPIHandler_CleanupEntity(t *testing.T) {
 		store := mocks.NewMockTokenStore(t)
 		log := logmocks.NewMockLogger(t)
 
-		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, log), telegram.NewSentSpyStore(), "", nil, nil, log))
+		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, telegram.NoopRecorder(), log), telegram.NewSentSpyStore(), "", nil, nil, log))
 
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/test/cleanup-entity",
 			testapi.CleanupEntityRequest{Type: testapi.CampaignCreator, Id: "camp-1:"})
@@ -395,7 +396,7 @@ func TestTestAPIHandler_CleanupEntity(t *testing.T) {
 			DeleteByCampaignAndCreatorForTests(mock.Anything, "camp-1", "creator-missing").
 			Return(sql.ErrNoRows)
 
-		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, log), telegram.NewSentSpyStore(), "", nil, nil, log))
+		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, telegram.NoopRecorder(), log), telegram.NewSentSpyStore(), "", nil, nil, log))
 
 		w, _ := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/test/cleanup-entity",
 			testapi.CleanupEntityRequest{Type: testapi.CampaignCreator, Id: "camp-1:creator-missing"})
@@ -414,7 +415,7 @@ func TestTestAPIHandler_CleanupEntity(t *testing.T) {
 		repos.EXPECT().NewContractsRepo(mock.Anything).Return(contractRepo)
 		contractRepo.EXPECT().DeleteForTests(mock.Anything, "ct-1").Return(nil)
 
-		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, log), telegram.NewSentSpyStore(), "", nil, nil, log))
+		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, telegram.NoopRecorder(), log), telegram.NewSentSpyStore(), "", nil, nil, log))
 
 		w, _ := doJSON[any](t, router, http.MethodPost, "/test/cleanup-entity",
 			testapi.CleanupEntityRequest{Type: testapi.Contract, Id: "ct-1"})
@@ -433,7 +434,7 @@ func TestTestAPIHandler_CleanupEntity(t *testing.T) {
 		repos.EXPECT().NewContractsRepo(mock.Anything).Return(contractRepo)
 		contractRepo.EXPECT().DeleteForTests(mock.Anything, "ct-missing").Return(sql.ErrNoRows)
 
-		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, log), telegram.NewSentSpyStore(), "", nil, nil, log))
+		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, telegram.NoopRecorder(), log), telegram.NewSentSpyStore(), "", nil, nil, log))
 
 		w, _ := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/test/cleanup-entity",
 			testapi.CleanupEntityRequest{Type: testapi.Contract, Id: "ct-missing"})
@@ -464,7 +465,7 @@ func TestTestAPIHandler_ForceCleanupCampaignCreator(t *testing.T) {
 		repos.EXPECT().NewCampaignCreatorRepo(mock.Anything).Return(ccRepo)
 		ccRepo.EXPECT().DeleteByCampaignAndCreatorForTests(mock.Anything, campaignID.String(), creatorID.String()).Return(nil)
 
-		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, log), telegram.NewSentSpyStore(), "", nil, nil, log))
+		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, telegram.NoopRecorder(), log), telegram.NewSentSpyStore(), "", nil, nil, log))
 
 		w, _ := doJSON[any](t, router, http.MethodPost, "/test/campaign-creators/force-cleanup", body)
 		require.Equal(t, http.StatusNoContent, w.Code)
@@ -482,7 +483,7 @@ func TestTestAPIHandler_ForceCleanupCampaignCreator(t *testing.T) {
 		repos.EXPECT().NewCampaignCreatorRepo(mock.Anything).Return(ccRepo)
 		ccRepo.EXPECT().DeleteByCampaignAndCreatorForTests(mock.Anything, campaignID.String(), creatorID.String()).Return(sql.ErrNoRows)
 
-		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, log), telegram.NewSentSpyStore(), "", nil, nil, log))
+		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, telegram.NoopRecorder(), log), telegram.NewSentSpyStore(), "", nil, nil, log))
 
 		w, _ := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/test/campaign-creators/force-cleanup", body)
 		require.Equal(t, http.StatusNotFound, w.Code)
@@ -501,7 +502,7 @@ func TestTestAPIHandler_ForceCleanupCampaignCreator(t *testing.T) {
 		ccRepo.EXPECT().DeleteByCampaignAndCreatorForTests(mock.Anything, campaignID.String(), creatorID.String()).Return(errors.New("db boom"))
 		expectUnexpectedErrorLog(log, "/test/campaign-creators/force-cleanup")
 
-		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, log), telegram.NewSentSpyStore(), "", nil, nil, log))
+		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, telegram.NoopRecorder(), log), telegram.NewSentSpyStore(), "", nil, nil, log))
 
 		w, _ := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/test/campaign-creators/force-cleanup", body)
 		require.Equal(t, http.StatusInternalServerError, w.Code)
@@ -515,7 +516,7 @@ func TestTestAPIHandler_ForceCleanupCampaignCreator(t *testing.T) {
 		store := mocks.NewMockTokenStore(t)
 		log := logmocks.NewMockLogger(t)
 
-		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, log), telegram.NewSentSpyStore(), "", nil, nil, log))
+		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, telegram.NoopRecorder(), log), telegram.NewSentSpyStore(), "", nil, nil, log))
 
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/test/campaign-creators/force-cleanup",
 			testapi.ForceCleanupCampaignCreatorRequest{CampaignId: uuid.Nil, CreatorId: creatorID})
@@ -531,7 +532,7 @@ func TestTestAPIHandler_ForceCleanupCampaignCreator(t *testing.T) {
 		store := mocks.NewMockTokenStore(t)
 		log := logmocks.NewMockLogger(t)
 
-		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, log), telegram.NewSentSpyStore(), "", nil, nil, log))
+		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, telegram.NoopRecorder(), log), telegram.NewSentSpyStore(), "", nil, nil, log))
 
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/test/campaign-creators/force-cleanup",
 			testapi.ForceCleanupCampaignCreatorRequest{CampaignId: campaignID, CreatorId: uuid.Nil})
@@ -557,7 +558,7 @@ func TestTestAPIHandler_MarkCampaignDeleted(t *testing.T) {
 		repos.EXPECT().NewCampaignRepo(mock.Anything).Return(campaignRepo)
 		campaignRepo.EXPECT().MarkDeletedForTests(mock.Anything, id).Return(nil)
 
-		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, log), telegram.NewSentSpyStore(), "", nil, nil, log))
+		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, telegram.NoopRecorder(), log), telegram.NewSentSpyStore(), "", nil, nil, log))
 
 		w, _ := doJSON[any](t, router, http.MethodPost, "/test/campaigns/"+id+"/mark-deleted", nil)
 		require.Equal(t, http.StatusNoContent, w.Code)
@@ -575,7 +576,7 @@ func TestTestAPIHandler_MarkCampaignDeleted(t *testing.T) {
 		repos.EXPECT().NewCampaignRepo(mock.Anything).Return(campaignRepo)
 		campaignRepo.EXPECT().MarkDeletedForTests(mock.Anything, id).Return(sql.ErrNoRows)
 
-		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, log), telegram.NewSentSpyStore(), "", nil, nil, log))
+		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, telegram.NoopRecorder(), log), telegram.NewSentSpyStore(), "", nil, nil, log))
 
 		w, _ := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/test/campaigns/"+id+"/mark-deleted", nil)
 		require.Equal(t, http.StatusNotFound, w.Code)
@@ -594,7 +595,7 @@ func TestTestAPIHandler_MarkCampaignDeleted(t *testing.T) {
 		campaignRepo.EXPECT().MarkDeletedForTests(mock.Anything, id).Return(errors.New("db boom"))
 		expectUnexpectedErrorLog(log, "/test/campaigns/"+id+"/mark-deleted")
 
-		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, log), telegram.NewSentSpyStore(), "", nil, nil, log))
+		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, telegram.NoopRecorder(), log), telegram.NewSentSpyStore(), "", nil, nil, log))
 
 		w, _ := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/test/campaigns/"+id+"/mark-deleted", nil)
 		require.Equal(t, http.StatusInternalServerError, w.Code)
@@ -612,7 +613,7 @@ func TestTestAPIHandler_GetResetToken(t *testing.T) {
 		store := mocks.NewMockTokenStore(t)
 		log := logmocks.NewMockLogger(t)
 		store.EXPECT().GetToken("missing@example.com").Return("", false)
-		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, log), telegram.NewSentSpyStore(), "", nil, nil, log))
+		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, telegram.NoopRecorder(), log), telegram.NewSentSpyStore(), "", nil, nil, log))
 
 		w, _ := doJSON[api.ErrorResponse](t, router, http.MethodGet,
 			"/test/reset-tokens?email=missing@example.com", nil)
@@ -627,7 +628,7 @@ func TestTestAPIHandler_GetResetToken(t *testing.T) {
 		store := mocks.NewMockTokenStore(t)
 		log := logmocks.NewMockLogger(t)
 		store.EXPECT().GetToken("alice@example.com").Return("raw-token-123", true)
-		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, log), telegram.NewSentSpyStore(), "", nil, nil, log))
+		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, telegram.NoopRecorder(), log), telegram.NewSentSpyStore(), "", nil, nil, log))
 
 		w, resp := doJSON[testapi.ResetTokenResult](t, router, http.MethodGet,
 			"/test/reset-tokens?email=alice@example.com", nil)
@@ -663,7 +664,7 @@ func TestTestAPIHandler_GetTelegramSent(t *testing.T) {
 		})
 		spy.Record(telegram.SentRecord{ChatID: 999, Text: "other", SentAt: time.Now().UTC()})
 
-		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, log), spy, "", nil, nil, log))
+		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, telegram.NoopRecorder(), log), spy, "", nil, nil, log))
 
 		w, resp := doJSON[testapi.TelegramSentResult](t, router, http.MethodGet,
 			"/test/telegram/sent?chatId=555", nil)
@@ -687,7 +688,7 @@ func TestTestAPIHandler_GetTelegramSent(t *testing.T) {
 		spy := telegram.NewSentSpyStore()
 		spy.Record(telegram.SentRecord{ChatID: 42, Text: "boom", SentAt: time.Now().UTC(), Err: "telegram down"})
 
-		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, log), spy, "", nil, nil, log))
+		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, telegram.NoopRecorder(), log), spy, "", nil, nil, log))
 
 		w, resp := doJSON[testapi.TelegramSentResult](t, router, http.MethodGet,
 			"/test/telegram/sent?chatId=42", nil)
@@ -710,7 +711,7 @@ func TestTestAPIHandler_GetTelegramSent(t *testing.T) {
 		spy.Record(telegram.SentRecord{ChatID: 7, Text: "old", SentAt: now.Add(-time.Hour)})
 		spy.Record(telegram.SentRecord{ChatID: 7, Text: "fresh", SentAt: now})
 
-		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, log), spy, "", nil, nil, log))
+		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, telegram.NoopRecorder(), log), spy, "", nil, nil, log))
 
 		since := now.Add(-time.Minute).Format(time.RFC3339Nano)
 		w, resp := doJSON[testapi.TelegramSentResult](t, router, http.MethodGet,
@@ -731,7 +732,7 @@ func TestTestAPIHandler_SendTelegramMessage(t *testing.T) {
 		pool := dbutilmocks.NewMockPool(t)
 		store := mocks.NewMockTokenStore(t)
 		log := logmocks.NewMockLogger(t)
-		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, log), telegram.NewSentSpyStore(), "", nil, nil, log))
+		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, telegram.NoopRecorder(), log), telegram.NewSentSpyStore(), "", nil, nil, log))
 
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/test/telegram/message",
 			map[string]any{"chatId": "not-a-number"})
@@ -746,7 +747,7 @@ func TestTestAPIHandler_SendTelegramMessage(t *testing.T) {
 		pool := dbutilmocks.NewMockPool(t)
 		store := mocks.NewMockTokenStore(t)
 		log := logmocks.NewMockLogger(t)
-		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, log), telegram.NewSentSpyStore(), "", nil, nil, log))
+		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, telegram.NoopRecorder(), log), telegram.NewSentSpyStore(), "", nil, nil, log))
 
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, "/test/telegram/message",
 			testapi.SendTelegramMessageRequest{ChatId: 1, Text: ""})
@@ -761,7 +762,7 @@ func TestTestAPIHandler_SendTelegramMessage(t *testing.T) {
 		pool := dbutilmocks.NewMockPool(t)
 		store := mocks.NewMockTokenStore(t)
 		log := logmocks.NewMockLogger(t)
-		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, log), telegram.NewSentSpyStore(), "", nil, nil, log))
+		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, telegram.NoopRecorder(), log), telegram.NewSentSpyStore(), "", nil, nil, log))
 
 		w, resp := doJSON[testapi.SendTelegramMessageResult](t, router, http.MethodPost,
 			"/test/telegram/message",
@@ -786,7 +787,7 @@ func TestTestAPIHandler_TelegramSpyFailNext(t *testing.T) {
 		spy := telegram.NewSentSpyStore()
 		sender := telegram.NewSpyOnlySender(spy)
 
-		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, log), spy, "", nil, nil, log))
+		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, telegram.NoopRecorder(), log), spy, "", nil, nil, log))
 
 		w, _ := doJSON[map[string]any](t, router, http.MethodPost,
 			"/test/telegram/spy/fail-next",
@@ -825,7 +826,7 @@ func TestTestAPIHandler_TelegramSpyFailNext(t *testing.T) {
 		spy := telegram.NewSentSpyStore()
 		sender := telegram.NewSpyOnlySender(spy)
 
-		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, log), spy, "", nil, nil, log))
+		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, telegram.NoopRecorder(), log), spy, "", nil, nil, log))
 
 		custom := "network down"
 		w, _ := doJSON[map[string]any](t, router, http.MethodPost,
@@ -855,7 +856,7 @@ func TestTestAPIHandler_TelegramSpyFakeChat(t *testing.T) {
 		log := logmocks.NewMockLogger(t)
 		spy := telegram.NewSentSpyStore()
 
-		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, log), spy, "", nil, nil, log))
+		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, telegram.NoopRecorder(), log), spy, "", nil, nil, log))
 
 		require.False(t, spy.IsFakeChat(101))
 		w, _ := doJSON[map[string]any](t, router, http.MethodPost,
@@ -878,7 +879,7 @@ func TestTestAPIHandler_SignTMAInitData(t *testing.T) {
 		log := logmocks.NewMockLogger(t)
 		const botToken = "bot-token-secret"
 
-		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, log), telegram.NewSentSpyStore(), botToken, nil, nil, log))
+		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, telegram.NoopRecorder(), log), telegram.NewSentSpyStore(), botToken, nil, nil, log))
 
 		w, resp := doJSON[testapi.SignTMAInitDataResult](t, router, http.MethodPost,
 			"/test/tma/sign-init-data",
@@ -903,7 +904,7 @@ func TestTestAPIHandler_SignTMAInitData(t *testing.T) {
 		store := mocks.NewMockTokenStore(t)
 		log := logmocks.NewMockLogger(t)
 
-		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, log), telegram.NewSentSpyStore(), "", nil, nil, log))
+		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, telegram.NoopRecorder(), log), telegram.NewSentSpyStore(), "", nil, nil, log))
 
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost,
 			"/test/tma/sign-init-data",
@@ -920,7 +921,7 @@ func TestTestAPIHandler_SignTMAInitData(t *testing.T) {
 		store := mocks.NewMockTokenStore(t)
 		log := logmocks.NewMockLogger(t)
 
-		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, log), telegram.NewSentSpyStore(), "bot-token", nil, nil, log))
+		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, telegram.NoopRecorder(), log), telegram.NewSentSpyStore(), "bot-token", nil, nil, log))
 
 		past := time.Now().Add(-time.Hour).Unix()
 		w, resp := doJSON[testapi.SignTMAInitDataResult](t, router, http.MethodPost,
@@ -933,6 +934,178 @@ func TestTestAPIHandler_SignTMAInitData(t *testing.T) {
 		gotAuthDate, err := strconv.ParseInt(values.Get("auth_date"), 10, 64)
 		require.NoError(t, err)
 		require.Equal(t, past, gotAuthDate)
+	})
+}
+
+func TestTestAPIHandler_SeedTelegramMessage(t *testing.T) {
+	t.Parallel()
+
+	t.Run("happy inbound: row persisted, response carries new id", func(t *testing.T) {
+		t.Parallel()
+		auth := mocks.NewMockTestAPIAuthService(t)
+		repos := mocks.NewMockTestAPICleanupRepoFactory(t)
+		pool := dbutilmocks.NewMockPool(t)
+		store := mocks.NewMockTokenStore(t)
+		log := logmocks.NewMockLogger(t)
+		tmrepo := repomocks.NewMockTelegramMessageRepo(t)
+
+		newID := uuid.New().String()
+		repos.EXPECT().NewTelegramMessageRepo(mock.Anything).Return(tmrepo)
+		tmrepo.EXPECT().Insert(mock.Anything, mock.Anything).
+			Run(func(_ context.Context, row *repository.TelegramMessageRow) {
+				row.ID = newID
+				row.CreatedAt = time.Now().UTC()
+			}).Return(nil)
+
+		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, telegram.NoopRecorder(), log), telegram.NewSentSpyStore(), "", nil, nil, log))
+		body := testapi.SeedTelegramMessageRequest{
+			ChatId:    42,
+			Direction: testapi.Inbound,
+			Text:      "hi",
+		}
+		w, resp := doJSON[testapi.SeedTelegramMessageResult](t, router, http.MethodPost,
+			"/test/seed-telegram-message", body)
+		require.Equal(t, http.StatusCreated, w.Code)
+		require.Equal(t, newID, resp.Data.Id.String())
+	})
+
+	t.Run("happy outbound with status sent", func(t *testing.T) {
+		t.Parallel()
+		auth := mocks.NewMockTestAPIAuthService(t)
+		repos := mocks.NewMockTestAPICleanupRepoFactory(t)
+		pool := dbutilmocks.NewMockPool(t)
+		store := mocks.NewMockTokenStore(t)
+		log := logmocks.NewMockLogger(t)
+		tmrepo := repomocks.NewMockTelegramMessageRepo(t)
+
+		newID := uuid.New().String()
+		status := testapi.Sent
+		repos.EXPECT().NewTelegramMessageRepo(mock.Anything).Return(tmrepo)
+		tmrepo.EXPECT().Insert(mock.Anything, mock.MatchedBy(func(row *repository.TelegramMessageRow) bool {
+			return row.Status != nil && *row.Status == "sent"
+		})).Run(func(_ context.Context, row *repository.TelegramMessageRow) {
+			row.ID = newID
+		}).Return(nil)
+
+		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, telegram.NoopRecorder(), log), telegram.NewSentSpyStore(), "", nil, nil, log))
+		body := testapi.SeedTelegramMessageRequest{
+			ChatId:    42,
+			Direction: testapi.Outbound,
+			Text:      "hi",
+			Status:    &status,
+		}
+		w, resp := doJSON[testapi.SeedTelegramMessageResult](t, router, http.MethodPost,
+			"/test/seed-telegram-message", body)
+		require.Equal(t, http.StatusCreated, w.Code)
+		require.Equal(t, newID, resp.Data.Id.String())
+	})
+
+	t.Run("invalid direction returns 422", func(t *testing.T) {
+		t.Parallel()
+		auth := mocks.NewMockTestAPIAuthService(t)
+		repos := mocks.NewMockTestAPICleanupRepoFactory(t)
+		pool := dbutilmocks.NewMockPool(t)
+		store := mocks.NewMockTokenStore(t)
+		log := logmocks.NewMockLogger(t)
+
+		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, telegram.NoopRecorder(), log), telegram.NewSentSpyStore(), "", nil, nil, log))
+		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost,
+			"/test/seed-telegram-message",
+			map[string]any{"chatId": 42, "direction": "bogus", "text": "hi"})
+		require.Equal(t, http.StatusUnprocessableEntity, w.Code)
+		require.Equal(t, domain.CodeValidation, resp.Error.Code)
+	})
+
+	t.Run("invalid status returns 422", func(t *testing.T) {
+		t.Parallel()
+		auth := mocks.NewMockTestAPIAuthService(t)
+		repos := mocks.NewMockTestAPICleanupRepoFactory(t)
+		pool := dbutilmocks.NewMockPool(t)
+		store := mocks.NewMockTokenStore(t)
+		log := logmocks.NewMockLogger(t)
+
+		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, telegram.NoopRecorder(), log), telegram.NewSentSpyStore(), "", nil, nil, log))
+		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost,
+			"/test/seed-telegram-message",
+			map[string]any{"chatId": 42, "direction": "outbound", "text": "hi", "status": "bogus"})
+		require.Equal(t, http.StatusUnprocessableEntity, w.Code)
+		require.Equal(t, domain.CodeValidation, resp.Error.Code)
+	})
+
+	t.Run("repo error returns 500", func(t *testing.T) {
+		t.Parallel()
+		auth := mocks.NewMockTestAPIAuthService(t)
+		repos := mocks.NewMockTestAPICleanupRepoFactory(t)
+		pool := dbutilmocks.NewMockPool(t)
+		store := mocks.NewMockTokenStore(t)
+		log := logmocks.NewMockLogger(t)
+		tmrepo := repomocks.NewMockTelegramMessageRepo(t)
+
+		repos.EXPECT().NewTelegramMessageRepo(mock.Anything).Return(tmrepo)
+		tmrepo.EXPECT().Insert(mock.Anything, mock.Anything).Return(errors.New("db boom"))
+		expectUnexpectedErrorLog(log, "/test/seed-telegram-message")
+
+		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, telegram.NoopRecorder(), log), telegram.NewSentSpyStore(), "", nil, nil, log))
+		w, _ := doJSON[api.ErrorResponse](t, router, http.MethodPost,
+			"/test/seed-telegram-message",
+			testapi.SeedTelegramMessageRequest{ChatId: 42, Direction: testapi.Inbound, Text: "hi"})
+		require.Equal(t, http.StatusInternalServerError, w.Code)
+	})
+}
+
+func TestTestAPIHandler_CleanupTelegramMessages(t *testing.T) {
+	t.Parallel()
+
+	t.Run("happy: rows removed", func(t *testing.T) {
+		t.Parallel()
+		auth := mocks.NewMockTestAPIAuthService(t)
+		repos := mocks.NewMockTestAPICleanupRepoFactory(t)
+		pool := dbutilmocks.NewMockPool(t)
+		store := mocks.NewMockTokenStore(t)
+		log := logmocks.NewMockLogger(t)
+		tmrepo := repomocks.NewMockTelegramMessageRepo(t)
+
+		repos.EXPECT().NewTelegramMessageRepo(mock.Anything).Return(tmrepo)
+		tmrepo.EXPECT().DeleteByChatForTests(mock.Anything, int64(42)).Return(nil)
+
+		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, telegram.NoopRecorder(), log), telegram.NewSentSpyStore(), "", nil, nil, log))
+		w, _ := doJSON[any](t, router, http.MethodDelete, "/test/telegram-messages?chatId=42", nil)
+		require.Equal(t, http.StatusNoContent, w.Code)
+	})
+
+	t.Run("idempotent no rows returns 204", func(t *testing.T) {
+		t.Parallel()
+		auth := mocks.NewMockTestAPIAuthService(t)
+		repos := mocks.NewMockTestAPICleanupRepoFactory(t)
+		pool := dbutilmocks.NewMockPool(t)
+		store := mocks.NewMockTokenStore(t)
+		log := logmocks.NewMockLogger(t)
+		tmrepo := repomocks.NewMockTelegramMessageRepo(t)
+
+		repos.EXPECT().NewTelegramMessageRepo(mock.Anything).Return(tmrepo)
+		tmrepo.EXPECT().DeleteByChatForTests(mock.Anything, int64(42)).Return(sql.ErrNoRows)
+
+		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, telegram.NoopRecorder(), log), telegram.NewSentSpyStore(), "", nil, nil, log))
+		w, _ := doJSON[any](t, router, http.MethodDelete, "/test/telegram-messages?chatId=42", nil)
+		require.Equal(t, http.StatusNoContent, w.Code)
+	})
+
+	t.Run("repo error returns 500", func(t *testing.T) {
+		t.Parallel()
+		auth := mocks.NewMockTestAPIAuthService(t)
+		repos := mocks.NewMockTestAPICleanupRepoFactory(t)
+		pool := dbutilmocks.NewMockPool(t)
+		store := mocks.NewMockTokenStore(t)
+		log := logmocks.NewMockLogger(t)
+		tmrepo := repomocks.NewMockTelegramMessageRepo(t)
+
+		repos.EXPECT().NewTelegramMessageRepo(mock.Anything).Return(tmrepo)
+		tmrepo.EXPECT().DeleteByChatForTests(mock.Anything, int64(42)).Return(errors.New("db down"))
+		expectUnexpectedErrorLog(log, "/test/telegram-messages")
+
+		router := newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store, telegram.NewHandler(nil, telegram.NoopRecorder(), log), telegram.NewSentSpyStore(), "", nil, nil, log))
+		w, _ := doJSON[api.ErrorResponse](t, router, http.MethodDelete, "/test/telegram-messages?chatId=42", nil)
+		require.Equal(t, http.StatusInternalServerError, w.Code)
 	})
 }
 

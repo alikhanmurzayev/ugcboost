@@ -40,7 +40,7 @@ func TestServer_AddCampaignCreators(t *testing.T) {
 		authz := mocks.NewMockAuthzService(t)
 		authz.EXPECT().CanAddCampaignCreators(mock.Anything).Return(domain.ErrForbidden)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, campaignCreatorsPath,
 			api.AddCampaignCreatorsInput{CreatorIds: []openapi_types.UUID{uuid.MustParse(creatorAUUID)}})
 		require.Equal(t, http.StatusForbidden, w.Code)
@@ -52,7 +52,7 @@ func TestServer_AddCampaignCreators(t *testing.T) {
 		authz := mocks.NewMockAuthzService(t)
 		authz.EXPECT().CanAddCampaignCreators(mock.Anything).Return(nil)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, campaignCreatorsPath,
 			api.AddCampaignCreatorsInput{CreatorIds: []openapi_types.UUID{}})
 		require.Equal(t, http.StatusUnprocessableEntity, w.Code)
@@ -70,7 +70,7 @@ func TestServer_AddCampaignCreators(t *testing.T) {
 			ids[i] = uuid.New()
 		}
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, campaignCreatorsPath,
 			api.AddCampaignCreatorsInput{CreatorIds: ids})
 		require.Equal(t, http.StatusUnprocessableEntity, w.Code)
@@ -82,7 +82,7 @@ func TestServer_AddCampaignCreators(t *testing.T) {
 		authz := mocks.NewMockAuthzService(t)
 		authz.EXPECT().CanAddCampaignCreators(mock.Anything).Return(nil)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, campaignCreatorsPath,
 			api.AddCampaignCreatorsInput{CreatorIds: []openapi_types.UUID{
 				uuid.MustParse(creatorAUUID), uuid.MustParse(creatorAUUID),
@@ -99,7 +99,7 @@ func TestServer_AddCampaignCreators(t *testing.T) {
 		ccSvc.EXPECT().Add(mock.Anything, campaignUUID, []string{creatorAUUID}).
 			Return(nil, domain.ErrCampaignNotFound)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, ccSvc, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, ccSvc, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, campaignCreatorsPath,
 			api.AddCampaignCreatorsInput{CreatorIds: []openapi_types.UUID{uuid.MustParse(creatorAUUID)}})
 		require.Equal(t, http.StatusNotFound, w.Code)
@@ -114,7 +114,7 @@ func TestServer_AddCampaignCreators(t *testing.T) {
 		ccSvc.EXPECT().Add(mock.Anything, campaignUUID, []string{creatorAUUID}).
 			Return(nil, domain.ErrCampaignCreatorCreatorNotFound)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, ccSvc, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, ccSvc, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, campaignCreatorsPath,
 			api.AddCampaignCreatorsInput{CreatorIds: []openapi_types.UUID{uuid.MustParse(creatorAUUID)}})
 		require.Equal(t, http.StatusUnprocessableEntity, w.Code)
@@ -129,7 +129,7 @@ func TestServer_AddCampaignCreators(t *testing.T) {
 		ccSvc.EXPECT().Add(mock.Anything, campaignUUID, []string{creatorAUUID}).
 			Return(nil, domain.ErrCreatorAlreadyInCampaign)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, ccSvc, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, ccSvc, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, campaignCreatorsPath,
 			api.AddCampaignCreatorsInput{CreatorIds: []openapi_types.UUID{uuid.MustParse(creatorAUUID)}})
 		require.Equal(t, http.StatusUnprocessableEntity, w.Code)
@@ -146,7 +146,7 @@ func TestServer_AddCampaignCreators(t *testing.T) {
 		log := logmocks.NewMockLogger(t)
 		expectHandlerUnexpectedErrorLog(log, campaignCreatorsPath)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, ccSvc, nil, nil, nil, ServerConfig{Version: "test-version"}, log))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, ccSvc, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, log))
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, campaignCreatorsPath,
 			api.AddCampaignCreatorsInput{CreatorIds: []openapi_types.UUID{uuid.MustParse(creatorAUUID)}})
 		require.Equal(t, http.StatusInternalServerError, w.Code)
@@ -167,7 +167,7 @@ func TestServer_AddCampaignCreators(t *testing.T) {
 					Status: domain.CampaignCreatorStatusPlanned, CreatedAt: created, UpdatedAt: created},
 			}, nil)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, ccSvc, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, ccSvc, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.AddCampaignCreatorsResult](t, router, http.MethodPost, campaignCreatorsPath,
 			api.AddCampaignCreatorsInput{CreatorIds: []openapi_types.UUID{
 				uuid.MustParse(creatorAUUID), uuid.MustParse(creatorBUUID),
@@ -216,7 +216,7 @@ func TestServer_AddCampaignCreators(t *testing.T) {
 		log := logmocks.NewMockLogger(t)
 		expectHandlerUnexpectedErrorLog(log, campaignCreatorsPath)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, ccSvc, nil, nil, nil, ServerConfig{Version: "test-version"}, log))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, ccSvc, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, log))
 		w, _ := doJSON[api.ErrorResponse](t, router, http.MethodPost, campaignCreatorsPath,
 			api.AddCampaignCreatorsInput{CreatorIds: []openapi_types.UUID{uuid.MustParse(creatorAUUID)}})
 		require.Equal(t, http.StatusInternalServerError, w.Code)
@@ -236,7 +236,7 @@ func TestServer_AddCampaignCreators(t *testing.T) {
 		log := logmocks.NewMockLogger(t)
 		expectHandlerUnexpectedErrorLog(log, campaignCreatorsPath)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, ccSvc, nil, nil, nil, ServerConfig{Version: "test-version"}, log))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, ccSvc, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, log))
 		w, _ := doJSON[api.ErrorResponse](t, router, http.MethodPost, campaignCreatorsPath,
 			api.AddCampaignCreatorsInput{CreatorIds: []openapi_types.UUID{uuid.MustParse(creatorAUUID)}})
 		require.Equal(t, http.StatusInternalServerError, w.Code)
@@ -256,7 +256,7 @@ func TestServer_AddCampaignCreators(t *testing.T) {
 		log := logmocks.NewMockLogger(t)
 		expectHandlerUnexpectedErrorLog(log, campaignCreatorsPath)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, ccSvc, nil, nil, nil, ServerConfig{Version: "test-version"}, log))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, ccSvc, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, log))
 		w, _ := doJSON[api.ErrorResponse](t, router, http.MethodPost, campaignCreatorsPath,
 			api.AddCampaignCreatorsInput{CreatorIds: []openapi_types.UUID{uuid.MustParse(creatorAUUID)}})
 		require.Equal(t, http.StatusInternalServerError, w.Code)
@@ -273,7 +273,7 @@ func TestServer_RemoveCampaignCreator(t *testing.T) {
 		authz := mocks.NewMockAuthzService(t)
 		authz.EXPECT().CanRemoveCampaignCreator(mock.Anything).Return(domain.ErrForbidden)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodDelete, removePath, nil)
 		require.Equal(t, http.StatusForbidden, w.Code)
 		require.Equal(t, domain.CodeForbidden, resp.Error.Code)
@@ -287,7 +287,7 @@ func TestServer_RemoveCampaignCreator(t *testing.T) {
 		ccSvc.EXPECT().Remove(mock.Anything, campaignUUID, creatorAUUID).
 			Return(domain.ErrCampaignNotFound)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, ccSvc, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, ccSvc, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodDelete, removePath, nil)
 		require.Equal(t, http.StatusNotFound, w.Code)
 		require.Equal(t, domain.CodeCampaignNotFound, resp.Error.Code)
@@ -301,7 +301,7 @@ func TestServer_RemoveCampaignCreator(t *testing.T) {
 		ccSvc.EXPECT().Remove(mock.Anything, campaignUUID, creatorAUUID).
 			Return(domain.ErrCampaignCreatorNotFound)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, ccSvc, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, ccSvc, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodDelete, removePath, nil)
 		require.Equal(t, http.StatusNotFound, w.Code)
 		require.Equal(t, domain.CodeCampaignCreatorNotFound, resp.Error.Code)
@@ -315,7 +315,7 @@ func TestServer_RemoveCampaignCreator(t *testing.T) {
 		ccSvc.EXPECT().Remove(mock.Anything, campaignUUID, creatorAUUID).
 			Return(domain.ErrCampaignCreatorRemoveAfterAgreed)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, ccSvc, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, ccSvc, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodDelete, removePath, nil)
 		require.Equal(t, http.StatusUnprocessableEntity, w.Code)
 		require.Equal(t, domain.CodeCampaignCreatorRemoveAfterAgreed, resp.Error.Code)
@@ -331,7 +331,7 @@ func TestServer_RemoveCampaignCreator(t *testing.T) {
 		log := logmocks.NewMockLogger(t)
 		expectHandlerUnexpectedErrorLog(log, removePath)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, ccSvc, nil, nil, nil, ServerConfig{Version: "test-version"}, log))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, ccSvc, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, log))
 		w, _ := doJSON[api.ErrorResponse](t, router, http.MethodDelete, removePath, nil)
 		require.Equal(t, http.StatusInternalServerError, w.Code)
 	})
@@ -343,7 +343,7 @@ func TestServer_RemoveCampaignCreator(t *testing.T) {
 		ccSvc := mocks.NewMockCampaignCreatorService(t)
 		ccSvc.EXPECT().Remove(mock.Anything, campaignUUID, creatorAUUID).Return(nil)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, ccSvc, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, ccSvc, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, _ := doJSON[api.ErrorResponse](t, router, http.MethodDelete, removePath, nil)
 		require.Equal(t, http.StatusNoContent, w.Code)
 		require.Empty(t, w.Body.Bytes(), "204 must not carry a body")
@@ -358,7 +358,7 @@ func TestServer_ListCampaignCreators(t *testing.T) {
 		authz := mocks.NewMockAuthzService(t)
 		authz.EXPECT().CanListCampaignCreators(mock.Anything).Return(domain.ErrForbidden)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodGet, campaignCreatorsPath, nil)
 		require.Equal(t, http.StatusForbidden, w.Code)
 		require.Equal(t, domain.CodeForbidden, resp.Error.Code)
@@ -371,7 +371,7 @@ func TestServer_ListCampaignCreators(t *testing.T) {
 		ccSvc := mocks.NewMockCampaignCreatorService(t)
 		ccSvc.EXPECT().List(mock.Anything, campaignUUID).Return(nil, domain.ErrCampaignNotFound)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, ccSvc, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, ccSvc, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodGet, campaignCreatorsPath, nil)
 		require.Equal(t, http.StatusNotFound, w.Code)
 		require.Equal(t, domain.CodeCampaignNotFound, resp.Error.Code)
@@ -386,7 +386,7 @@ func TestServer_ListCampaignCreators(t *testing.T) {
 		log := logmocks.NewMockLogger(t)
 		expectHandlerUnexpectedErrorLog(log, campaignCreatorsPath)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, ccSvc, nil, nil, nil, ServerConfig{Version: "test-version"}, log))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, ccSvc, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, log))
 		w, _ := doJSON[api.ErrorResponse](t, router, http.MethodGet, campaignCreatorsPath, nil)
 		require.Equal(t, http.StatusInternalServerError, w.Code)
 	})
@@ -399,7 +399,7 @@ func TestServer_ListCampaignCreators(t *testing.T) {
 		ccSvc.EXPECT().List(mock.Anything, campaignUUID).
 			Return([]*domain.CampaignCreator{}, nil)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, ccSvc, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, ccSvc, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.ListCampaignCreatorsResult](t, router, http.MethodGet, campaignCreatorsPath, nil)
 		require.Equal(t, http.StatusOK, w.Code)
 		require.Empty(t, resp.Data.Items)
@@ -417,7 +417,7 @@ func TestServer_ListCampaignCreators(t *testing.T) {
 					Status: domain.CampaignCreatorStatusPlanned, CreatedAt: created, UpdatedAt: created},
 			}, nil)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, ccSvc, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, ccSvc, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.ListCampaignCreatorsResult](t, router, http.MethodGet, campaignCreatorsPath, nil)
 		require.Equal(t, http.StatusOK, w.Code)
 		require.Len(t, resp.Data.Items, 1)
@@ -450,7 +450,7 @@ func TestServer_ListCampaignCreators(t *testing.T) {
 		log := logmocks.NewMockLogger(t)
 		expectHandlerUnexpectedErrorLog(log, campaignCreatorsPath)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, ccSvc, nil, nil, nil, ServerConfig{Version: "test-version"}, log))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, ccSvc, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, log))
 		w, _ := doJSON[api.ErrorResponse](t, router, http.MethodGet, campaignCreatorsPath, nil)
 		require.Equal(t, http.StatusInternalServerError, w.Code)
 	})
@@ -464,7 +464,7 @@ func TestServer_NotifyCampaignCreators(t *testing.T) {
 		authz := mocks.NewMockAuthzService(t)
 		authz.EXPECT().CanNotifyCampaignCreators(mock.Anything).Return(domain.ErrForbidden)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, campaignNotifyPath,
 			api.CampaignCreatorBatchInput{CreatorIds: []openapi_types.UUID{uuid.MustParse(creatorAUUID)}})
 		require.Equal(t, http.StatusForbidden, w.Code)
@@ -476,7 +476,7 @@ func TestServer_NotifyCampaignCreators(t *testing.T) {
 		authz := mocks.NewMockAuthzService(t)
 		authz.EXPECT().CanNotifyCampaignCreators(mock.Anything).Return(nil)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, campaignNotifyPath,
 			api.CampaignCreatorBatchInput{CreatorIds: []openapi_types.UUID{}})
 		require.Equal(t, http.StatusUnprocessableEntity, w.Code)
@@ -492,7 +492,7 @@ func TestServer_NotifyCampaignCreators(t *testing.T) {
 		for i := range ids {
 			ids[i] = uuid.New()
 		}
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, campaignNotifyPath,
 			api.CampaignCreatorBatchInput{CreatorIds: ids})
 		require.Equal(t, http.StatusUnprocessableEntity, w.Code)
@@ -504,7 +504,7 @@ func TestServer_NotifyCampaignCreators(t *testing.T) {
 		authz := mocks.NewMockAuthzService(t)
 		authz.EXPECT().CanNotifyCampaignCreators(mock.Anything).Return(nil)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, campaignNotifyPath,
 			api.CampaignCreatorBatchInput{CreatorIds: []openapi_types.UUID{
 				uuid.MustParse(creatorAUUID), uuid.MustParse(creatorAUUID),
@@ -521,7 +521,7 @@ func TestServer_NotifyCampaignCreators(t *testing.T) {
 		ccSvc.EXPECT().Notify(mock.Anything, campaignUUID, []string{creatorAUUID}).
 			Return(nil, domain.ErrCampaignNotFound)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, ccSvc, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, ccSvc, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, campaignNotifyPath,
 			api.CampaignCreatorBatchInput{CreatorIds: []openapi_types.UUID{uuid.MustParse(creatorAUUID)}})
 		require.Equal(t, http.StatusNotFound, w.Code)
@@ -541,7 +541,7 @@ func TestServer_NotifyCampaignCreators(t *testing.T) {
 				},
 			})
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, ccSvc, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, ccSvc, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.CampaignCreatorBatchInvalidErrorResponse](t, router, http.MethodPost, campaignNotifyPath,
 			api.CampaignCreatorBatchInput{CreatorIds: []openapi_types.UUID{
 				uuid.MustParse(creatorAUUID), uuid.MustParse(creatorBUUID),
@@ -566,7 +566,7 @@ func TestServer_NotifyCampaignCreators(t *testing.T) {
 		ccSvc.EXPECT().Notify(mock.Anything, campaignUUID, []string{creatorAUUID}).
 			Return(nil, nil)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, ccSvc, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, ccSvc, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.CampaignNotifyResult](t, router, http.MethodPost, campaignNotifyPath,
 			api.CampaignCreatorBatchInput{CreatorIds: []openapi_types.UUID{uuid.MustParse(creatorAUUID)}})
 		require.Equal(t, http.StatusOK, w.Code)
@@ -583,7 +583,7 @@ func TestServer_NotifyCampaignCreators(t *testing.T) {
 				{CreatorID: creatorAUUID, Reason: domain.NotifyFailureReasonBotBlocked},
 			}, nil)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, ccSvc, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, ccSvc, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.CampaignNotifyResult](t, router, http.MethodPost, campaignNotifyPath,
 			api.CampaignCreatorBatchInput{CreatorIds: []openapi_types.UUID{
 				uuid.MustParse(creatorAUUID), uuid.MustParse(creatorBUUID),
@@ -604,7 +604,7 @@ func TestServer_NotifyCampaignCreators(t *testing.T) {
 		log := logmocks.NewMockLogger(t)
 		expectHandlerUnexpectedErrorLog(log, campaignNotifyPath)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, ccSvc, nil, nil, nil, ServerConfig{Version: "test-version"}, log))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, ccSvc, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, log))
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, campaignNotifyPath,
 			api.CampaignCreatorBatchInput{CreatorIds: []openapi_types.UUID{uuid.MustParse(creatorAUUID)}})
 		require.Equal(t, http.StatusInternalServerError, w.Code)
@@ -620,7 +620,7 @@ func TestServer_RemindCampaignCreatorsInvitation(t *testing.T) {
 		authz := mocks.NewMockAuthzService(t)
 		authz.EXPECT().CanRemindCampaignCreators(mock.Anything).Return(domain.ErrForbidden)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, campaignRemindPath,
 			api.CampaignCreatorBatchInput{CreatorIds: []openapi_types.UUID{uuid.MustParse(creatorAUUID)}})
 		require.Equal(t, http.StatusForbidden, w.Code)
@@ -635,7 +635,7 @@ func TestServer_RemindCampaignCreatorsInvitation(t *testing.T) {
 		ccSvc.EXPECT().RemindInvitation(mock.Anything, campaignUUID, []string{creatorAUUID}).
 			Return(nil, nil)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, ccSvc, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, ccSvc, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.CampaignNotifyResult](t, router, http.MethodPost, campaignRemindPath,
 			api.CampaignCreatorBatchInput{CreatorIds: []openapi_types.UUID{uuid.MustParse(creatorAUUID)}})
 		require.Equal(t, http.StatusOK, w.Code)
@@ -654,7 +654,7 @@ func TestServer_RemindCampaignCreatorsInvitation(t *testing.T) {
 				},
 			})
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, ccSvc, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, ccSvc, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.CampaignCreatorBatchInvalidErrorResponse](t, router, http.MethodPost, campaignRemindPath,
 			api.CampaignCreatorBatchInput{CreatorIds: []openapi_types.UUID{uuid.MustParse(creatorAUUID)}})
 		require.Equal(t, http.StatusUnprocessableEntity, w.Code)
@@ -675,7 +675,7 @@ func TestServer_RemindCampaignCreatorsInvitation(t *testing.T) {
 		log := logmocks.NewMockLogger(t)
 		expectHandlerUnexpectedErrorLog(log, campaignRemindPath)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, ccSvc, nil, nil, nil, ServerConfig{Version: "test-version"}, log))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, ccSvc, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, log))
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, campaignRemindPath,
 			api.CampaignCreatorBatchInput{CreatorIds: []openapi_types.UUID{uuid.MustParse(creatorAUUID)}})
 		require.Equal(t, http.StatusInternalServerError, w.Code)
@@ -692,7 +692,7 @@ func TestServer_RemindCampaignCreatorsSigning(t *testing.T) {
 		authz.EXPECT().CanRemindCampaignCreatorsSigning(mock.Anything).Return(domain.ErrForbidden)
 		ccSvc := mocks.NewMockCampaignCreatorService(t)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, ccSvc, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, ccSvc, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, campaignRemindSigningPath,
 			api.CampaignCreatorBatchInput{CreatorIds: []openapi_types.UUID{uuid.MustParse(creatorAUUID)}})
 		require.Equal(t, http.StatusForbidden, w.Code)
@@ -705,7 +705,7 @@ func TestServer_RemindCampaignCreatorsSigning(t *testing.T) {
 		authz := mocks.NewMockAuthzService(t)
 		authz.EXPECT().CanRemindCampaignCreatorsSigning(mock.Anything).Return(nil)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, campaignRemindSigningPath,
 			api.CampaignCreatorBatchInput{CreatorIds: []openapi_types.UUID{}})
 		require.Equal(t, http.StatusUnprocessableEntity, w.Code)
@@ -721,7 +721,7 @@ func TestServer_RemindCampaignCreatorsSigning(t *testing.T) {
 		for i := range ids {
 			ids[i] = uuid.New()
 		}
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, campaignRemindSigningPath,
 			api.CampaignCreatorBatchInput{CreatorIds: ids})
 		require.Equal(t, http.StatusUnprocessableEntity, w.Code)
@@ -733,7 +733,7 @@ func TestServer_RemindCampaignCreatorsSigning(t *testing.T) {
 		authz := mocks.NewMockAuthzService(t)
 		authz.EXPECT().CanRemindCampaignCreatorsSigning(mock.Anything).Return(nil)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, nil, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, campaignRemindSigningPath,
 			api.CampaignCreatorBatchInput{CreatorIds: []openapi_types.UUID{
 				uuid.MustParse(creatorAUUID), uuid.MustParse(creatorAUUID),
@@ -750,7 +750,7 @@ func TestServer_RemindCampaignCreatorsSigning(t *testing.T) {
 		ccSvc.EXPECT().RemindSigning(mock.Anything, campaignUUID, []string{creatorAUUID}).
 			Return(nil, domain.ErrCampaignNotFound)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, ccSvc, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, ccSvc, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, campaignRemindSigningPath,
 			api.CampaignCreatorBatchInput{CreatorIds: []openapi_types.UUID{uuid.MustParse(creatorAUUID)}})
 		require.Equal(t, http.StatusNotFound, w.Code)
@@ -769,7 +769,7 @@ func TestServer_RemindCampaignCreatorsSigning(t *testing.T) {
 				},
 			})
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, ccSvc, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, ccSvc, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.CampaignCreatorBatchInvalidErrorResponse](t, router, http.MethodPost, campaignRemindSigningPath,
 			api.CampaignCreatorBatchInput{CreatorIds: []openapi_types.UUID{uuid.MustParse(creatorAUUID)}})
 		require.Equal(t, http.StatusUnprocessableEntity, w.Code)
@@ -798,7 +798,7 @@ func TestServer_RemindCampaignCreatorsSigning(t *testing.T) {
 			}).
 			Return(nil, nil)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, ccSvc, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, ccSvc, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.CampaignNotifyResult](t, router, http.MethodPost, campaignRemindSigningPath,
 			api.CampaignCreatorBatchInput{CreatorIds: []openapi_types.UUID{
 				uuid.MustParse(creatorAUUID), uuid.MustParse(creatorBUUID),
@@ -819,7 +819,7 @@ func TestServer_RemindCampaignCreatorsSigning(t *testing.T) {
 				{CreatorID: creatorAUUID, Reason: domain.NotifyFailureReasonBotBlocked},
 			}, nil)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, ccSvc, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, ccSvc, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.CampaignNotifyResult](t, router, http.MethodPost, campaignRemindSigningPath,
 			api.CampaignCreatorBatchInput{CreatorIds: []openapi_types.UUID{
 				uuid.MustParse(creatorAUUID), uuid.MustParse(creatorBUUID),
@@ -840,7 +840,7 @@ func TestServer_RemindCampaignCreatorsSigning(t *testing.T) {
 		log := logmocks.NewMockLogger(t)
 		expectHandlerUnexpectedErrorLog(log, campaignRemindSigningPath)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, ccSvc, nil, nil, nil, ServerConfig{Version: "test-version"}, log))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, ccSvc, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, log))
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPost, campaignRemindSigningPath,
 			api.CampaignCreatorBatchInput{CreatorIds: []openapi_types.UUID{uuid.MustParse(creatorAUUID)}})
 		require.Equal(t, http.StatusInternalServerError, w.Code)
@@ -859,7 +859,7 @@ func TestServer_PatchCampaignCreator(t *testing.T) {
 		authz.EXPECT().CanPatchCampaignCreator(mock.Anything).Return(domain.ErrForbidden)
 		ccSvc := mocks.NewMockCampaignCreatorService(t)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, ccSvc, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, ccSvc, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPatch, patchPath,
 			api.CampaignCreatorPatchInput{TicketSent: pointer.ToBool(true)})
 		require.Equal(t, http.StatusForbidden, w.Code)
@@ -873,7 +873,7 @@ func TestServer_PatchCampaignCreator(t *testing.T) {
 		authz.EXPECT().CanPatchCampaignCreator(mock.Anything).Return(nil)
 		ccSvc := mocks.NewMockCampaignCreatorService(t)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, ccSvc, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, ccSvc, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPatch, patchPath,
 			api.CampaignCreatorPatchInput{})
 		require.Equal(t, http.StatusUnprocessableEntity, w.Code)
@@ -891,7 +891,7 @@ func TestServer_PatchCampaignCreator(t *testing.T) {
 			domain.PatchCampaignCreatorInput{TicketSent: pointer.ToBool(true)}).
 			Return(nil, domain.ErrCampaignNotFound)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, ccSvc, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, ccSvc, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPatch, patchPath,
 			api.CampaignCreatorPatchInput{TicketSent: pointer.ToBool(true)})
 		require.Equal(t, http.StatusNotFound, w.Code)
@@ -907,7 +907,7 @@ func TestServer_PatchCampaignCreator(t *testing.T) {
 			domain.PatchCampaignCreatorInput{TicketSent: pointer.ToBool(true)}).
 			Return(nil, domain.ErrCampaignCreatorNotFound)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, ccSvc, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, ccSvc, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPatch, patchPath,
 			api.CampaignCreatorPatchInput{TicketSent: pointer.ToBool(true)})
 		require.Equal(t, http.StatusNotFound, w.Code)
@@ -923,7 +923,7 @@ func TestServer_PatchCampaignCreator(t *testing.T) {
 			domain.PatchCampaignCreatorInput{TicketSent: pointer.ToBool(true)}).
 			Return(nil, domain.ErrCampaignCreatorTicketSentBadStatus)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, ccSvc, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, ccSvc, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPatch, patchPath,
 			api.CampaignCreatorPatchInput{TicketSent: pointer.ToBool(true)})
 		require.Equal(t, http.StatusUnprocessableEntity, w.Code)
@@ -941,7 +941,7 @@ func TestServer_PatchCampaignCreator(t *testing.T) {
 		log := logmocks.NewMockLogger(t)
 		expectHandlerUnexpectedErrorLog(log, patchPath)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, ccSvc, nil, nil, nil, ServerConfig{Version: "test-version"}, log))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, ccSvc, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, log))
 		w, resp := doJSON[api.ErrorResponse](t, router, http.MethodPatch, patchPath,
 			api.CampaignCreatorPatchInput{TicketSent: pointer.ToBool(true)})
 		require.Equal(t, http.StatusInternalServerError, w.Code)
@@ -977,7 +977,7 @@ func TestServer_PatchCampaignCreator(t *testing.T) {
 				UpdatedAt:    now,
 			}, nil)
 
-		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, ccSvc, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
+		router := newTestRouter(t, NewServer(nil, nil, authz, nil, nil, nil, nil, ccSvc, nil, nil, nil, nil, ServerConfig{Version: "test-version"}, logmocks.NewMockLogger(t)))
 		w, resp := doJSON[api.PatchCampaignCreatorResult](t, router, http.MethodPatch, patchPath,
 			api.CampaignCreatorPatchInput{TicketSent: pointer.ToBool(true)})
 		require.Equal(t, http.StatusOK, w.Code)

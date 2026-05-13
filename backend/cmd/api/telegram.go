@@ -6,6 +6,7 @@ import (
 
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/closer"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/config"
+	"github.com/alikhanmurzayev/ugcboost/backend/internal/dbutil"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/logger"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/telegram"
 )
@@ -15,10 +16,13 @@ import (
 // true — the test-API handler reads it directly to expose /test/telegram/sent.
 // Notifier owns the outbound Sender, the WaitGroup the closer drains and the
 // per-call timeout — services depend on a consumer-side notifier interface,
-// never on the raw Sender or WaitGroup.
+// never on the raw Sender or WaitGroup. Recorder is the inbound + outbound
+// persistence hook; it is consumed by both the handler (RecordInbound) and
+// the RecordingSender layered under the Notifier.
 type telegramRig struct {
 	Notifier *telegram.Notifier
 	Spy      *telegram.SentSpyStore
+	Recorder *telegram.MessageRecorderService
 }
 
 // setupTelegram wires the outbound sender used by service-side notifications.
@@ -37,7 +41,7 @@ type telegramRig struct {
 // no token is configured. Neither is rejected at config load time outside
 // production, but local/staging accept a missing token because the test-API
 // keeps the bot surface usable from inside the test harness.
-func setupTelegram(cfg *config.Config, log logger.Logger) (*telegramRig, error) {
+func setupTelegram(cfg *config.Config, pool dbutil.Pool, repoFactory telegram.RecorderRepoFactory, log logger.Logger) (*telegramRig, error) {
 	rig := &telegramRig{}
 	if cfg.EnableTestEndpoints {
 		rig.Spy = telegram.NewSentSpyStore()
@@ -63,7 +67,11 @@ func setupTelegram(cfg *config.Config, log logger.Logger) (*telegramRig, error) 
 		// here rather than handing the service layer a nil sender.
 		return nil, fmt.Errorf("telegram: neither TELEGRAM_BOT_TOKEN nor EnableTestEndpoints configured")
 	}
-	rig.Notifier = telegram.NewNotifier(sender, log)
+	rig.Recorder = telegram.NewMessageRecorderService(pool, repoFactory, log)
+	// RecordingSender wraps the final sender BEFORE the Notifier so every
+	// retry attempt the backoff loop fires lands as its own row.
+	recordingSender := telegram.NewRecordingSender(sender, rig.Recorder)
+	rig.Notifier = telegram.NewNotifier(recordingSender, log)
 	return rig, nil
 }
 

@@ -112,7 +112,7 @@ func run() error {
 	auditSvc := service.NewAuditService(pool, repoFactory)
 	authzSvc := authz.NewAuthzService(brandSvc, pool, repoFactory)
 
-	tgRig, err := setupTelegram(cfg, appLogger)
+	tgRig, err := setupTelegram(cfg, pool, repoFactory, appLogger)
 	if err != nil {
 		return err
 	}
@@ -130,8 +130,9 @@ func run() error {
 	creatorApplicationTelegramSvc := service.NewCreatorApplicationTelegramService(pool, repoFactory, tgRig.Notifier, appLogger)
 	creatorSvc := service.NewCreatorService(pool, repoFactory, appLogger)
 	dictionarySvc := service.NewDictionaryService(pool, repoFactory, appLogger)
+	telegramMessageSvc := service.NewTelegramMessageService(pool, repoFactory)
 
-	tgHandler := telegram.NewHandler(creatorApplicationTelegramSvc, appLogger)
+	tgHandler := telegram.NewHandler(creatorApplicationTelegramSvc, tgRig.Recorder, appLogger)
 	startTelegramRunner(ctx, cfg, tgHandler, appLogger, cl)
 
 	contractSenderSvc := contract.NewContractSenderService(
@@ -187,7 +188,7 @@ func run() error {
 	r.Use(middleware.TrustMeWebhookAuth(cfg.TrustMeWebhookToken, appLogger))
 
 	// Create server implementing ServerInterface
-	server := handler.NewServer(authSvc, brandSvc, authzSvc, auditSvc, creatorApplicationSvc, creatorSvc, campaignSvc, campaignCreatorSvc, tmaCampaignCreatorSvc, dictionarySvc, contractWebhookSvc, handler.ServerConfig{
+	server := handler.NewServer(authSvc, brandSvc, authzSvc, auditSvc, creatorApplicationSvc, creatorSvc, campaignSvc, campaignCreatorSvc, tmaCampaignCreatorSvc, dictionarySvc, contractWebhookSvc, telegramMessageSvc, handler.ServerConfig{
 		Version:               cfg.Version,
 		CookieSecure:          cfg.CookieSecure,
 		TelegramBotUsername:   cfg.TelegramBotUsername,

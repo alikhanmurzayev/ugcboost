@@ -33,7 +33,7 @@ func trustMeWebhookRouter(t *testing.T, s *Server) chi.Router {
 
 func serverWithTrustMeWebhook(t *testing.T, svc TrustMeWebhookService, log *logmocks.MockLogger) *Server {
 	t.Helper()
-	return NewServer(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, svc, ServerConfig{Version: "test-version"}, log)
+	return NewServer(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, svc, nil, ServerConfig{Version: "test-version"}, log)
 }
 
 func TestServer_TrustMeWebhook(t *testing.T) {

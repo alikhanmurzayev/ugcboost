@@ -116,6 +116,15 @@ func TestSendPulseInstagramWebhook(t *testing.T) {
 		})
 		require.Len(t, sent, 1)
 		assertVerificationApprovedShape(t, sent[0])
+
+		// Recorder writes the verification-approved outbound row alongside
+		// the spy capture. Match on text body to disambiguate from the
+		// earlier welcome row. Status not pinned — staging TeeSender mode
+		// reports synthetic chat ids as failed. Cleanup auto-registered by
+		// LinkTelegramToApplication.
+		row := testutil.AssertTelegramMessageRecorded(t, adminClient, adminToken, tgUpd.UserID,
+			testutil.TelegramMessageMatcher{Direction: "outbound", TextContains: sent[0].Text})
+		require.Equal(t, sent[0].Text, row.Text)
 	})
 
 	t.Run("self-fix mismatch overwrites handle, stamps audit flag, notifies", func(t *testing.T) {

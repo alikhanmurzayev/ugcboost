@@ -187,6 +187,28 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/telegram-messages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Telegram messages by chat_id (admin only)
+         * @description Хронологическая лента переписки бота с пользователем (inbound + outbound)
+         *     для указанного chat_id. Keyset cursor пагинация (DESC по created_at, id).
+         *     cursor — opaque base64-JSON; первый запрос без cursor. limit ∈ [1,100].
+         */
+        get: operations["listTelegramMessages"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/audit-logs": {
         parameters: {
             query?: never;
@@ -1188,6 +1210,47 @@ export interface components {
         };
         AuditLogsResult: {
             data: components["schemas"]["ListAuditLogsData"];
+        };
+        /**
+         * @description Whether the message was received by the bot (inbound) or sent by it (outbound).
+         * @enum {string}
+         */
+        TelegramMessageDirection: "inbound" | "outbound";
+        /**
+         * @description Outbound delivery outcome captured at SendMessage time. NULL for inbound
+         *     rows (they have no delivery outcome).
+         * @enum {string}
+         */
+        TelegramMessageStatus: "sent" | "failed";
+        TelegramMessage: {
+            /** Format: uuid */
+            id: string;
+            /** Format: int64 */
+            chatId: number;
+            direction: components["schemas"]["TelegramMessageDirection"];
+            /** @description Message body (empty string for non-text inbound updates). */
+            text: string;
+            /**
+             * Format: int64
+             * @description Telegram message_id (inbound — always present; outbound — present only when send succeeded).
+             */
+            telegramMessageId?: number | null;
+            /** @description Telegram @username of the sender (inbound only; NULL when the user has no public username or for outbound rows). */
+            telegramUsername?: string | null;
+            /** @description Delivery outcome for outbound rows; NULL for inbound. */
+            status?: components["schemas"]["TelegramMessageStatus"] | null;
+            /** @description Upstream error string when status=failed; NULL otherwise. */
+            error?: string | null;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        TelegramMessagesData: {
+            items: components["schemas"]["TelegramMessage"][];
+            /** @description Opaque cursor for the next page; NULL when no more rows. */
+            nextCursor?: string | null;
+        };
+        TelegramMessagesResult: {
+            data: components["schemas"]["TelegramMessagesData"];
         };
         /**
          * @description Supported social network for creator accounts (MVP scope).
@@ -2549,6 +2612,53 @@ export interface operations {
                 };
             };
             403: components["responses"]["Forbidden"];
+            default: components["responses"]["UnexpectedError"];
+        };
+    };
+    listTelegramMessages: {
+        parameters: {
+            query: {
+                /** @description Telegram chat id (== TG user id for private DMs). */
+                chatId: number;
+                /** @description Page size, between 1 and 100 inclusive. */
+                limit: number;
+                /** @description Opaque cursor returned by the previous page; omit for first page. */
+                cursor?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Telegram messages page */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TelegramMessagesResult"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            403: components["responses"]["Forbidden"];
+            /** @description Validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
             default: components["responses"]["UnexpectedError"];
         };
     };

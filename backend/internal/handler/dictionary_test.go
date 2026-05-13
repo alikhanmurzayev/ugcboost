@@ -15,7 +15,7 @@ import (
 
 func serverWithDictionary(t *testing.T, dict DictionaryService, log *logmocks.MockLogger) *Server {
 	t.Helper()
-	return NewServer(nil, nil, nil, nil, nil, nil, nil, nil, nil, dict, nil, ServerConfig{Version: "test-version"}, log)
+	return NewServer(nil, nil, nil, nil, nil, nil, nil, nil, nil, dict, nil, nil, ServerConfig{Version: "test-version"}, log)
 }
 
 func TestServer_ListDictionary(t *testing.T) {

@@ -355,6 +355,59 @@ func (_c *MockTestAPICleanupRepoFactory_NewCreatorRepo_Call) RunAndReturn(run fu
 	return _c
 }
 
+// NewTelegramMessageRepo provides a mock function for the type MockTestAPICleanupRepoFactory
+func (_mock *MockTestAPICleanupRepoFactory) NewTelegramMessageRepo(db dbutil.DB) repository.TelegramMessageRepo {
+	ret := _mock.Called(db)
+
+	if len(ret) == 0 {
+		panic("no return value specified for NewTelegramMessageRepo")
+	}
+
+	var r0 repository.TelegramMessageRepo
+	if returnFunc, ok := ret.Get(0).(func(dbutil.DB) repository.TelegramMessageRepo); ok {
+		r0 = returnFunc(db)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(repository.TelegramMessageRepo)
+		}
+	}
+	return r0
+}
+
+// MockTestAPICleanupRepoFactory_NewTelegramMessageRepo_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'NewTelegramMessageRepo'
+type MockTestAPICleanupRepoFactory_NewTelegramMessageRepo_Call struct {
+	*mock.Call
+}
+
+// NewTelegramMessageRepo is a helper method to define mock.On call
+//   - db dbutil.DB
+func (_e *MockTestAPICleanupRepoFactory_Expecter) NewTelegramMessageRepo(db interface{}) *MockTestAPICleanupRepoFactory_NewTelegramMessageRepo_Call {
+	return &MockTestAPICleanupRepoFactory_NewTelegramMessageRepo_Call{Call: _e.mock.On("NewTelegramMessageRepo", db)}
+}
+
+func (_c *MockTestAPICleanupRepoFactory_NewTelegramMessageRepo_Call) Run(run func(db dbutil.DB)) *MockTestAPICleanupRepoFactory_NewTelegramMessageRepo_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 dbutil.DB
+		if args[0] != nil {
+			arg0 = args[0].(dbutil.DB)
+		}
+		run(
+			arg0,
+		)
+	})
+	return _c
+}
+
+func (_c *MockTestAPICleanupRepoFactory_NewTelegramMessageRepo_Call) Return(telegramMessageRepo repository.TelegramMessageRepo) *MockTestAPICleanupRepoFactory_NewTelegramMessageRepo_Call {
+	_c.Call.Return(telegramMessageRepo)
+	return _c
+}
+
+func (_c *MockTestAPICleanupRepoFactory_NewTelegramMessageRepo_Call) RunAndReturn(run func(db dbutil.DB) repository.TelegramMessageRepo) *MockTestAPICleanupRepoFactory_NewTelegramMessageRepo_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // NewUserRepo provides a mock function for the type MockTestAPICleanupRepoFactory
 func (_mock *MockTestAPICleanupRepoFactory) NewUserRepo(db dbutil.DB) repository.UserRepo {
 	ret := _mock.Called(db)

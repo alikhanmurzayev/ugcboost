@@ -29,17 +29,19 @@ type LinkService interface {
 
 // Handler routes every incoming update through one entry point.
 type Handler struct {
-	link LinkService
-	log  logger.Logger
-	now  func() time.Time
+	link     LinkService
+	recorder MessageRecorder
+	log      logger.Logger
+	now      func() time.Time
 }
 
 // NewHandler wires the handler. The clock defaults to time.Now in UTC.
-func NewHandler(link LinkService, log logger.Logger) *Handler {
+func NewHandler(link LinkService, recorder MessageRecorder, log logger.Logger) *Handler {
 	return &Handler{
-		link: link,
-		log:  log,
-		now:  func() time.Time { return time.Now().UTC() },
+		link:     link,
+		recorder: recorder,
+		log:      log,
+		now:      func() time.Time { return time.Now().UTC() },
 	}
 }
 
@@ -74,6 +76,10 @@ func (h *Handler) Handle(ctx context.Context, sender Sender, update *models.Upda
 	if update.Message.From == nil || update.Message.From.ID <= 0 {
 		return
 	}
+	// Persist the inbound row before dispatch so the audit trail survives
+	// even when a downstream branch panics. Sync call — recorder shares this
+	// goroutine; failures land in recorder's own log and never propagate.
+	h.recorder.RecordInbound(ctx, update)
 	chatID := update.Message.Chat.ID
 	text := strings.TrimSpace(update.Message.Text)
 

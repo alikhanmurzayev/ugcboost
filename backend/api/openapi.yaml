@@ -353,6 +353,63 @@ paths:
         default:
           $ref: "#/components/responses/UnexpectedError"
 
+  /telegram-messages:
+    get:
+      operationId: listTelegramMessages
+      summary: List Telegram messages by chat_id (admin only)
+      description: |
+        Хронологическая лента переписки бота с пользователем (inbound + outbound)
+        для указанного chat_id. Keyset cursor пагинация (DESC по created_at, id).
+        cursor — opaque base64-JSON; первый запрос без cursor. limit ∈ [1,100].
+      tags: [telegram]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: chatId
+          in: query
+          required: true
+          description: Telegram chat id (== TG user id for private DMs).
+          schema:
+            type: integer
+            format: int64
+        - name: limit
+          in: query
+          required: true
+          description: Page size, between 1 and 100 inclusive.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+        - name: cursor
+          in: query
+          required: false
+          description: Opaque cursor returned by the previous page; omit for first page.
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Telegram messages page
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TelegramMessagesResult"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "422":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        default:
+          $ref: "#/components/responses/UnexpectedError"
+
   /audit-logs:
     get:
       operationId: listAuditLogs
@@ -2389,6 +2446,75 @@ components:
       properties:
         data:
           $ref: "#/components/schemas/ListAuditLogsData"
+
+    TelegramMessageDirection:
+      type: string
+      description: Whether the message was received by the bot (inbound) or sent by it (outbound).
+      enum: [inbound, outbound]
+
+    TelegramMessageStatus:
+      type: string
+      description: |
+        Outbound delivery outcome captured at SendMessage time. NULL for inbound
+        rows (they have no delivery outcome).
+      enum: [sent, failed]
+
+    TelegramMessage:
+      type: object
+      required: [id, chatId, direction, text, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        chatId:
+          type: integer
+          format: int64
+        direction:
+          $ref: "#/components/schemas/TelegramMessageDirection"
+        text:
+          type: string
+          description: Message body (empty string for non-text inbound updates).
+        telegramMessageId:
+          type: integer
+          format: int64
+          nullable: true
+          description: Telegram message_id (inbound — always present; outbound — present only when send succeeded).
+        telegramUsername:
+          type: string
+          nullable: true
+          description: Telegram @username of the sender (inbound only; NULL when the user has no public username or for outbound rows).
+        status:
+          allOf:
+            - $ref: "#/components/schemas/TelegramMessageStatus"
+          nullable: true
+          description: Delivery outcome for outbound rows; NULL for inbound.
+        error:
+          type: string
+          nullable: true
+          description: Upstream error string when status=failed; NULL otherwise.
+        createdAt:
+          type: string
+          format: date-time
+
+    TelegramMessagesData:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/TelegramMessage"
+        nextCursor:
+          type: string
+          nullable: true
+          description: Opaque cursor for the next page; NULL when no more rows.
+
+    TelegramMessagesResult:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: "#/components/schemas/TelegramMessagesData"
 
     SocialPlatform:
       type: string

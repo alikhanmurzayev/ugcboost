@@ -266,6 +266,42 @@ func (e SortOrder) Valid() bool {
 	}
 }
 
+// Defines values for TelegramMessageDirection.
+const (
+	Inbound  TelegramMessageDirection = "inbound"
+	Outbound TelegramMessageDirection = "outbound"
+)
+
+// Valid indicates whether the value is a known member of the TelegramMessageDirection enum.
+func (e TelegramMessageDirection) Valid() bool {
+	switch e {
+	case Inbound:
+		return true
+	case Outbound:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for TelegramMessageStatus.
+const (
+	Failed TelegramMessageStatus = "failed"
+	Sent   TelegramMessageStatus = "sent"
+)
+
+// Valid indicates whether the value is a known member of the TelegramMessageStatus enum.
+func (e TelegramMessageStatus) Valid() bool {
+	switch e {
+	case Failed:
+		return true
+	case Sent:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for UserRole.
 const (
 	Admin        UserRole = "admin"
@@ -1453,6 +1489,51 @@ type TelegramLink struct {
 	TelegramUsername *string `json:"telegramUsername,omitempty"`
 }
 
+// TelegramMessage defines model for TelegramMessage.
+type TelegramMessage struct {
+	ChatId    int64     `json:"chatId"`
+	CreatedAt time.Time `json:"createdAt"`
+
+	// Direction Whether the message was received by the bot (inbound) or sent by it (outbound).
+	Direction TelegramMessageDirection `json:"direction"`
+
+	// Error Upstream error string when status=failed; NULL otherwise.
+	Error *string            `json:"error,omitempty"`
+	Id    openapi_types.UUID `json:"id"`
+
+	// Status Delivery outcome for outbound rows; NULL for inbound.
+	Status *TelegramMessageStatus `json:"status,omitempty"`
+
+	// TelegramMessageId Telegram message_id (inbound — always present; outbound — present only when send succeeded).
+	TelegramMessageId *int64 `json:"telegramMessageId,omitempty"`
+
+	// TelegramUsername Telegram @username of the sender (inbound only; NULL when the user has no public username or for outbound rows).
+	TelegramUsername *string `json:"telegramUsername,omitempty"`
+
+	// Text Message body (empty string for non-text inbound updates).
+	Text string `json:"text"`
+}
+
+// TelegramMessageDirection Whether the message was received by the bot (inbound) or sent by it (outbound).
+type TelegramMessageDirection string
+
+// TelegramMessageStatus Outbound delivery outcome captured at SendMessage time. NULL for inbound
+// rows (they have no delivery outcome).
+type TelegramMessageStatus string
+
+// TelegramMessagesData defines model for TelegramMessagesData.
+type TelegramMessagesData struct {
+	Items []TelegramMessage `json:"items"`
+
+	// NextCursor Opaque cursor for the next page; NULL when no more rows.
+	NextCursor *string `json:"nextCursor,omitempty"`
+}
+
+// TelegramMessagesResult defines model for TelegramMessagesResult.
+type TelegramMessagesResult struct {
+	Data TelegramMessagesData `json:"data"`
+}
+
 // TmaDecisionResult Result of a TMA agree / decline call. `status` is the
 // post-decision row state (`agreed` | `declined`). `alreadyDecided`
 // is true when the row was already in the requested terminal state —
@@ -1614,6 +1695,18 @@ type VerifyCreatorApplicationSocialJSONBody = map[string]interface{}
 
 // ListDictionaryParamsType defines parameters for ListDictionary.
 type ListDictionaryParamsType string
+
+// ListTelegramMessagesParams defines parameters for ListTelegramMessages.
+type ListTelegramMessagesParams struct {
+	// ChatId Telegram chat id (== TG user id for private DMs).
+	ChatId int64 `form:"chatId" json:"chatId"`
+
+	// Limit Page size, between 1 and 100 inclusive.
+	Limit int `form:"limit" json:"limit"`
+
+	// Cursor Opaque cursor returned by the previous page; omit for first page.
+	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
 
 // LoginJSONRequestBody defines body for Login for application/json ContentType.
 type LoginJSONRequestBody = LoginRequest
