@@ -29,11 +29,11 @@ func NewClient(store *SpyStore, nowFn func() time.Time) *Client {
 }
 
 // SendToSign имитирует TrustMe: detereministic document_id = "spy-" +
-// hash(additionalInfo)[:10]. RegisterFailNext (по IIN) возвращает
-// синтетическую ошибку.
+// hash(additionalInfo)[:10]. RegisterFail (по IIN) возвращает
+// синтетическую ошибку до явного ClearFail.
 func (c *Client) SendToSign(ctx context.Context, in trustme.SendToSignInput) (*trustme.SendToSignResult, error) {
 	first := pickFirstRequisite(in.Requisites)
-	if reason, ok := c.store.consumeFailNext(first.IINBIN); ok {
+	if reason, ok := c.store.consumeFail(first.IINBIN); ok {
 		c.store.Record(SentRecord{
 			AdditionalInfo: in.AdditionalInfo,
 			ContractName:   in.ContractName,

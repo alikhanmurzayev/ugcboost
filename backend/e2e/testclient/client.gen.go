@@ -140,10 +140,15 @@ type ClientInterface interface {
 	// TrustMeSpyClear request
 	TrustMeSpyClear(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	// TrustMeSpyFailNextWithBody request with any body
-	TrustMeSpyFailNextWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+	// TrustMeSpyClearFailWithBody request with any body
+	TrustMeSpyClearFailWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
-	TrustMeSpyFailNext(ctx context.Context, body TrustMeSpyFailNextJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+	TrustMeSpyClearFail(ctx context.Context, body TrustMeSpyClearFailJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// TrustMeSpyFailWithBody request with any body
+	TrustMeSpyFailWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	TrustMeSpyFail(ctx context.Context, body TrustMeSpyFailJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// TrustMeSpyList request
 	TrustMeSpyList(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -382,8 +387,8 @@ func (c *Client) TrustMeSpyClear(ctx context.Context, reqEditors ...RequestEdito
 	return c.Client.Do(req)
 }
 
-func (c *Client) TrustMeSpyFailNextWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewTrustMeSpyFailNextRequestWithBody(c.Server, contentType, body)
+func (c *Client) TrustMeSpyClearFailWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewTrustMeSpyClearFailRequestWithBody(c.Server, contentType, body)
 	if err != nil {
 		return nil, err
 	}
@@ -394,8 +399,32 @@ func (c *Client) TrustMeSpyFailNextWithBody(ctx context.Context, contentType str
 	return c.Client.Do(req)
 }
 
-func (c *Client) TrustMeSpyFailNext(ctx context.Context, body TrustMeSpyFailNextJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
-	req, err := NewTrustMeSpyFailNextRequest(c.Server, body)
+func (c *Client) TrustMeSpyClearFail(ctx context.Context, body TrustMeSpyClearFailJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewTrustMeSpyClearFailRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) TrustMeSpyFailWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewTrustMeSpyFailRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) TrustMeSpyFail(ctx context.Context, body TrustMeSpyFailJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewTrustMeSpyFailRequest(c.Server, body)
 	if err != nil {
 		return nil, err
 	}
@@ -916,19 +945,19 @@ func NewTrustMeSpyClearRequest(server string) (*http.Request, error) {
 	return req, nil
 }
 
-// NewTrustMeSpyFailNextRequest calls the generic TrustMeSpyFailNext builder with application/json body
-func NewTrustMeSpyFailNextRequest(server string, body TrustMeSpyFailNextJSONRequestBody) (*http.Request, error) {
+// NewTrustMeSpyClearFailRequest calls the generic TrustMeSpyClearFail builder with application/json body
+func NewTrustMeSpyClearFailRequest(server string, body TrustMeSpyClearFailJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
 	buf, err := json.Marshal(body)
 	if err != nil {
 		return nil, err
 	}
 	bodyReader = bytes.NewReader(buf)
-	return NewTrustMeSpyFailNextRequestWithBody(server, "application/json", bodyReader)
+	return NewTrustMeSpyClearFailRequestWithBody(server, "application/json", bodyReader)
 }
 
-// NewTrustMeSpyFailNextRequestWithBody generates requests for TrustMeSpyFailNext with any type of body
-func NewTrustMeSpyFailNextRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+// NewTrustMeSpyClearFailRequestWithBody generates requests for TrustMeSpyClearFail with any type of body
+func NewTrustMeSpyClearFailRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
 	var err error
 
 	serverURL, err := url.Parse(server)
@@ -936,7 +965,47 @@ func NewTrustMeSpyFailNextRequestWithBody(server string, contentType string, bod
 		return nil, err
 	}
 
-	operationPath := fmt.Sprintf("/test/trustme/spy-fail-next")
+	operationPath := fmt.Sprintf("/test/trustme/spy-clear-fail")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewTrustMeSpyFailRequest calls the generic TrustMeSpyFail builder with application/json body
+func NewTrustMeSpyFailRequest(server string, body TrustMeSpyFailJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewTrustMeSpyFailRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewTrustMeSpyFailRequestWithBody generates requests for TrustMeSpyFail with any type of body
+func NewTrustMeSpyFailRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/test/trustme/spy-fail")
 	if operationPath[0] == '/' {
 		operationPath = "." + operationPath
 	}
@@ -1116,10 +1185,15 @@ type ClientWithResponsesInterface interface {
 	// TrustMeSpyClearWithResponse request
 	TrustMeSpyClearWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*TrustMeSpyClearResponse, error)
 
-	// TrustMeSpyFailNextWithBodyWithResponse request with any body
-	TrustMeSpyFailNextWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*TrustMeSpyFailNextResponse, error)
+	// TrustMeSpyClearFailWithBodyWithResponse request with any body
+	TrustMeSpyClearFailWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*TrustMeSpyClearFailResponse, error)
 
-	TrustMeSpyFailNextWithResponse(ctx context.Context, body TrustMeSpyFailNextJSONRequestBody, reqEditors ...RequestEditorFn) (*TrustMeSpyFailNextResponse, error)
+	TrustMeSpyClearFailWithResponse(ctx context.Context, body TrustMeSpyClearFailJSONRequestBody, reqEditors ...RequestEditorFn) (*TrustMeSpyClearFailResponse, error)
+
+	// TrustMeSpyFailWithBodyWithResponse request with any body
+	TrustMeSpyFailWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*TrustMeSpyFailResponse, error)
+
+	TrustMeSpyFailWithResponse(ctx context.Context, body TrustMeSpyFailJSONRequestBody, reqEditors ...RequestEditorFn) (*TrustMeSpyFailResponse, error)
 
 	// TrustMeSpyListWithResponse request
 	TrustMeSpyListWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*TrustMeSpyListResponse, error)
@@ -1397,14 +1471,14 @@ func (r TrustMeSpyClearResponse) StatusCode() int {
 	return 0
 }
 
-type TrustMeSpyFailNextResponse struct {
+type TrustMeSpyClearFailResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
 	JSON422      *ErrorResponse
 }
 
 // Status returns HTTPResponse.Status
-func (r TrustMeSpyFailNextResponse) Status() string {
+func (r TrustMeSpyClearFailResponse) Status() string {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.Status
 	}
@@ -1412,7 +1486,29 @@ func (r TrustMeSpyFailNextResponse) Status() string {
 }
 
 // StatusCode returns HTTPResponse.StatusCode
-func (r TrustMeSpyFailNextResponse) StatusCode() int {
+func (r TrustMeSpyClearFailResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type TrustMeSpyFailResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON422      *ErrorResponse
+}
+
+// Status returns HTTPResponse.Status
+func (r TrustMeSpyFailResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r TrustMeSpyFailResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -1627,21 +1723,38 @@ func (c *ClientWithResponses) TrustMeSpyClearWithResponse(ctx context.Context, r
 	return ParseTrustMeSpyClearResponse(rsp)
 }
 
-// TrustMeSpyFailNextWithBodyWithResponse request with arbitrary body returning *TrustMeSpyFailNextResponse
-func (c *ClientWithResponses) TrustMeSpyFailNextWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*TrustMeSpyFailNextResponse, error) {
-	rsp, err := c.TrustMeSpyFailNextWithBody(ctx, contentType, body, reqEditors...)
+// TrustMeSpyClearFailWithBodyWithResponse request with arbitrary body returning *TrustMeSpyClearFailResponse
+func (c *ClientWithResponses) TrustMeSpyClearFailWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*TrustMeSpyClearFailResponse, error) {
+	rsp, err := c.TrustMeSpyClearFailWithBody(ctx, contentType, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseTrustMeSpyFailNextResponse(rsp)
+	return ParseTrustMeSpyClearFailResponse(rsp)
 }
 
-func (c *ClientWithResponses) TrustMeSpyFailNextWithResponse(ctx context.Context, body TrustMeSpyFailNextJSONRequestBody, reqEditors ...RequestEditorFn) (*TrustMeSpyFailNextResponse, error) {
-	rsp, err := c.TrustMeSpyFailNext(ctx, body, reqEditors...)
+func (c *ClientWithResponses) TrustMeSpyClearFailWithResponse(ctx context.Context, body TrustMeSpyClearFailJSONRequestBody, reqEditors ...RequestEditorFn) (*TrustMeSpyClearFailResponse, error) {
+	rsp, err := c.TrustMeSpyClearFail(ctx, body, reqEditors...)
 	if err != nil {
 		return nil, err
 	}
-	return ParseTrustMeSpyFailNextResponse(rsp)
+	return ParseTrustMeSpyClearFailResponse(rsp)
+}
+
+// TrustMeSpyFailWithBodyWithResponse request with arbitrary body returning *TrustMeSpyFailResponse
+func (c *ClientWithResponses) TrustMeSpyFailWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*TrustMeSpyFailResponse, error) {
+	rsp, err := c.TrustMeSpyFailWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseTrustMeSpyFailResponse(rsp)
+}
+
+func (c *ClientWithResponses) TrustMeSpyFailWithResponse(ctx context.Context, body TrustMeSpyFailJSONRequestBody, reqEditors ...RequestEditorFn) (*TrustMeSpyFailResponse, error) {
+	rsp, err := c.TrustMeSpyFail(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseTrustMeSpyFailResponse(rsp)
 }
 
 // TrustMeSpyListWithResponse request returning *TrustMeSpyListResponse
@@ -1997,15 +2110,41 @@ func ParseTrustMeSpyClearResponse(rsp *http.Response) (*TrustMeSpyClearResponse,
 	return response, nil
 }
 
-// ParseTrustMeSpyFailNextResponse parses an HTTP response from a TrustMeSpyFailNextWithResponse call
-func ParseTrustMeSpyFailNextResponse(rsp *http.Response) (*TrustMeSpyFailNextResponse, error) {
+// ParseTrustMeSpyClearFailResponse parses an HTTP response from a TrustMeSpyClearFailWithResponse call
+func ParseTrustMeSpyClearFailResponse(rsp *http.Response) (*TrustMeSpyClearFailResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
 	defer func() { _ = rsp.Body.Close() }()
 	if err != nil {
 		return nil, err
 	}
 
-	response := &TrustMeSpyFailNextResponse{
+	response := &TrustMeSpyClearFailResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON422 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseTrustMeSpyFailResponse parses an HTTP response from a TrustMeSpyFailWithResponse call
+func ParseTrustMeSpyFailResponse(rsp *http.Response) (*TrustMeSpyFailResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &TrustMeSpyFailResponse{
 		Body:         bodyBytes,
 		HTTPResponse: rsp,
 	}

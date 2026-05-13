@@ -164,19 +164,81 @@ func TestTestAPIHandler_TrustMeSpyClear(t *testing.T) {
 	})
 }
 
-func TestTestAPIHandler_TrustMeSpyFailNext(t *testing.T) {
+func TestTestAPIHandler_TrustMeSpyFail(t *testing.T) {
 	t.Parallel()
-	rig := newTrustMeRig(t, true, true)
-	rig.spy.EXPECT().RegisterFailNext("880101300123", "boom", 2).Once()
 
-	w, _ := doJSON[any](t, rig.router, http.MethodPost, "/test/trustme/spy-fail-next",
-		testapi.TrustMeSpyFailNextRequest{
-			Iin:    "880101300123",
-			Reason: pointerStr("boom"),
-			Count:  pointerInt(2),
-		})
+	t.Run("registers a sticky fail and returns 204", func(t *testing.T) {
+		t.Parallel()
+		rig := newTrustMeRig(t, true, true)
+		rig.spy.EXPECT().RegisterFail("880101300123", "boom").Once()
 
-	require.Equal(t, http.StatusNoContent, w.Code)
+		w, _ := doJSON[any](t, rig.router, http.MethodPost, "/test/trustme/spy-fail",
+			testapi.TrustMeSpyFailRequest{
+				Iin:    "880101300123",
+				Reason: pointerStr("boom"),
+			})
+
+		require.Equal(t, http.StatusNoContent, w.Code)
+	})
+
+	t.Run("empty IIN returns 422", func(t *testing.T) {
+		t.Parallel()
+		rig := newTrustMeRig(t, true, true)
+
+		w, resp := doJSON[api.ErrorResponse](t, rig.router, http.MethodPost, "/test/trustme/spy-fail",
+			testapi.TrustMeSpyFailRequest{Iin: ""})
+
+		require.Equal(t, http.StatusUnprocessableEntity, w.Code)
+		require.Equal(t, domain.CodeValidation, resp.Error.Code)
+	})
+
+	t.Run("nil spy returns 404", func(t *testing.T) {
+		t.Parallel()
+		rig := newTrustMeRig(t, true, false)
+
+		w, resp := doJSON[api.ErrorResponse](t, rig.router, http.MethodPost, "/test/trustme/spy-fail",
+			testapi.TrustMeSpyFailRequest{Iin: "880101300123"})
+
+		require.Equal(t, http.StatusNotFound, w.Code)
+		require.Equal(t, domain.CodeNotFound, resp.Error.Code)
+	})
+}
+
+func TestTestAPIHandler_TrustMeSpyClearFail(t *testing.T) {
+	t.Parallel()
+
+	t.Run("clears registration and returns 204", func(t *testing.T) {
+		t.Parallel()
+		rig := newTrustMeRig(t, true, true)
+		rig.spy.EXPECT().ClearFail("880101300123").Once()
+
+		w, _ := doJSON[any](t, rig.router, http.MethodPost, "/test/trustme/spy-clear-fail",
+			testapi.TrustMeSpyClearFailRequest{Iin: "880101300123"})
+
+		require.Equal(t, http.StatusNoContent, w.Code)
+	})
+
+	t.Run("empty IIN returns 422", func(t *testing.T) {
+		t.Parallel()
+		rig := newTrustMeRig(t, true, true)
+
+		w, resp := doJSON[api.ErrorResponse](t, rig.router, http.MethodPost, "/test/trustme/spy-clear-fail",
+			testapi.TrustMeSpyClearFailRequest{Iin: ""})
+
+		require.Equal(t, http.StatusUnprocessableEntity, w.Code)
+		require.Equal(t, domain.CodeValidation, resp.Error.Code)
+	})
+
+	t.Run("nil spy returns 404", func(t *testing.T) {
+		t.Parallel()
+		rig := newTrustMeRig(t, true, false)
+
+		w, resp := doJSON[api.ErrorResponse](t, rig.router, http.MethodPost, "/test/trustme/spy-clear-fail",
+			testapi.TrustMeSpyClearFailRequest{Iin: "880101300123"})
+
+		require.Equal(t, http.StatusNotFound, w.Code)
+		require.Equal(t, domain.CodeNotFound, resp.Error.Code)
+	})
 }
 
 func TestTestAPIHandler_TrustMeSpyRegisterDocument(t *testing.T) {

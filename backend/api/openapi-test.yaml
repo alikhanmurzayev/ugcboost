@@ -345,24 +345,54 @@ paths:
         "204":
           description: Spy store cleared
 
-  /test/trustme/spy-fail-next:
+  /test/trustme/spy-fail:
     post:
-      operationId: trustMeSpyFailNext
-      summary: Force the next TrustMe SendToSign for additionalInfo to fail
+      operationId: trustMeSpyFail
+      summary: Make every TrustMe SendToSign for the IIN fail until cleared
       description: |
-        Registers a synthetic failure for the next `count` SendToSign calls
-        with the given AdditionalInfo. Used to exercise Phase 2c failure +
-        Phase 0 recovery in e2e. NEVER enabled in production.
+        Registers a synthetic failure for SendToSign on the given IIN. Every
+        consume returns the registered reason — the registration persists
+        until explicitly dropped via /test/trustme/spy-clear-fail. Used to
+        exercise Phase 2c failure + Phase 0 recovery in e2e under parallel
+        staging workers, where count-based one-shot semantics are racy
+        (Phase 0 recovery could consume the only one-shot before the test
+        observes it). NEVER enabled in production.
       tags: [test]
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/TrustMeSpyFailNextRequest"
+              $ref: "#/components/schemas/TrustMeSpyFailRequest"
       responses:
         "204":
           description: Failure registered
+        "422":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /test/trustme/spy-clear-fail:
+    post:
+      operationId: trustMeSpyClearFail
+      summary: Drop the spy fail registration for the IIN
+      description: |
+        Removes the previously registered fail for the IIN. Subsequent
+        SendToSign calls proceed normally. No-op when no registration
+        exists. Pair endpoint for /test/trustme/spy-fail. NEVER enabled in
+        production.
+      tags: [test]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TrustMeSpyClearFailRequest"
+      responses:
+        "204":
+          description: Fail cleared (or no-op)
         "422":
           description: Validation error
           content:
@@ -629,25 +659,31 @@ components:
         data:
           $ref: "#/components/schemas/TrustMeSpyListData"
 
-    TrustMeSpyFailNextRequest:
+    TrustMeSpyFailRequest:
       type: object
       required: [iin]
       properties:
         iin:
           type: string
+          minLength: 1
           description: |
-            IIN of the creator whose next SendToSign should fail. Tests
-            register BEFORE the creator agrees, so the outbox tick consumes
-            the registered failure on its first attempt at this IIN. Mirrors
+            IIN of the creator whose SendToSign should fail. Tests register
+            BEFORE the creator agrees; every outbox tick that attempts
+            SendToSign on this IIN returns the registered reason. Mirrors
             telegramSpyFailNext (chatId-keyed) — no wildcard, otherwise a
             parallel test in another package would consume our failure.
         reason:
           type: string
           description: Optional override for the error string the spy returns.
-        count:
-          type: integer
-          minimum: 1
-          description: How many subsequent calls on this IIN to fail. Defaults to 1.
+
+    TrustMeSpyClearFailRequest:
+      type: object
+      required: [iin]
+      properties:
+        iin:
+          type: string
+          minLength: 1
+          description: IIN whose fail registration must be dropped.
 
     TrustMeSpyRegisterDocumentRequest:
       type: object

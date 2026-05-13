@@ -70,8 +70,12 @@ func (a *trustMeSpyAdapter) List() []trustmeport.SentRecord {
 
 func (a *trustMeSpyAdapter) Clear() { a.store.Clear() }
 
-func (a *trustMeSpyAdapter) RegisterFailNext(iin, reason string, count int) {
-	a.store.RegisterFailNext(iin, reason, count)
+func (a *trustMeSpyAdapter) RegisterFail(iin, reason string) {
+	a.store.RegisterFail(iin, reason)
+}
+
+func (a *trustMeSpyAdapter) ClearFail(iin string) {
+	a.store.ClearFail(iin)
 }
 
 func (a *trustMeSpyAdapter) RegisterDocument(additionalInfo, documentID, shortURL string, contractStatus int) {

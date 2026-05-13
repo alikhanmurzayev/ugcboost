@@ -273,14 +273,17 @@ type TrustMeSentRecord struct {
 	ShortUrl *string `json:"shortUrl,omitempty"`
 }
 
-// TrustMeSpyFailNextRequest defines model for TrustMeSpyFailNextRequest.
-type TrustMeSpyFailNextRequest struct {
-	// Count How many subsequent calls on this IIN to fail. Defaults to 1.
-	Count *int `json:"count,omitempty"`
+// TrustMeSpyClearFailRequest defines model for TrustMeSpyClearFailRequest.
+type TrustMeSpyClearFailRequest struct {
+	// Iin IIN whose fail registration must be dropped.
+	Iin string `json:"iin"`
+}
 
-	// Iin IIN of the creator whose next SendToSign should fail. Tests
-	// register BEFORE the creator agrees, so the outbox tick consumes
-	// the registered failure on its first attempt at this IIN. Mirrors
+// TrustMeSpyFailRequest defines model for TrustMeSpyFailRequest.
+type TrustMeSpyFailRequest struct {
+	// Iin IIN of the creator whose SendToSign should fail. Tests register
+	// BEFORE the creator agrees; every outbox tick that attempts
+	// SendToSign on this IIN returns the registered reason. Mirrors
 	// telegramSpyFailNext (chatId-keyed) — no wildcard, otherwise a
 	// parallel test in another package would consume our failure.
 	Iin string `json:"iin"`
@@ -348,8 +351,11 @@ type TelegramSpyFakeChatJSONRequestBody = TelegramSpyFakeChatRequest
 // SignTMAInitDataJSONRequestBody defines body for SignTMAInitData for application/json ContentType.
 type SignTMAInitDataJSONRequestBody = SignTMAInitDataRequest
 
-// TrustMeSpyFailNextJSONRequestBody defines body for TrustMeSpyFailNext for application/json ContentType.
-type TrustMeSpyFailNextJSONRequestBody = TrustMeSpyFailNextRequest
+// TrustMeSpyClearFailJSONRequestBody defines body for TrustMeSpyClearFail for application/json ContentType.
+type TrustMeSpyClearFailJSONRequestBody = TrustMeSpyClearFailRequest
+
+// TrustMeSpyFailJSONRequestBody defines body for TrustMeSpyFail for application/json ContentType.
+type TrustMeSpyFailJSONRequestBody = TrustMeSpyFailRequest
 
 // TrustMeSpyRegisterDocumentJSONRequestBody defines body for TrustMeSpyRegisterDocument for application/json ContentType.
 type TrustMeSpyRegisterDocumentJSONRequestBody = TrustMeSpyRegisterDocumentRequest
@@ -392,9 +398,12 @@ type ServerInterface interface {
 	// Clear the TrustMe spy store
 	// (POST /test/trustme/spy-clear)
 	TrustMeSpyClear(w http.ResponseWriter, r *http.Request)
-	// Force the next TrustMe SendToSign for additionalInfo to fail
-	// (POST /test/trustme/spy-fail-next)
-	TrustMeSpyFailNext(w http.ResponseWriter, r *http.Request)
+	// Drop the spy fail registration for the IIN
+	// (POST /test/trustme/spy-clear-fail)
+	TrustMeSpyClearFail(w http.ResponseWriter, r *http.Request)
+	// Make every TrustMe SendToSign for the IIN fail until cleared
+	// (POST /test/trustme/spy-fail)
+	TrustMeSpyFail(w http.ResponseWriter, r *http.Request)
 	// Read recorded outbound TrustMe SendToSign requests
 	// (GET /test/trustme/spy-list)
 	TrustMeSpyList(w http.ResponseWriter, r *http.Request)
@@ -479,9 +488,15 @@ func (_ Unimplemented) TrustMeSpyClear(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
-// Force the next TrustMe SendToSign for additionalInfo to fail
-// (POST /test/trustme/spy-fail-next)
-func (_ Unimplemented) TrustMeSpyFailNext(w http.ResponseWriter, r *http.Request) {
+// Drop the spy fail registration for the IIN
+// (POST /test/trustme/spy-clear-fail)
+func (_ Unimplemented) TrustMeSpyClearFail(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Make every TrustMe SendToSign for the IIN fail until cleared
+// (POST /test/trustme/spy-fail)
+func (_ Unimplemented) TrustMeSpyFail(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -733,11 +748,25 @@ func (siw *ServerInterfaceWrapper) TrustMeSpyClear(w http.ResponseWriter, r *htt
 	handler.ServeHTTP(w, r)
 }
 
-// TrustMeSpyFailNext operation middleware
-func (siw *ServerInterfaceWrapper) TrustMeSpyFailNext(w http.ResponseWriter, r *http.Request) {
+// TrustMeSpyClearFail operation middleware
+func (siw *ServerInterfaceWrapper) TrustMeSpyClearFail(w http.ResponseWriter, r *http.Request) {
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.TrustMeSpyFailNext(w, r)
+		siw.Handler.TrustMeSpyClearFail(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// TrustMeSpyFail operation middleware
+func (siw *ServerInterfaceWrapper) TrustMeSpyFail(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.TrustMeSpyFail(w, r)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -925,7 +954,10 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Post(options.BaseURL+"/test/trustme/spy-clear", wrapper.TrustMeSpyClear)
 	})
 	r.Group(func(r chi.Router) {
-		r.Post(options.BaseURL+"/test/trustme/spy-fail-next", wrapper.TrustMeSpyFailNext)
+		r.Post(options.BaseURL+"/test/trustme/spy-clear-fail", wrapper.TrustMeSpyClearFail)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/test/trustme/spy-fail", wrapper.TrustMeSpyFail)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/test/trustme/spy-list", wrapper.TrustMeSpyList)
@@ -1222,25 +1254,50 @@ func (response TrustMeSpyClear204Response) VisitTrustMeSpyClearResponse(w http.R
 	return nil
 }
 
-type TrustMeSpyFailNextRequestObject struct {
-	Body *TrustMeSpyFailNextJSONRequestBody
+type TrustMeSpyClearFailRequestObject struct {
+	Body *TrustMeSpyClearFailJSONRequestBody
 }
 
-type TrustMeSpyFailNextResponseObject interface {
-	VisitTrustMeSpyFailNextResponse(w http.ResponseWriter) error
+type TrustMeSpyClearFailResponseObject interface {
+	VisitTrustMeSpyClearFailResponse(w http.ResponseWriter) error
 }
 
-type TrustMeSpyFailNext204Response struct {
+type TrustMeSpyClearFail204Response struct {
 }
 
-func (response TrustMeSpyFailNext204Response) VisitTrustMeSpyFailNextResponse(w http.ResponseWriter) error {
+func (response TrustMeSpyClearFail204Response) VisitTrustMeSpyClearFailResponse(w http.ResponseWriter) error {
 	w.WriteHeader(204)
 	return nil
 }
 
-type TrustMeSpyFailNext422JSONResponse ErrorResponse
+type TrustMeSpyClearFail422JSONResponse ErrorResponse
 
-func (response TrustMeSpyFailNext422JSONResponse) VisitTrustMeSpyFailNextResponse(w http.ResponseWriter) error {
+func (response TrustMeSpyClearFail422JSONResponse) VisitTrustMeSpyClearFailResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(422)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type TrustMeSpyFailRequestObject struct {
+	Body *TrustMeSpyFailJSONRequestBody
+}
+
+type TrustMeSpyFailResponseObject interface {
+	VisitTrustMeSpyFailResponse(w http.ResponseWriter) error
+}
+
+type TrustMeSpyFail204Response struct {
+}
+
+func (response TrustMeSpyFail204Response) VisitTrustMeSpyFailResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type TrustMeSpyFail422JSONResponse ErrorResponse
+
+func (response TrustMeSpyFail422JSONResponse) VisitTrustMeSpyFailResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(422)
 
@@ -1326,9 +1383,12 @@ type StrictServerInterface interface {
 	// Clear the TrustMe spy store
 	// (POST /test/trustme/spy-clear)
 	TrustMeSpyClear(ctx context.Context, request TrustMeSpyClearRequestObject) (TrustMeSpyClearResponseObject, error)
-	// Force the next TrustMe SendToSign for additionalInfo to fail
-	// (POST /test/trustme/spy-fail-next)
-	TrustMeSpyFailNext(ctx context.Context, request TrustMeSpyFailNextRequestObject) (TrustMeSpyFailNextResponseObject, error)
+	// Drop the spy fail registration for the IIN
+	// (POST /test/trustme/spy-clear-fail)
+	TrustMeSpyClearFail(ctx context.Context, request TrustMeSpyClearFailRequestObject) (TrustMeSpyClearFailResponseObject, error)
+	// Make every TrustMe SendToSign for the IIN fail until cleared
+	// (POST /test/trustme/spy-fail)
+	TrustMeSpyFail(ctx context.Context, request TrustMeSpyFailRequestObject) (TrustMeSpyFailResponseObject, error)
 	// Read recorded outbound TrustMe SendToSign requests
 	// (GET /test/trustme/spy-list)
 	TrustMeSpyList(ctx context.Context, request TrustMeSpyListRequestObject) (TrustMeSpyListResponseObject, error)
@@ -1709,11 +1769,11 @@ func (sh *strictHandler) TrustMeSpyClear(w http.ResponseWriter, r *http.Request)
 	}
 }
 
-// TrustMeSpyFailNext operation middleware
-func (sh *strictHandler) TrustMeSpyFailNext(w http.ResponseWriter, r *http.Request) {
-	var request TrustMeSpyFailNextRequestObject
+// TrustMeSpyClearFail operation middleware
+func (sh *strictHandler) TrustMeSpyClearFail(w http.ResponseWriter, r *http.Request) {
+	var request TrustMeSpyClearFailRequestObject
 
-	var body TrustMeSpyFailNextJSONRequestBody
+	var body TrustMeSpyClearFailJSONRequestBody
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
 		return
@@ -1721,18 +1781,49 @@ func (sh *strictHandler) TrustMeSpyFailNext(w http.ResponseWriter, r *http.Reque
 	request.Body = &body
 
 	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
-		return sh.ssi.TrustMeSpyFailNext(ctx, request.(TrustMeSpyFailNextRequestObject))
+		return sh.ssi.TrustMeSpyClearFail(ctx, request.(TrustMeSpyClearFailRequestObject))
 	}
 	for _, middleware := range sh.middlewares {
-		handler = middleware(handler, "TrustMeSpyFailNext")
+		handler = middleware(handler, "TrustMeSpyClearFail")
 	}
 
 	response, err := handler(r.Context(), w, r, request)
 
 	if err != nil {
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
-	} else if validResponse, ok := response.(TrustMeSpyFailNextResponseObject); ok {
-		if err := validResponse.VisitTrustMeSpyFailNextResponse(w); err != nil {
+	} else if validResponse, ok := response.(TrustMeSpyClearFailResponseObject); ok {
+		if err := validResponse.VisitTrustMeSpyClearFailResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// TrustMeSpyFail operation middleware
+func (sh *strictHandler) TrustMeSpyFail(w http.ResponseWriter, r *http.Request) {
+	var request TrustMeSpyFailRequestObject
+
+	var body TrustMeSpyFailJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.TrustMeSpyFail(ctx, request.(TrustMeSpyFailRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "TrustMeSpyFail")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(TrustMeSpyFailResponseObject); ok {
+		if err := validResponse.VisitTrustMeSpyFailResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {
