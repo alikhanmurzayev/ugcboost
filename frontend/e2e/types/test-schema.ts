@@ -207,6 +207,53 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/test/seed-telegram-message": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Insert a synthetic row into telegram_messages
+         * @description Test-only direct write into telegram_messages, bypassing Recorder /
+         *     RecordingSender wiring. Used by the list_test e2e to seed deterministic
+         *     pagination fixtures without going through inbound/outbound flows.
+         *     NEVER enabled in production.
+         */
+        post: operations["seedTelegramMessage"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/test/telegram-messages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Hard-delete telegram_messages rows by chat_id
+         * @description Test-only cleanup endpoint — drops every telegram_messages row matching
+         *     the supplied chatId. Used by e2e cleanup stacks because there is no
+         *     production endpoint exposing this operation. 204 even when nothing was
+         *     deleted (idempotent against parallel cleanups). NEVER enabled in
+         *     production.
+         */
+        delete: operations["cleanupTelegramMessages"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/test/telegram/spy/fail-next": {
         parameters: {
             query?: never;
@@ -556,6 +603,27 @@ export interface components {
         SignTMAInitDataResult: {
             data: components["schemas"]["SignTMAInitDataData"];
         };
+        SeedTelegramMessageRequest: {
+            /** Format: int64 */
+            chatId: number;
+            /** @enum {string} */
+            direction: "inbound" | "outbound";
+            /** @description Body text. Empty string is valid (non-text inbound messages seed with ""). */
+            text: string;
+            /** Format: int64 */
+            telegramMessageId?: number | null;
+            telegramUsername?: string | null;
+            /** @enum {string|null} */
+            status?: "sent" | "failed" | null;
+            error?: string | null;
+        };
+        SeedTelegramMessageData: {
+            /** Format: uuid */
+            id: string;
+        };
+        SeedTelegramMessageResult: {
+            data: components["schemas"]["SeedTelegramMessageData"];
+        };
         TelegramSpyFakeChatRequest: {
             /**
              * Format: int64
@@ -853,6 +921,68 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["SignTMAInitDataResult"];
                 };
+            };
+            /** @description Validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    seedTelegramMessage: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SeedTelegramMessageRequest"];
+            };
+        };
+        responses: {
+            /** @description Row seeded */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SeedTelegramMessageResult"];
+                };
+            };
+            /** @description Validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+        };
+    };
+    cleanupTelegramMessages: {
+        parameters: {
+            query: {
+                chatId: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Rows removed (or no-op) */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description Validation error */
             422: {

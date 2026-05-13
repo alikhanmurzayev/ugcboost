@@ -56,7 +56,7 @@ func newTrustMeRig(t *testing.T, withRunner, withSpy bool) *trustMeRig {
 		spy = rig.spy
 	}
 	rig.router = newTestAPIRouter(t, NewTestAPIHandler(auth, pool, repos, store,
-		telegram.NewHandler(nil, log), telegram.NewSentSpyStore(), "",
+		telegram.NewHandler(nil, telegram.NoopRecorder(), log), telegram.NewSentSpyStore(), "",
 		runner, spy, log))
 	return rig
 }

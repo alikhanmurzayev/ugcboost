@@ -758,6 +758,19 @@ func TestRemindCampaignCreatorsSigning(t *testing.T) {
 		deliveredMsg := waitInviteSent(t, fxDelivered.TelegramUserID, deliveredStartedAt, chunk12RemindSigningText)
 		require.Nil(t, deliveredMsg.Error)
 		require.Nil(t, deliveredMsg.WebAppUrl, "remind-signing partial-success delivered branch must also stay plain-text")
+
+		// Recorder writes both rows. Delivered creator: outbound with the
+		// reminder text (status not pinned — staging TeeSender flips it to
+		// failed for synthetic chat ids). Failing creator: outbound with the
+		// canonical "bot was blocked" error captured in the error column.
+		testutil.CleanupTelegramMessagesByChat(t, fxDelivered.TelegramUserID)
+		testutil.CleanupTelegramMessagesByChat(t, fxFailing.TelegramUserID)
+		deliveredRow := testutil.AssertTelegramMessageRecorded(t, adminClient, adminToken, fxDelivered.TelegramUserID,
+			testutil.TelegramMessageMatcher{Direction: "outbound", TextContains: deliveredMsg.Text})
+		require.Equal(t, deliveredMsg.Text, deliveredRow.Text)
+		failedRow := testutil.AssertTelegramMessageRecorded(t, adminClient, adminToken, fxFailing.TelegramUserID,
+			testutil.TelegramMessageMatcher{Direction: "outbound", Status: "failed", ErrorContains: "bot was blocked"})
+		require.NotNil(t, failedRow.Error)
 	})
 }
 

@@ -106,10 +106,18 @@ type ClientInterface interface {
 	// GetResetToken request
 	GetResetToken(ctx context.Context, params *GetResetTokenParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// SeedTelegramMessageWithBody request with any body
+	SeedTelegramMessageWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	SeedTelegramMessage(ctx context.Context, body SeedTelegramMessageJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// SeedUserWithBody request with any body
 	SeedUserWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	SeedUser(ctx context.Context, body SeedUserJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error)
+
+	// CleanupTelegramMessages request
+	CleanupTelegramMessages(ctx context.Context, params *CleanupTelegramMessagesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
 
 	// SendTelegramMessageWithBody request with any body
 	SendTelegramMessageWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error)
@@ -231,6 +239,30 @@ func (c *Client) GetResetToken(ctx context.Context, params *GetResetTokenParams,
 	return c.Client.Do(req)
 }
 
+func (c *Client) SeedTelegramMessageWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewSeedTelegramMessageRequestWithBody(c.Server, contentType, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) SeedTelegramMessage(ctx context.Context, body SeedTelegramMessageJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewSeedTelegramMessageRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
 func (c *Client) SeedUserWithBody(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewSeedUserRequestWithBody(c.Server, contentType, body)
 	if err != nil {
@@ -245,6 +277,18 @@ func (c *Client) SeedUserWithBody(ctx context.Context, contentType string, body 
 
 func (c *Client) SeedUser(ctx context.Context, body SeedUserJSONRequestBody, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewSeedUserRequest(c.Server, body)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) CleanupTelegramMessages(ctx context.Context, params *CleanupTelegramMessagesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewCleanupTelegramMessagesRequest(c.Server, params)
 	if err != nil {
 		return nil, err
 	}
@@ -630,6 +674,46 @@ func NewGetResetTokenRequest(server string, params *GetResetTokenParams) (*http.
 	return req, nil
 }
 
+// NewSeedTelegramMessageRequest calls the generic SeedTelegramMessage builder with application/json body
+func NewSeedTelegramMessageRequest(server string, body SeedTelegramMessageJSONRequestBody) (*http.Request, error) {
+	var bodyReader io.Reader
+	buf, err := json.Marshal(body)
+	if err != nil {
+		return nil, err
+	}
+	bodyReader = bytes.NewReader(buf)
+	return NewSeedTelegramMessageRequestWithBody(server, "application/json", bodyReader)
+}
+
+// NewSeedTelegramMessageRequestWithBody generates requests for SeedTelegramMessage with any type of body
+func NewSeedTelegramMessageRequestWithBody(server string, contentType string, body io.Reader) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/test/seed-telegram-message")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", queryURL.String(), body)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
 // NewSeedUserRequest calls the generic SeedUser builder with application/json body
 func NewSeedUserRequest(server string, body SeedUserJSONRequestBody) (*http.Request, error) {
 	var bodyReader io.Reader
@@ -666,6 +750,51 @@ func NewSeedUserRequestWithBody(server string, contentType string, body io.Reade
 	}
 
 	req.Header.Add("Content-Type", contentType)
+
+	return req, nil
+}
+
+// NewCleanupTelegramMessagesRequest generates requests for CleanupTelegramMessages
+func NewCleanupTelegramMessagesRequest(server string, params *CleanupTelegramMessagesParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/test/telegram-messages")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", true, "chatId", params.ChatId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: "int64"}); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("DELETE", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
 
 	return req, nil
 }
@@ -1151,10 +1280,18 @@ type ClientWithResponsesInterface interface {
 	// GetResetTokenWithResponse request
 	GetResetTokenWithResponse(ctx context.Context, params *GetResetTokenParams, reqEditors ...RequestEditorFn) (*GetResetTokenResponse, error)
 
+	// SeedTelegramMessageWithBodyWithResponse request with any body
+	SeedTelegramMessageWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SeedTelegramMessageResponse, error)
+
+	SeedTelegramMessageWithResponse(ctx context.Context, body SeedTelegramMessageJSONRequestBody, reqEditors ...RequestEditorFn) (*SeedTelegramMessageResponse, error)
+
 	// SeedUserWithBodyWithResponse request with any body
 	SeedUserWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SeedUserResponse, error)
 
 	SeedUserWithResponse(ctx context.Context, body SeedUserJSONRequestBody, reqEditors ...RequestEditorFn) (*SeedUserResponse, error)
+
+	// CleanupTelegramMessagesWithResponse request
+	CleanupTelegramMessagesWithResponse(ctx context.Context, params *CleanupTelegramMessagesParams, reqEditors ...RequestEditorFn) (*CleanupTelegramMessagesResponse, error)
 
 	// SendTelegramMessageWithBodyWithResponse request with any body
 	SendTelegramMessageWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SendTelegramMessageResponse, error)
@@ -1294,6 +1431,29 @@ func (r GetResetTokenResponse) StatusCode() int {
 	return 0
 }
 
+type SeedTelegramMessageResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON201      *SeedTelegramMessageResult
+	JSON422      *ErrorResponse
+}
+
+// Status returns HTTPResponse.Status
+func (r SeedTelegramMessageResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r SeedTelegramMessageResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type SeedUserResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -1311,6 +1471,28 @@ func (r SeedUserResponse) Status() string {
 
 // StatusCode returns HTTPResponse.StatusCode
 func (r SeedUserResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
+type CleanupTelegramMessagesResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON422      *ErrorResponse
+}
+
+// Status returns HTTPResponse.Status
+func (r CleanupTelegramMessagesResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r CleanupTelegramMessagesResponse) StatusCode() int {
 	if r.HTTPResponse != nil {
 		return r.HTTPResponse.StatusCode
 	}
@@ -1611,6 +1793,23 @@ func (c *ClientWithResponses) GetResetTokenWithResponse(ctx context.Context, par
 	return ParseGetResetTokenResponse(rsp)
 }
 
+// SeedTelegramMessageWithBodyWithResponse request with arbitrary body returning *SeedTelegramMessageResponse
+func (c *ClientWithResponses) SeedTelegramMessageWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SeedTelegramMessageResponse, error) {
+	rsp, err := c.SeedTelegramMessageWithBody(ctx, contentType, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseSeedTelegramMessageResponse(rsp)
+}
+
+func (c *ClientWithResponses) SeedTelegramMessageWithResponse(ctx context.Context, body SeedTelegramMessageJSONRequestBody, reqEditors ...RequestEditorFn) (*SeedTelegramMessageResponse, error) {
+	rsp, err := c.SeedTelegramMessage(ctx, body, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseSeedTelegramMessageResponse(rsp)
+}
+
 // SeedUserWithBodyWithResponse request with arbitrary body returning *SeedUserResponse
 func (c *ClientWithResponses) SeedUserWithBodyWithResponse(ctx context.Context, contentType string, body io.Reader, reqEditors ...RequestEditorFn) (*SeedUserResponse, error) {
 	rsp, err := c.SeedUserWithBody(ctx, contentType, body, reqEditors...)
@@ -1626,6 +1825,15 @@ func (c *ClientWithResponses) SeedUserWithResponse(ctx context.Context, body See
 		return nil, err
 	}
 	return ParseSeedUserResponse(rsp)
+}
+
+// CleanupTelegramMessagesWithResponse request returning *CleanupTelegramMessagesResponse
+func (c *ClientWithResponses) CleanupTelegramMessagesWithResponse(ctx context.Context, params *CleanupTelegramMessagesParams, reqEditors ...RequestEditorFn) (*CleanupTelegramMessagesResponse, error) {
+	rsp, err := c.CleanupTelegramMessages(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseCleanupTelegramMessagesResponse(rsp)
 }
 
 // SendTelegramMessageWithBodyWithResponse request with arbitrary body returning *SendTelegramMessageResponse
@@ -1901,6 +2109,39 @@ func ParseGetResetTokenResponse(rsp *http.Response) (*GetResetTokenResponse, err
 	return response, nil
 }
 
+// ParseSeedTelegramMessageResponse parses an HTTP response from a SeedTelegramMessageWithResponse call
+func ParseSeedTelegramMessageResponse(rsp *http.Response) (*SeedTelegramMessageResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &SeedTelegramMessageResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 201:
+		var dest SeedTelegramMessageResult
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON201 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON422 = &dest
+
+	}
+
+	return response, nil
+}
+
 // ParseSeedUserResponse parses an HTTP response from a SeedUserWithResponse call
 func ParseSeedUserResponse(rsp *http.Response) (*SeedUserResponse, error) {
 	bodyBytes, err := io.ReadAll(rsp.Body)
@@ -1922,6 +2163,32 @@ func ParseSeedUserResponse(rsp *http.Response) (*SeedUserResponse, error) {
 		}
 		response.JSON201 = &dest
 
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON422 = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseCleanupTelegramMessagesResponse parses an HTTP response from a CleanupTelegramMessagesWithResponse call
+func ParseCleanupTelegramMessagesResponse(rsp *http.Response) (*CleanupTelegramMessagesResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &CleanupTelegramMessagesResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
 		var dest ErrorResponse
 		if err := json.Unmarshal(bodyBytes, &dest); err != nil {

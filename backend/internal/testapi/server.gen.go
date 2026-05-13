@@ -49,6 +49,42 @@ func (e CleanupEntityRequestType) Valid() bool {
 	}
 }
 
+// Defines values for SeedTelegramMessageRequestDirection.
+const (
+	Inbound  SeedTelegramMessageRequestDirection = "inbound"
+	Outbound SeedTelegramMessageRequestDirection = "outbound"
+)
+
+// Valid indicates whether the value is a known member of the SeedTelegramMessageRequestDirection enum.
+func (e SeedTelegramMessageRequestDirection) Valid() bool {
+	switch e {
+	case Inbound:
+		return true
+	case Outbound:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SeedTelegramMessageRequestStatus.
+const (
+	Failed SeedTelegramMessageRequestStatus = "failed"
+	Sent   SeedTelegramMessageRequestStatus = "sent"
+)
+
+// Valid indicates whether the value is a known member of the SeedTelegramMessageRequestStatus enum.
+func (e SeedTelegramMessageRequestStatus) Valid() bool {
+	switch e {
+	case Failed:
+		return true
+	case Sent:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for SeedUserDataRole.
 const (
 	SeedUserDataRoleAdmin        SeedUserDataRole = "admin"
@@ -116,6 +152,35 @@ type ResetTokenData struct {
 // ResetTokenResult defines model for ResetTokenResult.
 type ResetTokenResult struct {
 	Data ResetTokenData `json:"data"`
+}
+
+// SeedTelegramMessageData defines model for SeedTelegramMessageData.
+type SeedTelegramMessageData struct {
+	Id openapi_types.UUID `json:"id"`
+}
+
+// SeedTelegramMessageRequest defines model for SeedTelegramMessageRequest.
+type SeedTelegramMessageRequest struct {
+	ChatId            int64                               `json:"chatId"`
+	Direction         SeedTelegramMessageRequestDirection `json:"direction"`
+	Error             *string                             `json:"error,omitempty"`
+	Status            *SeedTelegramMessageRequestStatus   `json:"status,omitempty"`
+	TelegramMessageId *int64                              `json:"telegramMessageId,omitempty"`
+	TelegramUsername  *string                             `json:"telegramUsername,omitempty"`
+
+	// Text Body text. Empty string is valid (non-text inbound messages seed with "").
+	Text string `json:"text"`
+}
+
+// SeedTelegramMessageRequestDirection defines model for SeedTelegramMessageRequest.Direction.
+type SeedTelegramMessageRequestDirection string
+
+// SeedTelegramMessageRequestStatus defines model for SeedTelegramMessageRequest.Status.
+type SeedTelegramMessageRequestStatus string
+
+// SeedTelegramMessageResult defines model for SeedTelegramMessageResult.
+type SeedTelegramMessageResult struct {
+	Data SeedTelegramMessageData `json:"data"`
 }
 
 // SeedUserData defines model for SeedUserData.
@@ -321,6 +386,11 @@ type GetResetTokenParams struct {
 	Email openapi_types.Email `form:"email" json:"email"`
 }
 
+// CleanupTelegramMessagesParams defines parameters for CleanupTelegramMessages.
+type CleanupTelegramMessagesParams struct {
+	ChatId int64 `form:"chatId" json:"chatId"`
+}
+
 // GetTelegramSentParams defines parameters for GetTelegramSent.
 type GetTelegramSentParams struct {
 	// ChatId Telegram chat id (== TG user id for private DMs).
@@ -335,6 +405,9 @@ type ForceCleanupCampaignCreatorJSONRequestBody = ForceCleanupCampaignCreatorReq
 
 // CleanupEntityJSONRequestBody defines body for CleanupEntity for application/json ContentType.
 type CleanupEntityJSONRequestBody = CleanupEntityRequest
+
+// SeedTelegramMessageJSONRequestBody defines body for SeedTelegramMessage for application/json ContentType.
+type SeedTelegramMessageJSONRequestBody = SeedTelegramMessageRequest
 
 // SeedUserJSONRequestBody defines body for SeedUser for application/json ContentType.
 type SeedUserJSONRequestBody = SeedUserRequest
@@ -374,9 +447,15 @@ type ServerInterface interface {
 	// Get the raw reset token captured for the given email
 	// (GET /test/reset-tokens)
 	GetResetToken(w http.ResponseWriter, r *http.Request, params GetResetTokenParams)
+	// Insert a synthetic row into telegram_messages
+	// (POST /test/seed-telegram-message)
+	SeedTelegramMessage(w http.ResponseWriter, r *http.Request)
 	// Create a test user with given credentials and role
 	// (POST /test/seed-user)
 	SeedUser(w http.ResponseWriter, r *http.Request)
+	// Hard-delete telegram_messages rows by chat_id
+	// (DELETE /test/telegram-messages)
+	CleanupTelegramMessages(w http.ResponseWriter, r *http.Request, params CleanupTelegramMessagesParams)
 	// Inject a synthetic text message into the Telegram handler
 	// (POST /test/telegram/message)
 	SendTelegramMessage(w http.ResponseWriter, r *http.Request)
@@ -440,9 +519,21 @@ func (_ Unimplemented) GetResetToken(w http.ResponseWriter, r *http.Request, par
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// Insert a synthetic row into telegram_messages
+// (POST /test/seed-telegram-message)
+func (_ Unimplemented) SeedTelegramMessage(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // Create a test user with given credentials and role
 // (POST /test/seed-user)
 func (_ Unimplemented) SeedUser(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// Hard-delete telegram_messages rows by chat_id
+// (DELETE /test/telegram-messages)
+func (_ Unimplemented) CleanupTelegramMessages(w http.ResponseWriter, r *http.Request, params CleanupTelegramMessagesParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -608,11 +699,59 @@ func (siw *ServerInterfaceWrapper) GetResetToken(w http.ResponseWriter, r *http.
 	handler.ServeHTTP(w, r)
 }
 
+// SeedTelegramMessage operation middleware
+func (siw *ServerInterfaceWrapper) SeedTelegramMessage(w http.ResponseWriter, r *http.Request) {
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SeedTelegramMessage(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // SeedUser operation middleware
 func (siw *ServerInterfaceWrapper) SeedUser(w http.ResponseWriter, r *http.Request) {
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.SeedUser(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CleanupTelegramMessages operation middleware
+func (siw *ServerInterfaceWrapper) CleanupTelegramMessages(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params CleanupTelegramMessagesParams
+
+	// ------------- Required query parameter "chatId" -------------
+
+	if paramValue := r.URL.Query().Get("chatId"); paramValue != "" {
+
+	} else {
+		siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "chatId"})
+		return
+	}
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "chatId", r.URL.Query(), &params.ChatId, runtime.BindQueryParameterOptions{Type: "integer", Format: "int64"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "chatId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CleanupTelegramMessages(w, r, params)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -930,7 +1069,13 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Get(options.BaseURL+"/test/reset-tokens", wrapper.GetResetToken)
 	})
 	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/test/seed-telegram-message", wrapper.SeedTelegramMessage)
+	})
+	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/test/seed-user", wrapper.SeedUser)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/test/telegram-messages", wrapper.CleanupTelegramMessages)
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/test/telegram/message", wrapper.SendTelegramMessage)
@@ -1079,6 +1224,32 @@ func (response GetResetToken404JSONResponse) VisitGetResetTokenResponse(w http.R
 	return json.NewEncoder(w).Encode(response)
 }
 
+type SeedTelegramMessageRequestObject struct {
+	Body *SeedTelegramMessageJSONRequestBody
+}
+
+type SeedTelegramMessageResponseObject interface {
+	VisitSeedTelegramMessageResponse(w http.ResponseWriter) error
+}
+
+type SeedTelegramMessage201JSONResponse SeedTelegramMessageResult
+
+func (response SeedTelegramMessage201JSONResponse) VisitSeedTelegramMessageResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(201)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type SeedTelegramMessage422JSONResponse ErrorResponse
+
+func (response SeedTelegramMessage422JSONResponse) VisitSeedTelegramMessageResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(422)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
 type SeedUserRequestObject struct {
 	Body *SeedUserJSONRequestBody
 }
@@ -1099,6 +1270,31 @@ func (response SeedUser201JSONResponse) VisitSeedUserResponse(w http.ResponseWri
 type SeedUser422JSONResponse ErrorResponse
 
 func (response SeedUser422JSONResponse) VisitSeedUserResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(422)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type CleanupTelegramMessagesRequestObject struct {
+	Params CleanupTelegramMessagesParams
+}
+
+type CleanupTelegramMessagesResponseObject interface {
+	VisitCleanupTelegramMessagesResponse(w http.ResponseWriter) error
+}
+
+type CleanupTelegramMessages204Response struct {
+}
+
+func (response CleanupTelegramMessages204Response) VisitCleanupTelegramMessagesResponse(w http.ResponseWriter) error {
+	w.WriteHeader(204)
+	return nil
+}
+
+type CleanupTelegramMessages422JSONResponse ErrorResponse
+
+func (response CleanupTelegramMessages422JSONResponse) VisitCleanupTelegramMessagesResponse(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(422)
 
@@ -1359,9 +1555,15 @@ type StrictServerInterface interface {
 	// Get the raw reset token captured for the given email
 	// (GET /test/reset-tokens)
 	GetResetToken(ctx context.Context, request GetResetTokenRequestObject) (GetResetTokenResponseObject, error)
+	// Insert a synthetic row into telegram_messages
+	// (POST /test/seed-telegram-message)
+	SeedTelegramMessage(ctx context.Context, request SeedTelegramMessageRequestObject) (SeedTelegramMessageResponseObject, error)
 	// Create a test user with given credentials and role
 	// (POST /test/seed-user)
 	SeedUser(ctx context.Context, request SeedUserRequestObject) (SeedUserResponseObject, error)
+	// Hard-delete telegram_messages rows by chat_id
+	// (DELETE /test/telegram-messages)
+	CleanupTelegramMessages(ctx context.Context, request CleanupTelegramMessagesRequestObject) (CleanupTelegramMessagesResponseObject, error)
 	// Inject a synthetic text message into the Telegram handler
 	// (POST /test/telegram/message)
 	SendTelegramMessage(ctx context.Context, request SendTelegramMessageRequestObject) (SendTelegramMessageResponseObject, error)
@@ -1540,6 +1742,37 @@ func (sh *strictHandler) GetResetToken(w http.ResponseWriter, r *http.Request, p
 	}
 }
 
+// SeedTelegramMessage operation middleware
+func (sh *strictHandler) SeedTelegramMessage(w http.ResponseWriter, r *http.Request) {
+	var request SeedTelegramMessageRequestObject
+
+	var body SeedTelegramMessageJSONRequestBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		sh.options.RequestErrorHandlerFunc(w, r, fmt.Errorf("can't decode JSON body: %w", err))
+		return
+	}
+	request.Body = &body
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.SeedTelegramMessage(ctx, request.(SeedTelegramMessageRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "SeedTelegramMessage")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(SeedTelegramMessageResponseObject); ok {
+		if err := validResponse.VisitSeedTelegramMessageResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
 // SeedUser operation middleware
 func (sh *strictHandler) SeedUser(w http.ResponseWriter, r *http.Request) {
 	var request SeedUserRequestObject
@@ -1564,6 +1797,32 @@ func (sh *strictHandler) SeedUser(w http.ResponseWriter, r *http.Request) {
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(SeedUserResponseObject); ok {
 		if err := validResponse.VisitSeedUserResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// CleanupTelegramMessages operation middleware
+func (sh *strictHandler) CleanupTelegramMessages(w http.ResponseWriter, r *http.Request, params CleanupTelegramMessagesParams) {
+	var request CleanupTelegramMessagesRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.CleanupTelegramMessages(ctx, request.(CleanupTelegramMessagesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "CleanupTelegramMessages")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(CleanupTelegramMessagesResponseObject); ok {
+		if err := validResponse.VisitCleanupTelegramMessagesResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

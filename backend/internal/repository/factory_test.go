@@ -158,6 +158,15 @@ func TestRepoFactory(t *testing.T) {
 		require.True(t, ok, "factory returns *contractRepository")
 		require.Same(t, db, concrete.db)
 	})
+
+	t.Run("NewTelegramMessageRepo returns TelegramMessageRepo bound to db", func(t *testing.T) {
+		t.Parallel()
+		repo := factory.NewTelegramMessageRepo(db)
+		require.NotNil(t, repo)
+		concrete, ok := repo.(*telegramMessageRepository)
+		require.True(t, ok, "factory returns *telegramMessageRepository")
+		require.Same(t, db, concrete.db)
+	})
 }
 
 // pgxmockPool returns a pgxmock pool without any expectation assertions —

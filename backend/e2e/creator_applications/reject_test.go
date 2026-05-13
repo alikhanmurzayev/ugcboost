@@ -164,6 +164,14 @@ func TestRejectCreatorApplication(t *testing.T) {
 		})
 		require.Len(t, msgs, 1)
 		assertRejectPushExact(t, msgs[0], tg.UserID, since)
+
+		// Outbound recorder writes the same body the spy captured. Cleanup
+		// removes the row at LIFO teardown. Status not pinned — staging
+		// TeeSender returns "chat not found" for synthetic chat ids.
+		testutil.CleanupTelegramMessagesByChat(t, tg.UserID)
+		row := testutil.AssertTelegramMessageRecorded(t, c, adminToken, tg.UserID,
+			testutil.TelegramMessageMatcher{Direction: "outbound", TextContains: msgs[0].Text})
+		require.Equal(t, msgs[0].Text, row.Text)
 	})
 
 	t.Run("happy path from moderation — rejection.fromStatus reflects moderation, push sent", func(t *testing.T) {

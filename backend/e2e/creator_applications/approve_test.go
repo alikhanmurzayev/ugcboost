@@ -228,6 +228,15 @@ func TestApproveCreatorApplication(t *testing.T) {
 		})
 		require.Len(t, msgs, 1)
 		assertApprovePushExact(t, msgs[0], fx.TelegramUserID, since)
+
+		// Outbound notify lands in telegram_messages with direction=outbound
+		// and the same body the spy captured. Status is not pinned — staging
+		// TeeSender mode reports failed sends for synthetic chat ids; the
+		// row itself is the invariant under test.
+		testutil.CleanupTelegramMessagesByChat(t, fx.TelegramUserID)
+		row := testutil.AssertTelegramMessageRecorded(t, c, fx.AdminToken, fx.TelegramUserID,
+			testutil.TelegramMessageMatcher{Direction: "outbound", TextContains: msgs[0].Text})
+		require.Equal(t, msgs[0].Text, row.Text)
 	})
 
 	t.Run("happy_sparse — все nullable=nil, 1 IG auto-verified, 1 категория", func(t *testing.T) {

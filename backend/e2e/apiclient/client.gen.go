@@ -240,6 +240,9 @@ type ClientInterface interface {
 	// HealthCheck request
 	HealthCheck(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error)
 
+	// ListTelegramMessages request
+	ListTelegramMessages(ctx context.Context, params *ListTelegramMessagesParams, reqEditors ...RequestEditorFn) (*http.Response, error)
+
 	// TmaAgree request
 	TmaAgree(ctx context.Context, secretToken TmaSecretTokenPathParam, reqEditors ...RequestEditorFn) (*http.Response, error)
 
@@ -922,6 +925,18 @@ func (c *Client) ListDictionary(ctx context.Context, pType ListDictionaryParamsT
 
 func (c *Client) HealthCheck(ctx context.Context, reqEditors ...RequestEditorFn) (*http.Response, error) {
 	req, err := NewHealthCheckRequest(c.Server)
+	if err != nil {
+		return nil, err
+	}
+	req = req.WithContext(ctx)
+	if err := c.applyEditors(ctx, req, reqEditors); err != nil {
+		return nil, err
+	}
+	return c.Client.Do(req)
+}
+
+func (c *Client) ListTelegramMessages(ctx context.Context, params *ListTelegramMessagesParams, reqEditors ...RequestEditorFn) (*http.Response, error) {
+	req, err := NewListTelegramMessagesRequest(c.Server, params)
 	if err != nil {
 		return nil, err
 	}
@@ -2680,6 +2695,79 @@ func NewHealthCheckRequest(server string) (*http.Request, error) {
 	return req, nil
 }
 
+// NewListTelegramMessagesRequest generates requests for ListTelegramMessages
+func NewListTelegramMessagesRequest(server string, params *ListTelegramMessagesParams) (*http.Request, error) {
+	var err error
+
+	serverURL, err := url.Parse(server)
+	if err != nil {
+		return nil, err
+	}
+
+	operationPath := fmt.Sprintf("/telegram-messages")
+	if operationPath[0] == '/' {
+		operationPath = "." + operationPath
+	}
+
+	queryURL, err := serverURL.Parse(operationPath)
+	if err != nil {
+		return nil, err
+	}
+
+	if params != nil {
+		queryValues := queryURL.Query()
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", true, "chatId", params.ChatId, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: "int64"}); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if queryFrag, err := runtime.StyleParamWithOptions("form", true, "limit", params.Limit, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "integer", Format: ""}); err != nil {
+			return nil, err
+		} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+			return nil, err
+		} else {
+			for k, v := range parsed {
+				for _, v2 := range v {
+					queryValues.Add(k, v2)
+				}
+			}
+		}
+
+		if params.Cursor != nil {
+
+			if queryFrag, err := runtime.StyleParamWithOptions("form", true, "cursor", *params.Cursor, runtime.StyleParamOptions{ParamLocation: runtime.ParamLocationQuery, Type: "string", Format: ""}); err != nil {
+				return nil, err
+			} else if parsed, err := url.ParseQuery(queryFrag); err != nil {
+				return nil, err
+			} else {
+				for k, v := range parsed {
+					for _, v2 := range v {
+						queryValues.Add(k, v2)
+					}
+				}
+			}
+
+		}
+
+		queryURL.RawQuery = queryValues.Encode()
+	}
+
+	req, err := http.NewRequest("GET", queryURL.String(), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	return req, nil
+}
+
 // NewTmaAgreeRequest generates requests for TmaAgree
 func NewTmaAgreeRequest(server string, secretToken TmaSecretTokenPathParam) (*http.Request, error) {
 	var err error
@@ -3054,6 +3142,9 @@ type ClientWithResponsesInterface interface {
 
 	// HealthCheckWithResponse request
 	HealthCheckWithResponse(ctx context.Context, reqEditors ...RequestEditorFn) (*HealthCheckResponse, error)
+
+	// ListTelegramMessagesWithResponse request
+	ListTelegramMessagesWithResponse(ctx context.Context, params *ListTelegramMessagesParams, reqEditors ...RequestEditorFn) (*ListTelegramMessagesResponse, error)
 
 	// TmaAgreeWithResponse request
 	TmaAgreeWithResponse(ctx context.Context, secretToken TmaSecretTokenPathParam, reqEditors ...RequestEditorFn) (*TmaAgreeResponse, error)
@@ -4048,6 +4139,32 @@ func (r HealthCheckResponse) StatusCode() int {
 	return 0
 }
 
+type ListTelegramMessagesResponse struct {
+	Body         []byte
+	HTTPResponse *http.Response
+	JSON200      *TelegramMessagesResult
+	JSON401      *ErrorResponse
+	JSON403      *Forbidden
+	JSON422      *ErrorResponse
+	JSONDefault  *UnexpectedError
+}
+
+// Status returns HTTPResponse.Status
+func (r ListTelegramMessagesResponse) Status() string {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.Status
+	}
+	return http.StatusText(0)
+}
+
+// StatusCode returns HTTPResponse.StatusCode
+func (r ListTelegramMessagesResponse) StatusCode() int {
+	if r.HTTPResponse != nil {
+		return r.HTTPResponse.StatusCode
+	}
+	return 0
+}
+
 type TmaAgreeResponse struct {
 	Body         []byte
 	HTTPResponse *http.Response
@@ -4662,6 +4779,15 @@ func (c *ClientWithResponses) HealthCheckWithResponse(ctx context.Context, reqEd
 		return nil, err
 	}
 	return ParseHealthCheckResponse(rsp)
+}
+
+// ListTelegramMessagesWithResponse request returning *ListTelegramMessagesResponse
+func (c *ClientWithResponses) ListTelegramMessagesWithResponse(ctx context.Context, params *ListTelegramMessagesParams, reqEditors ...RequestEditorFn) (*ListTelegramMessagesResponse, error) {
+	rsp, err := c.ListTelegramMessages(ctx, params, reqEditors...)
+	if err != nil {
+		return nil, err
+	}
+	return ParseListTelegramMessagesResponse(rsp)
 }
 
 // TmaAgreeWithResponse request returning *TmaAgreeResponse
@@ -6623,6 +6749,60 @@ func ParseHealthCheckResponse(rsp *http.Response) (*HealthCheckResponse, error) 
 			return nil, err
 		}
 		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
+		var dest UnexpectedError
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSONDefault = &dest
+
+	}
+
+	return response, nil
+}
+
+// ParseListTelegramMessagesResponse parses an HTTP response from a ListTelegramMessagesWithResponse call
+func ParseListTelegramMessagesResponse(rsp *http.Response) (*ListTelegramMessagesResponse, error) {
+	bodyBytes, err := io.ReadAll(rsp.Body)
+	defer func() { _ = rsp.Body.Close() }()
+	if err != nil {
+		return nil, err
+	}
+
+	response := &ListTelegramMessagesResponse{
+		Body:         bodyBytes,
+		HTTPResponse: rsp,
+	}
+
+	switch {
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 200:
+		var dest TelegramMessagesResult
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON200 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 401:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON401 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 403:
+		var dest Forbidden
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON403 = &dest
+
+	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && rsp.StatusCode == 422:
+		var dest ErrorResponse
+		if err := json.Unmarshal(bodyBytes, &dest); err != nil {
+			return nil, err
+		}
+		response.JSON422 = &dest
 
 	case strings.Contains(rsp.Header.Get("Content-Type"), "json") && true:
 		var dest UnexpectedError

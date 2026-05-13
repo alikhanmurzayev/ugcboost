@@ -42,6 +42,42 @@ func (e CleanupEntityRequestType) Valid() bool {
 	}
 }
 
+// Defines values for SeedTelegramMessageRequestDirection.
+const (
+	Inbound  SeedTelegramMessageRequestDirection = "inbound"
+	Outbound SeedTelegramMessageRequestDirection = "outbound"
+)
+
+// Valid indicates whether the value is a known member of the SeedTelegramMessageRequestDirection enum.
+func (e SeedTelegramMessageRequestDirection) Valid() bool {
+	switch e {
+	case Inbound:
+		return true
+	case Outbound:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SeedTelegramMessageRequestStatus.
+const (
+	Failed SeedTelegramMessageRequestStatus = "failed"
+	Sent   SeedTelegramMessageRequestStatus = "sent"
+)
+
+// Valid indicates whether the value is a known member of the SeedTelegramMessageRequestStatus enum.
+func (e SeedTelegramMessageRequestStatus) Valid() bool {
+	switch e {
+	case Failed:
+		return true
+	case Sent:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for SeedUserDataRole.
 const (
 	SeedUserDataRoleAdmin        SeedUserDataRole = "admin"
@@ -109,6 +145,35 @@ type ResetTokenData struct {
 // ResetTokenResult defines model for ResetTokenResult.
 type ResetTokenResult struct {
 	Data ResetTokenData `json:"data"`
+}
+
+// SeedTelegramMessageData defines model for SeedTelegramMessageData.
+type SeedTelegramMessageData struct {
+	Id openapi_types.UUID `json:"id"`
+}
+
+// SeedTelegramMessageRequest defines model for SeedTelegramMessageRequest.
+type SeedTelegramMessageRequest struct {
+	ChatId            int64                               `json:"chatId"`
+	Direction         SeedTelegramMessageRequestDirection `json:"direction"`
+	Error             *string                             `json:"error,omitempty"`
+	Status            *SeedTelegramMessageRequestStatus   `json:"status,omitempty"`
+	TelegramMessageId *int64                              `json:"telegramMessageId,omitempty"`
+	TelegramUsername  *string                             `json:"telegramUsername,omitempty"`
+
+	// Text Body text. Empty string is valid (non-text inbound messages seed with "").
+	Text string `json:"text"`
+}
+
+// SeedTelegramMessageRequestDirection defines model for SeedTelegramMessageRequest.Direction.
+type SeedTelegramMessageRequestDirection string
+
+// SeedTelegramMessageRequestStatus defines model for SeedTelegramMessageRequest.Status.
+type SeedTelegramMessageRequestStatus string
+
+// SeedTelegramMessageResult defines model for SeedTelegramMessageResult.
+type SeedTelegramMessageResult struct {
+	Data SeedTelegramMessageData `json:"data"`
 }
 
 // SeedUserData defines model for SeedUserData.
@@ -314,6 +379,11 @@ type GetResetTokenParams struct {
 	Email openapi_types.Email `form:"email" json:"email"`
 }
 
+// CleanupTelegramMessagesParams defines parameters for CleanupTelegramMessages.
+type CleanupTelegramMessagesParams struct {
+	ChatId int64 `form:"chatId" json:"chatId"`
+}
+
 // GetTelegramSentParams defines parameters for GetTelegramSent.
 type GetTelegramSentParams struct {
 	// ChatId Telegram chat id (== TG user id for private DMs).
@@ -328,6 +398,9 @@ type ForceCleanupCampaignCreatorJSONRequestBody = ForceCleanupCampaignCreatorReq
 
 // CleanupEntityJSONRequestBody defines body for CleanupEntity for application/json ContentType.
 type CleanupEntityJSONRequestBody = CleanupEntityRequest
+
+// SeedTelegramMessageJSONRequestBody defines body for SeedTelegramMessage for application/json ContentType.
+type SeedTelegramMessageJSONRequestBody = SeedTelegramMessageRequest
 
 // SeedUserJSONRequestBody defines body for SeedUser for application/json ContentType.
 type SeedUserJSONRequestBody = SeedUserRequest

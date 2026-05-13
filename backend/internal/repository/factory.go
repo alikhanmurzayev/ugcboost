@@ -95,3 +95,10 @@ func (f *RepoFactory) NewCampaignCreatorRepo(db dbutil.DB) CampaignCreatorRepo {
 func (f *RepoFactory) NewContractsRepo(db dbutil.DB) ContractRepo {
 	return &contractRepository{db: db}
 }
+
+// NewTelegramMessageRepo creates a telegram_messages repository bound to the
+// given DB. Used by the recorder (sync INSERT on inbound + outbound), the
+// telegram-messages list service (admin read), and the test cleanup endpoint.
+func (f *RepoFactory) NewTelegramMessageRepo(db dbutil.DB) TelegramMessageRepo {
+	return &telegramMessageRepository{db: db}
+}

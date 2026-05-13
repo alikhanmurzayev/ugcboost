@@ -9,6 +9,7 @@ import (
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/domain"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/logger"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/middleware"
+	"github.com/alikhanmurzayev/ugcboost/backend/internal/repository"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/service"
 	"github.com/alikhanmurzayev/ugcboost/backend/internal/testapi"
 )
@@ -66,6 +67,7 @@ type AuthzService interface {
 	CanRemindCampaignCreators(ctx context.Context) error
 	CanRemindCampaignCreatorsSigning(ctx context.Context) error
 	CanPatchCampaignCreator(ctx context.Context) error
+	CanReadTelegramMessages(ctx context.Context) error
 	AuthorizeTMACampaignDecision(ctx context.Context, secretToken string) (authz.TMACampaignDecisionAuth, error)
 }
 
@@ -146,6 +148,13 @@ type TrustMeWebhookService interface {
 	HandleEvent(ctx context.Context, ev domain.TrustMeWebhookEvent) error
 }
 
+// TelegramMessageService backs admin GET /telegram-messages. Cursor is
+// optional (nil → first page); the response carries the next cursor when more
+// rows remain.
+type TelegramMessageService interface {
+	ListByChat(ctx context.Context, chatID int64, cursor *domain.TelegramMessagesCursor, limit int) ([]*repository.TelegramMessageRow, *domain.TelegramMessagesCursor, error)
+}
+
 // ServerConfig bundles configuration values the handler layer needs. Keeping
 // them in a struct lets NewServer grow without a long positional signature.
 type ServerConfig struct {
@@ -169,6 +178,7 @@ type Server struct {
 	tmaCampaignCreatorService TmaCampaignCreatorService
 	dictionaryService         DictionaryService
 	trustMeWebhookService     TrustMeWebhookService
+	telegramMessageService    TelegramMessageService
 	version                   string
 	cookieSecure              bool
 	telegramBotUsername       string
@@ -192,6 +202,7 @@ func NewServer(
 	tmaCampaignCreators TmaCampaignCreatorService,
 	dict DictionaryService,
 	trustMeWebhook TrustMeWebhookService,
+	telegramMessages TelegramMessageService,
 	cfg ServerConfig,
 	log logger.Logger,
 ) *Server {
@@ -207,6 +218,7 @@ func NewServer(
 		tmaCampaignCreatorService: tmaCampaignCreators,
 		dictionaryService:         dict,
 		trustMeWebhookService:     trustMeWebhook,
+		telegramMessageService:    telegramMessages,
 		version:                   cfg.Version,
 		cookieSecure:              cfg.CookieSecure,
 		telegramBotUsername:       cfg.TelegramBotUsername,

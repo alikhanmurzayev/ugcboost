@@ -275,6 +275,42 @@ func (e SortOrder) Valid() bool {
 	}
 }
 
+// Defines values for TelegramMessageDirection.
+const (
+	Inbound  TelegramMessageDirection = "inbound"
+	Outbound TelegramMessageDirection = "outbound"
+)
+
+// Valid indicates whether the value is a known member of the TelegramMessageDirection enum.
+func (e TelegramMessageDirection) Valid() bool {
+	switch e {
+	case Inbound:
+		return true
+	case Outbound:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for TelegramMessageStatus.
+const (
+	Failed TelegramMessageStatus = "failed"
+	Sent   TelegramMessageStatus = "sent"
+)
+
+// Valid indicates whether the value is a known member of the TelegramMessageStatus enum.
+func (e TelegramMessageStatus) Valid() bool {
+	switch e {
+	case Failed:
+		return true
+	case Sent:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for UserRole.
 const (
 	Admin        UserRole = "admin"
@@ -1462,6 +1498,51 @@ type TelegramLink struct {
 	TelegramUsername *string `json:"telegramUsername,omitempty"`
 }
 
+// TelegramMessage defines model for TelegramMessage.
+type TelegramMessage struct {
+	ChatId    int64     `json:"chatId"`
+	CreatedAt time.Time `json:"createdAt"`
+
+	// Direction Whether the message was received by the bot (inbound) or sent by it (outbound).
+	Direction TelegramMessageDirection `json:"direction"`
+
+	// Error Upstream error string when status=failed; NULL otherwise.
+	Error *string            `json:"error,omitempty"`
+	Id    openapi_types.UUID `json:"id"`
+
+	// Status Delivery outcome for outbound rows; NULL for inbound.
+	Status *TelegramMessageStatus `json:"status,omitempty"`
+
+	// TelegramMessageId Telegram message_id (inbound — always present; outbound — present only when send succeeded).
+	TelegramMessageId *int64 `json:"telegramMessageId,omitempty"`
+
+	// TelegramUsername Telegram @username of the sender (inbound only; NULL when the user has no public username or for outbound rows).
+	TelegramUsername *string `json:"telegramUsername,omitempty"`
+
+	// Text Message body (empty string for non-text inbound updates).
+	Text string `json:"text"`
+}
+
+// TelegramMessageDirection Whether the message was received by the bot (inbound) or sent by it (outbound).
+type TelegramMessageDirection string
+
+// TelegramMessageStatus Outbound delivery outcome captured at SendMessage time. NULL for inbound
+// rows (they have no delivery outcome).
+type TelegramMessageStatus string
+
+// TelegramMessagesData defines model for TelegramMessagesData.
+type TelegramMessagesData struct {
+	Items []TelegramMessage `json:"items"`
+
+	// NextCursor Opaque cursor for the next page; NULL when no more rows.
+	NextCursor *string `json:"nextCursor,omitempty"`
+}
+
+// TelegramMessagesResult defines model for TelegramMessagesResult.
+type TelegramMessagesResult struct {
+	Data TelegramMessagesData `json:"data"`
+}
+
 // TmaDecisionResult Result of a TMA agree / decline call. `status` is the
 // post-decision row state (`agreed` | `declined`). `alreadyDecided`
 // is true when the row was already in the requested terminal state —
@@ -1623,6 +1704,18 @@ type VerifyCreatorApplicationSocialJSONBody = map[string]interface{}
 
 // ListDictionaryParamsType defines parameters for ListDictionary.
 type ListDictionaryParamsType string
+
+// ListTelegramMessagesParams defines parameters for ListTelegramMessages.
+type ListTelegramMessagesParams struct {
+	// ChatId Telegram chat id (== TG user id for private DMs).
+	ChatId int64 `form:"chatId" json:"chatId"`
+
+	// Limit Page size, between 1 and 100 inclusive.
+	Limit int `form:"limit" json:"limit"`
+
+	// Cursor Opaque cursor returned by the previous page; omit for first page.
+	Cursor *string `form:"cursor,omitempty" json:"cursor,omitempty"`
+}
 
 // LoginJSONRequestBody defines body for Login for application/json ContentType.
 type LoginJSONRequestBody = LoginRequest
@@ -1800,6 +1893,9 @@ type ServerInterface interface {
 	// Health check
 	// (GET /healthz)
 	HealthCheck(w http.ResponseWriter, r *http.Request)
+	// List Telegram messages by chat_id (admin only)
+	// (GET /telegram-messages)
+	ListTelegramMessages(w http.ResponseWriter, r *http.Request, params ListTelegramMessagesParams)
 	// Creator agrees to participate in a campaign (TMA-only)
 	// (POST /tma/campaigns/{secretToken}/agree)
 	TmaAgree(w http.ResponseWriter, r *http.Request, secretToken TmaSecretTokenPathParam)
@@ -2046,6 +2142,12 @@ func (_ Unimplemented) ListDictionary(w http.ResponseWriter, r *http.Request, pT
 // Health check
 // (GET /healthz)
 func (_ Unimplemented) HealthCheck(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// List Telegram messages by chat_id (admin only)
+// (GET /telegram-messages)
+func (_ Unimplemented) ListTelegramMessages(w http.ResponseWriter, r *http.Request, params ListTelegramMessagesParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -3228,6 +3330,69 @@ func (siw *ServerInterfaceWrapper) HealthCheck(w http.ResponseWriter, r *http.Re
 	handler.ServeHTTP(w, r)
 }
 
+// ListTelegramMessages operation middleware
+func (siw *ServerInterfaceWrapper) ListTelegramMessages(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListTelegramMessagesParams
+
+	// ------------- Required query parameter "chatId" -------------
+
+	if paramValue := r.URL.Query().Get("chatId"); paramValue != "" {
+
+	} else {
+		siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "chatId"})
+		return
+	}
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "chatId", r.URL.Query(), &params.ChatId, runtime.BindQueryParameterOptions{Type: "integer", Format: "int64"})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "chatId", Err: err})
+		return
+	}
+
+	// ------------- Required query parameter "limit" -------------
+
+	if paramValue := r.URL.Query().Get("limit"); paramValue != "" {
+
+	} else {
+		siw.ErrorHandlerFunc(w, r, &RequiredParamError{ParamName: "limit"})
+		return
+	}
+
+	err = runtime.BindQueryParameterWithOptions("form", true, true, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListTelegramMessages(w, r, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // TmaAgree operation middleware
 func (siw *ServerInterfaceWrapper) TmaAgree(w http.ResponseWriter, r *http.Request) {
 
@@ -3575,6 +3740,9 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/healthz", wrapper.HealthCheck)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/telegram-messages", wrapper.ListTelegramMessages)
 	})
 	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/tma/campaigns/{secretToken}/agree", wrapper.TmaAgree)
@@ -5612,6 +5780,62 @@ func (response HealthCheckdefaultJSONResponse) VisitHealthCheckResponse(w http.R
 	return json.NewEncoder(w).Encode(response.Body)
 }
 
+type ListTelegramMessagesRequestObject struct {
+	Params ListTelegramMessagesParams
+}
+
+type ListTelegramMessagesResponseObject interface {
+	VisitListTelegramMessagesResponse(w http.ResponseWriter) error
+}
+
+type ListTelegramMessages200JSONResponse TelegramMessagesResult
+
+func (response ListTelegramMessages200JSONResponse) VisitListTelegramMessagesResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(200)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type ListTelegramMessages401JSONResponse ErrorResponse
+
+func (response ListTelegramMessages401JSONResponse) VisitListTelegramMessagesResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type ListTelegramMessages403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response ListTelegramMessages403JSONResponse) VisitListTelegramMessagesResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type ListTelegramMessages422JSONResponse ErrorResponse
+
+func (response ListTelegramMessages422JSONResponse) VisitListTelegramMessagesResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(422)
+
+	return json.NewEncoder(w).Encode(response)
+}
+
+type ListTelegramMessagesdefaultJSONResponse struct {
+	Body       ErrorResponse
+	StatusCode int
+}
+
+func (response ListTelegramMessagesdefaultJSONResponse) VisitListTelegramMessagesResponse(w http.ResponseWriter) error {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(response.StatusCode)
+
+	return json.NewEncoder(w).Encode(response.Body)
+}
+
 type TmaAgreeRequestObject struct {
 	SecretToken TmaSecretTokenPathParam `json:"secretToken"`
 }
@@ -6008,6 +6232,9 @@ type StrictServerInterface interface {
 	// Health check
 	// (GET /healthz)
 	HealthCheck(ctx context.Context, request HealthCheckRequestObject) (HealthCheckResponseObject, error)
+	// List Telegram messages by chat_id (admin only)
+	// (GET /telegram-messages)
+	ListTelegramMessages(ctx context.Context, request ListTelegramMessagesRequestObject) (ListTelegramMessagesResponseObject, error)
 	// Creator agrees to participate in a campaign (TMA-only)
 	// (POST /tma/campaigns/{secretToken}/agree)
 	TmaAgree(ctx context.Context, request TmaAgreeRequestObject) (TmaAgreeResponseObject, error)
@@ -7145,6 +7372,32 @@ func (sh *strictHandler) HealthCheck(w http.ResponseWriter, r *http.Request) {
 		sh.options.ResponseErrorHandlerFunc(w, r, err)
 	} else if validResponse, ok := response.(HealthCheckResponseObject); ok {
 		if err := validResponse.VisitHealthCheckResponse(w); err != nil {
+			sh.options.ResponseErrorHandlerFunc(w, r, err)
+		}
+	} else if response != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, fmt.Errorf("unexpected response type: %T", response))
+	}
+}
+
+// ListTelegramMessages operation middleware
+func (sh *strictHandler) ListTelegramMessages(w http.ResponseWriter, r *http.Request, params ListTelegramMessagesParams) {
+	var request ListTelegramMessagesRequestObject
+
+	request.Params = params
+
+	handler := func(ctx context.Context, w http.ResponseWriter, r *http.Request, request interface{}) (interface{}, error) {
+		return sh.ssi.ListTelegramMessages(ctx, request.(ListTelegramMessagesRequestObject))
+	}
+	for _, middleware := range sh.middlewares {
+		handler = middleware(handler, "ListTelegramMessages")
+	}
+
+	response, err := handler(r.Context(), w, r, request)
+
+	if err != nil {
+		sh.options.ResponseErrorHandlerFunc(w, r, err)
+	} else if validResponse, ok := response.(ListTelegramMessagesResponseObject); ok {
+		if err := validResponse.VisitListTelegramMessagesResponse(w); err != nil {
 			sh.options.ResponseErrorHandlerFunc(w, r, err)
 		}
 	} else if response != nil {

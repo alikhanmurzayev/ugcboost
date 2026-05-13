@@ -326,7 +326,17 @@ func TestTelegramFallback(t *testing.T) {
 			t.Parallel()
 			upd := testutil.DefaultTelegramUpdate(t)
 			upd.Text = tc2.text
+			testutil.CleanupTelegramMessagesByChat(t, upd.ChatID)
 			require.Equal(t, tc2.want, singleReply(t, testutil.SendTelegramUpdate(t, tc, upd), upd.ChatID))
+
+			// Recorder writes one inbound row per private update (regardless of
+			// the dispatcher branch), so every fallback case must persist the
+			// raw text — including the synthetic `application not found` UUID
+			// payload — so admins can later replay the chat from the DB.
+			adminClient, adminToken, _ := testutil.SetupAdminClient(t)
+			row := testutil.AssertTelegramMessageRecorded(t, adminClient, adminToken, upd.ChatID,
+				testutil.TelegramMessageMatcher{Direction: "inbound", TextContains: tc2.text})
+			require.Equal(t, tc2.text, row.Text)
 		})
 	}
 }

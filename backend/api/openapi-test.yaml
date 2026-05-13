@@ -275,6 +275,64 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /test/seed-telegram-message:
+    post:
+      operationId: seedTelegramMessage
+      summary: Insert a synthetic row into telegram_messages
+      description: |
+        Test-only direct write into telegram_messages, bypassing Recorder /
+        RecordingSender wiring. Used by the list_test e2e to seed deterministic
+        pagination fixtures without going through inbound/outbound flows.
+        NEVER enabled in production.
+      tags: [test]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SeedTelegramMessageRequest"
+      responses:
+        "201":
+          description: Row seeded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SeedTelegramMessageResult"
+        "422":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /test/telegram-messages:
+    delete:
+      operationId: cleanupTelegramMessages
+      summary: Hard-delete telegram_messages rows by chat_id
+      description: |
+        Test-only cleanup endpoint — drops every telegram_messages row matching
+        the supplied chatId. Used by e2e cleanup stacks because there is no
+        production endpoint exposing this operation. 204 even when nothing was
+        deleted (idempotent against parallel cleanups). NEVER enabled in
+        production.
+      tags: [test]
+      parameters:
+        - name: chatId
+          in: query
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        "204":
+          description: Rows removed (or no-op)
+        "422":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /test/telegram/spy/fail-next:
     post:
       operationId: telegramSpyFailNext
@@ -737,6 +795,49 @@ components:
       properties:
         data:
           $ref: "#/components/schemas/SignTMAInitDataData"
+
+    SeedTelegramMessageRequest:
+      type: object
+      required: [chatId, direction, text]
+      properties:
+        chatId:
+          type: integer
+          format: int64
+        direction:
+          type: string
+          enum: [inbound, outbound]
+        text:
+          type: string
+          description: Body text. Empty string is valid (non-text inbound messages seed with "").
+        telegramMessageId:
+          type: integer
+          format: int64
+          nullable: true
+        telegramUsername:
+          type: string
+          nullable: true
+        status:
+          type: string
+          enum: [sent, failed]
+          nullable: true
+        error:
+          type: string
+          nullable: true
+
+    SeedTelegramMessageData:
+      type: object
+      required: [id]
+      properties:
+        id:
+          type: string
+          format: uuid
+
+    SeedTelegramMessageResult:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: "#/components/schemas/SeedTelegramMessageData"
 
     TelegramSpyFakeChatRequest:
       type: object
